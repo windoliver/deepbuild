@@ -1,8 +1,8 @@
-// Agent launch policies for the runner: sign-in, confinement, model hosts, versions and plan readings.
+// Agent policies for the runner: sign-in, confinement, model hosts, versions, plan readings and each agent's stream parser.
 // Job lifecycle, budgets and process ownership stay in runner.ts; this module starts no process.
-import { existsSync, mkdirSync, readdirSync, readFileSync, symlinkSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import type { Agent, McpServer, Subagent } from './types.js';
+import type { Agent, JobRecord, McpServer, Plant, StopCause, Subagent } from './types.js';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -45,7 +45,37 @@ export interface AgentParts {
   token(home: string, keychain: (service: string) => Promise<string | undefined>, env?: Record<string, string | undefined>): Promise<string | undefined>;
   /** When that token expires, in ms, if the Keychain says (#19: a run that would outlive it never starts). */
   expires(home: string, keychain: (service: string) => Promise<string | undefined>, env?: Record<string, string | undefined>): Promise<number | undefined>;
+  /** Your variables its job's environment carries beside the ones every job's may. */
+  passes?: string[];
+  /** A read-only job's own home in its temp folder, set up there: what its environment takes from it. */
+  ownHome?(o: { temp: string; home: string; env: Record<string, string | undefined>; billsKey: boolean }): Record<string, string>;
+  /** One line of its job's stdout, an object, read into the job as it comes. */
+  stream(e: Obj, job: Streamed, run: StreamRun): void;
 }
+/** What a stream parser reads a job's output into: its record, and what the runner keeps of it until the job ends. */
+export interface Streamed {
+  rec: JobRecord;
+  /** The message IDs whose usage is counted. */
+  seen: Set<string>;
+  answered?: string;
+  errored?: boolean;
+  stopCause?: StopCause;
+  /** The text of its last answer: its result once it has settled. */
+  said?: string;
+}
+/** What the runner gives a stream parser beside the job. */
+export interface StreamRun {
+  /** Its final result is read: its grace stops it from here, so its timers stop and no deadline ends it twice. */
+  settle(): void;
+  /** The cause its facts name for an error's words. */
+  cause(error: string): StopCause;
+  /** How its facts name an API error's cause: the entry's field, and the cause for each value. */
+  errors(): { field: string; values: Record<string, string> };
+  plant?: Plant;
+}
+const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+/** A result's own subtype that names its stop. */
+const RESULT_CAUSES: Record<string, StopCause> = { error_max_turns: 'max_turns' };
 /** What a program reads to run: the package holding it, since a launcher in bin loads the rest from there, or its own folder. */
 export function programRoot(real: string): string {
   const own = dirname(real);
@@ -108,6 +138,20 @@ export const AGENTS: Partial<Record<Agent, AgentParts>> = {
       const o = isObj(v) && isObj(v.claudeAiOauth) ? v.claudeAiOauth : undefined;
       return o && typeof o.accessToken === 'string' && o.accessToken && !(typeof o.expiresAt === 'number' && o.expiresAt <= Date.now()) ? o.accessToken : undefined;
     },
+    passes: ['CLAUDE_CONFIG_DIR'],
+    // A read-only job must not load your hooks or write its transcript into your home.
+    ownHome: ({ temp, home, env, billsKey }) => {
+      const config = join(temp, 'claude-home'); mkdirSync(config);
+      const own: Record<string, string> = { HOME: temp, CLAUDE_CONFIG_DIR: config };
+      const credentials = join(env.CLAUDE_CONFIG_DIR || join(home, '.claude'), '.credentials.json');
+      if (!billsKey && existsSync(credentials)) {
+        const value = JSON.parse(readFileSync(credentials, 'utf8')) as { claudeAiOauth?: { accessToken?: string } };
+        if (value.claudeAiOauth?.accessToken) own.CLAUDE_CODE_OAUTH_TOKEN = value.claudeAiOauth.accessToken;
+      }
+      writeFileSync(join(config, 'settings.json'), '{}');
+      return own;
+    },
+    stream: claudeStream,
     expires: async (home, keychain, env = {}) => {
       let v = readJson(join(env.CLAUDE_CONFIG_DIR || join(home, '.claude'), '.credentials.json'));
       if (v === undefined) {
@@ -138,6 +182,7 @@ export const AGENTS: Partial<Record<Agent, AgentParts>> = {
     token: async () => undefined,
     expires: async () => undefined,
     planless: (account) => account === null,
+    stream: codexStream,
   },
 };
 /** The system's root certificates as a file: a Codex job's HTTP client can't load them from the keychain in its sandbox. macOS keeps them at /etc/ssl/cert.pem; Debian and Fedora under /etc/ssl/certs and /etc/pki. */
@@ -217,4 +262,94 @@ AGENTS.pi = {
   reach: ({ temp, proxy }) => ({ TMPDIR: temp, PI_CODING_AGENT_DIR: temp, HTTPS_PROXY: proxy, https_proxy: proxy, PI_OFFLINE: '1', PI_TELEMETRY: '0' }),
   token: async () => undefined,
   expires: async () => undefined,
+  stream: piStream,
 };
+
+/** Claude Code's stream-json: its session, each assistant message's model, usage and API error, and its result. */
+function claudeStream(e: Obj, job: Streamed, run: StreamRun): void {
+  if (typeof e.session_id === 'string' && !job.rec.session) job.rec.session = e.session_id;
+  if (e.type === 'assistant' && isObj(e.message)) {
+    const msg = e.message;
+    if (typeof msg.model === 'string' && msg.model !== '<synthetic>' && run.plant !== 'records-launched-model') job.answered = msg.model;
+    // An API error's entry names the stop's cause, as the facts map it; never the agent's words. A job's
+    // stream-json marks it is_api_error_message, where the transcript the facts describe says isApiErrorMessage.
+    const errors = run.errors();
+    if ((e.isApiErrorMessage === true || e.is_api_error_message === true) && typeof e[errors.field] === 'string') job.stopCause = (errors.values[e[errors.field] as string] ?? 'unknown') as StopCause;
+    const usage = msg.usage;
+    if (isObj(usage) && typeof msg.id === 'string' && !job.seen.has(msg.id) && msg.model !== '<synthetic>') {
+      job.seen.add(msg.id);
+      const u = job.rec.usage ?? { input: 0, cached: 0, output: 0 };
+      u.input += num(usage.input_tokens) + num(usage.cache_creation_input_tokens);
+      u.cached += num(usage.cache_read_input_tokens);
+      u.output += num(usage.output_tokens);
+      job.rec.usage = u;
+    }
+  }
+  if (e.type === 'result') {
+    if (typeof e.result === 'string') job.rec.result = e.result;
+    if (typeof e.total_cost_usd === 'number') job.rec.cost_usd = e.total_cost_usd;
+    // The model that answered is the one with the most output tokens in its usage (#87): Claude Code lists its own
+    // small calls' models there too, often first.
+    if (isObj(e.modelUsage) && run.plant !== 'records-launched-model') {
+      const used = Object.entries(e.modelUsage).map(([name, u]) => [name, isObj(u) ? num(u.outputTokens) : 0] as const);
+      const most = run.plant === 'first-model-listed' ? used[0] : [...used].sort((a, b) => b[1] - a[1])[0];
+      if (most) job.answered = most[0];
+    }
+    if (Array.isArray(e.permission_denials) && e.permission_denials.length) job.stopCause ??= 'refusal';
+    // A result marked an error is no answer: the job stopped, for the cause an error named or for none known.
+    if (e.is_error === true) { job.errored = true; job.stopCause ??= RESULT_CAUSES[String(e.subtype)] ?? 'unknown'; }
+    run.settle();
+  }
+}
+/** One line of `codex exec --json`: its thread, its items, and its turn's end. */
+function codexStream(e: Obj, job: Streamed, run: StreamRun): void {
+  if (e.type === 'thread.started' && typeof e.thread_id === 'string' && !job.rec.session) job.rec.session = e.thread_id;
+  if (e.type === 'item.completed' && isObj(e.item)) {
+    const item = e.item;
+    if (item.type === 'agent_message' && typeof item.text === 'string') job.rec.result = item.text;
+    // Its read-only mode refusing a write: a patch it declined, or a command the sandbox stopped.
+    if (codexRefused(item)) job.stopCause ??= 'refusal';
+  }
+  if (e.type !== 'turn.completed' && e.type !== 'turn.failed') return;
+  if (isObj(e.usage)) {
+    // Codex's input includes the cached tokens, taken back out (its facts' usage).
+    const u = job.rec.usage ?? { input: 0, cached: 0, output: 0 };
+    u.input += num(e.usage.input_tokens) - num(e.usage.cached_input_tokens);
+    u.cached += num(e.usage.cached_input_tokens);
+    u.output += num(e.usage.output_tokens);
+    job.rec.usage = u;
+  }
+  if (e.type === 'turn.failed') { job.errored = true; job.stopCause ??= 'unknown'; }
+  run.settle();
+}
+/** A pi job's own stream: its session line, each message once as it ends, and its settling as its result. */
+function piStream(e: Obj, job: Streamed, run: StreamRun): void {
+  if (e.type === 'session' && typeof e.id === 'string') job.rec.session ??= e.id;
+  if (e.type === 'message_end' && isObj(e.message) && e.message.role === 'assistant') {
+    const msg = e.message;
+    if (typeof msg.model === 'string') job.answered = msg.model;
+    if (isObj(msg.usage)) {
+      const u = job.rec.usage ?? { input: 0, cached: 0, output: 0 };
+      u.input += num(msg.usage.input) + num(msg.usage.cacheWrite);
+      u.cached += num(msg.usage.cacheRead);
+      u.output += num(msg.usage.output);
+      job.rec.usage = u;
+      const cost = isObj(msg.usage.cost) ? msg.usage.cost.total : undefined;
+      if (typeof cost === 'number') job.rec.cost_usd = (job.rec.cost_usd ?? 0) + cost;
+    }
+    // pi retries some errors itself: only the last message says how the run ended.
+    const failed = msg.stopReason === 'error' || msg.stopReason === 'aborted' || msg.stopReason === 'length';
+    job.errored = failed;
+    delete job.stopCause;
+    delete job.said;
+    if (failed) {
+      job.stopCause = run.cause(String(msg.errorMessage ?? ''));
+    } else if (Array.isArray(msg.content)) {
+      job.said = msg.content.flatMap((part) => (isObj(part) && part.type === 'text' && typeof part.text === 'string' ? [part.text] : [])).join('');
+    }
+  }
+  if (e.type === 'agent_settled') {
+    if (!job.errored && job.said !== undefined) job.rec.result = job.said;
+    run.settle();
+  }
+}

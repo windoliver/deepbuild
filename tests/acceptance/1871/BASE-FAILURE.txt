@@ -1,0 +1,29 @@
+#1871 acceptance suite at the base, 1b4929ae7 (Merge pull request #3436), before any implementation.
+Run 2026-11-24 23:33 PST on this Mac (one-minute load 124), Node 24, after a cold `cargo build --locked --bin deep-gpu`:
+
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/1871 --no-file-parallelism --reporter=verbose
+
+Result: 3 failed, 1 passed, each failure at its assertion. Under a drawn look the base's view3d hands the look an empty
+asset map, so #149's tooth image is refused in 3D even when the call's assets hold it:
+
+- AC1 #1871.9a827581: FAIL, refused asset_unreadable naming ground/params/tooth/from.
+- AC2 #1871.7550b5c1: FAIL, the first scene refused the same way, so no pixel hash to compare.
+- AC3 #1871.fbe6ad2a: PASS, as the base refuses every tooth image in 3D; its wrong program is the twin
+  tooth-missing-unrefused (README: Planted twins).
+- AC4 #1871.f656387e: FAIL before any screenshot is written, the 3D scene refused; with the scene drawn it would read
+  INCONCLUSIVE until TASTE.json is recorded. #149's 2D page on the same tooth (film2d with the same assets) draws at the
+  base: checked by hand with a one-off call, not part of the suite.
+
+Failing output (home folders as ~):
+
+ × tooth3d.test.ts > AC1 #1871.9a827581 #149's image tooth under the drawn look in view3d > AC1 #1871.9a827581 the gray PNG tooth named by hash in the call's assets is drawn on the one-box 3D scene, not refused 7670ms
+   → the one-box scene on #149's gray PNG tooth is drawn, not refused; the reply: {"code":"asset_unreadable","reason":"ground/params/tooth/from: b3de77943e5b7419a09854c276da8e0690d17f3c038c31764d27d2c1c6ea132d"}: expected 'asset_unreadable' to be undefined
+ × tooth3d.test.ts > AC2 #1871.7550b5c1 a different tooth image draws a different 3D frame > AC2 #1871.7550b5c1 the same 3D scene with a different gray PNG as its tooth gives a different pixel hash 2513ms
+   → the scene on #149's tooth is drawn, not refused; the reply: {"code":"asset_unreadable","reason":"ground/params/tooth/from: b3de77943e5b7419a09854c276da8e0690d17f3c038c31764d27d2c1c6ea132d"}: expected 'asset_unreadable' to be undefined
+ ✓ tooth3d.test.ts > AC3 #1871.fbe6ad2a a tooth image missing from assets is still refused in view3d > AC3 #1871.fbe6ad2a with the PNG missing from assets, view3d refuses asset_unreadable at ground/params/tooth/from 2654ms
+ × taste.test.ts > AC4 #1871.f656387e the screenshots and the one taste call on them > AC4 #1871.f656387e the run writes the 3D scene on the image tooth beside #149's 2D page, and the recorded call on exactly those says they look right 25001ms
+   → the 3D scene on the image tooth was answered, not refused: {"code":"asset_unreadable","reason":"ground/params/tooth/from: b3de77943e5b7419a09854c276da8e0690d17f3c038c31764d27d2c1c6ea132d"}: expected 'asset_unreadable' to be undefined
+
+ Test Files  2 failed (2)
+      Tests  3 failed | 1 passed (4)
+   Duration  45.96s (tests 99%, transform 1%)

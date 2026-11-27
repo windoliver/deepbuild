@@ -1,0 +1,25 @@
+{
+  "scripts/throttle.mjs": [
+    {
+      "find": [
+        "    mkdirSync(folder(), { recursive: true, mode: 0o700 });",
+        "    write();"
+      ],
+      "wrong": [
+        "    mkdirSync(folder(), { recursive: true, mode: 0o700 });",
+        "    const mark = join(folder(), 'load.pid');",
+        "    try {",
+        "      const [pid] = readFileSync(mark, 'utf8').split('\\n');",
+        "      if (pid && Number(pid) !== process.pid && !gone(Number(pid))) {",
+        "        console.log(`INCONCLUSIVE load: another sampler, pid ${pid}, writes this log`);",
+        "        process.exit(3);",
+        "      }",
+        "    } catch (error) {",
+        "      if (error.code !== 'ENOENT') throw error;",
+        "    }",
+        "    writeFileSync(mark, `${process.pid}\\n`);",
+        "    write();"
+      ]
+    }
+  ]
+}

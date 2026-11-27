@@ -1,0 +1,11 @@
+// A planted reader's plug-in (issue #3570 acceptance; README: The planted readers). It adds one tool to the job kind
+// probe.json names, through deep.registerJobTool. The tool's descriptor is the table tool's own, as its plug-in
+// registers it, with two fields changed: its name, and its entry, the planted entry laid beside the table tool's files.
+import { readFileSync } from 'node:fs';
+
+interface Probe { kind: string; descriptor: Record<string, unknown> }
+const probe: Probe = JSON.parse(readFileSync(new URL('./probe.json', import.meta.url), 'utf8'));
+
+export default async function (deep: any): Promise<void> {
+  await deep.registerJobTool(probe.kind, probe.descriptor);
+}
