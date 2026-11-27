@@ -344,7 +344,7 @@ export async function publish(w: World, files: Record<string, Buffer>): Promise<
   const dir = join(w.tmp, `pack-${packs}`);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'pack.json'), `${JSON.stringify({
-    id, name: id.split('/')[1], version, license: 'CC0-1.0', description: 'Published tables for the #3570 acceptance tests.', requires: { core: '^1', modules: {} },
+    id, name: id.split('/')[1], version, license: 'CC0-1.0', description: 'Published tables for the #3570 acceptance tests.', requires: { core: '>=0.0.0', modules: {} },
     assets: Object.values(out).map((a) => ({ path: a.path, url: a.url, sha256: a.sha256, size: a.size, license: CC0, upstream: { url: a.url, version, modified: '2026-01-01T00:00:00Z' } })),
   }, null, 2)}\n`);
   const ran = await run(['install', dir], w.home, w.work);
