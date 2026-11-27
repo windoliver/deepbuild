@@ -9,6 +9,8 @@ const GROUPS = ['What you ask for', 'Sessions', 'Proving it done', 'Verdicts', '
 const STATES = 'States people see';
 const PLAIN = 'contracts/plain-words.json';
 const REPO = 'https://github.com/windoliver/deepbuild/blob/main/';
+const WORDS = 'docs/canvas-primitives.md';
+const LIST = 'One word per idea';
 
 const findings = [];
 const fail = (at, why, fix) => findings.push(`FAIL glossary: ${at}: ${why}\n  Fix: ${fix}`);
@@ -30,6 +32,17 @@ for (const { line } of prose(readFileSync('docs/technical-design.md', 'utf8'))) 
   }
 }
 for (const word of Object.values(JSON.parse(readFileSync(PLAIN, 'utf8')).words)) see(word, PLAIN);
+
+let list = false;
+const packs = [];
+for (const { number, line } of prose(readFileSync(WORDS, 'utf8'))) {
+  const heading = line.match(/^(#{1,6})\s+(.*)$/);
+  if (heading) list = heading[1].length > 2 ? list : heading[2].trim() === LIST;
+  else if (list && /^\|(?!\s*-)/.test(line) && line.split('|')[1].replace(/[*_`]/g, '').trim().toLowerCase() === 'pack') packs.push({ number, cells: line.split('|').slice(2, 5).map((cell) => cell.trim()) });
+}
+const pack = `Give ${LIST} one row named pack: what a pack means, the words never to call it, such as package, and why.`;
+if (packs.length !== 1) fail(`${WORDS}#one-word-per-idea`, `${LIST} holds ${packs.length} rows named pack${packs.length ? ` (lines ${packs.map(({ number }) => number).join(', ')})` : ''}, not one`, pack);
+else if (packs[0].cells.length < 3 || packs[0].cells.some((cell) => !cell) || /^none\.?$/i.test(packs[0].cells[1])) fail(`${WORDS}:${packs[0].number}`, `${LIST}'s row named pack leaves its meaning, the words never to call it or why empty`, pack);
 
 if (!existsSync(FILE)) {
   fail(FILE, 'there is no glossary at the repo root', `Write ${FILE}: the real names in their eight groups, each a term in bold and one or two sentences.`);
@@ -90,5 +103,5 @@ for (const { at, term, text, avoid } of entries) {
 const pointers = readFileSync('AGENTS.md', 'utf8').split(/\r?\n/).filter((line) => line.includes(FILE)).length;
 if (pointers !== 1) fail('AGENTS.md', `names ${FILE} in ${pointers} lines, not one`, `Point to ${FILE} from AGENTS.md in one line.`);
 
-if (!findings.length) console.log(`PASS glossary: ${FILE} lists ${entries.length} terms in ${groups.length} groups, its links land, and AGENTS.md points to it`);
+if (!findings.length) console.log(`PASS glossary: ${FILE} lists ${entries.length} terms in ${groups.length} groups, its links land, AGENTS.md points to it, and ${LIST} has one row named pack`);
 finish();

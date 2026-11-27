@@ -1,0 +1,12 @@
+{
+  "scripts/doc-ceilings.mjs": [
+    {
+      "find": [
+        "    } else if (size > ceiling) fail(key, `${bytes(size)} bytes of its own text, over its ceiling of ${bytes(ceiling)}`, `Split or shorten its own text to ${bytes(ceiling)} bytes or fewer: a ceiling never rises.`);"
+      ],
+      "wrong": [
+        "    } else if (size > ceiling) fail('a section', 'its own text is over its ceiling', 'Split or shorten its own text: a ceiling never rises.');"
+      ]
+    }
+  ]
+}

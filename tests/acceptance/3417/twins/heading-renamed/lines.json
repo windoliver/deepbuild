@@ -1,0 +1,12 @@
+{
+  "docs/canvas-primitives.md": [
+    {
+      "find": [
+        "## One word per idea"
+      ],
+      "wrong": [
+        "## One word for each idea"
+      ]
+    }
+  ]
+}
