@@ -1,0 +1,1 @@
+{ "alone": true, "why": "binary: requires-core.test.ts builds deep-show with cargo (features r1) before its tests" }
