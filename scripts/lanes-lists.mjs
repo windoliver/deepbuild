@@ -1613,6 +1613,9 @@ byHand.push('tests/acceptance/96/commit.test.ts', 'tests/acceptance/96/proof.tes
 Object.assign(redrafted, { 'tests/acceptance/3295/late-close.test.mjs': 'tests/acceptance/3295-redraft-fae86cca/' });
 byHand.push('tests/acceptance/3295/late-close.test.mjs');
 
+Object.assign(redrafted, { 'tests/acceptance/3066/same-failures.test.mjs': 'tests/acceptance/3066-redraft-3699/' });
+byHand.push('tests/acceptance/3066/same-failures.test.mjs');
+
 // #3257's folder (blind) runs alone by its lane.json: its files build deep-gpu, the merge base's too, and draw on Metal.
 // ac7-budget.test.ts times the mask map's chain against the merge base's on the reference Mac.
 timed.push('tests/acceptance/3257/ac7-budget.test.ts');
