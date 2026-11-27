@@ -28,6 +28,68 @@ const DATA: &str = include_str!("actions.json");
 const UNREACHABLE: Duration = Duration::from_millis(1000);
 /// Longer than any call the hub holds open, as `deep mcp` waits.
 const ANSWER: Duration = Duration::from_secs(55);
+/// #2654's cap on one line, a request or the hub's reply, as `deep mcp` holds it (LINE_CAP in packages/hub/src/mcp.ts).
+const LINE_CAP: usize = 16 * 1024 * 1024;
+const CAP_TEXT: &str = "16 MiB (16,777,216 bytes)";
+
+enum Capped {
+    Line(String),
+    /// A line passed the cap here; the rest of it is dropped by the next read.
+    TooLong,
+    End,
+}
+
+/// Lines of at most LINE_CAP bytes, each decoded once it is whole, so a line or a character cut across two reads is
+/// read as one. A longer line comes out once as TooLong where it passes the cap, and its bytes are dropped as they come,
+/// never kept, up to the newline that ends it. A line that isn't UTF-8 ends the stream, as `lines()` did.
+struct Lines<R> {
+    reader: R,
+    dropping: bool,
+}
+
+impl<R: BufRead> Lines<R> {
+    fn next(&mut self) -> Capped {
+        let mut line = Vec::new();
+        loop {
+            let read = match self.reader.fill_buf() {
+                Ok(read) => read,
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                Err(_) => return Capped::End,
+            };
+            if read.is_empty() {
+                return match (self.dropping, line.is_empty()) {
+                    (false, false) => whole(line),
+                    _ => Capped::End,
+                };
+            }
+            let newline = read.iter().position(|&b| b == b'\n');
+            let part = &read[..newline.unwrap_or(read.len())];
+            let passed = !self.dropping && line.len() + part.len() > LINE_CAP;
+            if !self.dropping && !passed {
+                line.extend_from_slice(part);
+            }
+            let used = newline.map_or(read.len(), |at| at + 1);
+            self.reader.consume(used);
+            if passed {
+                self.dropping = newline.is_none();
+                return Capped::TooLong;
+            }
+            if newline.is_some() {
+                if std::mem::take(&mut self.dropping) {
+                    continue;
+                }
+                return whole(line);
+            }
+        }
+    }
+}
+
+fn whole(mut line: Vec<u8>) -> Capped {
+    if line.last() == Some(&b'\r') {
+        line.pop();
+    }
+    String::from_utf8(line).map_or(Capped::End, Capped::Line)
+}
 
 fn object(members: Vec<(&str, Value)>) -> Value {
     Value::Object(
@@ -89,6 +151,18 @@ fn unreachable(why: &str) -> Value {
         ("code", text("unavailable")),
         ("retryable", Value::Bool(true)),
         ("remediation", text(&format!("The DeepBuild hub is unreachable ({why}); nothing was recorded. Call again once it is back."))),
+        ("path", text("")),
+        ("actual", text("")),
+        ("evidence", Value::Array(Vec::new())),
+    ])
+}
+
+/// error@2 for a hub reply past the cap, in `deep mcp`'s words: the call may have acted, so it isn't retryable.
+fn too_large() -> Value {
+    object(vec![
+        ("code", text("too_large")),
+        ("retryable", Value::Bool(false)),
+        ("remediation", text(&format!("The DeepBuild hub's reply ran past {CAP_TEXT} with no end of line, so deep-actions gave up on it and read none of it. The hub may already have acted on the call, so check its effect before making it again."))),
         ("path", text("")),
         ("actual", text("")),
         ("evidence", Value::Array(Vec::new())),
@@ -207,16 +281,29 @@ impl Hub {
                 }
             })
             .ok()?;
+        // The handshake's deadline is over: a reply may take as long as its call.
+        reader.get_ref().set_read_timeout(None).ok()?;
+        let mut lines = Lines {
+            reader,
+            dropping: false,
+        };
         thread::Builder::new()
             .spawn(move || loop {
-                let line = match read_line(&mut reader, None) {
-                    Got::Line(line) => line,
-                    _ => {
-                        // Closed: every call still waiting on it is told so, and the next call connects again.
+                let line = match lines.next() {
+                    Capped::Line(line) => line,
+                    end => {
+                        // Closed, or a reply past the cap, which is a fault, not an answer: every call still waiting
+                        // on it is told so, and the next call connects again.
+                        let refusal = match end {
+                            Capped::TooLong => {
+                                let _ = lines.reader.get_ref().shutdown(Shutdown::Both);
+                                too_large()
+                            }
+                            _ => unreachable("it closed the connection"),
+                        };
                         let closed = woken.lock().unwrap_or_else(|e| e.into_inner()).take();
                         for (_, wake) in closed.into_iter().flatten() {
-                            let _ =
-                                wake.send(Reply::Refused(unreachable("it closed the connection")));
+                            let _ = wake.send(Reply::Refused(refusal.clone()));
                         }
                         return;
                     }
@@ -358,8 +445,26 @@ pub fn serve() -> ExitCode {
         ])
     };
     thread::scope(|scope| {
-        for raw in io::stdin().lock().lines() {
-            let Ok(raw) = raw else { break };
+        let mut lines = Lines {
+            reader: io::stdin().lock(),
+            dropping: false,
+        };
+        loop {
+            let raw = match lines.next() {
+                Capped::Line(raw) => raw,
+                Capped::TooLong => {
+                    send(
+                        &Value::Null,
+                        "error",
+                        failure(
+                            -32600.0,
+                            format!("A request line ran past {CAP_TEXT}; it was dropped unread. Send each JSON-RPC message as one line of at most 16 MiB."),
+                        ),
+                    );
+                    continue;
+                }
+                Capped::End => break,
+            };
             let Ok(request) = parse(&raw) else {
                 send(
                     &Value::Null,
