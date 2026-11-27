@@ -40,10 +40,7 @@ fn left_after_a_draw(
         )
     });
     cx.simulate_window_visibility_change(window.into(), visibility);
-    let whole = Bounds::new(
-        point(px(0.), px(0.)),
-        size(sizes().band, sizes().band),
-    );
+    let whole = Bounds::new(point(px(0.), px(0.)), size(sizes().band, sizes().band));
     cx.update_window(window.into(), |_, window, cx| {
         card.update(cx, |card, cx| {
             card.pictures.borrow_mut().push((hash, whole));
