@@ -321,9 +321,6 @@ pub enum Planted {
     ClaimsMsaaOverSingleSample,
     PuffBlockCopy,
     ResolveAccumulatesFrames,
-    /// #1316's wrong program (tests/acceptance/1316/README.md): the geometry pass draws one sample
-    /// a pixel, where environment-lit glTF frames still differ between fresh processes; #1173's
-    /// 4x MSAA pass (7caeca140) is where they stopped differing.
     EnvironmentTextureRace,
     /// #385's wrong programs (tests/acceptance/385/README.md: Planted programs): the GPU layer's
     /// solid fills two codes redder; GPUI's glyph quads half a device px right; Vello GPU on

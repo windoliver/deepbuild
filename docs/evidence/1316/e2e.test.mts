@@ -1,6 +1,3 @@
-// Hand e2e for #1316: SheenChair and DispersionTest in the blind suite's scene (environment-lit sky@1 and a sun,
-// 1280 x 800, frame 0), each drawn by 3 fresh `deep-gpu run` processes on the default path and 3 under
-// `--planted environment_texture_race`. Writes each sample's default final frame here as <sample>.png.
 import { copyFileSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
