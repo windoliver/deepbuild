@@ -710,11 +710,13 @@ export function prepareRuns({ root, change, issue }, { coverage = false } = {}) 
   const all = listFiles(root);
   for (const [folder, twinFiles] of needs) {
     const own = all.filter((path) => path.startsWith(`${folder}/`));
-    // A twin is a wrong program: it replaces code under test, never a test's own files, or a test
-    // that asserts nothing could fail on a twin that rewrites what it compares.
+    // A twin is a wrong program: it replaces code under test, never a test's own files, or a test that asserts nothing
+    // could fail on a twin that rewrites what it compares; code its tests run but don't import is code under test (#3689).
     // Nor installed packages, whose frames a failure's origin passes over.
     const { overlay, paths, stale } = twinOverlay(root, folder, own, all);
-    const tests = paths.filter((path) => underTestPaths(path) || path.split('/').includes('node_modules'));
+    const imported = new Set(twinFiles.flatMap((file) => [...testImports(root, null, file).keys()]));
+    const run = (path) => testPattern.test(path) && !TEST_DATA.test(path) && !isTestFile(path) && !path.startsWith('tests/acceptance/') && /\.(?:rs|[cm]?js|tsx?|[cm]ts)$/.test(path) && !imported.has(path);
+    const tests = paths.filter((path) => (underTestPaths(path) && !run(path)) || path.split('/').includes('node_modules'));
     if (!own.length || tests.length) {
       runs.twins.set(folder, { refused: own.length ? `replaces files under the test paths or node_modules (${tests.join(', ')})` : 'has no files', ...empty() });
       continue;
