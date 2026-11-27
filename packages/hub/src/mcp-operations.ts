@@ -105,10 +105,6 @@ schedule: Pick<HookSchedule, "replaying" | "queue" | "askingNow" | "wakeable">;
 
 }
 
-/**
- * The asks settings a raise reads, which no argument of deep_ask or deep_propose holds, and who fixes each (#2198): a
- * refusal for one names no path in the call and, as role, says only the person fixes it.
- */
 const SETTINGS: Record<string, string> = {
   deadline: 'Only the person declares that deadline, in their settings or the repo\'s done.yaml; ask them to, then call again.',
   asks: 'Only the person fixes that line of the repo\'s done.yaml; ask them to, then call again.',
