@@ -1,0 +1,14 @@
+{
+  "#2058.e29d9bdc": [
+    "core-text-only"
+  ],
+  "#2058.3cf1dddc": [
+    "unparsed-as-lowest"
+  ],
+  "#2058.729deb44": [
+    "pack-range-parsed-only"
+  ],
+  "#2058.d337dccb": [
+    "loader-modules-only"
+  ]
+}
