@@ -1,0 +1,44 @@
+Base c0a16dda6, Node v24.22.0, start load averages: 168.54 191.83 178.00
+$ node --test --test-concurrency=1 'tests/acceptance/3417/*.test.mjs'
+✖ #3417.bdaf7f22 AC1: One word per idea holds exactly one row named pack, with what it means, the words never to use for it and why (10.941125ms)
+✖ #3417.bdaf7f22 AC1: a planted list with no row named pack fails the lint lane, naming the list (1501097.127458ms)
+✖ #3417.bdaf7f22 AC1: a planted list with two rows named pack fails the lint lane, naming the list (36.085666ms)
+✖ #3417.bdaf7f22 AC1: the lint lane's check that fails those plants passes on the list as it is (10.940292ms)
+✔ #3417.fad053d0 AC2: the doc ceilings check passes on the tree as it is (1725.86725ms)
+✔ #3417.fad053d0 AC2: no ceiling in scripts/doc-ceilings.json is above the merge base's (660.45175ms)
+✔ #3417.fad053d0 AC2: a planted row that takes the section past its ceiling fails, naming the heading and the bytes over (179153.947ms)
+✖ #3417.33df4e7a AC3: the design links lane passes with the open issues read, so every link an open issue makes to One word per idea lands (265978.987542ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 3
+ℹ fail 5
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1949265.830458
+
+Why each fails (assertion messages; the lane summaries under them are in the full output):
+✖ #3417.bdaf7f22 AC1: One word per idea holds exactly one row named pack, with what it means, the words never to use for it and why (10.941125ms)
+  AssertionError [ERR_ASSERTION]: One word per idea holds 0 rows named pack: 
+✖ #3417.bdaf7f22 AC1: a planted list with no row named pack fails the lint lane, naming the list (1501097.127458ms)
+  AssertionError [ERR_ASSERTION]: no failing lint lane command names One word per idea for a list with no row named pack
+✖ #3417.bdaf7f22 AC1: a planted list with two rows named pack fails the lint lane, naming the list (36.085666ms)
+  AssertionError [ERR_ASSERTION]: no failing lint lane command names One word per idea for a list with two rows named pack
+✖ #3417.bdaf7f22 AC1: the lint lane's check that fails those plants passes on the list as it is (10.940292ms)
+  AssertionError [ERR_ASSERTION]: no lint lane command reads One word per idea for its pack row: neither plant made a failing command name the list
+✖ #3417.33df4e7a AC3: the design links lane passes with the open issues read, so every link an open issue makes to One word per idea lands (265978.987542ms)
+  AssertionError [ERR_ASSERTION]: scripts/design-links.mjs fails:
+  an issue's first read (design-section.mjs --issue): 1,115 issues read; tokens not counted, gpt-tokenizer is not installed (npm ci)
+  FAIL 4 links into docs/*.md land on no heading, 0 names are not in the design, 0 planned names are stale, 0 principles findings, 0 places where the design is behind main
+    #3499 https://github.com/windoliver/deepbuild/blob/main/docs/technical-design.md#what-a-person-reads-on-a-plain-surface (no heading or <a id> in docs/technical-design.md is #what-a-person-reads-on-a-plain-surface)
+    #3498 https://github.com/windoliver/deepbuild/blob/main/docs/technical-design.md#what-a-person-reads-on-a-plain-surface (no heading or <a id> in docs/technical-design.md is #what-a-person-reads-on-a-plain-surface)
+    #3497 https://github.com/windoliver/deepbuild/blob/main/docs/technical-design.md#what-a-person-reads-on-a-plain-surface (no heading or <a id> in docs/technical-design.md is #what-a-person-reads-on-a-plain-surface)
+    #3496 https://github.com/windoliver/deepbuild/blob/main/docs/technical-design.md#what-a-person-reads-on-a-plain-surface (no heading or <a id> in docs/technical-design.md is #what-a-person-reads-on-a-plain-surface)
+  
+
+AC1's lane runs (control and both plants at once) took 25 minutes; at the base the plants equal the control (no pack row to remove; two added rows that no check reads), so no failing command named One word per idea in either.
+AC2's three pass at the base: the section is 40,707 bytes at its ceiling of 40,707, and the check's FAIL line already names the heading with its size and ceiling.
+AC3 fails at the base for links unrelated to One word per idea: four open issues (#3496-#3499) link a technical-design.md heading that doesn't exist. No line named #one-word-per-idea.
+Under this load the copy's canvas-lint was BLOCKED by a full disk (ENOSPC in cargo metadata); it fails in the control too, so it counts for nothing.
+exit 1
+end load averages: 68.54 116.71 134.54
