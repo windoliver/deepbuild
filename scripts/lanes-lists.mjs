@@ -1647,6 +1647,14 @@ alone.push('tests/acceptance/3507-redraft-ac2/');
 // ac2-onepass.test.ts judges the five-run draw-and-finish p95 on a reference Mac.
 timed.push('tests/acceptance/3617/ac2-onepass.test.ts');
 
+// #3402: #1352's section, routes and taste-call files find the section as the one heading holding its words and read
+// Decided rows under ### Decided alone, so they fail since #3138. Kept as written, by hand only; their blind redraft,
+// which finds the section by its anchor and reads every Decided table under Decisions, runs in their place.
+for (const name of ['ac1-section', 'ac3-agent-routes', 'ac5-taste-call']) {
+  redrafted[`tests/acceptance/1352/${name}.test.mjs`] = 'tests/acceptance/1352-redraft-3402/';
+  byHand.push(`tests/acceptance/1352/${name}.test.mjs`);
+}
+
 // #138's manifest.test.ts holds a sidecar check's keys to nine, so a planted fixture of a check kind with fields of its
 // own (the design's loop kinds, logic.tuning's catalogs, motion's instruments) fails it, though #138.9e9940d1 needs
 // one for every catalog code (tests/acceptance/138-redraft-3648/DISPUTE.md, #3648). Kept as written, by hand only;

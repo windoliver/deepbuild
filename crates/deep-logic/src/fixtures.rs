@@ -5,6 +5,8 @@
 //! row for a logic item; and a claim that a library is right counts its fixtures only when an
 //! installed pack ships them.
 
+use std::rc::Rc;
+
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 use deep_canvas_sandbox::check::{self, Limits};
 use serde_json::{json, Map, Value};
@@ -209,16 +211,14 @@ impl Logic {
             let started = std::time::Instant::now();
             let line = json!({"call": "bake", "piece": piece, "track": fixture.get("track").cloned().unwrap_or(json!([])),
                 "steps": fixture.get("steps").cloned().unwrap_or(json!(1))});
-            let bake = self.bake(&line).map_err(|r| {
+            let (bake, det) = self.fixture_runs(line).map_err(|r| {
                 let refusals = r["refusals"]
                     .as_array()
                     .cloned()
                     .unwrap_or_else(|| vec![r.clone()]);
                 (refusals, false)
             })?;
-            let mut line = line;
-            line["at_times"] = json!([0.0]);
-            let det = self.determinism(&line).map_err(|r| (vec![r], false))?;
+            let det = det.map_err(|r| (vec![r], false))?;
             let ns = started.elapsed().as_nanos() as u64;
             if let Some(r) = differs(
                 lib,
@@ -245,6 +245,24 @@ impl Logic {
             records.push(json!({"fixture": id, "verdict": "PASS", "ran": true, "ns": ns, "deep_hashes": deep}));
         }
         Ok(Value::Array(records))
+    }
+
+    /// A fixture's bake and its logic.determinism run, sampled at time 0, both of the one check
+    /// of its piece (#3612): the check's or the bake's refusal, else the bake and the run's reply.
+    pub(crate) fn fixture_runs(
+        &mut self,
+        mut line: Value,
+    ) -> Result<(Value, Result<Value, Value>), Value> {
+        let piece = Rc::new(self.check(&line)?);
+        let bake = self.bake(piece.clone(), &line)?;
+        line["at_times"] = json!([0.0]);
+        let det = match self.planted.fixture_checks_piece_twice {
+            true => self
+                .check(&line)
+                .and_then(|p| self.determinism(Rc::new(p), &line)),
+            false => self.determinism(piece, &line),
+        };
+        Ok((bake, det))
     }
 
     /// deep_query's row for each logic item: its program, its rewritten hash and its libraries.
