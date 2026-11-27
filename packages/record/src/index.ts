@@ -1247,6 +1247,58 @@ function syncFolder(dir: string): void {
 export interface PreparedRestore { generation: number; put(): void; discard(): void }
 
 /**
+ * What a restore of the backup at `from` takes away from the record at `to` (#3459), read before the OS asks you:
+ * `none` where no record is there; `later` where the record holds the backup's last event at its log position, so the
+ * backup is an earlier copy of it, with how many events it holds past that one and the newest one's time; `other`
+ * where it doesn't, so the backup wasn't taken from it, with how many events it holds. Both files are only read.
+ */
+export type RestoreLoss = { kind: 'none' } | { kind: 'later'; events: number; newest?: number } | { kind: 'other'; events: number };
+export function restoreLoss(from: string, to: string): RestoreLoss {
+  if (!existsSync(to)) return { kind: 'none' };
+  const backup = openReadOnly(from);
+  let last: { id: string; log_pos: number } | undefined;
+  try {
+    last = backup.prepare('SELECT id, log_pos FROM events ORDER BY log_pos DESC LIMIT 1').get() as typeof last;
+  } finally {
+    backup.close();
+  }
+  const record = openReadOnly(to);
+  try {
+    if (!record.prepare("SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'events'").get()) return { kind: 'none' };
+    if (last && !record.prepare('SELECT 1 FROM events WHERE id = ? AND log_pos = ?').get(last.id, last.log_pos)) {
+      return { kind: 'other', events: Number((record.prepare('SELECT count(*) AS n FROM events').get() as { n: number }).n) };
+    }
+    const past = record.prepare('SELECT count(*) AS n, max(ts) AS newest FROM events WHERE log_pos > ?').get(last?.log_pos ?? 0) as { n: number; newest: number | null };
+    return { kind: 'later', events: Number(past.n), ...(past.newest === null ? {} : { newest: Number(past.newest) }) };
+  } finally {
+    record.close();
+  }
+}
+
+/** The backup's file readied beside the record at `to`, as `prepare` left it there, so a swap cut off midway finishes. */
+const readied = (to: string, tmp: string, generation: number, discard: () => void): PreparedRestore => ({
+  generation,
+  put() {
+    // The replaced record's WAL would otherwise be read as the restored one's.
+    for (const f of [`${to}-wal`, `${to}-shm`]) rmSync(f, { force: true });
+    renameSync(tmp, to);
+    syncFolder(dirname(to));
+  },
+  discard,
+});
+
+/**
+ * The restore a cut left midway at `to` (#3459): the readied backup still beside the record, or, where it was already
+ * put in place, the record as it is, with nothing left to put. Neither file is changed until `put`.
+ */
+export function resumeRestore(to: string): PreparedRestore {
+  const tmp = `${to}.restoring`;
+  const discard = () => { for (const f of [tmp, `${tmp}-wal`, `${tmp}-shm`]) rmSync(f, { force: true }); };
+  if (existsSync(tmp)) return readied(to, tmp, metaOf(tmp).generation, discard);
+  return { generation: metaOf(to).generation, put() {}, discard() {} };
+}
+
+/**
  * Readies the backup at `from` to take the place of the record at `to` (#572), with the hub stopped and its lock held:
  * the copy checked whole, every projection rebuilt from its log, the generation raised above the backup's and the
  * replaced record's, and log positions kept above any the replaced record handed out. It counts as a record after a
@@ -1291,16 +1343,7 @@ export async function prepareRestore(from: string, to: string): Promise<Prepared
     const record = new SqliteRecord({ path: tmp, now: Date.now }, fileStorage());
     await record.rebuild();
     record.sealRestored(generation, Math.max(copy.next, replaced.next));
-    return {
-      generation,
-      put() {
-        // The replaced record's WAL would otherwise be read as the restored one's.
-        for (const f of [`${to}-wal`, `${to}-shm`]) rmSync(f, { force: true });
-        renameSync(tmp, to);
-        syncFolder(dirname(to));
-      },
-      discard,
-    };
+    return readied(to, tmp, generation, discard);
   } catch (error) {
     discard();
     throw error;

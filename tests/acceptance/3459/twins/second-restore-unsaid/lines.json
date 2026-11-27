@@ -1,0 +1,13 @@
+{
+  "packages/hub/src/backup.ts": [
+    {
+      "find": [
+        "  if (!existsSync(root.kept)) return `; the replaced record is kept in ${root.kept}`;"
+      ],
+      "wrong": [
+        "  // Planted: a kept folder already there is replaced unsaid.",
+        "  if (root.kept) return `; the replaced record is kept in ${root.kept}`;"
+      ]
+    }
+  ]
+}

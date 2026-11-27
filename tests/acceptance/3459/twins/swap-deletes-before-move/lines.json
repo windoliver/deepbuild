@@ -1,0 +1,14 @@
+{
+  "packages/hub/src/backup.ts": [
+    {
+      "find": [
+        "      for (const [at, name] of aside) if (existsSync(at)) renameSync(at, join(root.keeping, name));"
+      ],
+      "wrong": [
+        "      // Planted: the replaced ledger is deleted from its place before anything moves aside.",
+        "      rmSync(root.ledger, { force: true });",
+        "      for (const [at, name] of aside) if (existsSync(at)) renameSync(at, join(root.keeping, name));"
+      ]
+    }
+  ]
+}

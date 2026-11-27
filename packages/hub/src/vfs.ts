@@ -12,7 +12,9 @@ import type { VfsSettings } from './wire.js';
 
 export type PointKind = 'commit' | 'log_pos_block' | 'spool_read' | 'spool_removal' | 'evidence_rename' | 'rules_rewrite' | 'journal_rewrite' | 'terminals_rewrite'
   // An agent sync's (#148): its crash journal durable, a target renamed into place, that target's folder flushed, the sync recorded complete.
-  | 'sync_intent' | 'sync_replace' | 'sync_flush' | 'sync_complete';
+  | 'sync_intent' | 'sync_replace' | 'sync_flush' | 'sync_complete'
+  // A restore's (#3459): the replaced record moved aside whole into the kept folder, before the backup's is put in.
+  | 'restore_aside';
 
 export interface Durable {
   /** Marks a durable write point just made. */

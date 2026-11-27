@@ -1,0 +1,21 @@
+{
+  "packages/hub/src/backup.ts": [
+    {
+      "find": [
+        "import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmdirSync, rmSync, statSync } from 'node:fs';"
+      ],
+      "wrong": [
+        "import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmdirSync, rmSync, statSync } from 'node:fs';"
+      ]
+    },
+    {
+      "find": [
+        "      for (const [at, name] of aside) if (existsSync(at)) renameSync(at, join(root.keeping, name));"
+      ],
+      "wrong": [
+        "      // Planted: the replaced record is copied into the kept folder, then removed: equal bytes, new inodes.",
+        "      for (const [at, name] of aside) if (existsSync(at)) { cpSync(at, join(root.keeping, name), { recursive: true }); rmSync(at, { recursive: true, force: true }); }"
+      ]
+    }
+  ]
+}
