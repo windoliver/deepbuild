@@ -725,10 +725,6 @@ function crates(bay, paths) {
 export function claimPair(root, print) {
   const refused = refusal(root);
   if (refused) return { refused };
-  // A claim under no grant keeps its place while bay-pair grants change hands, and leaves the line once none has for 720
-  // minutes, a hung holder's bound (#3590); DEEP_TEST_GRANT_STALL sets the bound in minutes, for tests. One nested in a
-  // grant of its caller's (a lane command's build grant, the preflight's timed one) holds that slot while it waits, so
-  // it waits 30 minutes at most, as before.
   const nested = ['build', 'test', 'timed'].some((cls) => holds(cls));
   const stall = Number(process.env.DEEP_TEST_GRANT_STALL ?? '720');
   const grant = acquire('bay-pair', nested ? { wait: 30 } : { stall });

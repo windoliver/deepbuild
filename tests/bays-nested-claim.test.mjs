@@ -1,6 +1,3 @@
-// An interim rule of #3590 (the owner's coordinator, 2026-11-26), not one of its criteria: a claim made by the command
-// of `node scripts/throttle.mjs build -- <command>`, so nested in a build grant, keeps today's bounded wait: its
-// bay-pair grant is logged with wait: 30 and no stall. The table, bays and HOME are the sandbox's (3590/helpers.mjs).
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -8,9 +5,6 @@ import { pathToFileURL } from 'node:url';
 import { start } from './acceptance/3334/helpers.mjs';
 import { fixture, PAIRS, show, showLog, tableLog, within } from './acceptance/3590/helpers.mjs';
 
-// The claim, as helpers.mjs's `claim` makes it, but run as a command of the throttle's build class: claimPair from the
-// fixture's own bays.mjs with its cwd as the root, printing one `CLAIM <json>` line, which also names the grant its
-// process inherited (DEEP_THROTTLE, read before the claim). A pair is closed again at once.
 const CLAIM = `const [script] = process.argv.slice(1);
 const throttle = process.env.DEEP_THROTTLE ?? null;
 const { claimPair } = await import(script);
@@ -31,7 +25,6 @@ test('a bay-pair claim nested in a build grant keeps a 30-minute wait (interim, 
   try { seen = line ? JSON.parse(line.slice('CLAIM '.length)) : null; } catch {}
   assert.ok(seen, `the claim printed no CLAIM line\n${show(result)}\n${showLog(box)}`);
   assert.equal(result.status, 0, `throttle.mjs build exited ${result.status}\n${show(result)}`);
-  // The claim ran nested in the build grant throttle.mjs took on the test's own table.
   const log = tableLog(box);
   const build = log.filter((entry) => entry.event === 'granted' && entry.class === 'build' && entry.pid === run.pid);
   assert.equal(build.length, 1, `the log holds ${build.length} build grants of throttle.mjs (pid ${run.pid}), not 1\n${showLog(box)}`);
