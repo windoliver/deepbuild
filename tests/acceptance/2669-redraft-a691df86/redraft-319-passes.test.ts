@@ -1,17 +1,3 @@
-// #2669.a691df86: "`tests/acceptance/83/redraft-319/status.test.ts` passes"
-//
-// The criterion as amended (issue comment 7150789468): #83's blind redraft for #319 of its status tests passes. That
-// file is run here once, as its own README runs it (vitest with --root at its folder, one file at a time, no colour),
-// in a child process through the repo's own vitest.
-//
-// asserts:
-//   - the CLI and deep-hook the suite drives (#83's helpers.ts `CURRENT`) are built, or this is BLOCKED, never a pass;
-//   - the child vitest exits 0;
-//   - its summary reports one test file and at least one test, every test passed, and none failed, was skipped or left
-//     todo (nothing unrun passes: AGENTS.md, the four invariants).
-// Wrong programs (twins.json): `status-never-asked` (verdict-chat.ts reads no prompt as a status question) and
-// `needs-you-counts-queued` (core.ts counts an ask still waiting for its batch in Needs you). Each makes the redraft
-// fail at its own expect, and this test at its exit and summary assertions (BASE-FAILURE.txt).
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -21,10 +7,8 @@ import { CURRENT } from '../83/helpers.ts';
 const ID = '#2669.a691df86';
 const ROOT = 'tests/acceptance/83/redraft-319';
 const FILE = 'status.test.ts';
-/** The redraft's README: about 15 s, up to 4 minutes more just before a batch time. The proof lanes stop a file at 20 minutes. */
 const CHILD_TIMEOUT = 17 * 60_000;
 
-/** vitest's summary line for `label` ("Tests  3 failed | 2 passed (5)"), as counts by word. */
 function counts(summary: string, label: string): Record<string, number> | undefined {
   const line = summary.split('\n').find((l) => new RegExp(`^\\s*${label}\\s+\\S`).test(l));
   if (!line) return undefined;

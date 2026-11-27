@@ -1,13 +1,3 @@
-// #2669.3a6c6d5b: a status question typed as the next prompt after a session outside any repo opened its first task
-// is answered from the record and reaches no model, however late the task lands; a run whose task lands after the
-// first prompt's reply shows it.
-// #2669.8fb05bc5: the workspace notice still reaches the agent once, at that first prompt or at the next prompt that
-// goes to the model.
-//
-// The landing is held past the first prompt's reply by Claude Code's own order (#567): its transcript entry for the
-// prompt is written after the hook fires, so the hub sets the prompt aside, replies, and opens the task (which lands
-// it in a workspace) only when the session's next hook places it. The test writes the entry after the reply and fires
-// the next hook itself, then waits for the record to show the workspace: no sleep decides the order.
 import { afterAll, describe, expect, it } from 'vitest';
 import {
   answerOf, begin, Claude, cleanup, edits, firedShown, hubWithSetup, makeHome, modelCalled, newSession, payload, promptEntry, readLines, stop, waitFor,
@@ -20,17 +10,11 @@ afterAll(cleanup, 60_000);
 const FIRST = 'Fix the cart total, then stop.';
 const WORK = 'Now add a test for total.ts.';
 
-/** A person's prompt, its transcript entry first, then its UserPromptSubmit. */
 async function typed(claude: Claude, s: Session, text: string) {
   promptEntry(s, text, 'person');
   return claude.hook('UserPromptSubmit', payload(s, 'UserPromptSubmit', { prompt: text }));
 }
 
-/**
- * A session outside any repo whose first task lands after its first prompt's reply has gone: the first prompt's reply,
- * with no notice in it and no workspace in the record yet; then the entry, an Edit whose hooks place the prompt, the
- * record showing the workspace, and the stop.
- */
 async function lateRun(): Promise<{ h: Home; hub: Hub; s: Session; claude: Claude }> {
   const h = makeHome();
   const hub = await hubWithSetup(h);
@@ -66,7 +50,6 @@ describe(`${ONCE} The workspace notice still reaches the agent once, at the firs
     expect(fired.model, `"${WORK}" reaches the model: ${firedShown(fired)}`).toBe(true);
     const reached = noticeReached(h, s);
     expect(reached.length, `the workspace notice reaches the agent exactly once (not zero, not twice): ${reachedShown(reached)}`).toBe(1);
-    // The next prompt that went to the model after the first: the first prompt line in the hook log's model lines after it.
     const models = readLines(h.hookLog).filter((l) => l.phase === 'model' && l.session === s.id).map((l) => String(l.prompt));
     const next = models.find((p) => p !== FIRST);
     expect(reached[0]!.event, `the notice came with a prompt: ${reachedShown(reached)}`).toBe('UserPromptSubmit');
