@@ -1,12 +1,3 @@
-// #1869 #1869.c671af33: with git stubbed to hang on `ls-files`, the claim gets a verdict other than PASS before its
-// stop hold ends, naming the timed-out read.
-//
-// The hub's GateRunner on the bench (bench.ts), with the hub's stop hold (STOP_HOLD_MS). The session's worktree edits
-// the code under test alone, so none of the check's own files changed and the check passes: the control, on a bench of
-// its own with git unstubbed, must read that claim PASS (else something else keeps it from passing: BLOCKED). Then the
-// same claim on a fresh bench, every listing of tracked files in the worktree (`git ls-files`, the snapshot's own
-// listings left alone) hanging. Before the stop hold ends, the stop must reply with a verdict made, other than PASS,
-// and a line of it must name the timed-out `ls-files` read.
 import { describe, expect, it } from 'vitest';
 import { CODE, EDITED_CODE, openBench, shown, STOP_HOLD_MS, TOTAL } from './bench.ts';
 
@@ -14,7 +5,6 @@ const AC2 = '#1869.c671af33';
 
 describe(`${AC2} with git ls-files hanging, the claim gets a verdict other than PASS before its stop hold ends, naming the timed-out read`, () => {
   it(`${AC2} git ls-files hangs in the worktree: before the ${STOP_HOLD_MS / 1000} s stop hold ends, a verdict other than PASS naming the ls-files read`, async () => {
-    // The control: the claim changes only the code under test, so with every read answered it passes.
     const control = await openBench({ [CODE]: EDITED_CODE });
     try {
       const claim = 'claim:01K9C0NTR0L000000000000000';
@@ -30,7 +20,6 @@ describe(`${AC2} with git ls-files hanging, the claim gets a verdict other than 
       b.arm('ls-files-hangs');
       const claim = 'claim:01K9L5F1LE5000000000000000';
       const { replied } = await b.stop({ session: 'session:ls-files', claim });
-      // Read at once, before the bench stops the hang: what the claim had when its hold ended.
       const v = b.verdict(claim);
       const hung = b.stubbed().filter((s) => s.did === 'hung');
       if (!hung.length) throw Error(`BLOCKED: the gate never listed tracked files with git ls-files in the session's worktree, so the stub hung nothing (runs: ${b.outcomes.join(', ') || 'none'})`);

@@ -1,12 +1,3 @@
-// #1869 #1869.2a6f926a: with git stubbed to fail on `diff` for a claim that edits an approved check's test file, the
-// claim does not read PASS, and the check's line names the failed read. A runner that treats the error as no change
-// passes the claim and fails this test, naming the check.
-//
-// The hub's GateRunner on the bench (bench.ts): the session's worktree edits `test/total.check.cjs`, the own test file
-// of the approved check `total`, so it still passes. The control, on a bench of its own with git unstubbed, must read
-// that claim as not PASS with a line naming the check as the agent's own (else the bench can't see the edit: BLOCKED).
-// Then the same claim on a fresh bench, every `git diff` in the worktree failing: it must not read PASS, and a line of
-// its verdict must name both the check and the failed `diff` read.
 import { describe, expect, it } from 'vitest';
 import { EDITED_TEST, openBench, shown, TEST_FILE, TOTAL } from './bench.ts';
 
@@ -14,7 +5,6 @@ const AC1 = '#1869.2a6f926a';
 
 describe(`${AC1} a claim that edits an approved check's test file, with git diff failing, does not read PASS, and the check's line names the failed read`, () => {
   it(`${AC1} git diff fails in the worktree for a claim that edits ${TEST_FILE}: not PASS, ${TOTAL.check}'s line names the failed diff`, async () => {
-    // The control: the edit, read whole, makes the approved check the agent's own.
     const control = await openBench({ [TEST_FILE]: EDITED_TEST });
     try {
       const { replied } = await control.stop({ session: 'session:control', claim: 'claim:01K9C0NTR0L000000000000000' });
