@@ -15,7 +15,6 @@ const READ_MAX = 4 * 1024 * 1024;
 const BLOCK = 6;
 
 interface ChangedFile { path: string; added: number; removed: number }
-/** Something a change brought in, and the file it came from. */
 interface Brought { name: string; from: string }
 interface Measured {
   files: ChangedFile[];

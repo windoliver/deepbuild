@@ -15,8 +15,9 @@ const glob = (pattern) => new RegExp(`^${pattern.split(/(\*\*\/|\/\*\*$|\*\*|\*)
 const TESTS = testPaths.map(glob);
 const MARKERS = [
   [/^\/\/\s*deadline:\s*\S/, (path) => TESTS.some((pattern) => pattern.test(path))],
-  [/^\/\/\/?\s*cache:\s*(?:[^,]*,\s*)*(?:entries|bytes)\s+\S/, (path) => /^crates\/[^/]+\/src\//.test(path)],
-  [/^\/\/\s*(?:copy-exception|color-literal-exception|size-literal-exception|blocking call):\s*\S/, (path) => /^crates\/deep-app\/(?:src|panels)\//.test(path)],
+  [/^\/\/\/?\s*cache:\s*(?:[^,]*,\s*)*(?:entries|bytes)\s+\S/, (path) => /^crates\/.*\.rs$/.test(path)],
+  [/^\/\/\s*(?:copy-exception|size-literal-exception|blocking call):\s*\S/, (path) => /^crates\/deep-app\/src\/.*\.rs$/.test(path)],
+  [/^\/\/\s*color-literal-exception:\s*\S/, (path) => /^crates\/deep-app\/(?:src\/.*\.rs|panels\/.*\.js)$/.test(path)],
 ];
 const LICENSE = /\bCopyright (?:\(c\)|©|\d{4}|[A-Z])|\bLicensed under the\b|SPDX-License-Identifier:/;
 
@@ -76,7 +77,12 @@ if (!isMainThread) {
     } catch {
       continue;
     }
-    if (!GENERATED.test(text.split('\n', 5).join('\n'))) counts.push([path, count(path, text)]);
+    if (GENERATED.test(text.split('\n', 5).join('\n'))) continue;
+    try {
+      counts.push([path, count(path, text)]);
+    } catch (error) {
+      throw Error(`${path} can't be read for its comments: ${error.message}`);
+    }
   }
   parentPort.postMessage(counts);
   process.exit(0);
@@ -90,7 +96,7 @@ try {
     console.log(`INVALID comments: ${CEILINGS} can't be read: ${error.message}\n  Fix: Restore ${CEILINGS}: a JSON object mapping each hand-written source file that holds comments to its count of comment lines.`);
     process.exit(1);
   }
-  ceilings = null;
+  ceilings = {};
 }
 let base = null;
 try {
@@ -108,14 +114,20 @@ try {
 const paths = listing.filter((path) => SOURCE.test(path) && !OUT.test(path)).sort();
 const workers = Math.min(4, availableParallelism(), paths.length);
 const shares = Array.from({ length: workers }, (_, share) => paths.filter((_, index) => index % workers === share));
-const counts = Object.fromEntries((await Promise.all(shares.map((share) => new Promise((resolve, reject) => {
-  new Worker(new URL(import.meta.url), { workerData: share }).once('message', resolve).once('error', reject).once('exit', () => reject(Error('a counting thread ended with no counts')));
-})))).flat().sort(([a], [b]) => (a < b ? -1 : 1)));
+let counts;
+try {
+  counts = Object.fromEntries((await Promise.all(shares.map((share) => new Promise((resolve, reject) => {
+    new Worker(new URL(import.meta.url), { workerData: share }).once('message', resolve).once('error', reject).once('exit', () => reject(Error('a counting thread ended with no counts')));
+  })))).flat().sort(([a], [b]) => (a < b ? -1 : 1)));
+} catch (error) {
+  console.log(`BLOCKED comments: ${error.message}\n  Fix: Make the file one its language's parser reads, then run the ratchet again.`);
+  process.exit(2);
+}
 
 if (write) {
   const next = {};
   for (const [path, found] of Object.entries(counts)) {
-    const most = base ? base[path] ?? 0 : ceilings ? ceilings[path] ?? 0 : found;
+    const most = base ? base[path] ?? 0 : found;
     const ceiling = Math.min(found, most);
     if (ceiling) next[path] = ceiling;
   }

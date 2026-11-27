@@ -300,6 +300,7 @@ class Sim {
         own.set(this.key(s, def), start + exp);
       } else slow.push(def);
     }
+    // What the hold alone would have run of what the budget left out.
     const budgetCost: string[] = [];
     for (const def of slow) {
       const exp = this.expected(def, e.changed);

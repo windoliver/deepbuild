@@ -14,6 +14,7 @@ Status: accepted. Moved from comments in `packages/gate` by #3454's first pass (
 
 - **A check can't fail by either mask.** `packages/gate/src/claim.ts`, `claimVerdict`. The locked command's own mask counts, and so does one the kind found by the same rule in what the command runs (a script or a package.json script, named `<mask> in <file>`). The kind's other uncounted causes, an untraced program or altered evidence, name no mask the rule reads.
 - **A run whose report can't record a failure makes its check one that can't fail.** `packages/gate/src/claim.ts`, `claimVerdict`. A report that showed a control passing, or no control at all, proves nothing (#1099).
+- **A check proves by a static check only when no test tool counted its runs.** `packages/gate/src/claim.ts`, `claimVerdict`. A check with a run a test tool's report counted, or of a kind that doesn't say, proves by a test run, so a lower proof is never shown as a higher one (#1861).
 - **A run that never started is the machine's, so yours to provide.** `packages/gate/src/claim.ts`, `recordOf`. Its record names why, such as a program the run's PATH lacks or a checkout gone, with you as its owner.
 
 ## Whose checks count

@@ -9,14 +9,14 @@ Hand-written code says what it does through its names, and a decision about it i
 The lint lane holds the rule with a ratchet, `scripts/comment-ratchet.mjs`. `scripts/comment-ceilings.json` lists each hand-written `.ts`, `.mts`, `.cts`, `.tsx`, `.js`, `.mjs`, `.cjs`, `.jsx`, `.rs` and `.wgsl` file that still holds comments, with its count of comment lines. A line counts when any part of a comment is on it.
 
 - A count may drop, and its ceiling drops with it in the same change: `node scripts/comment-ratchet.mjs --write` lowers the ceilings and drops the entry of a file with none left.
-- A count never rises above its ceiling, and a ceiling never rises above the merge base's with `origin/main`, by hand or by `--write`. Where there is no merge base to read, `--write` never raises a ceiling the file already has.
+- A count never rises above its ceiling, and a ceiling never rises above the merge base's with `origin/main`, by hand or by `--write`. Until the merge base holds a ceilings file, as on the change that lands the ratchet, there is nothing to compare with and `--write` writes the counts as they are.
 - A file the merge base doesn't list starts at zero, so new code is written without comments.
 
 Comments are found by token: the TypeScript parser for scripts, `scripts/rust-source.mjs` for Rust, and WGSL's two comment forms. A `//` or `/*` inside a string, a regular expression or a template is none.
 
 ## What is not counted
 
-- A marker another lint reads, with its reason, in a file that lint reads: `// deadline:` in a test file, `// cache:` with a bound (`entries` or `bytes`) in a crate's `src/`, and `// copy-exception:`, `// color-literal-exception:`, `// size-literal-exception:` and `// blocking call:` in `crates/deep-app`. The marker without a reason counts, and so does the marker anywhere else.
+- A marker another lint reads, with its reason, in a file that lint reads: `// deadline:` in a test file, `// cache:` with a bound (`entries` or `bytes`) in a crate's Rust, `// copy-exception:`, `// size-literal-exception:` and `// blocking call:` in the Rust of `crates/deep-app/src`, and `// color-literal-exception:` there and in the panel scripts of `crates/deep-app/panels`. The marker without a reason counts, and so does the marker anywhere else. The ratchet doesn't ask whether the lint finds something beside the marker; that stays the lint's.
 - A license notice: a comment that holds `Copyright` and its holder or year, `Licensed under the`, or `SPDX-License-Identifier:` (AGENTS.md: ported code keeps its notice in the receiving file).
 - With either, the comment-only lines next to it.
 

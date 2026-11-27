@@ -23,6 +23,7 @@ describe('#907 a fast-lane check takes the next free slot ahead of queued slow r
       const fastWaits = slot(table, 'session:typecheck', 'run:T', 'fast');
       const waiting = Date.now();
       await sleep(400);
+      // A request the slow run had in flight as the fast one began waiting is allowed for; none after it.
       const slowAsked = asked.filter((a) => a.holder === 'session:e2e' && a.at > waiting + 60);
       expect(slowAsked.length, `the waiting slow run asked for a slot ${slowAsked.length} times while the fast-lane check waited; it must ask for none, so the next free slot goes to the fast one`).toBe(0);
       await real.release(journey.id, []);

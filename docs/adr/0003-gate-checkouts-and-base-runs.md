@@ -4,7 +4,7 @@ Status: accepted. Moved from comments in `packages/gate` by #3454's first pass (
 
 ## Cloned folders
 
-- **A folder git tracks a file in is still cloned.** `packages/gate/src/checkouts.ts`, `cloneIn`. Git doesn't call a folder ignored once it tracks a file in it, though the rest of it still is, so the folder is taken by name rather than by git's word.
+- **A folder git tracks a file in is still cloned.** `packages/gate/src/checkouts.ts`, `cloneIn`. Git doesn't call a folder ignored once it tracks a file in it, though the rest of it still is.
 - **A folder that is itself a link is cloned from where it points.** `packages/gate/src/checkouts.ts`, `cloneIn`. Nothing written in the checkout then reaches the shared install.
 - **A read-only folder is made writable in the clone.** `packages/gate/src/checkouts.ts`, `cloneIn`. It keeps its mode when cloned, and the tree's files must still go into it.
 - **What isn't ignored in a cloned folder comes from the tree alone.** `packages/gate/src/checkouts.ts`, `cloneIn`. A file only the worktree has isn't left behind, and a link the clone keeps on the way to one is removed itself, never what it points at.
