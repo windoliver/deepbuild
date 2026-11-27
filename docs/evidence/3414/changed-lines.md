@@ -138,7 +138,7 @@ New line, an anchor that keeps the old heading's link landing: `<a id="what-the-
 ### docs/canvas-primitives.md:695
 
 - Before: `The tech design's kernel row lists five ask kinds and its asks table six; this keeps six, with `definition`.`
-- After: `The tech design's core row lists five ask kinds and its asks table six; this keeps six, with `definition`.`
+- After: `The tech design's Ask, in [The contract](./technical-design.md#prim-kernel), lists the same six, with `definition`.`
 
 ### docs/canvas-primitives.md:1131
 
