@@ -2831,7 +2831,7 @@ Exit: a day of real Claude Code sessions recorded, with hook overhead under 10 m
 
 ### Week 2
 
-**Asks and delivery.** Every prompt recorded with its origin, and a definition locked for each task that changes behavior. The inbox in the CLI, with each ask's deadline, fallback and default, the resolver matching saved decisions by kind and scope with rule states, the core's budget ledger, which checks the budget a resolver names, tasks that close themselves, and Claude Code delivery through the Stop hold, the background waiter and prompt context. A new or changed MCP tool that can change or destroy is held until you approve it once. The MCP tools `deep_ask`, `deep_wait` and `deep_search` arrive, and the background waiter is tested in the desktop app.
+**Asks and delivery.** Every prompt recorded with its origin, and a task with its definition locked for each prompt that changes behavior. The inbox in the CLI, with each ask's deadline, fallback and default, the resolver matching saved decisions by kind and scope with rule states, the core's budget ledger, which checks the budget a resolver names, tasks that close themselves, and Claude Code delivery through the Stop hold, the background waiter and prompt context. A new or changed MCP tool that can change or destroy is held until you approve it once. The MCP tools `deep_ask`, `deep_wait` and `deep_search` arrive, and the background waiter is tested in the desktop app.
 
 Exit: an answer typed in the CLI reaches an idle Claude Code session, a repeated question never reaches you, and an unanswered ask reaches its default on time, announced and undoable.
 
