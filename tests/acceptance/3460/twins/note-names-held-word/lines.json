@@ -2,10 +2,10 @@
   "packages/hub/src/search.ts": [
     {
       "find": [
-        "  for (const word of new Set(wanted.slice(0, NOTE_WORDS))) if (!(await everyHit(input, [word], word)).length) unheld.push(word);"
+        "  for (const word of new Set(wanted.slice(0, NOTE_WORDS))) if (!(await everyHit(input, [word], word, true)).length) unheld.push(word);"
       ],
       "wrong": [
-        "  for (const word of new Set(wanted.slice(0, NOTE_WORDS))) unheld.push(word);"
+        "  for (const word of new Set(wanted.slice(0, NOTE_WORDS))) if ((await everyHit(input, [word], word, true)).length >= 0) unheld.push(word);"
       ]
     }
   ]

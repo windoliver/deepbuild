@@ -71,6 +71,7 @@ function mcp(env, cwd, started) {
   started.push(child);
   const replies = new Map();
   const waiting = new Map();
+  child.once('exit', () => { for (const fail of [...waiting.values()]) fail(); });
   createInterface({ input: child.stdout }).on('line', (raw) => {
     let reply;
     try { reply = JSON.parse(raw); } catch { return; }
@@ -81,12 +82,25 @@ function mcp(env, cwd, started) {
   let next = 0;
   const ask = (method, params) => new Promise((done, fail) => {
     const id = ++next;
-    const timer = setTimeout(() => fail(Error(`deep mcp gave no reply to ${method}`)), 120_000);
-    waiting.set(id, () => { clearTimeout(timer); waiting.delete(id); done(replies.get(id)); });
-    child.once('exit', () => fail(Error('deep mcp exited')));
+    const timer = setTimeout(() => { waiting.delete(id); fail(Error(`deep mcp gave no reply to ${method}`)); }, 120_000);
+    // Woken by its reply, or by deep mcp's exit, which leaves no reply.
+    waiting.set(id, () => { clearTimeout(timer); waiting.delete(id); if (replies.has(id)) done(replies.get(id)); else fail(Error('deep mcp exited')); });
     child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`);
   });
   return { ask };
+}
+
+/** Every hit's handle for a query through `deep find --json`, following `next` to the last slice. */
+function findAll(root, env, cwd, query) {
+  const out = [];
+  for (let cursor; ;) {
+    const r = spawnSync(process.execPath, [CLI, 'find', query, '--json', '--root', root, ...(cursor !== undefined ? ['--slice', cursor] : [])], { cwd, env, encoding: 'utf8', timeout: 120_000 });
+    if (r.status !== 0) throw Error(`deep find ${JSON.stringify(query)} --json exited ${r.status}: ${String(r.stderr).slice(0, 400)}`);
+    const found = JSON.parse(r.stdout);
+    out.push(...found.hits.map((h) => h.handle));
+    cursor = typeof found.next === 'string' ? found.next : undefined;
+    if (cursor === undefined) return out;
+  }
 }
 
 /** Every hit's source for a query through deep_search, following `next` to the last page. */
@@ -105,7 +119,7 @@ async function searchAll(client, query) {
 
 async function main(file) {
   const { claims, queries } = JSON.parse(readFileSync(file, 'utf8'));
-  // A short folder: the hub's socket path must fit the OS's limit, which the macOS temp folder's long path passes.
+  // A short folder: the hub's socket path must fit the OS's limit, which a path under the macOS temp folder exceeds.
   const tmp = realpathSync(mkdtempSync(join(process.platform === 'win32' ? tmpdir() : '/tmp', 'dsr-')));
   const home = join(tmp, 'h');
   const root = join(home, '.deepbuild');
@@ -121,15 +135,26 @@ async function main(file) {
     started.push(hub);
     let log = '';
     hub.stderr.setEncoding('utf8').on('data', (d) => { log += d; });
-    await new Promise((ready, fail) => { hub.stdout.once('data', ready); hub.once('exit', () => fail(Error(`the hub did not start: ${log.slice(0, 2000)}`))); });
+    // Ready when its first line says so, as the hub's own tests wait for it.
+    await new Promise((ready, fail) => {
+      const timer = setTimeout(() => fail(Error(`the hub did not start in 120 s: ${log.slice(0, 2000)}`)), 120_000);
+      let first = '';
+      hub.stdout.setEncoding('utf8').on('data', (d) => {
+        first += d;
+        if (!first.includes('\n')) return;
+        clearTimeout(timer);
+        let said;
+        try { said = JSON.parse(first.split('\n')[0]); } catch { /* not the ready line */ }
+        if (said?.ready === true) ready(); else fail(Error(`the hub did not start: ${first.split('\n')[0].slice(0, 400)} ${log.slice(0, 2000)}`));
+      });
+      hub.once('exit', () => { clearTimeout(timer); fail(Error(`the hub did not start: ${log.slice(0, 2000)}`)); });
+    });
     const client = mcp(env, elsewhere, started);
     await client.ask('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'search-reading', version: '0' } });
     const hits = new Map();
     for (const q of queries) {
       hits.set(`deep_search\n${q.query}`, await searchAll(client, q.query));
-      const r = spawnSync(process.execPath, [CLI, 'find', q.query, '--json', '--root', root], { cwd: elsewhere, env, encoding: 'utf8', timeout: 120_000 });
-      if (r.status !== 0) throw Error(`deep find ${JSON.stringify(q.query)} --json exited ${r.status}: ${String(r.stderr).slice(0, 400)}`);
-      hits.set(`deep find\n${q.query}`, JSON.parse(r.stdout).hits.map((h) => h.handle));
+      hits.set(`deep find\n${q.query}`, findAll(root, env, elsewhere, q.query));
     }
     process.stdout.write(reading(queries, (search, q) => hits.get(`${search}\n${q.query}`)));
   } finally {

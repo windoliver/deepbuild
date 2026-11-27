@@ -220,16 +220,19 @@ async function pastHits(past: NonNullable<SearchIn['past']>, wanted: readonly st
 
 /** How many of a query's words an empty reply's note reads, one search a word. */
 const NOTE_WORDS = 16;
+/** The most characters of one word a note names, so 16 words keep the reply well under the cap. */
+const NOTE_WORD = 64;
 /**
  * Why a query with words found nothing (#3460): each word read, of its first 16, that no source the call may read
- * holds, by the search's own word rule and scope, one search a word; or, when each is held somewhere, that no one
- * source holds them all.
+ * holds, by the search's own word rule and scope, one search a word that stops at the first source holding it; or,
+ * when each is held somewhere, that no one source holds them all.
  */
 async function whyNothing(input: SearchIn, wanted: readonly string[]): Promise<string> {
   const unheld: string[] = [];
-  for (const word of new Set(wanted.slice(0, NOTE_WORDS))) if (!(await everyHit(input, [word], word)).length) unheld.push(word);
+  for (const word of new Set(wanted.slice(0, NOTE_WORDS))) if (!(await everyHit(input, [word], word, true)).length) unheld.push(word);
+  const named = unheld.map((w) => ([...w].length > NOTE_WORD ? `${[...w].slice(0, NOTE_WORD).join('')}…` : w));
   const left = Math.max(0, wanted.length - NOTE_WORDS);
-  return `${unheld.length ? `No source this call may read holds these words: ${unheld.join(', ')}.` : 'Each word is held by a source this call may read, but no one source holds them all.'}${left ? ` The search read the query's first ${NOTE_WORDS} words and left ${left} unread.` : ''}`;
+  return `${named.length ? `No source this call may read holds these words: ${named.join(', ')}.` : 'Each word is held by a source this call may read, but no one source holds them all.'}${left ? ` The search read the query's first ${NOTE_WORDS} words and left ${left} unread.` : ''}`;
 }
 
 /** Every hit for the query, each citing its source: your decisions, newest first, then the wiki's and the spec's, then the session's own, then readings, then past sessions. */
@@ -261,9 +264,13 @@ export async function search(input: SearchIn): Promise<{ hits: Hit[]; more: numb
   return { hits: shown.slice(0, n), more: Math.max(0, all.length - end), ...(end < all.length ? { next: `h${end}` } : {}) };
 }
 
-/** Every hit for the words a query asks for, in a reply's order, read only where the call may read. */
-async function everyHit(input: SearchIn, wanted: readonly string[], query: string): Promise<Hit[]> {
+/**
+ * Every hit for the words a query asks for, in a reply's order, read only where the call may read. `first` stops at
+ * the first source that holds them, for a note that only asks whether any does.
+ */
+async function everyHit(input: SearchIn, wanted: readonly string[], query: string, first = false): Promise<Hit[]> {
   const hits: Hit[] = await wikiHits(input.index ? await input.index.search(query) : await ledgerSearch(input, wanted), input);
+  if (first && hits.length) return hits;
 
   const asked = mightHold('a.question', wanted);
   const decisions = (await input.raw(`SELECT e.id AS id, a.question AS question, e.data AS data FROM events e JOIN asks a ON a.id = substr(json_extract(e.data, '$.ask'), 5)
@@ -275,6 +282,7 @@ async function everyHit(input: SearchIn, wanted: readonly string[], query: strin
     if (input.decides && !input.decides(scope)) continue;
     decided.push({ source: `decision:${d.id}`, quote: `${d.question} → ${answer} (${scope})`.slice(0, QUOTE) });
   }
+  if (first && decided.length) return decided;
 
   const own = input.session;
   const record: Hit[] = [];
@@ -288,6 +296,7 @@ async function everyHit(input: SearchIn, wanted: readonly string[], query: strin
       if (holds(text, wanted)) record.push({ source: row.kind === 'open_item.opened' ? String(d.task_ref) : String(d.verdict), quote: text.slice(0, QUOTE) });
     }
   }
+  if (first && record.length) return record;
 
   if (input.worktree) {
     const file = join(input.worktree, '.deepbuild', 'done.yaml');
@@ -295,7 +304,9 @@ async function everyHit(input: SearchIn, wanted: readonly string[], query: strin
     try { text = readFileSync(file, 'utf8'); } catch { /* a repo with no spec has nothing to find */ }
     text.split('\n').forEach((line, i) => { if (holds(line, wanted)) hits.push({ source: `${file}#L${i + 1}`, quote: line.trim().slice(0, QUOTE) }); });
   }
+  if (first && hits.length) return hits;
   const numbers: Hit[] = (await input.readings(query)).map(({ reading, source, as_of, status }) => ({ source, as_of, reading, status, quote: `${status === 'STALE' ? 'STALE ' : ''}${reading.id}${reading.subject ? ` ${reading.subject}` : ''}: ${reading.value === null ? 'unknown' : String(reading.value)} ${reading.unit}`.slice(0, QUOTE) }));
+  if (first && numbers.length) return numbers;
   const history = input.past ? await pastHits(input.past, wanted) : [];
   return [...decided, ...hits, ...record, ...numbers, ...history];
 }
