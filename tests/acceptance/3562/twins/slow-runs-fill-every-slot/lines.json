@@ -1,0 +1,12 @@
+{
+  "packages/leases/src/index.ts": [
+    {
+      "find": [
+        "      if (kind.name === 'cpu.slot' && resource.key === SLOW_SLOT && sum(slow) + units > slowSlots(kind.n) && this.plant !== 'fills-every-slot') {"
+      ],
+      "wrong": [
+        "      if (kind.name === 'cpu.slot' && resource.key === SLOW_SLOT && sum(slow) + units > kind.n && this.plant !== 'fills-every-slot') {"
+      ]
+    }
+  ]
+}

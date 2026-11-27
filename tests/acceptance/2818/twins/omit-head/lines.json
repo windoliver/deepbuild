@@ -1,0 +1,12 @@
+{
+  "scripts/known-failures-record.mjs": [
+    {
+      "find": [
+        "        baseline.failures[id] = `fails on main ${short(head)}: ${singleLine(message)} (#${prevOpen ?? targetIssue}, added ${day})`;"
+      ],
+      "wrong": [
+        "        baseline.failures[id] = `fails on main: ${singleLine(message)} (#${prevOpen ?? targetIssue}, added ${day})`;"
+      ]
+    }
+  ]
+}

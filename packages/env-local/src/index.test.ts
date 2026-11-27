@@ -360,8 +360,10 @@ test('a service whose container holds an anonymous volume is recreated, keeping 
   const stack = new WarmStack({ host, compose: { dir: join(dir, 'hub'), docker: join(tools, 'docker') }, products: {} as WarmProducts, take: async () => ({ key: '' }), scrub: () => undefined });
   try {
     stack.project = 'deep-c000';
-    const up = (stack as unknown as { up: (file: string, services: string[]) => Promise<string | undefined> }).up.bind(stack);
-    expect(await up(join(dir, 'compose.json'), ['db', 'web'])).toBeUndefined();
+    // up() reads the file for its bind mounts (#3377) before it starts anything; this one has none.
+    writeFileSync(join(dir, 'compose.json'), '{}');
+    const up = (stack as unknown as { up: (file: string, folder: string, services: string[]) => Promise<string | undefined> }).up.bind(stack);
+    expect(await up(join(dir, 'compose.json'), dir, ['db', 'web'])).toBeUndefined();
     const ran = readFileSync(calls, 'utf8').trim().split('\n').filter((c) => / (rm|up) /.test(c)).map((c) => c.replace(/^.* (rm|up) /, '$1 '));
     expect(ran).toEqual(['rm -f web', "up -d --wait -t 3 --no-deps --no-build --pull never --force-recreate db web"]);
   } finally {
