@@ -1,24 +1,3 @@
-//! #1847: a panel's imports are refused whatever way their name is spelled, not only as one plain string. Written blind
-//! (README.md here). Each test's name carries its criterion's ID.
-//!
-//! - AC1 `#1847.675d2963`: the planted panels (a dynamic import naming the toolkit in a template literal, a dynamic
-//!   import whose name is computed, a `require` whose name is computed) are each refused at pack check
-//!   (`deep_replica::kit::panel`) and at load (`deep-panel-host serve --panel`, which loads through
-//!   `deep_app::mount_panel`), naming the file and the line. Beside them, from the owner's audit comment and not a
-//!   checkbox criterion, a static toolkit import after a regex literal holding a quote. And through the check the issue
-//!   names (`deep_app::panel_module::check`), generated panels with one such import at a random line are refused naming
-//!   that file and line.
-//! - AC2 `#1847.fc64718b`: a panel importing only `@deepbuild/panel` and its own files, by plain strings, passes the pack
-//!   check and loads unchanged (its tree is the merge base's, `base-trees/plain-imports.txt`); every shipped panel still
-//!   passes and loads; generated panels whose every import is one plain string pass the check.
-//!
-//! Wired into deep-replica by one `[[test]]` entry (no harness: on macOS the pack check's headless window wants the
-//! main thread). Build the panel host first, then run from the checkout:
-//!     cargo build --locked -p deep-panel-host
-//!     cargo test --locked -p deep-replica --test acceptance_1847 [-- <part of a name>]
-//! With `DEEP_1847_OUT=<dir>`, the plain panel's tree is also written to `<dir>/plain-imports.txt` (how base-trees/ was
-//! captured at the base).
-
 use std::io::{BufRead as _, BufReader, Write as _};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
@@ -37,23 +16,16 @@ const AC2_LOAD: &str = "#1847.fc64718b a panel importing only @deepbuild/panel a
 const AC2_SHIPPED: &str = "#1847.fc64718b every shipped panel still passes the pack check and loads";
 const AC2_PROPERTY: &str = "#1847.fc64718b property: a generated panel whose every import is one plain string passes the check";
 
-/// The planted panels of AC1: the fixture, and the line of its `reach.js` that holds the planted import.
 const PLANTED: [(&str, usize); 3] = [
     ("dynamic-template", 4),
     ("dynamic-computed", 6),
     ("require-computed", 5),
 ];
-/// The owner's audit comment's spelling: the fixture and its line.
 const OWNER: (&str, usize) = ("regex-quote", 3);
-/// The file of each planted panel that holds its planted import.
 const PLANTED_FILE: &str = "reach.js";
-/// Shipped panels that import `quotes`, a name served only in a `spike` build (#1454): the base refuses them in this
-/// build too, so they aren't read here.
 const SPIKE_ONLY: [&str; 2] = ["claude-code", "codex"];
-/// The plain panel of AC2.
 const PLAIN: &str = "plain-imports";
 
-/// Property cases per property test, each from its own seed.
 const CASES: u64 = 300;
 
 type Check = fn() -> Outcome;
@@ -119,7 +91,6 @@ fn fixture(name: &str) -> PathBuf {
     repo().join("tests/acceptance/1847/fixtures").join(name)
 }
 
-/// A fresh scratch folder for this process.
 fn scratch(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("deep-1847-{}", std::process::id())).join(name);
     let _ = std::fs::remove_dir_all(&dir);
@@ -139,21 +110,18 @@ fn copy_tree(from: &Path, to: &Path) {
     }
 }
 
-/// A copy of a panel's folder, so neither the check nor a load writes into the checkout.
 fn copy_of(dir: &Path, name: &str) -> PathBuf {
     let to = scratch(name);
     copy_tree(dir, &to);
     to
 }
 
-/// Whether `text` holds `word` with no letter, digit or `_` on either side.
 fn names(text: &str, word: &str) -> bool {
     let edge = |c: Option<char>| !c.is_some_and(|c| c.is_alphanumeric() || c == '_');
     text.match_indices(word)
         .any(|(at, _)| edge(text[..at].chars().next_back()) && edge(text[at + word.len()..].chars().next()))
 }
 
-/// Whether a refusal names line `line` of `file`: `<file>:<line>` or `line <line>`, the number whole.
 fn names_line(text: &str, file: &str, line: usize) -> bool {
     [format!("{file}:{line}"), format!("line {line}")].iter().any(|form| {
         text.match_indices(form.as_str()).any(|(at, _)| {
@@ -163,7 +131,6 @@ fn names_line(text: &str, file: &str, line: usize) -> bool {
     })
 }
 
-/// The judge of every refusal AC1 asks for: refused, naming the file and the line. A failure names the panel.
 fn judge_refused(panel: &str, at: &str, file: &str, line: usize, result: Result<(), String>) -> Result<(), String> {
     match result {
         Ok(()) => Err(format!(
@@ -176,7 +143,6 @@ fn judge_refused(panel: &str, at: &str, file: &str, line: usize, result: Result<
     }
 }
 
-/// The pack check: `Ok(())` when `panel@1` passes the package, `Err(its refusal)` when it refuses.
 fn pack(dir: &Path) -> Result<(), String> {
     let verdict = deep_replica::kit::panel(dir);
     if verdict.pass {
@@ -186,16 +152,11 @@ fn pack(dir: &Path) -> Result<(), String> {
     }
 }
 
-/// What the panel host made of a panel.
 enum Load {
-    /// It loaded: the tree of its first invalidation.
     Loaded(String),
-    /// It refused the panel before it was ready: what it wrote on stderr.
     Refused(String),
 }
 
-/// The panel host built beside this test binary (`target/<profile>/deep-panel-host`), when it's no older than the
-/// sources it's built from; else why not.
 fn host() -> Result<PathBuf, String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let host = exe
@@ -228,8 +189,6 @@ fn host() -> Result<PathBuf, String> {
     Ok(host)
 }
 
-/// One load in the panel host, as the app runs an agent-built panel: `serve --panel <dir>` with HOME and nothing
-/// else of this environment, its `ready` line, then one invalidation and its tree. The host is stopped by its PID.
 fn load(dir: &Path) -> Result<Load, String> {
     let host = host()?;
     let mut child = Command::new(&host)
@@ -291,7 +250,6 @@ fn load(dir: &Path) -> Result<Load, String> {
     }
 }
 
-/// A load as a refusal judge reads it: `Ok(())` loaded, `Err(the refusal)`.
 fn load_verdict(dir: &Path) -> Result<Result<(), String>, String> {
     Ok(match load(dir)? {
         Load::Loaded(_) => Ok(()),
@@ -335,7 +293,6 @@ fn ac1_load() -> Outcome {
     collect(problems)
 }
 
-/// The owner's case also names the module, as the same import alone is refused naming it (#1425; design, Panel).
 fn judge_owner(at: &str, result: Result<(), String>) -> Result<(), String> {
     let (name, line) = OWNER;
     judge_refused(name, at, PLANTED_FILE, line, result.clone())?;
@@ -365,8 +322,6 @@ fn ac1_owner_load() -> Outcome {
     }
 }
 
-/// The comment's line exactly, alone in a file and after another line, against the same import alone: each refused by
-/// the check the issue names, naming the module, the file and the line.
 fn ac1_owner_spelling() -> Outcome {
     const LINE: &str = "const q = /\"/; import { Chart } from \"gpui-kit\";";
     const ALONE: &str = "import { Chart } from \"gpui-kit\";";
@@ -457,9 +412,6 @@ fn ac2_shipped() -> Outcome {
     collect(problems)
 }
 
-// ---- The property tests: generated panels through the check the issue names, `deep_app::panel_module::check`. ----
-
-/// xorshift64*, seeded per case, so a counterexample is replayed by its seed.
 struct Rng(u64);
 
 impl Rng {
@@ -475,9 +427,6 @@ impl Rng {
     }
 }
 
-/// One line of valid module code whose every import, if it has one, is named by one plain string literal: imports of
-/// `@deepbuild/panel` and of the panel's own file, beside comments, strings, template literals, regex literals and
-/// divisions that hold quotes, slashes, backticks and the words `import(` and `require(`. `i` keeps names unique.
 fn plain_line(rng: &mut Rng, i: usize) -> String {
     match rng.below(22) {
         0 => format!("import {{ View as View_{i}, div as div_{i} }} from \"@deepbuild/panel\";"),
@@ -505,8 +454,6 @@ fn plain_line(rng: &mut Rng, i: usize) -> String {
     }
 }
 
-/// One line holding one import whose module isn't named by one plain string literal (or names the toolkit), each a
-/// spelling the issue or the owner's comment states, and a word for it.
 fn planted_line(kind: usize, i: usize) -> (&'static str, String) {
     match kind % 8 {
         0 => ("a dynamic import of the toolkit in a template literal", format!("const m_{i} = await import(`gpui-kit`);")),
@@ -520,7 +467,6 @@ fn planted_line(kind: usize, i: usize) -> (&'static str, String) {
     }
 }
 
-/// A generated panel: a clean `main.js`, the stub `src/side.js`, and `src/gen.js` from `lines`.
 fn write_generated(dir: &Path, lines: &[String]) {
     let _ = std::fs::remove_dir_all(dir);
     std::fs::create_dir_all(dir.join("src")).expect("a panel folder");

@@ -164,3 +164,37 @@ cargo's fetches; no model is called. `base-trees/plain-imports.txt` was captured
 - The Scope's other item, the PR recording on the shipped build whether a dynamic import of a toolkit module resolves
   today, is the PR's record, not a test here.
 - The generated code is one construct per line; multi-line imports and imports split across comments aren't generated.
+
+## What the tests and fixtures are for
+
+- `imports.rs`: the suite for #1847, wired into deep-replica by one `[[test]]` entry with no harness, because on macOS the pack check's headless window wants the main thread. Build the panel host first (`cargo build --locked -p deep-panel-host`), then run `cargo test --locked -p deep-replica --test acceptance_1847 [-- <part of a name>]`. With `DEEP_1847_OUT=<dir>`, `ac2_load` also writes the plain panel's tree to `<dir>/plain-imports.txt`, which is how `base-trees/` was captured at the base.
+- `PLANTED`: AC1's planted panels, each paired with the line of its `reach.js` that holds the planted import.
+- `OWNER`: the fixture and line for the spelling from the owner's audit comment.
+- `PLANTED_FILE`: the file in each planted panel that holds its planted import.
+- `SPIKE_ONLY`: shipped panels that import `quotes`, a name served only in a `spike` build (#1454). The base refuses them in this build too, so they are not read.
+- `PLAIN`: AC2's plain panel.
+- `CASES`: the number of property cases per property test, each from its own seed.
+- `scratch`: a fresh scratch folder for this process.
+- `copy_of`: copies a panel's folder so neither the check nor a load writes into the checkout.
+- `names`: whether a text holds a word with no letter, digit or `_` on either side.
+- `names_line`: whether a refusal names line `n` of a file, as `<file>:<n>` or `line <n>`, with the number whole.
+- `judge_refused`: the judge for every refusal AC1 asks for, which must be a refusal naming the file and the line. A failure names the panel.
+- `pack`: the pack check, which gives `Ok(())` when `panel@1` passes the package and `Err(its refusal)` when it refuses.
+- `Load`: what the panel host made of a panel. `Loaded` holds the tree from its first invalidation. `Refused` holds what it wrote on stderr when it refused the panel before it was ready.
+- `host`: finds the panel host built beside the test binary (`target/<profile>/deep-panel-host`) when it is no older than its sources, or says why not (BLOCKED).
+- `load`: one load in the panel host, run the way the app runs an agent-built panel: `serve --panel <dir>` with HOME and nothing else from this environment, then its `ready` line, then one invalidation and its tree. The host is stopped by its PID.
+- `load_verdict`: a load in the form a refusal judge reads: `Ok(())` when it loaded, `Err(the refusal)` when it was refused.
+- `judge_owner`: the owner's case must also name the module, since the same import on its own is refused naming it (#1425; design, Panel).
+- `ac1_owner_spelling`: the comment's exact line, alone in a file and after another line, checked against the same import on its own. Each must be refused by the check the issue names, naming the module, the file and the line.
+- The property tests (`Rng`, `plain_line`, `planted_line`, `write_generated`, `ac1_property`, `ac2_property`) pass generated panels through the check the issue names, `deep_app::panel_module::check`.
+- `Rng`: xorshift64*, seeded per case, so a counterexample can be replayed from its seed.
+- `plain_line`: one line of valid module code in which every import, if there is one, is named by one plain string literal. The imports are of `@deepbuild/panel` and of the panel's own file. They sit beside comments, strings, template literals, regex literals and divisions that hold quotes, slashes, backticks and the words `import(` and `require(`. `i` keeps names unique.
+- `planted_line`: one line holding one import whose module is not named by one plain string literal (or that names the toolkit), each a spelling the issue or the owner's comment states, together with a description of it.
+- `write_generated`: a generated panel made of a clean `main.js`, the stub `src/side.js`, and `src/gen.js` built from the given lines.
+- `fixtures/{dynamic-template,dynamic-computed,regex-quote,require-computed}/main.js`: an AC1 planted panel whose own file is clean. Its `reach.js` reaches the toolkit in a spelling the merge base's check does not read.
+- `fixtures/dynamic-template/reach.js`: plants a dynamic import whose module name is a template literal naming the toolkit, on line 4. Nothing calls it while the panel loads, so a loader that does not read this spelling loads the panel.
+- `fixtures/dynamic-computed/reach.js`: plants a dynamic import whose module name is computed, on line 6. Nothing calls it while the panel loads.
+- `fixtures/require-computed/reach.js`: plants a `require` whose module name is computed, on line 5. Nothing calls it while the panel loads.
+- `fixtures/regex-quote/reach.js`: from the owner's audit comment (finding RUST-APP-15), not a checkbox criterion. It plants a static import of the toolkit after a regex literal that holds a quote, on line 3. The toolkit resolves it, so a loader that misreads it loads the panel.
+- `fixtures/plain-imports/main.js`: AC2's panel, which imports only `@deepbuild/panel` and its own files, each named by one plain string: a static import, a bare import, an export from, and a dynamic import.
+- `fixtures/plain-imports/parts/label.js`: a regex literal holding a quote, a division and a template literal, none of which is a module name.
