@@ -5,14 +5,16 @@
 // repo, and a design doc's anchor where it names one. AGENTS.md names GLOSSARY.md in one line. One `FAIL glossary: …`
 // line per finding, or one PASS line; exit 1 on a finding.
 import { existsSync, readFileSync } from 'node:fs';
+import { posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { anchors, prose, resolve, targets } from './doc-links.mjs';
+import { anchors, prose, targets } from './doc-links.mjs';
 
 process.chdir(fileURLToPath(new URL('../', import.meta.url)));
 const FILE = 'GLOSSARY.md';
 const GROUPS = ['What you ask for', 'Sessions', 'Proving it done', 'Verdicts', 'Asks and answers', 'The record', 'Access', 'Layers'];
 const STATES = 'States people see';
 const PLAIN = 'contracts/plain-words.json';
+const REPO = 'https://github.com/windoliver/deepbuild/blob/main/';
 
 const findings = [];
 const fail = (at, why, fix) => findings.push(`FAIL glossary: ${at}: ${why}\n  Fix: ${fix}`);
@@ -42,26 +44,39 @@ if (!existsSync(FILE)) {
   finish();
 }
 
+// A link lands when it leaves the repo, or names a file the repo has and, with an anchor, a heading or anchor of that
+// Markdown file; a link that is only an anchor is the glossary's own.
+const lands = (target) => {
+  const inRepo = target.startsWith(REPO);
+  if (!inRepo && /^[a-z][\w+.-]*:/i.test(target)) return true;
+  const [, path, anchor = ''] = (inRepo ? target.slice(REPO.length) : target).match(/^([^#?]*)(?:\?[^#]*)?(?:#(.*))?$/);
+  const file = path ? posix.normalize(path) : FILE;
+  if (!existsSync(file)) return false;
+  let id = anchor;
+  try {
+    id = decodeURIComponent(anchor);
+  } catch { /* compared as written */ }
+  return !id || (file.endsWith('.md') && anchors(file).has(id));
+};
+
 const entries = [];
 const groups = [];
 let entry = null;
 for (const { number, line } of prose(readFileSync(FILE, 'utf8'))) {
   const at = `${FILE}:${number}`;
   for (const target of targets(line)) {
-    const doc = resolve(target, FILE);
-    const path = target.split(/[?#]/)[0];
-    if (doc ? !existsSync(doc.file) || (doc.id && !anchors(doc.file).has(doc.id)) : !/^[a-z][\w+.-]*:/i.test(target) && !existsSync(path)) {
-      fail(at, `the link ${target} lands nowhere`, 'Link to a file in the repo, or to a heading or anchor the design doc it names has.');
-    }
+    if (!lands(target)) fail(at, `the link ${target} lands nowhere`, 'Link to a file in the repo, and to a heading or anchor that file has.');
   }
   const group = line.match(/^###\s+(.*)$/);
   const term = line.match(/^\*\*(.+?)\*\*:\s*(.*)$/);
   if (/^#{1,6}\s/.test(line)) entry = null;
   if (group) groups.push({ at, name: group[1].trim() });
   if (term) entries.push(entry = { at, term: term[1].trim(), text: term[2].trim(), avoid: [] });
+  else if (/^\s*\*\*/.test(line)) fail(at, `the bold line "${line.trim()}" isn't an entry`, 'Write each entry as **Term**: on its own line, its sentences on the next.');
   else if (!line.trim()) entry = entry && (entry.text || entry.avoid.length) ? null : entry;
   else if (entry && /^_Avoid_:/.test(line)) entry.avoid.push(...line.replace(/^_Avoid_:/, '').split(/[;,]/));
-  else if (entry && !entry.avoid.length) entry.text = `${entry.text} ${line.trim()}`.trim();
+  else if (entry && entry.avoid.length) fail(at, `the term ${entry.term} has text after its Avoid line`, 'Put the sentences before the Avoid line, which ends the entry.');
+  else if (entry) entry.text = `${entry.text} ${line.trim()}`.trim();
 }
 
 const named = groups.map(({ name }) => name);
@@ -73,10 +88,10 @@ for (const { at, term, text, avoid } of entries) {
   const key = term.toLowerCase();
   if (terms.has(key)) fail(at, `the term ${term} is listed twice, first at ${terms.get(key)}`, 'List each term once, with one meaning.');
   else terms.set(key, at);
-  const sentences = text.split(/(?<=[.!?])\s+/).filter(Boolean).length;
+  const sentences = text.split(/(?<!\b(?:e\.g|i\.e)\.)(?<=[.!?]["'’”)\]]*)\s+/).filter(Boolean).length;
   if (sentences < 1 || sentences > 2) fail(at, `the term ${term} has ${sentences} sentences, not one or two`, 'Say what the term is in one or two sentences.');
   for (const piece of avoid) {
-    const word = piece.replace(/\([^)]*\)/g, '').trim();
+    const word = piece.replace(/\([^)]*\)|[*_`]/g, '').trim();
     if (!word || /^(?:for|unless)\s/i.test(word)) continue;
     const list = seen.get(word.toLowerCase());
     if (list) fail(at, `the term ${term} lists "${word}" to avoid, a word a person sees in ${list.join(' and ')}`, `Take "${word}" off the term's Avoid line: that list keeps it.`);
