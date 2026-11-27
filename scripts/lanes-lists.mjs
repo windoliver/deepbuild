@@ -1632,9 +1632,6 @@ Object.assign(redrafted, Object.fromEntries([['1113', 'cli'], ['3238', 'serial']
   .map(([issue, file]) => [`tests/acceptance/${issue}/${file}.test.mjs`, `tests/acceptance/${issue}-redraft-3549/`])));
 byHand.push(...Object.keys(redrafted).filter((path) => redrafted[path].endsWith('-redraft-3549/')));
 
-// #3510 under #3549: stalled-line, drain and under-grant fill the build class with the old 1 and 2
-// (tests/acceptance/3510/DISPUTE-3549.md). Kept as written, by hand only; their blind redraft, which counts by
-// throttle.mjs's LIMITS line, runs in their place (the owner's call, 2026-11-27).
 for (const name of ['stalled-line', 'drain', 'under-grant']) {
   redrafted[`tests/acceptance/3510/${name}.test.mjs`] = 'tests/acceptance/3510-redraft-3549/';
   byHand.push(`tests/acceptance/3510/${name}.test.mjs`);
