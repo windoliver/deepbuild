@@ -1237,9 +1237,8 @@ pub(crate) struct Items<'a> {
 
 impl<'a> Items<'a> {
     /// `doc`'s items, with `written` from [`eval::written`] of its program at `state`. Item `id`'s
-    /// transform is its `TRANSFORM` slots from `i * TRANSFORM`, where `i` is `id`'s place in the
-    /// program's items: a program compiled from the canonical form lists them in ID order,
-    /// whatever order `doc` lists them in (#2396).
+    /// `TRANSFORM` slots start at `i * TRANSFORM`, `i` its place in the program's items, which a
+    /// canonical-form program lists in ID order whatever order `doc` lists them in (#2396).
     fn new(
         doc: &'a Map<String, Value>,
         written: &'a Map<String, Value>,
