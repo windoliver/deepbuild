@@ -2501,6 +2501,19 @@
         "#3617.ff2c540d",
         "#3617.e5d2f1f1"
       ]
+    },
+    {
+      "id": "canvas-core-first-reply",
+      "command": [
+        "node",
+        "benchmarks/core-first-reply.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #3529 first measurement (#3529.50c3d51b): the merge base has no task that times a canvas core's first reply. One process starts a fresh release deep-show canvas, gives it the shipped packs as the hub stages them and waits for its answer to packs, the hub's first call of a core, which it gives once every pack is checked; the run fails unless every pack is installed. So p50 is the first reply with Node's start and the release build's freshness check, and peak memory is the core's after that reply; the command's last line reports the reply's own time and the core's resident memory as readings. The criterion's 500 ms less than the merge base is drafted, and a task the merge base lacks has no base side in its own window: this change's comparison is one reading on each build, in its pull request. p50 and peak memory get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#3529.50c3d51b"
+      ]
     }
   ]
 }

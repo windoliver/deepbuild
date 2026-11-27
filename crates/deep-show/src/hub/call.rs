@@ -1,5 +1,12 @@
 use super::*;
 
+pub(crate) fn count(name: &str) -> u64 {
+    match name {
+        "compiles" => deep_sandbox_wasmtime::compiles(),
+        _ => deep_logic::piece::piece_checks(),
+    }
+}
+
 pub struct PatchCall {
     pub via: Via,
     pub doc: String,
@@ -113,8 +120,8 @@ pub enum Call {
     Kinds(Value),
     /// #238: the sandbox module's counts of checks, links, rewrites and check-time runs.
     Sandbox,
-    /// #3612: how many pieces the logic module has checked in this process.
-    PieceChecks,
+    /// #3612, #3529: a count this process keeps, by its call's name: `piece_checks` or `compiles`.
+    Count(String),
     /// #238: the providers a document's current revision ran at check, with their output.
     Provided(String),
     /// #415: the check-time validation of one data asset in a layout of `data.layout@1`.

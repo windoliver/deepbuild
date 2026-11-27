@@ -1554,7 +1554,7 @@ impl<'a> Hub<'a> {
                 "checks": self.sandbox.checks, "links": self.sandbox.links,
                 "rewrites": self.sandbox.rewrites, "runs": self.sandbox.runs,
             }),
-            Call::PieceChecks => json!({"piece_checks": deep_logic::piece::piece_checks()}),
+            Call::Count(name) => json!({name.as_str(): count(name)}),
             Call::Validate { layout, path } => {
                 self.sandbox.validate(&self.startup.sealed, layout, path)
             }
