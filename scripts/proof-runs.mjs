@@ -729,7 +729,7 @@ export function prepareRuns({ root, change, issue }, { coverage = false } = {}) 
     const reach = twinFiles.flatMap((file) => [...testImports(root, null, file)]);
     const imported = new Set(reach.map(([path]) => fold(path)));
     const unresolved = reach.flatMap(([path, source]) => relativeImports(path, source).filter(underTestPaths)).filter((file) => show(root, null, resolveModule(root, null, file)) === null);
-    const plantable = (path) => testPattern.test(path) && !DATA.test(path) && !isTestFile(path) && !isTestFile(fold(path)) && !RUNNER_CONFIG.test(path) && !configured.has(fold(path))
+    const plantable = (path) => testPattern.test(path) && !path.split('/').includes('node_modules') && !DATA.test(path) && !DATA.test(fold(path)) && !isTestFile(path) && !isTestFile(fold(path)) && !RUNNER_CONFIG.test(path) && !configured.has(fold(path))
       && !fold(path).startsWith('tests/acceptance/') && /\.(?:rs|[cm]?js|tsx?|[cm]ts)$/.test(path) && !imported.has(fold(path));
     const run = (path) => !unresolved.length && plantable(path);
     const tests = paths.filter((path) => (underTestPaths(path) && !run(path)) || path.split('/').includes('node_modules'));
