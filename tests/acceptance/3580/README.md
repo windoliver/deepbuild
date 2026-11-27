@@ -38,6 +38,24 @@ A run admitted on memory counts each held grant younger than 5 minutes as a run'
 Linux, 8 GiB on macOS at the base): with 100 GiB, the run in AC1 is admitted beside one held grant either way (100 − 24
 ≥ 24; 100 − 8 ≥ 8).
 
+## The code, said here rather than in comments
+
+The suite's files carry no comments but the `// deadline:` markers (the comment ratchet gives a blind suite's files a
+ceiling of 0), so what they would say is here.
+
+- `helpers.mjs`: `LOADED` and `EASED` are the issue's Spark readings at 04:26Z (load 25 on 20 cores, 100 GiB) and the
+  load dropping to 10. `GRANT_MS` (60 s) bounds a positive step on a loaded machine; `WAIT_MS` (3 s) is a negative's
+  wait. `box3580` is #2744's sandbox with `DEEP_THROTTLE_RUN` unset, so only a request the suite marks is a run's, and
+  the readings file written and named; `setReadings` rewrites it whole, and every look of every request reads it
+  again. `ask` makes a request, `--wait 10`, holding its grant until finished, with `DEEP_THROTTLE_RUN=0` (no disk
+  asked) for a run. `queued` waits for a request to show in the table's line and asserts it waits there;
+  `grantWithin` returns a stub's start note, or undefined after `ms`. `names` says whether a log entry names a request
+  or grant, by its pid (a number, or that number as a string) or by a string holding its ID, at any depth.
+- `order.test.mjs`: `enough` asserts the test limit allows one held grant and one more (macOS's 2 does exactly).
+  `headOfLine` is the shared start: the loaded readings, one grant held, then a plain request seen waiting. In AC2 the
+  first held grant gives its slot back only after the load has dropped, so one request can take it. In AC3 the run
+  request is given time to reach the table, or to be granted past the plain one, which the assertions then read.
+
 ## Criteria
 
 All four are in `order.test.mjs`. Each starts the same way: readings of load 25 on 20 cores and 100 GiB, one test

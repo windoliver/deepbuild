@@ -1,9 +1,3 @@
-// #3580: a plain test request that its own rule (the load) holds back at the head of the test line no longer holds back
-// the run requests behind it, whose rule (memory alone) would admit them; it keeps its place among requests that could
-// each be granted, a timed request's drain still stops every grant past it, and the log names each pass-over and why.
-// Every throttle.mjs runs as a process against a table of the test's own and the readings the test writes
-// (DEEP_THROTTLE_TABLE, DEEP_THROTTLE_READINGS; docs/parallel-proof.md section 6); the machine's table is never
-// touched, and neither the machine's cores nor its load decides anything here.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { dump, finish, log, running, startOf, started } from '../2744/helpers.mjs';
@@ -12,10 +6,8 @@ import { requestOf, until } from '../2902/helpers.mjs';
 import { EASED, GRANT_MS, LOADED, WAIT_MS, ask, box3580, grantWithin, names, queued, setReadings } from './helpers.mjs';
 
 const LIMIT = testLimit();
-// One test grant held and one more beside it is the least each test needs; macOS's ceiling of 2 allows exactly that.
 const enough = () => assert.ok(LIMIT >= 2, `scripts/throttle.mjs's test limit here is ${LIMIT}: one held grant leaves no room for another`);
 
-/** One test grant held, then a plain request first in line: the issue's head waiter, held back by load 25 ≥ 20 cores. */
 async function headOfLine(t) {
   enough();
   const box = box3580(t, LOADED);
@@ -43,8 +35,6 @@ test('#3580.54cd2bff load 25 on 20 cores, 100 GiB available, one test grant held
 
 test('#3580.bd6fae70 the same table, the readings then dropping to load 10: the plain request is granted next, ahead of a run request queued after it', { timeout: 300_000 }, async (t) => {
   const { box, holder, plain } = await headOfLine(t);
-  // Run requests queue behind the plain one, one at a time, until one waits: the line holds as many grants as the
-  // ceiling and the memory allow at load 25, and the last run request is queued after the plain one, waiting too.
   const passed = [];
   let behind = null;
   for (let k = 1; k <= LIMIT && !behind; k++) {
@@ -58,7 +48,6 @@ test('#3580.bd6fae70 the same table, the readings then dropping to load 10: the 
   await queued(box, behind, ...all);
   assert.equal(startOf(box, 'plain'), undefined, `the plain request was granted at load 25 on 20 cores\n${dump(box, ...all)}`);
 
-  // The load drops to 10; then the first grant held gives its slot back, so one request can take it.
   setReadings(box, EASED);
   // deadline: the throttle's polls read the new readings within this; nothing here needs a grant to happen.
   await until(() => startOf(box, 'plain') || startOf(box, behind.label), WAIT_MS);
@@ -76,7 +65,6 @@ test('#3580.00ead7ac with a timed request waiting, nothing is granted past the p
   await queued(box, timed, holder, plain);
   const run = ask(box, 'run', { run: true });
   const all = [holder, plain, timed, run];
-  // Its request reaches the table, or a grant past the plain one comes first, which the assertions below read.
   await until(async () => (await requestOf(box, run.pid)) || startOf(box, 'run') || !running(run), GRANT_MS);
 
   // deadline: a grant past the plain request would show within the throttle's polls.
