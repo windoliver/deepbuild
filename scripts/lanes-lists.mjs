@@ -477,9 +477,6 @@ byHand.push('tests/acceptance/503-redraft-ac4/');
 alone.push('tests/acceptance/935/', 'tests/acceptance/935-oracle/');
 byHand.push('tests/acceptance/408/machines.test.ts');
 
-// #3278's opening file runs #490's redraft-2 opening suite, which builds deep-show and its merge base (hours) and passes
-// only on main once the fix has landed, as its criterion (#3278.f8a0472b) says: it outlasts a lane run's 20 minutes and,
-// in the folder's one vitest run, stopped stable-keys.test.ts with it. It is kept by hand, run on main after the merge.
 byHand.push('tests/acceptance/3278/opening.test.ts');
 // #405's files each build deep-show. Criterion 4 runs from its redraft, which also builds it in release on a machine
 // that can judge a timing now and times the geometry audit and determinism hashing against the lane's rule; the
