@@ -296,11 +296,6 @@ export function toolList(): (Listed & { _meta?: Obj })[] {
     .map(([name, inputSchema]) => ({ name, description: text[name]!, inputSchema, annotations: annotations(name), ...(upFront.has(name) ? { _meta: { 'anthropic/alwaysLoad': true } } : {}) }));
 }
 
-/** Forms that moved to another tool, by tool.op, with the remediation that names where each went. */
-const MOVED: Readonly<Record<string, string>> = {
-  'deep_kinds.fetch': 'Call deep_job with op fetch and the same library and id, or pack and asset: deep_kinds only looks things up, and bringing an asset in is deep_job\'s fetch.',
-};
-
 /**
  * A call's arguments held to its tool's schema, as strictly as the hub holds any request: a field it doesn't list, a
  * missing required one or a wrong type is refused at its path. A nullable field left out reads as null. A required
@@ -312,11 +307,16 @@ export function checkArguments(tool: string, args: unknown): Obj {
     const near = nearest(tool, Object.keys(SCHEMAS));
     throw refuse('not_found', '/params/tool', near ? `Call ${near} in place of ${tool}.` : `Call one of the deep_* tools: ${Object.keys(SCHEMAS).join(', ')}.`, tool);
   }
-  // A form that moved to another tool (#3525) is refused at its selector, before any field it took is, naming its new place.
-  const moved = isObj(args) ? MOVED[`${tool}.${String(args.op)}`] : undefined;
-  if (moved) throw refuse('enum', '/params/arguments/op', moved, (args as Obj).op);
+  // deep_kinds' fetch moved to deep_job (#3525): refused at its selector, before any field it took is, naming its new place.
+  if (tool === 'deep_kinds' && isObj(args) && args.op === 'fetch') {
+    throw refuse('enum', '/params/arguments/op', 'Call deep_job with op fetch and the same library and id, or pack and asset: deep_kinds only looks things up, and bringing an asset in is deep_job\'s fetch.', args.op);
+  }
   try {
-    return check(schema, args ?? {}, '/params/arguments') as Obj;
+    const checked = check(schema, args ?? {}, '/params/arguments') as Obj;
+    // deep_job's fetch fields are op fetch's alone; a list or run that gives one is refused, as a field its schema doesn't list.
+    const stray = tool === 'deep_job' && checked.op !== 'fetch' ? ['library', 'id', 'pack', 'asset'].find((k) => checked[k] !== null) : undefined;
+    if (stray) throw refuse('unlisted_field', `/params/arguments/${stray}`, `Leave out ${stray}: only op fetch takes it.`, stray);
+    return checked;
   } catch (error) {
     if (error instanceof Refused && error.refusal.code === 'missing_field') error.refusal.schema = schema;
     throw error;

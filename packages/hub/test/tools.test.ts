@@ -1,7 +1,7 @@
 // deep_drive's schema is in the tool list every session loads, and the strict subset takes no $ref, so a locator is
 // written out at each place one goes: its fields are described once, at the call's own locator.
 import { describe, expect, it } from 'vitest';
-import { toolList } from '../src/tools.js';
+import { checkArguments, toolList } from '../src/tools.js';
 
 interface Schema { properties?: Record<string, Schema>; items?: Schema; description?: string }
 /** Every locator under a schema, by its path: an object that takes a role, a handle and a label. */
@@ -20,5 +20,15 @@ describe('deep_drive\'s schema', () => {
       expect(Object.keys(locator.properties!), path).toEqual(Object.keys(described.properties!));
       expect(Object.values(locator.properties!).filter((field) => field.description), path).toEqual([]);
     }
+  });
+});
+
+describe('the asset fetch is deep_job\'s (#3525)', () => {
+  const refusal = (tool: string, args: object): unknown => { try { checkArguments(tool, args); return 'taken'; } catch (e) { return (e as { refusal?: unknown }).refusal; } };
+  it('takes the fetch fields on deep_job\'s fetch alone, and refuses one on its list or run at its path', () => {
+    expect(refusal('deep_job', { op: 'fetch', library: 'shelf', id: 'chair' })).toBe('taken');
+    expect(refusal('deep_job', { op: 'list', library: 'shelf' })).toMatchObject({ code: 'unlisted_field', path: '/params/arguments/library' });
+    expect(refusal('deep_job', { op: 'run', kind: 'speech', tool: 'say@1.0.0', asset: 'a.wav' })).toMatchObject({ code: 'unlisted_field', path: '/params/arguments/asset' });
+    expect(refusal('deep_job', { op: 'run', kind: 'speech', tool: 'say@1.0.0' })).toBe('taken');
   });
 });
