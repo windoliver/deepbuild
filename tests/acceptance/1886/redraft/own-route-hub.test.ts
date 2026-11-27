@@ -1,8 +1,3 @@
-// AC2, on the real hub: a session on the agent's own route reads as it does today. The same claim as AC1's, from a
-// session started with no base URL override: the transcript's model (claude-haiku-5-5) stands, the review by
-// claude-sonnet-5-5 counts, its run passes on the clean diff and the claim is PASS, as on the merge base. It passes on
-// the merge base; its wrong program is the twin `own-route-unknown` (every route read as proxied), on which it fails
-// at its first expect.
 import { afterAll, describe, expect, it } from 'vitest';
 import { AC2, cleanup, lastVerdict, reviewText, reviewedClaim, verdictText } from './helpers.ts';
 

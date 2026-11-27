@@ -1,8 +1,3 @@
-// Shared by the #1886 acceptance tests (README): the criteria's IDs; one claim that opens PR 21 on a real hub, made
-// in a Claude Code session started with or without ANTHROPIC_BASE_URL in the environment its hooks get, and the
-// review check's run of it read back from the record; and one child run of #87's model suites. Everything real is
-// reused from #1537's and #322's helpers (the hub as a process, the real deep-hook, the fake second model, the socket),
-// which those suites keep and nobody edits. Only the second model and a loopback listener are ours.
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
@@ -19,7 +14,6 @@ import { runsOf } from '../../322/helpers.ts';
 
 export { cleanup } from '../../1537/helpers.ts';
 
-// ---- The criteria: `#1886.<first 8 hex of SHA-256 of the criterion's text, trimmed, white space collapsed>`.
 export const AC1 = '#1886.33628f8b';
 export const AC2 = '#1886.209d6f6c';
 export const AC3 = '#1886.ece183af';
@@ -27,7 +21,6 @@ export const AC3 = '#1886.ece183af';
 export const PROXIED = 'model unknown: proxied route';
 export const REPO = fileURLToPath(new URL('../../../../', import.meta.url));
 
-/** A loopback listener the session's ANTHROPIC_BASE_URL points at, as a proxy would listen; nothing connects to it. */
 export async function listener(): Promise<{ url: string; host: string; close(): Promise<void> }> {
   const server: Server = createServer((_req, res) => { res.statusCode = 502; res.end(); });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -35,35 +28,21 @@ export async function listener(): Promise<{ url: string; host: string; close(): 
   return { url: `http://${host}/dh1886-proxy`, host, close: () => new Promise<void>((resolve) => server.close(() => resolve())) };
 }
 
-/** What one claim's review came to on the hub. */
 export interface Reviewed {
   claim: string;
-  /** The review check's runs of the claim (check `review`), each with its finish. */
   review: { started: Ev; finished: Ev | undefined }[];
-  /** The claim's verdicts after the stop. */
   verdicts: Ev[];
-  /** Every event after the stop, as one text, to search for what the record holds. */
   record: string;
-  /** How many review jobs the runner recorded: each one call of the fake second model. */
   jobs: number;
 }
 
-/**
- * On a fresh real hub (#1537's review world: the fake second model answers as claude-sonnet-5-5, room in the plan
- * window), one Claude Code session started with `baseUrl` as ANTHROPIC_BASE_URL in its environment, or with none
- * set: deep-hook runs as a child of the session's own process, which holds that environment, as Claude Code's hook
- * commands do; the hub never has it. The session's transcript names claude-haiku-5-5. It fixes the middleware with a
- * clean diff, opens PR 21 and stops; the review check's run is read once it finishes, with the verdict after it.
- */
 export async function reviewedClaim(who: string, baseUrl: string | undefined): Promise<Reviewed> {
   const w = reviewWorld();
   await trustRepo(w, true);
-  // The hub starts with no base URL of this process's in its environment.
   const held = process.env.ANTHROPIC_BASE_URL;
   delete process.env.ANTHROPIC_BASE_URL;
   const hub = await startHub(w);
   await reportWindow(hub, 5, Date.now() + 3 * HOUR);
-  // The session's own process takes this environment when it is spawned, which openTask does before its first await.
   if (baseUrl !== undefined) process.env.ANTHROPIC_BASE_URL = baseUrl;
   let opening: ReturnType<typeof openTask>;
   try {
@@ -85,7 +64,6 @@ export async function reviewedClaim(who: string, baseUrl: string | undefined): P
   must(claim !== undefined, `BLOCKED: ${who} the stop after opening PR 21 must make a claim for ${ref}: none was recorded`);
   commandsGreen(events, ref, since, who, claim, w.base);
   const reviewRuns = (all: readonly Ev[]) => runsOf(all, ref, since).filter((r) => String(r.started.data.check) === 'review');
-  // The review's run, finished, and a verdict made after it.
   events = await settle(hub, (all) => {
     const done = reviewRuns(all).map((r) => r.finished).filter((f): f is Ev => f !== undefined);
     return done.length > 0 && taskVerdicts(all, ref, since).some((v) => v.log_pos > done.at(-1)!.log_pos);
@@ -97,12 +75,10 @@ export async function reviewedClaim(who: string, baseUrl: string | undefined): P
   return { claim: claim!, review, verdicts: taskVerdicts(events, ref, since), record: JSON.stringify(events.filter((e) => e.log_pos > since)), jobs };
 }
 
-/** The review's finished runs in one text: outcome, failures, mask, everything the record keeps of them. */
 export const reviewText = (r: Reviewed): string => JSON.stringify(r.review.map((x) => x.finished?.data ?? null));
 export const lastVerdict = (r: Reviewed): string => outcomeOf(r.verdicts.at(-1));
 export const verdictText = (r: Reviewed): string => r.verdicts.map((v) => `${outcomeOf(v)} ${JSON.stringify(v.data).slice(0, 900)}`).join(' | ') || 'none';
 
-// ---- #87's model suites, unchanged, in one child run of the repo's vitest.
 export const MODEL_SUITES = 'tests/acceptance/87/models';
 export interface Assertion { fullName: string; status: string; failureMessages?: string[] }
 interface FileResult { name: string; status: string; message?: string; assertionResults: Assertion[] }
@@ -110,8 +86,6 @@ interface FileResult { name: string; status: string; message?: string; assertion
 const blocked = (why: string): never => { throw new Error(`BLOCKED: ${why}`); };
 const AT_BASE = JSON.parse(readFileSync(fileURLToPath(new URL('./models-at-base.json', import.meta.url)), 'utf8')) as Record<string, string>;
 
-/** #87's model suite files whose bytes differ from the merge base's (SHA-256 of each, recorded in models-at-base.json at
- *  base 914bd5f29), each with how: edited, removed or added. */
 export function editedModelSuites(): string[] {
   const now = readdirSync(join(REPO, MODEL_SUITES), { recursive: true, withFileTypes: true }).filter((d) => d.isFile())
     .map((d) => relative(REPO, join(d.parentPath, d.name)).split(sep).join('/'));
@@ -124,7 +98,6 @@ export function editedModelSuites(): string[] {
 }
 
 let ran: Promise<Map<string, Assertion[]>> | undefined;
-/** Every test of #87's model suites, by file, from one run of the repo's vitest (run once, shared by the tests here). */
 export function modelSuites(): Promise<Map<string, Assertion[]>> {
   ran ??= Promise.resolve().then(() => {
     const dir = mkdtempSync(join(tmpdir(), 'dh1886-'));

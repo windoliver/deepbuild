@@ -1,15 +1,3 @@
-// AC1: on a real hub, a Claude Code session started with a base URL override in its environment has its review read
-// "model unknown: proxied route"; on the merge base the transcript's model is trusted (issue Scope: "A session's route
-// is read once at its start, from the environment its start reports, through its adapter's routeAtStart"; "The
-// review's change session carries that route"; design, Plan usage: "The adapter also records at session start whether
-// the session runs on the agent's own route").
-//
-// The session is #1537's clean PR claim through a real hub, its hooks fired through the real deep-hook by a Claude Code
-// process started with ANTHROPIC_BASE_URL at a loopback listener. Its transcript names claude-haiku-5-5; the second
-// model answers as claude-sonnet-5-5 with no finding. Behind the base URL the transcript's model is the proxy's word,
-// so the review's run is uncounted, its finding naming "model unknown: proxied route", and the claim isn't PASS; the
-// record holds that the variable was set, never where it pointed. The same story with the variable unset is the
-// agent's own route: the transcript's model stands, and the review counts.
 import { afterAll, describe, expect, it } from 'vitest';
 import {
   AC1, PROXIED, cleanup, close, filesHolding, listener, must, outcomeOf, restoreEnv, saidBy, sayRuns, sayVerdicts, story,
@@ -25,7 +13,6 @@ describe(`${AC1} a session started behind a base URL has its review read "${PROX
       const { claim, reviews, verdicts, events } = s;
       must(reviews.length > 0 && reviews.every((r) => r.finished), `BLOCKED: ${AC1} ${claim} opened PR 21, so the hub must run its review to its finish: ${sayRuns(reviews)}`);
 
-      // The record may hold that the base URL was set, never where it pointed: not in any event, nor in any file of the hub's root.
       const needles = [proxy.url, proxy.host, proxy.marker];
       const inEvents = needles.filter((n) => JSON.stringify(events).includes(n));
       expect(inEvents, `${AC1} the record's events hold the session's base URL`).toEqual([]);

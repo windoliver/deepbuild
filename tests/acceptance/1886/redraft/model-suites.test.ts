@@ -1,8 +1,3 @@
-// AC2 and AC3 through #87's model suites (tests/acceptance/87/models), unchanged from the merge base, in one child run
-// of the repo's vitest. AC2: every one of their tests passes. AC3: the planted `trusts-proxied-transcript` still fails
-// where it does: proxied-route.test.ts's wrong-program test, which expects the scenario to throw "the proxied
-// transcript's model trusted" under that plant, passes; and the plant's own scenario without the plant passes too.
-// Both pass on the merge base; their wrong programs are the twins `own-route-unknown` (AC2) and `plant-ignored` (AC3).
 import { describe, expect, it } from 'vitest';
 import { AC2, AC3, MODEL_SUITES, editedModelSuites, modelSuites, notPassed } from './helpers.ts';
 
