@@ -1,0 +1,30 @@
+#3552, the indexer's fault during the count before the step. Reference Mac: 18 cores, macOS 27.2.
+The lines are the system log's (log show), in its local time, UTC-5: 08:29 is 13:29Z on 2026-11-26.
+The only mdfind in flight from 08:29:14.013 to 08:29:55.158 was pid 55807:
+  mdfind -count -onlyin ~/deepbuild-shards 'kMDItemFSSize > 0'
+
+2026-11-26 08:29:14.013 A  mdfind[55807:17ef56d] (libsystem_info.dylib) Retrieve User by ID
+2026-11-26 08:29:31.494 E  mds_stores[520:17efdfc] (SpotlightIndex) Caught mach exception
+2026-11-26 08:29:31.494 E  mds_stores[520:17efdfc] [com.apple.spotlightindex:General] indexMakeInvalid:2836: <private> marking invalid at 2836
+2026-11-26 08:29:31.495 E  mds_stores[520:17efdfc] [com.apple.spotlightindex:CI] ContentIndexDocSet_Step:4601: Caught assertion for iterator 0x7917300000 <private>
+2026-11-26 08:29:55.158 Df mdfind[55807:17f1f79] [com.apple.xpc:connection] [0x78b0c2c000] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-11-26 08:29:56.245 Df mds_stores[520:17f1b1c] [com.apple.spotlightindex:CI] <private> invalid head (2), will try to recover
+2026-11-26 08:29:56.286 E  mds_stores[520:17f1b1c] [com.apple.spotlightindex:Drop] _CIOpenBulk:626: <si:cs_default> - _CIOpenBulk recoverIndex failed (<private>/<private>); 44: <private>
+2026-11-26 08:29:56.287 E  mds_stores[520:17f1b1c] [com.apple.spotlightindex:Drop] _SIOpenIndexFilesWithState:11932: (0) 0x79170fa000 ContentIndexOpenBulk (withState) failed(-1) errno:2; 216: <private>
+2026-11-26 08:29:56.289 E  mds_stores[520:17f1b1c] [com.apple.spotlightindex:General] _SIOpenIndex:13492: <si:cs_default> - Closing index from failed open
+2026-11-26 08:30:42.623 Df mds_stores[520:17f1b1c] [com.apple.spotlightindex:General] <si:cs_default> - Creating New Index
+2026-11-26 08:30:42.623 Df mds_stores[520:17f1b1c] [com.apple.spotlightindex:General] <si:cs_default> - Recovery Starting, total:11054324
+2026-11-26 08:30:42.623 Df mds_stores[520:17f1b1c] [com.apple.spotlightindex:General] <si:cs_default> - Recovery Starting, total:11054324 pre scan count:6345 reimport count:6112170
+2026-11-26 08:30:45.798 E  mdutil[68853:17f4ac5] [com.apple.metadata:Metadata] mdsCopyStoreAttributes failed: (268451843) (ipc/rcv) timed out
+2026-11-26 08:30:55.815 E  mdutil[70374:17f531b] [com.apple.metadata:Metadata] mdsCopyStorePaths failed: (268451843) (ipc/rcv) timed out
+
+What followed, in UTC:
+13:30:35Z  every count printed 0 in under a second, the home folder's too, and mdutil -s timed out twice
+13:32:05Z  the whole machine held 21250 indexed items, and 88183 at 13:34:32Z (the home folder alone held 2,811,573 on 2026-11-25)
+15:21Z to 00:52Z, while the index was built again, the load sampler read:
+  samples: 571 from 2026-11-26T15:21:08.197Z to 2026-11-27T00:51:11.069Z, in 571 distinct minutes, 0 failed
+  mds, mds_stores, mdworker_shared, mdsync or fseventsd: among the five busiest in 232 of 571 samples, 40.6%, at 1.63 cores then
+  mds, mds_stores, mdworker_shared or mdsync: among the five busiest in 226 of 571 samples, 39.6%, at 1.65 cores then
+  fseventsd: among the five busiest in 7 of 571 samples, 1.2%, at 0.64 cores then
+  load above the cores in 510 of 571 samples, 89.3%
+01:19Z     mds at 0.17 cores and mds_stores at 0.03
