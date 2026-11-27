@@ -1,6 +1,6 @@
 
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { parseYaml } from './yaml.js';
 
 import { UsageTail } from '@deepbuild/readings';
@@ -520,6 +520,7 @@ export class Core {
       }),
       acking: (session) => this.acking(session), queue: (work) => void this.queue(work).catch(() => undefined), wake: (session, text) => this.noticeWake(session, text),
       over: (session) => { const s = this.sessionStarts.runOf(session); return s !== undefined && !this.sessionStarts.live(s.run); },
+      ...(this.options.plant ? { plant: this.options.plant } : {}),
     });
     this.delivery.answers = new Answers({
       raw: this.raw, settled: (except) => Promise.allSettled([...this.inflight].flatMap(([append, { id, kind }]) => (id !== except && readsAnswer(kind) ? [append] : []))),
@@ -928,12 +929,13 @@ export class Core {
       appendCore: (kind, data, extra) => this.appendCore(kind, data, extra),
     });
     // #1922's planted hosts build a tool's digest wrongly, #2650's keep what they finished, #2402's never clears a
-    // handler's failures and #2648's reads notices once: the host's plants, selected with the hub's variable.
+    // handler's failures, #2648's reads notices once and #1853's publishes a method it has no case for:
+    // the host's plants, selected with the hub's variable.
     const plant = this.options.plant?.startsWith('job-build-') ? { plant: this.options.plant as 'job-build-entry-only' }
-      : this.options.plant === 'churn-keeps-every-answer' || this.options.plant === 'churn-keeps-every-result' || this.options.plant === 'churn-keeps-every-name-set' || this.options.plant === 'failures-never-cleared' || this.options.plant === 'reads-files-at-start-only' ? { plant: this.options.plant } : {};
+      : this.options.plant === 'churn-keeps-every-answer' || this.options.plant === 'churn-keeps-every-result' || this.options.plant === 'churn-keeps-every-name-set' || this.options.plant === 'failures-never-cleared' || this.options.plant === 'reads-files-at-start-only' || this.options.plant === 'unwired-method' ? { plant: this.options.plant } : {};
     // No package is in the hub's own release yet; a test may hand it one, which then loads in the hub (#2402).
     const release = this.options.release ? (JSON.parse(readFileSync(this.options.release, 'utf8')) as ReleaseEntry[]) : [];
-    const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release, now: this.now, leases, runner: this.runner, evidence: this.store, point: () => this.durable.point('terminals_rewrite'),
+    const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release, now: this.now, leases, runner: this.runner, evidence: this.store, asks: this.asks, point: () => this.durable.point('terminals_rewrite'),
       // A check runner's reads and plays of a canvas piece (#411, #184): the hub's canvas core, and a replica playing the
       // revision's canonical document, its programs from the evidence store. A job kind's qualification by the core
       // (#518) goes the same way, with the tools it names in the world.
@@ -948,7 +950,7 @@ export class Core {
       adopt: async (bytes) => { await this.control.stored(await this.store.connect({ role: 'agent', session: 'unknown' }).put({ bytes, kind: 'file', source: 'unrecorded', redaction: 'unknown', license: { name: 'unknown', allows: [] } }), 'a file of unknown origin'); },
       send: (request, boundary) => this.store.send(request, boundary),
       raise: (source, ask, plan) => this.asks.raise(this.connection('core'), source, ask, plan),
-      row: (job, running) => this.state.jobShown(job, running), reserve: (run, usd, step) => this.ledger.reserveCovering(this.connection('core'), run, usd, step), charge: (run, usd) => this.ledger.charge(this.connection('core'), run, usd), approve: (ask, budget) => this.ledger.approveOn(this.connection('core'), ask, budget),
+      fetched: (sha) => this.libraries?.fetchedFile(sha), table: async (sha, record) => { await mkdir(join(this.root.evidence, 'tables'), { recursive: true }); await writeFile(join(this.root.evidence, 'tables', `${sha}.json`), JSON.stringify(record)); }, row: (job, running) => this.state.jobShown(job, running), reserve: (run, usd, step) => this.ledger.reserveCovering(this.connection('core'), run, usd, step), charge: (run, usd) => this.ledger.charge(this.connection('core'), run, usd), approve: (ask, budget) => this.ledger.approveOn(this.connection('core'), ask, budget),
     });
     this.libraries = new Libraries({
       root: this.root.dir, now: this.now, host: () => this.extensions,
@@ -1595,7 +1597,9 @@ export class Core {
           this.state.midTurn.delete(meta.session);
           // The prompt that opens a turn is its origin, and ends the grace window a loop's last stop started (#965).
           live.turnFrom = String(data.from);
-          this.siblings.turn(meta.session, draft.id, live.turnFrom, this.now());
+          if (typeof data.server === 'string') live.turnServer = data.server;
+          else delete live.turnServer;
+          this.siblings.turn(meta.session, draft.id, live.turnFrom, this.now(), live.turnServer);
           // An adapter with no route to hold a prompt leaves the loop rule watch-only for its session, which says so once (#352).
           if (HOLDS_NO_PROMPT.has(meta.agent) && this.siblings.looping(meta.session) && !this.loopWatched.has(meta.session)) {
             this.loopWatched.add(meta.session);
@@ -1859,6 +1863,19 @@ export class Core {
         if (this.options.plant === 'continuation-by-likeness' && String(data.text).startsWith('The app was quit while you were working')) from = 'continuation';
         data.from = from;
         live.from = from;
+        // A channel's event names its server, as the entry gives it (#3405).
+        const server = this.mapped(meta, draft, { ...meta.fields }, entry ? [entry] : [])?.server;
+        if (from === 'channel' && typeof server === 'string' && server) data.server = server;
+        else delete data.server;
+        // Another session's message names its sender: the live session that reported the address the entry's origin
+        // names (#3405), never the message's text. One no live session reported names none.
+        const sender = from === 'session' && !foreign ? await this.senderOf(meta.session, entry) : undefined;
+        if (sender) data.sender = sender;
+        else delete data.sender;
+        // The loop rule names and holds this sender (#352, #3405), as the record names it.
+        if (!draft.queued) live.turnSender = sender;
+        // The origin channel and the fields beside it are user.ask@2's (#3405).
+        if (from === 'channel' || data.sender !== undefined || data.server !== undefined) draft.v = 2;
         // The app's own resume prompt (#82): the stop it leads to gets one automatic continue while asks are open.
         if (from === 'continuation' && live.agent === 'claude-code') { live.resumed = true; this.judging.nudgeable.add(meta.session); this.askingSoon(); }
         // A subagent's report or a command's end notice ends its wait: the call the notice names, or else the oldest
@@ -2400,10 +2417,33 @@ export class Core {
     const session = this.state.sessions.get(meta.session);
     if (!live?.turnFrom || childPrompt(meta)) return undefined;
     return this.siblings.held(meta, live.turnFrom, async () => {
+      if (live.turnSender) return live.turnSender;
       const entry = session && meta.fields?.prompt_id ? (await turnFrom(session, meta.fields.prompt_id, this.transcriptReader))[0] : undefined;
-      const origin = entry && isObj(entry.origin) ? entry.origin : undefined;
-      return typeof origin?.from === 'string' ? /^local_(.+)$/.exec(origin.from)?.[1] : undefined;
-    });
+      return this.senderOf(meta.session, entry);
+    }, live.turnServer);
+  }
+  /**
+   * The session whose message a prompt's transcript entry names (#3405): Claude Code writes the sender's inbox address,
+   * `uds:<path>`, which is the path a live session reported at its SessionStart; the desktop app writes `local_<id>`,
+   * which names a session only when it is one the hub knows and is live. Nothing is read from the message's text.
+   */
+  private async senderOf(receiver: string, entry: Obj | undefined): Promise<string | undefined> {
+    const from = entry && isObj(entry.origin) && typeof entry.origin.from === 'string' ? entry.origin.from : undefined;
+    if (!from) return undefined;
+    const live = (id: string | undefined): string | undefined => (id && id !== receiver && this.state.sessions.get(id)?.ended !== true ? id : undefined);
+    const address = /^uds:(.+)$/.exec(from)?.[1];
+    if (address) {
+      // The newest start that reported the address, of a session with no end since: a session whose turn ended is
+      // still live (the record's finished), one whose SessionEnd came is not.
+      const [row] = (await this.record.raw(`SELECT e.session_id AS id FROM events e WHERE e.kind = 'session.start' AND json_extract(e.data, '$.inbox') = ? AND NOT EXISTS (SELECT 1 FROM events x WHERE x.session_id = e.session_id AND x.kind = 'session.end' AND x.log_pos > e.log_pos) ORDER BY e.log_pos DESC LIMIT 1`, [address])) as { id: string }[];
+      // The planted wrong program names another live session for an address none reported.
+      if (!row && this.options.plant === 'names-other-session-for-unreported-address') return [...this.state.sessions.values()].find((s) => s.id !== receiver && !s.ended)?.id;
+      return live(row?.id);
+    }
+    const local = /^local_(.+)$/.exec(from)?.[1];
+    if (!local) return undefined;
+    const [row] = (await this.record.raw(`SELECT e.session_id AS id FROM events e WHERE e.kind = 'session.start' AND e.session_id = ? AND NOT EXISTS (SELECT 1 FROM events x WHERE x.session_id = e.session_id AND x.kind = 'session.end' AND x.log_pos > e.log_pos) ORDER BY e.log_pos DESC LIMIT 1`, [local])) as { id: string }[];
+    return live(row?.id);
   }
   /**
    * The messages typed mid-turn since the last acknowledgement (#340): the agent is asked to acknowledge each in one
