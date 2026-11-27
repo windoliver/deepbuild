@@ -142,6 +142,8 @@ pub struct Gpu {
     /// The GPU seam's adapter and device features (issue #140); `None` on the noop backend.
     choice: Option<Choice>,
     current: Mutex<Arc<Device>>,
+    /// The current device's epoch, read without locking `current` on each frame (#3617).
+    epoch: AtomicU64,
     /// Reopens still to fail, from a test's planted reopen (`u64::MAX`: every one).
     failing_reopens: AtomicU64,
 }
@@ -176,10 +178,12 @@ impl Gpu {
             }
         }
         LIVE.fetch_add(1, Ordering::SeqCst);
+        let epoch = AtomicU64::new(device.epoch);
         Ok(Arc::new(Gpu {
             backend,
             choice,
             current: Mutex::new(device),
+            epoch,
             failing_reopens: AtomicU64::new(0),
         }))
     }
@@ -187,6 +191,10 @@ impl Gpu {
     /// The adapter the GPU seam picked and what its devices are created with.
     pub fn seam(&self) -> Option<&Choice> {
         self.choice.as_ref()
+    }
+
+    pub fn epoch(&self) -> u64 {
+        self.epoch.load(Ordering::Acquire)
     }
 
     pub fn device(&self) -> Arc<Device> {
@@ -201,7 +209,9 @@ impl Gpu {
     pub fn recover(&self) -> Result<Arc<Device>, String> {
         let mut current = lock(&self.current);
         if current.is_lost() {
-            *current = self.open_again()?;
+            let next = self.open_again()?;
+            self.epoch.store(next.epoch, Ordering::Release);
+            *current = next;
         }
         Ok(current.clone())
     }

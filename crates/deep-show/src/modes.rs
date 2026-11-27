@@ -458,9 +458,9 @@ impl Hub<'_> {
         }
         let mut rows = read_out.rows;
         match mode {
-            "overdraw" => {
-                rows.push(json!({"id": "frame", "what": "overdraw", "max": counts.max_overdraw}))
-            }
+            "overdraw" => rows.push(json!({"id": "frame", "what": "overdraw",
+                                           "max": counts.max_overdraw,
+                                           "shaded": counts.shaded, "covered": counts.covered})),
             "lights_per_cluster" => rows.push(json!({"id": "frame", "what": "lights_per_cluster",
                                                      "max": counts.max_lights_per_cluster})),
             "cascade_splits" => rows.push(json!({"id": "frame", "what": "cascade_splits",

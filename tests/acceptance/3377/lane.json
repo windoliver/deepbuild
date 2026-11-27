@@ -1,0 +1,1 @@
+{ "alone": true, "why": "shared: Docker, as #580's suite whose Bench it runs: both tests start a deep hub with compose stacks on the daemon, and AC2 holds two stacks up at once" }

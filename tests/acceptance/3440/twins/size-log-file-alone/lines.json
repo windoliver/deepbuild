@@ -1,0 +1,12 @@
+{
+  "packages/record/src/storage.ts": [
+    {
+      "find": [
+        "  return [path, `${path}-wal`].reduce((sum, file) => sum + (statSync(file, { throwIfNoEntry: false })?.size ?? 0), 0);"
+      ],
+      "wrong": [
+        "  return [path].reduce((sum, file) => sum + (statSync(file, { throwIfNoEntry: false })?.size ?? 0), 0);"
+      ]
+    }
+  ]
+}

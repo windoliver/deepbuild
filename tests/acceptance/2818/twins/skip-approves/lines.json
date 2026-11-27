@@ -1,0 +1,12 @@
+{
+  "scripts/known-failures-record.mjs": [
+    {
+      "find": [
+        "    for (const item of approvals) console.log(`Approves: ${item}`);"
+      ],
+      "wrong": [
+        "    for (const item of []) console.log(`Approves: ${item}`);"
+      ]
+    }
+  ]
+}

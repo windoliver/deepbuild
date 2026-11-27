@@ -1,0 +1,294 @@
+The suite on the base commit 35956a44a7c4b20023055f50229821330e09b69f (origin/main, 2026-11-26), Node v24.22.0, before any
+implementation existed: every test fails at a node:assert assertion about the behavior the base lacks. The checkout's
+path is written <checkout>, and the scratch twin's <twin>.
+
+$ node --test 'tests/acceptance/3401/*.test.mjs'
+✖ #3401.a5f27d7f AC1: on the change doc-ceilings.mjs prints its one PASS line; the merge base's docs and ceilings fail under the same script, naming the section, its size and its ceiling (186.947375ms)
+✖ #3401.a5f27d7f AC1: doc-ceilings.json holds Registries and closed lists at its own text's size, under 20,000 bytes (13.795916ms)
+✖ #3401.e49d42a4 AC2: with a planted field list of a 300-byte row in a scratch copy's fill, `table` run there leaves doc-ceilings.mjs passing and the text under exactly one generated heading different; one table under one heading fails the ceilings, naming the heading (510.278583ms)
+✖ #3401.b6c9c9bc AC3: the rows under the generated headings, read in name order, equal the merge base's generated rows byte for byte, every one of them (15.37825ms)
+✖ #3401.b6c9c9bc AC3: a `table` that drops a row or rewords one fails the comparison, naming the list (6.788625ms)
+✖ #3401.56148288 AC4: drift passes on the change; with a row deleted from the last generated heading it fails, naming that list; a planted drift that reads only the first generated table passes the deletion and fails this test (10.105208ms)
+✖ #3401.51a09d90 AC5: no generated heading's own text is over 8,192 bytes (12.763333ms)
+✖ #3401.4caee707 AC6: tests/acceptance/2338/ passes unchanged on the change; on the merge base its ceilings test fails, naming the section (2187.5725ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 0
+ℹ fail 8
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2247.560958
+
+✖ failing tests:
+
+test at tests/acceptance/3401/ac1-ceilings.test.mjs:10:1
+✖ #3401.a5f27d7f AC1: on the change doc-ceilings.mjs prints its one PASS line; the merge base's docs and ceilings fail under the same script, naming the section, its size and its ceiling (186.947375ms)
+  AssertionError [ERR_ASSERTION]: scripts/doc-ceilings.mjs doesn't pass on this checkout with its one PASS line:
+  node scripts/doc-ceilings.mjs exited 1, not 0
+  node scripts/doc-ceilings.mjs printed 2 lines on stdout, not one
+  no line starting `PASS doc-ceilings:`
+  
+  node scripts/doc-ceilings.mjs exited 1
+  stdout:
+  FAIL doc-ceilings: docs/canvas-primitives.md#registries-and-closed-lists: 54,992 bytes of its own text, over its ceiling of 54,106
+    Fix: Split or shorten its own text to 54,106 bytes or fewer: a ceiling never rises.
+  
+  stderr:
+  (empty)
+  + actual - expected
+  
+  + [
+  +   'node scripts/doc-ceilings.mjs exited 1, not 0',
+  +   'node scripts/doc-ceilings.mjs printed 2 lines on stdout, not one',
+  +   'no line starting `PASS doc-ceilings:`'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3401/ac1-ceilings.test.mjs:13:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'node scripts/doc-ceilings.mjs exited 1, not 0', 'node scripts/doc-ceilings.mjs printed 2 lines on stdout, not one', 'no line starting `PASS doc-ceilings:`' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3401/ac1-ceilings.test.mjs:26:1
+✖ #3401.a5f27d7f AC1: doc-ceilings.json holds Registries and closed lists at its own text's size, under 20,000 bytes (13.795916ms)
+  AssertionError [ERR_ASSERTION]: scripts/doc-ceilings.json holds docs/canvas-primitives.md#registries-and-closed-lists at 54106, and its own text is 54992 bytes
+  
+  54106 !== 54992
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3401/ac1-ceilings.test.mjs:30:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 54106,
+    expected: 54992,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3401/ac2-planted-list.test.mjs:12:1
+✖ #3401.e49d42a4 AC2: with a planted field list of a 300-byte row in a scratch copy's fill, `table` run there leaves doc-ceilings.mjs passing and the text under exactly one generated heading different; one table under one heading fails the ceilings, naming the heading (510.278583ms)
+  AssertionError [ERR_ASSERTION]: scripts/doc-ceilings.mjs doesn't pass in a scratch copy of this checkout before anything is planted:
+  node scripts/doc-ceilings.mjs exited 1, not 0
+  node scripts/doc-ceilings.mjs printed 2 lines on stdout, not one
+  no line starting `PASS doc-ceilings:`
+  
+  node scripts/doc-ceilings.mjs exited 1
+  stdout:
+  FAIL doc-ceilings: docs/canvas-primitives.md#registries-and-closed-lists: 54,992 bytes of its own text, over its ceiling of 54,106
+    Fix: Split or shorten its own text to 54,106 bytes or fewer: a ceiling never rises.
+  
+  stderr:
+  (empty)
+  + actual - expected
+  
+  + [
+  +   'node scripts/doc-ceilings.mjs exited 1, not 0',
+  +   'node scripts/doc-ceilings.mjs printed 2 lines on stdout, not one',
+  +   'no line starting `PASS doc-ceilings:`'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3401/ac2-planted-list.test.mjs:16:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'node scripts/doc-ceilings.mjs exited 1, not 0', 'node scripts/doc-ceilings.mjs printed 2 lines on stdout, not one', 'no line starting `PASS doc-ceilings:`' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3401/ac3-rows.test.mjs:19:1
+✖ #3401.b6c9c9bc AC3: the rows under the generated headings, read in name order, equal the merge base's generated rows byte for byte, every one of them (15.37825ms)
+  AssertionError [ERR_ASSERTION]: docs/canvas-primitives.md holds its field lists under 0 generated headings inside Registries and closed lists, not several
+      at readBoth (file://<checkout>/tests/acceptance/3401/ac3-rows.test.mjs:12:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3401/ac3-rows.test.mjs:20:45)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3401/ac3-rows.test.mjs:26:1
+✖ #3401.b6c9c9bc AC3: a `table` that drops a row or rewords one fails the comparison, naming the list (6.788625ms)
+  AssertionError [ERR_ASSERTION]: docs/canvas-primitives.md holds its field lists under 0 generated headings inside Registries and closed lists, not several
+      at readBoth (file://<checkout>/tests/acceptance/3401/ac3-rows.test.mjs:12:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3401/ac3-rows.test.mjs:27:39)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3401/ac4-drift.test.mjs:8:1
+✖ #3401.56148288 AC4: drift passes on the change; with a row deleted from the last generated heading it fails, naming that list; a planted drift that reads only the first generated table passes the deletion and fails this test (10.105208ms)
+  AssertionError [ERR_ASSERTION]: docs/canvas-primitives.md holds its field lists under 0 generated headings inside Registries and closed lists, so there is no last generated heading past the first
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3401/ac4-drift.test.mjs:10:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3401/ac5-heading-sizes.test.mjs:7:1
+✖ #3401.51a09d90 AC5: no generated heading's own text is over 8,192 bytes (12.763333ms)
+  AssertionError [ERR_ASSERTION]: docs/canvas-primitives.md holds its field lists under 0 generated headings inside Registries and closed lists, not several, each under a heading of its own
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3401/ac5-heading-sizes.test.mjs:10:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3401/ac6-suite-2338.test.mjs:13:1
+✖ #3401.4caee707 AC6: tests/acceptance/2338/ passes unchanged on the change; on the merge base its ceilings test fails, naming the section (2187.5725ms)
+  AssertionError [ERR_ASSERTION]: tests/acceptance/2338/ doesn't pass on this checkout:
+  ✖ #2338.1a6db6b6 AC4 on the commit under test the ceilings file holds exactly the headings whose own text is over 16,384 bytes, with their sizes, and the lint lane's check passes with one line: the headings read, how many are over, and the largest with its anchor (146.490209ms)
+  ✖ failing tests:
+  ✖ #2338.1a6db6b6 AC4 on the commit under test the ceilings file holds exactly the headings whose own text is over 16,384 bytes, with their sizes, and the lint lane's check passes with one line: the headings read, how many are over, and the largest with its anchor (146.490209ms)
+  
+  node --test --test-reporter=spec tests/acceptance/2338/ac1-sections.test.mjs tests/acceptance/2338/ac2-unknown-anchor.test.mjs tests/acceptance/2338/ac3-issue.test.mjs tests/acceptance/2338/ac4-ceilings.test.mjs tests/acceptance/2338/ac5-reading-rule.test.mjs exited 1
+  stdout:
+  ✔ #2338.c7574234 AC1 the script prints the sections for a heading anchor, an explicit <a id> anchor and a repeated heading's -1 anchor, each byte-equal to its expected file; planted scripts that stop at a heading of any level or read a fenced # line as a heading fail, naming the anchor (338.043042ms)
+  ℹ planted stops-at-any-heading.mjs fails: docs/technical-design.md#alpha: printed 29 bytes, not the 245 bytes of fixture/alpha.md; they differ from byte 29: printed "", expected "### Alpha one\n\nAlpha one's text, then a fenced block whose s"
+  ℹ planted fenced-hash-as-heading.mjs fails: docs/technical-design.md#alpha: printed 138 bytes, not the 245 bytes of fixture/alpha.md; they differ from byte 138: printed "", expected "# a shell comment, not a heading\n```\n\nAlpha one's text after"
+  ✔ #2338.19700c5a AC2 an anchor no heading or <a id> of the file has exits non-zero, naming the file and the anchor, and prints no section; a planted script that exits 0 fails (191.485791ms)
+  ℹ planted unknown-exits-zero.mjs fails: the planted unknown-exits-zero.mjs exited 0 for docs/technical-design.md#no-such-section, which no heading or <a id> of the file has; its output doesn't name both the file docs/technical-design.md and the anchor no-such-section
+  ✔ #2338.64ab4593 AC3 an issue linking three sections in four links prints the three once each in first-linked order; a planted script that prints a section once per link prints four and fails, naming the count (224.7765ms)
+  ℹ planted once-per-link.mjs fails: printed 4 sections, not 3: #9338 links 3 sections in 4 links, and each prints once (docs/technical-design.md#alpha, docs/technical-design.md#the-plan, docs/technical-design.md#alpha, docs/technical-design.md#notes-1); section 3 is docs/technical-design.md#alpha, not docs/technical-design.md#notes-1: the sections print in the order the issue first links them
+  ✔ #2338.64ab4593 AC3 with no fetched issues the script prints BLOCKED naming what is missing, exits non-zero and prints no section; a planted script that prints nothing and exits 0 fails (314.604083ms)
+  ℹ planted blocked-prints-nothing.mjs fails: the planted blocked-prints-nothing.mjs exited 0 though no open issues were fetched; no line starting BLOCKED names what is missing, #9338 and the open issues (BLOCKED lines: none)
+  ✖ #2338.1a6db6b6 AC4 on the commit under test the ceilings file holds exactly the headings whose own text is over 16,384 bytes, with their sizes, and the lint lane's check passes with one line: the headings read, how many are over, and the largest with its anchor (146.490209ms)
+  ✔ #2338.1a6db6b6 AC4 a planted doc adding 1 KB to a listed heading's own text fails, naming the anchor, its size and its ceiling; at the merge base the planted docs pass (815.064459ms)
+  ✔ #2338.1a6db6b6 AC4 a planted heading new over the limit fails, naming it (255.270875ms)
+  ✔ #2338.1a6db6b6 AC4 a planted ceiling raised above the merge base's fails, naming it; a planted check that never reads the merge base passes it and fails this test (289.745625ms)
+  ℹ planted no-merge-base.mjs fails: the planted no-merge-base.mjs exited 0; no line starting FAIL names docs/technical-design.md#big-section and 18024 and 17000
+  ✔ #2338.1a6db6b6 AC4 a heading whose own text shrank, with its ceiling lowered in the same change, passes (543.332333ms)
+  ✔ #2338.a3eb5a70 AC5 AGENTS.md's first rule is the reading rule, CONTRIBUTING.md states it in the same words, and the lint lane's text check passes on this checkout (158.010375ms)
+  ✔ #2338.a3eb5a70 AC5 the text check fails when AGENTS.md or CONTRIBUTING.md is edited alone, naming both lines, and passes when both are; a planted check that reads AGENTS.md alone fails this test (450.345167ms)
+  ℹ planted agents-only.mjs fails: the planted agents-only.mjs exited 0 though the reading rule's words differ between the two files; the planted agents-only.mjs printed no line starting FAIL; its output doesn't name CONTRIBUTING.md:13
+  ℹ tests 11
+  ℹ suites 0
+  ℹ pass 10
+  ℹ fail 1
+  ℹ cancelled 0
+  ℹ skipped 0
+  ℹ todo 0
+  ℹ duration_ms 2135.687125
+  
+  ✖ failing tests:
+  
+  test at tests/acceptance/2338/ac4-ceilings.test.mjs:15:1
+  ✖ #2338.1a6db6b6 AC4 on the commit under test the ceilings file holds exactly the headings whose own text is over 16,384 bytes, with their sizes, and the lint lane's check passes with one line: the headings read, how many are over, and the largest with its anchor (146.490209ms)
+    AssertionError [ERR_ASSERTION]: scripts/doc-ceilings.json doesn't hold exactly the 19 headings over the limit with their sizes
+    + actual - expected
+    
+    + [
+    +   'docs/canvas-primitives.md#registries-and-closed-lists: own text 54992 bytes, ceiling 54106'
+    + ]
+    - []
+    
+        at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2338/ac4-ceilings.test.mjs:25:10)
+        at async Test.run (node:internal/test_runner/test:1409:7)
+        at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: [ 'docs/canvas-primitives.md#registries-and-closed-lists: own text 54992 bytes, ceiling 54106' ],
+      expected: [],
+      operator: 'deepStrictEqual',
+      diff: 'simple'
+    }
+  
+  stderr:
+  (empty)
+  
+  1 !== 0
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3401/ac6-suite-2338.test.mjs:17:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+================================================================================================================
+The self-check (README: How I checked the tests can pass and fail): the same suite in a scratch repository outside the
+checkout, holding the base's files with a twin of the change left uncommitted (the generated rows in 40 tables, each
+under a heading `#### Field lists: <name before its first . or @>`, drift reading the rows under all of them, the
+section's ceiling lowered to its own text). No twin was left in the checkout.
+
+$ node --test 'tests/acceptance/3401/*.test.mjs'
+✔ #3401.a5f27d7f AC1: on the change doc-ceilings.mjs prints its one PASS line; the merge base's docs and ceilings fail under the same script, naming the section, its size and its ceiling (987.450208ms)
+✔ #3401.a5f27d7f AC1: doc-ceilings.json holds Registries and closed lists at its own text's size, under 20,000 bytes (9.945583ms)
+✔ #3401.e49d42a4 AC2: with a planted field list of a 300-byte row in a scratch copy's fill, `table` run there leaves doc-ceilings.mjs passing and the text under exactly one generated heading different; one table under one heading fails the ceilings, naming the heading (1183.128833ms)
+ℹ one table under one generated heading fails: FAIL doc-ceilings: docs/canvas-primitives.md#field-lists-arch: 39,411 bytes of its own text, over 16,384 with no ceiling
+ℹ one table under the section's heading fails: FAIL doc-ceilings: docs/canvas-primitives.md#registries-and-closed-lists: 58,415 bytes of its own text, over its ceiling of 19,027
+✔ #3401.b6c9c9bc AC3: the rows under the generated headings, read in name order, equal the merge base's generated rows byte for byte, every one of them (109.832125ms)
+ℹ 215 rows of the merge base fc3c73f1d, each under one of 40 generated headings, byte for byte
+✔ #3401.b6c9c9bc AC3: a `table` that drops a row or rewords one fails the comparison, naming the list (103.385708ms)
+ℹ a dropped row fails: light.sun@1.shadow_far: the merge base holds its row, and no generated heading does
+ℹ a reworded row fails: arch.bay_frame@1.column.sides: its row isn't the merge base's byte for byte; from character 197 it holds "(reworded) |", where the merge base holds "|"
+✔ #3401.56148288 AC4: drift passes on the change; with a row deleted from the last generated heading it fails, naming that list; a planted drift that reads only the first generated table passes the deletion and fails this test (727.280208ms)
+ℹ drift with the row deleted: FAIL drift: vector@1.write_on.order: the fill (crates/deep-canvas/src/registry/fields.json) holds it, and the generated table has no row for it
+ℹ the planted first-table drift fails: the planted drift that reads only the first generated table exited 0; no line starting `FAIL drift:` names vector@1.write_on.order
+✔ #3401.51a09d90 AC5: no generated heading's own text is over 8,192 bytes (21.462666ms)
+ℹ 40 generated headings; the largest is docs/canvas-primitives.md#field-lists-gpu, 3337 bytes of its own text
+✔ #3401.4caee707 AC6: tests/acceptance/2338/ passes unchanged on the change; on the merge base its ceilings test fails, naming the section (4455.239042ms)
+ℹ on the merge base fc3c73f1d: ✖ #2338.1a6db6b6 AC4 on the commit under test the ceilings file holds exactly the headings whose own text is over 16,384 bytes, with their sizes, and the lint lane's check passes with one line: the headings read, how many are over, and the largest with its anchor (27.921125ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4551.531083
