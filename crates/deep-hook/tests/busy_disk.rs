@@ -2,7 +2,6 @@
 // spool write runs beside it. It has no libtest harness (Cargo.toml), so its tests run in turn, their disk loads never
 // adding up, and a run that proves nothing can say so: libtest knows only ok, FAILED and ignored-before-running, and
 // the lanes read a `test result: INCONCLUSIVE` line as INCONCLUSIVE (scripts/lanes.mjs, cargoResults).
-//
 // What the first test writes: up to 60 files of 512 MB in turn under /tmp, each over the last in /tmp/dh315-busy-<pid>,
 // which it removes unless it panics. What the second writes: four files of 1 GB at once in /tmp/dh315-bound-<pid>, up
 // to four times, each time in place of the last four, which it removes unless it panics.
@@ -163,9 +162,7 @@ fn hooks_spooling_on_a_stalled_disk_leave_one_sync_and_the_spool_s_makers_runnin
         bursts += 1;
         let writers: Vec<_> = (0..4)
             .map(|w| {
-                // Gone before each burst, so the size read after it is what this burst's dd wrote.
                 let _ = std::fs::remove_file(home.join(format!("busy-{w}.bin")));
-                // 1048576 rather than 1m: GNU dd refuses 1m, and BSD dd reads both.
                 Command::new("dd")
                     .args(["if=/dev/zero", "bs=1048576", "count=1024"])
                     .arg(format!("of={}/busy-{w}.bin", home.display()))
@@ -208,7 +205,6 @@ fn hooks_spooling_on_a_stalled_disk_leave_one_sync_and_the_spool_s_makers_runnin
             .filter(|line| line.contains(&format!("spool-sync {}", folder.display())))
             .count();
         most = most.max(left);
-        // A writer that failed or wrote less than its 1 GB never loaded the disk this burst was timed against.
         for (w, mut writer) in writers.into_iter().enumerate() {
             let status = writer.wait().unwrap();
             let file = home.join(format!("busy-{w}.bin"));
@@ -219,7 +215,6 @@ fn hooks_spooling_on_a_stalled_disk_leave_one_sync_and_the_spool_s_makers_runnin
         }
     }
     std::fs::remove_dir_all(&home).unwrap();
-    // Syncs left behind fail the test even if a writer didn't write: the hooks left them all the same.
     assert!(
         most <= 3,
         "once the hooks exited, {most} spool syncs were still running for their spool"
