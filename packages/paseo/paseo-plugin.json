@@ -2,5 +2,5 @@
   "id": "deepbuild",
   "name": "DeepBuild",
   "description": "The done gate, policy answers and DeepBuild's MCP tools for every agent paseo runs",
-  "requirements": { "paseo": ">=0.15.0 <0.16.0" }
+  "requirements": { "paseo": "0.15.0 || 0.17.6" }
 }

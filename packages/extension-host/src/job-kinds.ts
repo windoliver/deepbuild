@@ -8,7 +8,9 @@ import { registry, sha256Hex, type JsonValue, type Schema } from '@deepbuild/con
 import { packageDigest } from './digest.js';
 
 type Texts = Record<string, string>;
-export interface JobFixture { name: string; params: Record<string, JsonValue>; inputs: Texts; expect: Texts }
+/** A fixture's input: text, kept in UTF-8, or a file's bytes in base64 (#3570: a zip, a workbook, a Latin-1 file). */
+type FixtureFile = string | { base64: string };
+export interface JobFixture { name: string; params: Record<string, JsonValue>; inputs: Record<string, FixtureFile>; expect: Texts }
 export interface JobKind {
   /** Each input by name; one declared `many` (#154) takes zero or more files, in order, all of them in the key. */
   schema: { params: Schema; inputs: Record<string, { media?: string; many?: boolean }> };
@@ -29,6 +31,8 @@ export interface Weight { name: string; sha256: string }
 export interface JobTool {
   tool: string; params: Schema; run: { dir: string; entry: string } | { url: string } | { core: true }; qualification: unknown; cost?: { usd: number };
   weights?: Weight[]; needs?: string[];
+  /** The kind's outputs this tool writes, where its format writes only some of them (#3570: a table import writes a table and its receipt); all of them when left out. */
+  outputs?: string[];
 }
 /**
  * What an install holds of the job API: the kinds it registered, and its tools, each with the build it qualified as,
@@ -42,9 +46,9 @@ export interface HeldJobs { kinds: Record<string, JobKind>; tools: { kind: strin
 export interface JobCall { provider: string; key: string; journal: string }
 /** A job's input files by name: one file each, or a list for an input declared `many` (#154). */
 export type JobBytes = Record<string, Uint8Array | Uint8Array[]>;
-/** A qualification fixture's inputs as bytes: each text in UTF-8, and an empty list for a `many` input it leaves out. */
-export function fixtureInputs(inputs: JobKind['schema']['inputs'], texts: Texts): JobBytes {
-  const bytes: JobBytes = Object.fromEntries(Object.entries(texts).map(([n, t]) => [n, Buffer.from(t, 'utf8')]));
+/** A qualification fixture's inputs as bytes: each text in UTF-8 or each file from base64, and an empty list for a `many` input it leaves out. */
+export function fixtureInputs(inputs: JobKind['schema']['inputs'], given: Record<string, FixtureFile>): JobBytes {
+  const bytes: JobBytes = Object.fromEntries(Object.entries(given).map(([n, t]) => [n, typeof t === 'string' ? Buffer.from(t, 'utf8') : Buffer.from(t.base64, 'base64')]));
   for (const [n, d] of Object.entries(inputs)) if (d.many && !bytes[n]) bytes[n] = [];
   return bytes;
 }
@@ -78,6 +82,7 @@ export function counterOf(line: string): JobCounter | undefined {
 const TOOL = /^[a-z0-9][a-z0-9_-]*@\d+\.\d+\.\d+$/;
 const isPlain = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const texts = (v: unknown): v is Texts => isPlain(v) && Object.values(v).every((x) => typeof x === 'string');
+const fixtureFiles = (v: unknown): v is Record<string, FixtureFile> => isPlain(v) && Object.values(v).every((x) => typeof x === 'string' || (isPlain(x) && typeof x.base64 === 'string'));
 const KEY_PARTS = ['tool', 'params', 'inputs'];
 
 /** The schema the contracts' validator reads: `default` taken out, and an enum of texts typed as text. */
@@ -127,7 +132,7 @@ export function kindOf(kind: string, raw: unknown): JobKind {
   if (core !== undefined && (typeof core !== 'string' || !core)) throw Error(`the job kind ${kind}'s qualification.core names the canvas core's call that qualifies a tool`);
   if (!fixtures.length && core === undefined) throw Error(`the job kind ${kind} declares no qualification fixtures`);
   for (const f of fixtures as Partial<JobFixture>[]) {
-    if (!isPlain(f) || typeof f.name !== 'string' || !texts(f.inputs) || !texts(f.expect)) throw Error(`the job kind ${kind}'s qualification fixture ${JSON.stringify((f as { name?: unknown })?.name)} names no inputs and expected outputs as text`);
+    if (!isPlain(f) || typeof f.name !== 'string' || !fixtureFiles(f.inputs) || !texts(f.expect)) throw Error(`the job kind ${kind}'s qualification fixture ${JSON.stringify((f as { name?: unknown })?.name)} names no inputs (as text or {base64}) and expected outputs as text`);
     try {
       paramsOf(k.schema.params, f.params);
     } catch (e) {
@@ -166,6 +171,7 @@ export function toolOf(kind: string, raw: unknown, folder: string, host?: string
   }
   if (!isPlain(t.params)) throw Error(`${t.tool} declares no params schema`);
   if (t.cost !== undefined && !(isPlain(t.cost) && typeof t.cost.usd === 'number' && t.cost.usd >= 0)) throw Error(`${t.tool}'s cost is {usd}, a price per run`);
+  if (t.outputs !== undefined && !(Array.isArray(t.outputs) && t.outputs.length && t.outputs.every((o) => typeof o === 'string' && !!o))) throw Error(`${t.tool}'s outputs name the outputs of ${kind} it writes, at least one`);
   return plain(t) as unknown as JobTool;
 }
 
