@@ -34,8 +34,6 @@ const REST_STEPS: usize = 12;
 const FLICKER_WINDOW: u64 = FLICKS / 5;
 /// How long after the last input anything may still move: 2 s.
 const SETTLE: u64 = 2 * FLICKS;
-/// The shipped journeys' window height, in points: room for the fixture's whole list, about 1,590 at the clean look's
-/// sizes (Needs you's heading of 40, 40 ask rows of 32, one project heading and 7 session rows).
 const SHIPPED_HEIGHT: u32 = 2_048;
 
 /// One element as a step saw it.
@@ -662,9 +660,6 @@ impl Recording {
 
 /// The three shipped journeys: Needs you, a session page and the project page, on #338's fixture record. Each
 /// launches on its center, points at one row and holds the pointer there, and runs past 2 s so `no_settle` is judged.
-/// The window is tall enough for the whole of the one list (#1461), the fixture's 40 asks and then its sessions:
-/// only rows in view are drawn (#1808), and a row scrolled into view while recording would read as a `pop_in`. A row
-/// is named by its record's id, never by the words it draws.
 fn shipped() -> Vec<(&'static str, Vec<Value>)> {
     let hold = json!({"call": "wait_for", "wait_for": {"t": 3 * FLICKS}, "timeout": 60_000});
     let journey = |center: &str, row: &str| {
