@@ -108,7 +108,6 @@ describe('guards on a pi call', () => {
     expect(existsSync(join(w.cwd, 'ran.txt'))).toBe(false);
   }, 90_000);
 
-  /** Setup finished, then no deep-hook recorded, the hub stopped and rules.json removed (#1856). */
   async function lost(script: Step[]): Promise<{ pi: Pi; cwd: string; home: string }> {
     const w = await world(script);
     w.hub.child.kill();
