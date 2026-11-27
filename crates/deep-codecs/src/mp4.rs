@@ -155,15 +155,27 @@ pub struct Track {
     pub samples: Vec<Sample>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Unbacked {
+    pub kind: [u8; 4],
+    pub count: u64,
+    pub limit: u64,
+}
+
 pub struct Movie {
     pub timescale: u32,
     pub tracks: Vec<Track>,
     /// Every data reference that names a place outside the file.
     pub urls: Vec<String>,
+    pub unbacked: Option<Unbacked>,
 }
 
 /// The movie in `data`, or `None` when it has no `moov`.
 pub fn parse(data: &[u8]) -> Option<Movie> {
+    parse_in(data, data.len() as u64)
+}
+
+fn parse_in(data: &[u8], file: u64) -> Option<Movie> {
     let moov = atoms(data).into_iter().find(|a| &a.kind == b"moov")?.body;
     let mut timescale = 0;
     if let Some(mvhd) = child(moov, b"mvhd") {
@@ -176,9 +188,10 @@ pub fn parse(data: &[u8]) -> Option<Movie> {
         timescale,
         tracks: Vec::new(),
         urls: Vec::new(),
+        unbacked: None,
     };
     for trak in atoms(moov).into_iter().filter(|a| &a.kind == b"trak") {
-        if let Some(t) = track(trak.body, &mut movie.urls) {
+        if let Some(t) = track(trak.body, file, &mut movie) {
             movie.tracks.push(t);
         }
     }
@@ -224,7 +237,7 @@ impl Head {
                 let mut moov = vec![0u8; size as usize];
                 r.seek(SeekFrom::Start(at))?;
                 r.read_exact(&mut moov)?;
-                head.movie = parse(&moov);
+                head.movie = parse_in(&moov, len);
             }
             at += size;
         }
@@ -232,7 +245,7 @@ impl Head {
     }
 }
 
-fn track(trak: &[u8], urls: &mut Vec<String>) -> Option<Track> {
+fn track(trak: &[u8], file: u64, movie: &mut Movie) -> Option<Track> {
     let mdia = child(trak, b"mdia")?;
     let mut b = Bytes(child(mdia, b"mdhd")?, 0);
     let v = b.u8()?;
@@ -252,7 +265,7 @@ fn track(trak: &[u8], urls: &mut Vec<String>) -> Option<Track> {
         .unwrap_or_default();
     let minf = child(mdia, b"minf")?;
     if let Some(dref) = child(minf, b"dinf").and_then(|d| child(d, b"dref")) {
-        urls.extend(external(dref));
+        movie.urls.extend(external(dref));
     }
     let stbl = child(minf, b"stbl")?;
     let mut entry = child(stbl, b"stsd")
@@ -262,7 +275,7 @@ fn track(trak: &[u8], urls: &mut Vec<String>) -> Option<Track> {
     if kind == Kind::Audio && entry.sample_rate == 0 {
         entry.sample_rate = timescale;
     }
-    let samples = table(stbl).unwrap_or_default();
+    let samples = table(stbl, file, &mut movie.unbacked).unwrap_or_default();
     Some(Track {
         kind,
         rotation: child(trak, b"tkhd").and_then(rotation).unwrap_or(0),
@@ -410,33 +423,44 @@ fn stsd(body: &[u8], audio: bool) -> Option<Entry> {
 }
 
 /// The sample table, in decode order: offsets, sizes, decode and composition times, sync samples.
-fn table(stbl: &[u8]) -> Option<Vec<Sample>> {
+fn table(stbl: &[u8], file: u64, unbacked: &mut Option<Unbacked>) -> Option<Vec<Sample>> {
     let full = |k: &[u8; 4]| child(stbl, k).map(|b| Bytes(b, 4));
+    let mut backed = |kind: &[u8; 4], count: u64, each: u64, room: u64| {
+        let limit = room / each;
+        if count > limit {
+            unbacked.get_or_insert(Unbacked {
+                kind: *kind,
+                count,
+                limit,
+            });
+        }
+        (count <= limit).then_some(count as usize)
+    };
     let mut stsz = full(b"stsz")?;
     let fixed = stsz.u32()?;
-    let count = stsz.u32()? as usize;
-    let count = if fixed == 0 {
-        count.min(stsz.left() / 4)
-    } else {
-        count
+    let count = stsz.u32()? as u64;
+    let count = match fixed {
+        0 => backed(b"stsz", count, 4, stsz.left() as u64)?,
+        size => backed(b"stsz", count, size as u64, file)?,
     };
     let sizes: Vec<u32> = (0..count)
         .map(|_| if fixed == 0 { stsz.u32() } else { Some(fixed) })
         .collect::<Option<_>>()?;
     let mut offsets = Vec::new();
     if let Some(mut b) = full(b"stco") {
-        let n = b.u32()?;
-        for _ in 0..n {
+        let n = b.u32()? as u64;
+        for _ in 0..backed(b"stco", n, 4, b.left() as u64)? {
             offsets.push(b.u32()? as u64);
         }
     } else if let Some(mut b) = full(b"co64") {
-        let n = b.u32()?;
-        for _ in 0..n {
+        let n = b.u32()? as u64;
+        for _ in 0..backed(b"co64", n, 8, b.left() as u64)? {
             offsets.push(b.u64()?);
         }
     }
     let mut stsc = full(b"stsc")?;
-    let n = stsc.u32()?;
+    let n = stsc.u32()? as u64;
+    let n = backed(b"stsc", n, 12, stsc.left() as u64)?;
     let runs: Vec<(u32, u32)> = (0..n)
         .map(|_| {
             let first = stsc.u32()?;
@@ -469,11 +493,14 @@ fn table(stbl: &[u8]) -> Option<Vec<Sample>> {
         }
     }
     let mut stts = full(b"stts")?;
-    let n = stts.u32()?;
-    let (mut t, mut i) = (0i64, 0usize);
+    let n = stts.u32()? as u64;
+    let n = backed(b"stts", n, 8, stts.left() as u64)?;
+    let (mut t, mut i, mut stated) = (0i64, 0usize, 0u64);
     for _ in 0..n {
         let run = stts.u32()?;
         let delta = stts.u32()? as i64;
+        stated += run as u64;
+        backed(b"stts", stated, 1, file);
         for _ in 0..run {
             let Some(s) = samples.get_mut(i) else { break };
             s.dts = t;
@@ -483,12 +510,15 @@ fn table(stbl: &[u8]) -> Option<Vec<Sample>> {
     }
     let mut offsets_c = vec![0i64; samples.len()];
     if let Some(mut b) = child(stbl, b"ctts").map(|b| Bytes(b, 4)) {
-        let n = b.u32()?;
-        let mut i = 0usize;
+        let n = b.u32()? as u64;
+        let n = backed(b"ctts", n, 8, b.left() as u64)?;
+        let (mut i, mut stated) = (0usize, 0u64);
         for _ in 0..n {
             let run = b.u32()?;
             // Read signed, as FFmpeg does for version 0 too.
             let off = b.u32()? as i32 as i64;
+            stated += run as u64;
+            backed(b"ctts", stated, 1, file);
             for _ in 0..run {
                 let Some(o) = offsets_c.get_mut(i) else { break };
                 *o = off;
@@ -500,7 +530,8 @@ fn table(stbl: &[u8]) -> Option<Vec<Sample>> {
         s.cts = s.dts + off;
     }
     if let Some(mut b) = full(b"stss") {
-        let n = b.u32()?;
+        let n = b.u32()? as u64;
+        let n = backed(b"stss", n, 4, b.left() as u64)?;
         samples.iter_mut().for_each(|s| s.key = false);
         for _ in 0..n {
             let number = b.u32()? as usize;
@@ -673,6 +704,48 @@ mod tests {
         stbl.push(full_box(b"ctts", 0, &long_runs(&[65, 1, 3], 7)));
         let got = crate::tests::finished(move || samples(&stbl)).expect("the probe returns");
         assert_eq!(got.iter().map(|s| s.cts).collect::<Vec<_>>(), [3, 17]);
+    }
+
+    fn unbacked(stbl: &[Vec<u8>]) -> Option<Unbacked> {
+        let mdhd = full_box(b"mdhd", 0, &[0; 16]);
+        let hdlr = full_box(b"hdlr", 0, b"\0\0\0\0vide");
+        let minf = mp4_box(b"minf", &mp4_box(b"stbl", &stbl.concat()));
+        let trak = mp4_box(b"trak", &mp4_box(b"mdia", &[mdhd, hdlr, minf].concat()));
+        parse(&mp4_box(b"moov", &trak)).expect("a movie").unbacked
+    }
+
+    #[test]
+    fn a_count_its_box_cannot_back_is_refused_naming_the_box() {
+        let cases = [
+            (0, b"stsz", &[0u32, 3, 4, 4][..], 3, 2),
+            (1, b"stco", &[2, 100][..], 2, 1),
+            (1, b"co64", &[2, 0, 100][..], 2, 1),
+            (2, b"stsc", &[2, 1, 2, 1][..], 2, 1),
+            (3, b"stts", &[2, 2, 10][..], 2, 1),
+            (4, b"ctts", &[2, 2, 3][..], 2, 1),
+            (4, b"stss", &[3, 1, 2][..], 3, 2),
+        ];
+        for (at, kind, body, count, limit) in cases {
+            let mut stbl = two_samples();
+            stbl.push(full_box(b"stts", 0, &be(&[1, 2, 10])));
+            stbl.splice(at..(at + 1).min(stbl.len()), [full_box(kind, 0, &be(body))]);
+            let named = Unbacked {
+                kind: *kind,
+                count,
+                limit,
+            };
+            assert_eq!(unbacked(&stbl), Some(named));
+        }
+    }
+
+    #[test]
+    fn composition_runs_of_more_samples_than_the_file_has_bytes_are_refused() {
+        let mut stbl = two_samples();
+        stbl.push(full_box(b"stts", 0, &be(&[1, 2, 10])));
+        stbl.push(full_box(b"ctts", 0, &be(&[1, u32::MAX, 3])));
+        let found = unbacked(&stbl).expect("a refusal");
+        assert_eq!((&found.kind, found.count), (b"ctts", u32::MAX as u64));
+        assert!(found.limit < 1024);
     }
 
     #[test]

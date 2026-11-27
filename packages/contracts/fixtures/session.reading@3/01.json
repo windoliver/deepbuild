@@ -1,0 +1,13 @@
+{
+  "v": 3,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6X",
+  "kind": "session.reading",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "reading": "This session runs copilot through paseo in its mode allow-all, where the agent approves its own calls: no call is checked before it runs, and no guard entry is matched. Its turn's end is still checked.",
+    "code": "mode_unchecked"
+  }
+}

@@ -79,7 +79,7 @@ export function writePack(dir: string, srv: Srv, pack: string, version: string, 
   mkdirSync(dir, { recursive: true });
   const url = (a: Listed) => `https://${srv.host}/${root(pack, version)}/${a.path}`;
   writeFileSync(join(dir, 'pack.json'), `${JSON.stringify({
-    id: pack, name: pack.split('/')[1], version, license: 'MIT', description: `#1820 supplemental pack ${pack}.`, requires: { core: '^1', modules: {} },
+    id: pack, name: pack.split('/')[1], version, license: 'MIT', description: `#1820 supplemental pack ${pack}.`, requires: { core: '>=0.0.0', modules: {} },
     assets: list.map(({ a, tag }) => ({ path: a.path, url: url(a), sha256: sha(a.body), size: a.body.length, license: { ...a.license, terms: `https://${srv.host}/terms/${tag}` }, upstream: { url: url(a), version, modified: '2026-01-01T00:00:00Z' } })),
   }, null, 2)}\n`);
   return dir;

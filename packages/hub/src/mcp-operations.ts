@@ -541,7 +541,7 @@ export class McpOperations {
         if (!slackConfig(this.options.services.root.dir)) throw refuse('required', '/params/arguments/thread', 'No Slack connector: put your Slack user ID in the hub\'s slack.json as {"you": "U…"}, mode 0600, and enter your bot token with deep secret add slack token, to read this thread.', null);
       } else {
         need('check', 'Name the check in the repo\'s spec that will prove the task done; a task without one is refused, since nobody could tell it was done.');
-        const approved = checksIn((await approvedSpec(s.cwd, (await headOf(s.cwd).catch(() => undefined))?.sha ?? '')).spec);
+        const approved = checksIn((await approvedSpec(s.cwd, (await headOf(s.cwd).catch(() => undefined))?.sha ?? '', this.options.services.record)).spec);
         if (!approved.has(String(args.check))) throw this.unknownCheck([...approved.keys()], args.check);
       }
       need('steps', 'List the task\'s steps, in order.');

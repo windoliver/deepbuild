@@ -1,0 +1,14 @@
+{
+ "docs/technical-design.md": [
+  {
+   "find": [
+    "### Privacy"
+   ],
+   "wrong": [
+    "### Privacy",
+    "",
+    "The old wording, planted. There is no HTTP server for a UI, and the hub refuses any request carrying a browser Origin, so no web page can reach it."
+   ]
+  }
+ ]
+}

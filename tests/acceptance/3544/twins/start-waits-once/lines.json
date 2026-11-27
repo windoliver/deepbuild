@@ -1,0 +1,28 @@
+{
+  "packages/hub/src/service.ts": [
+    {
+      "find": [
+        "import { counted, rebuilding, replayingOf, type Replaying } from './replay.js';"
+      ],
+      "wrong": [
+        "import { rebuilding, replayingOf, type Replaying } from './replay.js';"
+      ]
+    },
+    {
+      "find": [
+        "        moved = Date.now();",
+        "      } else if (Date.now() - moved >= wait) {",
+        "        process.stderr.write(`deep hub start: the hub at unix:${root.socket} is rebuilding its tables from the log, and its replay has stood at ${counted(now.replayed)} of ${counted(now.events)} events for ${wait / 1000} s; see ${join(root.logs, 'hub.log')}\\n`);",
+        "        return 3;",
+        "      }"
+      ],
+      "wrong": [
+        "      }",
+        "      if (Date.now() - moved >= wait) {",
+        "        process.stderr.write(`deep hub start: the hub at unix:${root.socket} answers, but its core didn't start within ${wait / 1000} s; see ${join(root.logs, 'hub.log')}\\n`);",
+        "        return 3;",
+        "      }"
+      ]
+    }
+  ]
+}

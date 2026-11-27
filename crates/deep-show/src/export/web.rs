@@ -19,6 +19,13 @@
 //! bytes; the index gives each one's inflated size and the SHA-256 the document names it by, and
 //! the page inflates a file only after its stored bytes match its name. The read-back inflates
 //! each stored file and matches it, all or nothing.
+//!
+//! #1042: a piece's data is what the export recorded, the readings its bound values show, by hash
+//! with their as-of times, and the public sources it declares ([`super::sources`]), which the
+//! player goes on asking; a source that answers only with a key is refused, naming it. Light is
+//! today's light in the player, since WebGPU has no ray queries, so a light policy that names
+//! ray-traced light falls back to it and the receipt lists the fallback. Each bundled face is
+//! subset to the glyphs the piece's text can show ([`super::subset`]).
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -259,7 +266,7 @@ impl Files {
 
 /// #2892: whether `bytes` are of a format that compresses its own data, which the bundle stores as
 /// it is: PNG, JPEG, GIF and WebP pictures, a KTX2 map under supercompression, FLAC and Ogg sound.
-fn compresses_itself(bytes: &[u8]) -> bool {
+pub(super) fn compresses_itself(bytes: &[u8]) -> bool {
     let at = |o: usize, magic: &[u8]| bytes.get(o..o + magic.len()) == Some(magic);
     let ktx2_super = deep_codecs::maps::is_ktx2(bytes)
         && bytes
@@ -374,6 +381,41 @@ fn refusals(doc: &Value, missing: &BTreeMap<String, String>, set: &str) -> Vec<V
     out
 }
 
+/// #1042: what the web path draws where `doc`'s light policy names ray-traced light (Light: ray
+/// traced: a `rays` other than `off`, or `effects`), as the receipt's `stand_in` lists it: today's
+/// light, for each light that casts a shadow when shadows are among the policy's effects, and
+/// for the policy itself when no light is.
+fn light_fallbacks(doc: &Value) -> Vec<Value> {
+    let policy = &doc["light_policy"];
+    let effects = policy.get("effects");
+    let named = match policy.get("rays") {
+        Some(rays) => rays != "off",
+        None => effects.is_some(),
+    };
+    if !named {
+        return Vec::new();
+    }
+    let shadows = effects
+        .and_then(Value::as_array)
+        .is_none_or(|e| e.contains(&json!("shadows")));
+    let lights = doc["items"].as_object().into_iter().flatten();
+    let mut of: Vec<&str> = lights
+        .filter(|(_, i)| shadows && i["params"]["shadow"] == true)
+        .filter(|(_, i)| i["kind"].as_str().is_some_and(|k| k.starts_with("light.")))
+        .map(|(id, _)| id.as_str())
+        .collect();
+    if of.is_empty() {
+        of.push("light_policy");
+    }
+    of.into_iter()
+        .map(|item| {
+            json!({"item": item, "entry": "light_policy.rays", "path": "web", "light": "without_history",
+                "draws": "today's light, with no rays: WebGPU has no ray queries",
+                "receipt": "the fallback from ray-traced light to today's light"})
+        })
+        .collect()
+}
+
 /// What `doc` asks of the browser's GPU, computed from the document and WebGPU's feature table:
 /// the features it needs, the sets of which it needs one, and the limits past WebGPU's defaults.
 /// A cutaway cuts through WebGPU's clip distances (Cutaway `cutaway@1`), which the table gives no
@@ -477,6 +519,7 @@ fn index_html(
     element: (&str, &[u8]),
     stamp: Option<String>,
     relay: Option<&str>,
+    sources: &[Value],
 ) -> String {
     let map = json!({"imports": {"deep-player-glue": format!("./{}", glue.0)},
                      "integrity": {format!("./{}", glue.0): integrity(glue.1)}})
@@ -485,8 +528,15 @@ fn index_html(
     let relay = relay
         .map(|host| format!(" wss://{host}"))
         .unwrap_or_default();
+    // #1042: and each public source it declares, by its origin.
+    let mut origins: Vec<String> = (sources.iter())
+        .filter_map(|s| super::sources::origin(s["url"].as_str()?))
+        .collect();
+    origins.sort();
+    origins.dedup();
+    let sources: String = origins.iter().map(|o| format!(" {o}")).collect();
     let policy = format!(
-        "default-src 'none'; script-src 'self' 'wasm-unsafe-eval' '{}'; connect-src 'self'{relay}; img-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'",
+        "default-src 'none'; script-src 'self' 'wasm-unsafe-eval' '{}'; connect-src 'self'{relay}{sources}; img-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'",
         integrity(map.as_bytes())
     );
     let data = manifest.to_string().replace("</", "<\\/");
@@ -501,7 +551,7 @@ fn index_html(
         "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n\
 <meta http-equiv=\"Content-Security-Policy\" content=\"{policy}\">\n<meta name=\"referrer\" content=\"no-referrer\">\n{stamp}<title>{}</title>\n\
 <style>html,body{{margin:0;background:#101012;color:#e8e8ec;font:14px system-ui,sans-serif}}deep-player{{display:block;position:relative}}\
-deep-player canvas{{display:block;width:100%;height:auto;max-height:100vh;object-fit:contain}}[data-deep-notice],[data-deep-unstarted]{{margin:8px 12px}}\
+deep-player canvas{{display:block;width:100%;height:auto;max-height:100vh;object-fit:contain}}[data-deep-notice],[data-deep-unstarted],[data-deep-reading]{{margin:8px 12px}}\
 [data-deep-notice=stopped]{{position:absolute;top:12px;left:12px;max-width:560px;margin:0;padding:8px 12px;background:#1b1b20;border:1px solid #55555f;border-radius:6px}}deep-player a{{color:#9db4ff}}\
 [data-deep-saves]{{display:flex;gap:8px;margin:8px 12px}}[data-deep-saves] button,[data-deep-saves] select{{font:inherit;color:inherit;background:#232329;border:1px solid #4a4a55;border-radius:6px;padding:4px 10px}}</style>\n\
 <script type=\"importmap\">{map}</script>\n<script type=\"module\" src=\"./{}\" integrity=\"{}\" blocking=\"render\"></script>\n</head>\n<body>\n\
@@ -813,6 +863,24 @@ impl Hub<'_> {
                 refused.push(r);
             }
         }
+        // #1042: the public sources the export declares, each asked once with no key; one that
+        // isn't a source a player may read, or answers only with a key, is refused, naming it.
+        let sources = match super::sources::declared(doc, &job.web) {
+            Ok(sources) => sources,
+            Err(r) => {
+                refused.extend(r);
+                Vec::new()
+            }
+        };
+        if !sources.is_empty() {
+            let ca = match &self.scenario.net.source_ca {
+                None => Vec::new(),
+                Some(path) => std::fs::read(path).map_err(
+                    |e| json!({"code": "bad_input", "path": "source_ca", "why": e.to_string()}),
+                )?,
+            };
+            refused.extend(super::sources::refusals(&sources, &ca));
+        }
         if !refused.is_empty() {
             let names: Vec<&str> = refused.iter().filter_map(|r| r["item"].as_str()).collect();
             return Err(
@@ -859,14 +927,31 @@ impl Hub<'_> {
             || json!({"code": "bad_input", "what": "track: each entry is {t, control, value, writer}"}),
         )?;
         let (_, track_sha) = files.put(held, Some("json"), Map::new());
-        // Everything the document names by hash.
+        // Everything the document names by hash, and the characters its text can show (#1042).
+        let mut shown = super::subset::Shown::new();
+        shown.document(doc);
+        shown.document(&json!(job.track));
         for (_, path, sha) in crate::extended::hashes(doc, true) {
             let bytes = crate::evidence::read(&root, &sha).ok_or_else(|| {
                 json!({"outcome": "refused", "code": "asset_missing", "path": path, "sha256": sha,
                        "why": format!("the document names {sha} at {path}, which the store doesn't hold")})
             })?;
+            shown.asset(&bytes);
             files.put(bytes, None, Map::new());
         }
+        // #1042: the readings its bound values show, as the record holds them at the export.
+        let mut readings = Map::new();
+        for (_, b) in doc["bound_values"].as_object().into_iter().flatten() {
+            let handle = b["source"].as_str().unwrap_or_default();
+            let held = self.scenario.record.get(handle);
+            if let Some((value, o)) = held.and_then(|o| Some((o.value?, o))) {
+                readings.insert(handle.into(), json!({"value": value, "as_of": o.as_of}));
+            }
+        }
+        let readings = (!readings.is_empty()).then(|| {
+            let bytes = serde_json::to_vec(&readings).unwrap_or_default();
+            files.put(bytes, Some("json"), Map::new()).1
+        });
         // Each logic item's program as the app rewrote it, checked again against its hash.
         let mut logic = Vec::new();
         let form = crate::played::with_track(doc, &job.track);
@@ -899,11 +984,14 @@ impl Hub<'_> {
             let (_, sha) = files.put(level, Some("level"), marks);
             images.push(json!({"source": source, "row": row, "level": sha}));
         }
-        // The bundled faces, each with its license.
+        // The bundled faces, each subset to what the piece's text can show (#1042), with its license.
         let mut fonts = Vec::new();
         for face in deep_text::FACES {
             let ext = face.file.rsplit('.').next();
-            let (_, sha) = files.put(face.bytes().to_vec(), ext, Map::new());
+            let bytes = shown.face(face.bytes()).map_err(|why| {
+                json!({"outcome": "failed", "code": "web.font_subset", "file": face.file, "why": why})
+            })?;
+            let (_, sha) = files.put(bytes, ext, Map::new());
             fonts.push(json!({"file": face.file, "sha256": sha}));
         }
         for (_, text) in deep_text::LICENSES {
@@ -945,7 +1033,7 @@ impl Hub<'_> {
         let out = PathBuf::from(&job.out);
         let mut page = Files::default();
         let fallback = self.web_fallback(job, doc, &out, &mut page)?;
-        let manifest = json!({
+        let mut manifest = json!({
             "size": size,
             "player": {"wasm": wasm_sha},
             "document": doc_sha,
@@ -957,6 +1045,13 @@ impl Hub<'_> {
             "gpu_needs": needs,
             "fallback": fallback,
         });
+        // #1042: a piece with neither names neither, so its index page is as it was.
+        if !sources.is_empty() {
+            manifest["sources"] = json!(sources);
+        }
+        if let Some(sha) = &readings {
+            manifest["readings"] = json!(sha);
+        }
         let stamp = (guard == Some(Guard::WebIndexExportTime)).then(|| {
             // Planted (#172 AC6): the export's time written into the index page.
             let now = std::time::SystemTime::now()
@@ -979,6 +1074,7 @@ impl Hub<'_> {
                 .as_ref()
                 .map(|c| c.host.as_str())
                 .filter(|h| !h.is_empty()),
+            &sources,
         );
         // Every file the document, the player and the fallback page name, with what it is.
         let mut named: Vec<(String, String, String)> = Vec::new();
@@ -1097,11 +1193,11 @@ impl Hub<'_> {
             "player": {"core_version": about["core_version"], "module_set_digest": about["set_digest"], "hash": player_sha,
                        "module_set": set.name},
             "fallback": if fallback["tour_only"] == true { "tour_only" } else { "page" },
-            "sources": [],
+            "sources": sources.iter().map(|s| json!({"reading": s["reading"], "url": s["url"], "every": s["every"], "path": s["path"]})).collect::<Vec<_>>(),
             "bytes": all.values().map(Vec::len).sum::<usize>(),
             "refused": ports.iter().map(|n| json!({"item": n, "code": "web.port",
                 "why": format!("the port {n} is the app's own to open; the web player has no plug-in to send to")})).collect::<Vec<_>>(),
-            "stand_in": stand_ins,
+            "stand_in": stand_ins.into_iter().chain(light_fallbacks(doc)).collect::<Vec<_>>(),
             "gpu_needs": needs,
             "files": receipt_files,
         }))
