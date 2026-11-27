@@ -1,4 +1,4 @@
-# 0010: The logic module's circuit judge and its course shell
+# 0017: The logic module's circuit judge and its course shell
 
 Status: accepted (#3715). The design states circuit@2 under Logic: library interfaces and the shell's settings and profile record under its shell and Logic: saves (`docs/canvas-primitives.md`); the decisions below are the ones written nowhere else.
 
