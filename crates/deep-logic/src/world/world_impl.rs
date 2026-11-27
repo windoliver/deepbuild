@@ -738,10 +738,32 @@ impl World {
                         }
                         v => Some(v.clone()),
                     };
-                    let list: Vec<(&Entry, Given)> = taken[e.name.as_str()]
+                    let fallback;
+                    let mut list: Vec<(&Entry, Given)> = taken[e.name.as_str()]
                         .iter()
                         .filter_map(|x| Some((x, read(x)?)))
                         .collect();
+                    // #3605: a shell setting with no entry at step 0, played alone or under a
+                    // shell that doesn't declare it, reads its default there.
+                    if k == 0 && list.is_empty() {
+                        if let Some((_, d)) = item
+                            .settings
+                            .iter()
+                            .find(|(n, _)| crate::piece::setting_read(n) == e.name)
+                        {
+                            fallback = Entry {
+                                t: 0,
+                                seq: 0,
+                                control: e.name.clone(),
+                                value: Given::Number(*d),
+                                writer: String::new(),
+                                player: 1,
+                                as_of: None,
+                                arrived: 0,
+                            };
+                            list.push((&fallback, Given::Number(*d)));
+                        }
+                    }
                     let stride = (e.size as usize - 8) / PER_STEP;
                     region[at..at + 4].copy_from_slice(&(list.len() as u32).to_le_bytes());
                     for (j, (x, value)) in list.iter().enumerate() {

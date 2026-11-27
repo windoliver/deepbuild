@@ -21,6 +21,8 @@ pub(super) struct Declared {
     carry: Option<Value>,
     carry_in: Option<crate::carry::CarryIn>,
     profile: Option<Value>,
+    /// #3605: the shell settings it takes, each with its default, in declaration order.
+    settings: Vec<(String, f64)>,
     /// #276: the seats a profile's read entry has a block for: the piece's `players`, else 1.
     seats: u32,
     emits: Vec<Emit>,
@@ -66,6 +68,7 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
             "carry",
             "carry_in",
             "profile",
+            "settings",
             "emits",
             "fires",
             "services",
@@ -361,6 +364,7 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
                 .map(|_| Some(v.clone()))
                 .map_err(|r| logic_refused(id, vec![r]))?,
         },
+        settings: settings_of(params.get("settings")).map_err(|r| logic_refused(id, vec![r]))?,
         seats: 1,
         emits,
         fires,
@@ -628,6 +632,18 @@ pub(super) fn region_map(
             read: Read::Profile,
         });
     }
+    // #3605: each shell setting it takes, after those, as a number control's slot.
+    for (name, _) in &d.settings {
+        let at = entries.last().map_or(at, |e| align8(e.offset + e.size));
+        entries.push(Region {
+            region: "reads",
+            name: setting_read(name),
+            offset: at,
+            size: crate::piece::SLOT,
+            ty: "control".into(),
+            read: Read::Control,
+        });
+    }
     let mut at = 0u32;
     for w in &d.writes {
         entries.push(Region {
@@ -777,6 +793,34 @@ fn reading_max(r: &Read) -> u32 {
         Read::Reading { max, .. } => *max,
         _ => 0,
     }
+}
+
+/// #3605: the track key and read entry of shell setting `name`, which no control's ID can be.
+pub fn setting_read(name: &str) -> String {
+    format!("settings.{name}")
+}
+
+/// #3605: `settings: {name → default}`, each default a number.
+fn settings_of(v: Option<&Value>) -> Result<Vec<(String, f64)>, Value> {
+    let Some(v) = v else { return Ok(Vec::new()) };
+    let o = v.as_object().ok_or_else(|| {
+        refusal(
+            "field",
+            "settings is {name → default number}".into(),
+            json!({"field": "settings"}),
+        )
+    })?;
+    o.iter()
+        .map(|(n, d)| {
+            d.as_f64().map(|d| (n.clone(), d)).ok_or_else(|| {
+                refusal(
+                    "field",
+                    format!("settings.{n}'s default is a number"),
+                    json!({"field": "settings", "setting": n}),
+                )
+            })
+        })
+        .collect()
 }
 
 pub(super) type Controls = BTreeMap<String, (u32, &'static str)>;
@@ -1203,7 +1247,13 @@ pub fn check_in(
                     .expect("due names a write")
                     .offset
             }),
-            reads: d.reads.clone(),
+            reads: d
+                .reads
+                .iter()
+                .cloned()
+                .chain(d.settings.iter().map(|(n, _)| setting_read(n)))
+                .collect(),
+            settings: d.settings.clone(),
             writes: d.writes.clone(),
             layout,
             reads_at,
