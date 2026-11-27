@@ -6,7 +6,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { CheckContext } from '@deepbuild/conformance';
-import { check, mutantsOf } from './check.js';
+import { check, runMutants } from './check.js';
 import { sources } from './run.js';
 import type { MutantReport, ProofBase, ProofFill, ProofResult, ProofRunner, ProofSpec } from './types.js';
 
@@ -42,7 +42,7 @@ export async function runBase(spec: ProofSpec, ctx: CheckContext): Promise<Proof
 
 /** Each theorem re-checked on mutants of its targets; the core takes `cantFail` as the check's can't-fail reason. */
 export async function mutants(spec: ProofSpec, ctx: CheckContext): Promise<MutantReport> {
-  return mutantsOf(spec, ctx);
+  return runMutants(spec, ctx);
 }
 
 /** A proof check counts at unit depth, for the property its theorem states about its targets, whatever its spec says. */

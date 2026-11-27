@@ -23,7 +23,7 @@ export function check(spec: ProofSpec, ctx: CheckContext, fault: Fault = 'none')
 }
 
 /** Each theorem re-checked on mutants of its targets, by the spec's runner. */
-export function mutantsOf(spec: ProofSpec, ctx: CheckContext): MutantReport {
+export function runMutants(spec: ProofSpec, ctx: CheckContext): MutantReport {
   const runner = runnerOf(spec);
   if (runner) return runner.mutants(spec, ctx);
   const theorems = spec.theorems.map((theorem) => ({ theorem, killed: [], survived: [] }));
