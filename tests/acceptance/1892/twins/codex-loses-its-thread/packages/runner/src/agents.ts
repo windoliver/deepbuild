@@ -1,4 +1,4 @@
-// Agent launch policies for the runner: sign-in, confinement, model hosts, versions and plan readings.
+// Agent policies for the runner: sign-in, confinement, model hosts, versions, plan readings and each agent's stream parser.
 // Job lifecycle, budgets and process ownership stay in runner.ts; this module starts no process.
 import { existsSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -58,7 +58,6 @@ export interface Streamed {
   /** The message IDs whose usage is counted. */
   seen: Set<string>;
   answered?: string;
-  resultAt?: number;
   errored?: boolean;
   stopCause?: StopCause;
   /** The text of its last answer: its result once it has settled. */
@@ -66,7 +65,7 @@ export interface Streamed {
 }
 /** What the runner gives a stream parser beside the job. */
 export interface StreamRun {
-  /** Its final result is read: its timers stop and it settles. */
+  /** Its final result is read: its grace stops it from here, so its timers stop and no deadline ends it twice. */
   settle(): void;
   /** The cause its facts name for an error's words. */
   cause(error: string): StopCause;
@@ -287,8 +286,6 @@ function claudeStream(e: Obj, job: Streamed, run: StreamRun): void {
     }
   }
   if (e.type === 'result') {
-    // Its grace stops it from here; no deadline ends it twice.
-    job.resultAt ??= Date.now();
     if (typeof e.result === 'string') job.rec.result = e.result;
     if (typeof e.total_cost_usd === 'number') job.rec.cost_usd = e.total_cost_usd;
     // The model that answered is the one with the most output tokens in its usage (#87): Claude Code lists its own
@@ -313,7 +310,6 @@ function codexStream(e: Obj, job: Streamed, run: StreamRun): void {
     if (codexRefused(item)) job.stopCause ??= 'refusal';
   }
   if (e.type !== 'turn.completed' && e.type !== 'turn.failed') return;
-  job.resultAt ??= Date.now();
   if (isObj(e.usage)) {
     // Codex's input includes the cached tokens, taken back out (its facts' usage).
     const u = job.rec.usage ?? { input: 0, cached: 0, output: 0 };
@@ -352,7 +348,6 @@ function piStream(e: Obj, job: Streamed, run: StreamRun): void {
     }
   }
   if (e.type === 'agent_settled') {
-    job.resultAt ??= Date.now();
     if (!job.errored && job.said !== undefined) job.rec.result = job.said;
     run.settle();
   }
