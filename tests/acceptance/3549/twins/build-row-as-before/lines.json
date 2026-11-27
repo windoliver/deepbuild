@@ -1,0 +1,12 @@
+{
+  "docs/parallel-proof.md": [
+    {
+      "find": [
+        "| build grants, a ceiling: each admitted build then takes a turn (#3549) | 4 | 6 |"
+      ],
+      "wrong": [
+        "| build grants | 1 | 2 |"
+      ]
+    }
+  ]
+}

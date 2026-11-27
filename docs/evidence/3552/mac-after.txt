@@ -1,0 +1,38 @@
+#3552, the file index after the step. Reference Mac: 18 cores, macOS 27.2. The home folder is written ~. Times are UTC.
+The folders went on the list by 2026-11-27T00:52:06Z (mac-step.txt).
+
+== 2026-11-27, the same hour
+01:20:38Z wrote ~/Desktop/deepbuild-3552-check-1795742438.txt
+01:20:38Z wrote ~/dev/devin-worktrees/doneright/issue-3552-notes/deepbuild-3552-check-1795742438.txt (a folder on the list)
+01:21:49Z mdfind -name deepbuild-3552-check-1795742438 -> ~/Desktop/deepbuild-3552-check-1795742438.txt  (71 s after the write)
+01:24:37Z mdfind -name deepbuild-3552-check-1795742438 -> ~/Desktop/deepbuild-3552-check-1795742438.txt 
+01:27:42Z mdfind -count -onlyin ~/deepbuild-bays 'kMDItemFSSize > 0' -> 0 (0.1 s)
+01:27:42Z mdfind -count -onlyin ~/dev/devin-worktrees 'kMDItemFSSize > 0' -> 0 (0.1 s)
+01:27:43Z mdfind -count -onlyin ~/dev/claude-worktrees 'kMDItemFSSize > 0' -> 0 (0.1 s)
+01:27:43Z mdfind -count -onlyin ~/deepbuild-shards 'kMDItemFSSize > 0' -> 0 (0.1 s)
+01:27:43Z mdfind -count -onlyin ~/Desktop 'kMDItemFSSize > 0' -> 3 (0.7 s)
+01:27:44Z mdfind -name deepbuild-3552-check-1795742438 -> nothing (the desktop file was removed at 01:25Z; its twin under a folder on the list is still on disk)
+01:27:44Z load { 70.85 56.83 46.10 }
+
+== 2026-11-27, an hour on
+01:47:16Z load { 37.07 41.83 43.18 }
+01:47:26Z files under ~/deepbuild-shards written since the step (fd -t f -H -I --changed-after '2026-11-26 19:52:06' . ~/deepbuild-shards | wc -l, the step in the Mac's local time): 19989 (10 s)
+01:47:26Z mdfind -count -onlyin ~/deepbuild-shards 'kMDItemFSSize > 0' -> 0 (0.1 s)
+01:47:26Z mdfind -count -onlyin ~/deepbuild-bays 'kMDItemFSSize > 0' -> 0 (0.1 s)
+01:47:26Z mdfind -count -onlyin ~/dev/claude-worktrees 'kMDItemFSSize > 0' -> 0 (0.1 s)
+01:47:27Z mdfind -count -onlyin ~/dev/devin-worktrees 'kMDItemFSSize > 0' -> 0 (0.1 s)
+No affected.mjs run has made a new shard since the step: ls ~/deepbuild-shards holds 18, each made on 2026-11-08.
+
+The load sampler since the step, one reading, taken at 01:47Z at the load above (jq as in mac-before.txt, from 2026-11-27T00:52:06Z):
+  samples: 82 from 2026-11-27T00:52:11.071Z to 2026-11-27T01:47:11.158Z, in 56 distinct minutes, 0 failed
+  mds, mds_stores, mdworker_shared, mdsync or fseventsd: among the five busiest in 24 of 82 samples, 29.3%, at 1.23 cores then
+  mds, mds_stores, mdworker_shared or mdsync: among the five busiest in 24 of 82 samples, 29.3%, at 1.18 cores then
+  fseventsd: among the five busiest in 1 of 82 samples, 1.2%, at 1.07 cores then
+  load above the cores in 62 of 82 samples, 75.6%
+From 01:30Z, when the second sampler had stopped:
+  samples: 18 from 2026-11-27T01:30:11.126Z to 2026-11-27T01:47:11.158Z, in 18 distinct minutes, 0 failed
+  mds, mds_stores, mdworker_shared, mdsync or fseventsd: among the five busiest in 0 of 18 samples, 0.0%, at 0.00 cores then
+  mds, mds_stores, mdworker_shared or mdsync: among the five busiest in 0 of 18 samples, 0.0%, at 0.00 cores then
+  fseventsd: among the five busiest in 0 of 18 samples, 0.0%, at 0.00 cores then
+  load above the cores in 18 of 18 samples, 100.0%
+The first 38 minutes hold the end of the index being built again (mac-index-fault.txt), and 26 of their samples are a second sampler's.
