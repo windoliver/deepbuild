@@ -1,10 +1,3 @@
-// AC2 #1316.33db7d22: A planted race that reproduces the cause fails that check, naming the sample.
-//
-// AC1's check (`sameEveryRun`) run on the planted wrong program `deep-gpu run --planted environment_texture_race`, which
-// the fix adds to deep-gpu's Planted table to bring back the race on the environment-lit textured path (README: The
-// planted race). A race may differ in only some runs, so each sample gets up to 10 fresh processes and stops at the
-// first that differs. The check must return a problem for at least one sample, and every problem it returns must name
-// its sample. At the base `--planted` refuses the unknown name, so the processes exit non-zero and this test fails.
 import { describe, expect, it } from 'vitest';
 import { AC, RUNS, khronos, requireReferenceMac, sameEveryRun, useDir, useGpu, type SampleName } from './helpers.ts';
 

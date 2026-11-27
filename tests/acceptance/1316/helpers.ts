@@ -1,12 +1,3 @@
-// Test-side tools for the #1316 acceptance tests: the base's `deep-gpu` binary built once per file, one `view3d` call per
-// fresh `deep-gpu run` process, the two Khronos samples fetched by SHA-256 into the cache outside the checkout, and the
-// one check both criteria share: `sameEveryRun`, which draws a sample's frame 0 in fresh processes and returns a problem
-// naming the sample, the target and how many pixels differ, or null. Nothing here stands in for the renderer.
-//
-// Copied and trimmed from tests/acceptance/428/helpers.ts (the build, `runGpu`, the Khronos fetch, `look@1`, the
-// daylight sky, the session document) and 428/reference.ts (`decodePng`), and the reference-Mac list from
-// tests/acceptance/319/helpers.ts, all at the base 1b4929ae7 (README: What was read).
-
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
@@ -21,13 +12,10 @@ export type JsonObject = { [key: string]: JsonValue };
 type V3 = [number, number, number];
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-/** The checkout root (tests/acceptance/1316 is three levels down). */
 export const REPO = join(HERE, '..', '..', '..');
 
-/** The criteria's IDs (the issue's criterion tags; lanes read only these). */
 export const AC = { 1: 'AC1 #1316.a4e5e495', 2: 'AC2 #1316.33db7d22' } as const;
 
-/** Fresh processes per sample, as AC1 names. */
 export const RUNS = 10;
 
 const sha256 = (bytes: Uint8Array | string): string => createHash('sha256').update(bytes).digest('hex');
@@ -35,25 +23,18 @@ const SHA = /^[0-9a-f]{64}$/;
 const shown = (v: JsonValue | undefined): string => JSON.stringify(v)?.slice(0, 1500) ?? 'undefined';
 const isObject = (v: JsonValue | undefined): v is JsonObject => typeof v === 'object' && v !== null && !Array.isArray(v);
 
-// ---------------------------------------------------------------------------------------------------
-// The machine
-
-/** A test that can't be judged here fails with this, never passes. */
 export function inconclusive(reason: string): never {
   expect.fail(`INCONCLUSIVE: ${reason}; this is not a pass`);
 }
-/** A missing input: BLOCKED, with what unblocks it. */
 export function blocked(reason: string, unblock: string): never {
   expect.fail(`BLOCKED: ${reason}; unblock: ${unblock}`);
 }
-/** The reference Macs, as the base's tests/acceptance/319/helpers.ts lists them (model and chip). */
 const REFERENCE_MACS = [
   { model: 'Mac15,7', chip: 'Apple M3 Pro' },
   { model: 'Mac15,12', chip: 'Apple M3' },
   { model: 'Mac17,10', chip: 'Apple M5 Max' },
   { model: 'Mac18,1', chip: 'Apple M6' },
 ];
-/** Off macOS (no Metal) or off a reference Mac the check can't be judged: INCONCLUSIVE. Returns the fingerprint. */
 export function requireReferenceMac(): string {
   if (process.platform !== 'darwin') inconclusive(`the GPU layer draws these frames on macOS's Metal device; this is ${process.platform}`);
   const read = (...args: string[]): string | null => {
@@ -66,9 +47,6 @@ export function requireReferenceMac(): string {
   }
   return fingerprint;
 }
-
-// ---------------------------------------------------------------------------------------------------
-// The build: deep-gpu built once per file and copied out of the target folder (as 428 does).
 
 const targetDir = (): string => process.env['CARGO_TARGET_DIR'] ?? join(REPO, 'target');
 const CARGO_ARGS = ['build', '--locked', '--bin', 'deep-gpu'];
@@ -89,7 +67,6 @@ export function useGpu(): () => string {
   afterAll(() => { if (dir) rmSync(dir, { recursive: true, force: true }); dir = ''; });
   return () => { expect(error, `the binary builds: cargo ${CARGO_ARGS.join(' ')}`).toBe(''); return join(dir, 'deep-gpu'); };
 }
-/** A fresh temporary folder per test, deleted after it. */
 export function useDir(): () => string {
   let dir = '';
   beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'deep-1316-')); });
@@ -97,15 +74,10 @@ export function useDir(): () => string {
   return () => dir;
 }
 
-// ---------------------------------------------------------------------------------------------------
-// `deep-gpu run [--planted <name>]`: one JSON line in, one JSON line out (#377). Each call here is its own process.
-
-/** The planted wrong program AC2 runs (README: The planted race): the environment-lit textured path races. */
 export type GpuPlanted = 'environment_texture_race';
 function runGpu(bin: string, out: string, call: JsonObject, planted?: GpuPlanted): JsonObject {
   const args = ['run', ...(planted ? ['--planted', planted] : [])];
   const name = `deep-gpu ${args.join(' ')}`;
-  // A run that hangs is stopped by spawnSync's own timeout, which signals only this child.
   const run = spawnSync(bin, args, { cwd: REPO, input: `${JSON.stringify({ out, calls: [call] })}\n`, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, timeout: 600_000, killSignal: 'SIGKILL' });
   const timedOut = run.error !== undefined && (run.error as NodeJS.ErrnoException).code === 'ETIMEDOUT';
   if (run.error && !timedOut) throw Error(`${name}: ${run.error.message}`);
@@ -124,14 +96,10 @@ function runGpu(bin: string, out: string, call: JsonObject, planted?: GpuPlanted
   return reply;
 }
 
-// ---------------------------------------------------------------------------------------------------
-// The Khronos samples: fetched by hash on first use into a cache outside the checkout, never committed (as 428).
-
 const KHRONOS_COMMIT = 'edc7c9e67c639d230715049ee31f9a96a6babbbe';
 interface Pin { path: string; sha256: string; size: number }
 interface Sample {
   name: SampleName; main: Pin; license: JsonObject;
-  /** The three-quarter view of 428's AC9 screenshots, framed from the sample's triangle bounds (README: The scene). */
   eye: V3; target: V3; radius: number;
 }
 export type SampleName = 'SheenChair' | 'DispersionTest';
@@ -177,7 +145,6 @@ function committed(bytes: Buffer): boolean {
   return tree.includes(` ${id}\t`) || index.includes(` ${id} `);
 }
 export interface Fetched { sample: Sample; sha: string; assets: Record<string, string>; licenses: Record<string, JsonObject> }
-/** A sample fetched by hash, checked never committed, written under `dir` by hash for the product. */
 export async function khronos(name: SampleName, dir: string): Promise<Fetched> {
   const sample = SAMPLES[name];
   const bytes = await pinned(sample.main);
@@ -187,12 +154,8 @@ export async function khronos(name: SampleName, dir: string): Promise<Fetched> {
   return { sample, sha: sample.main.sha256, assets: { [sample.main.sha256]: path }, licenses: { [sample.main.sha256]: sample.license } };
 }
 
-// ---------------------------------------------------------------------------------------------------
-// The scene: the sample under 428's daylight sky that lights by its environment, and a sun (428's AC9 showcase).
-
 const STATUS: JsonObject = { pass: '#007429', fail: '#bf232b', invalid: '#8645b0', blocked: '#a44700', inconclusive: '#666600', running: '#0063b8', needs_you: '#8a5900', stale: '#326c6f', idle: '#636464' };
 const GLYPHS: JsonObject = { pass: '✓', fail: '✗', invalid: '⊘', blocked: '■', inconclusive: '?', running: '↻', needs_you: '!', stale: '◇', idle: '○' };
-/** A physical-basis filmic `look@1` at EV100 0 (428's SHOW_LOOK). */
 const LOOK: JsonObject = {
   id: 'look-1316-filmic', format: 1, basis: 'physical', license: 'Apache-2.0', description: 'A #1316 acceptance look.',
   palette: { night: '#101114', graphite: '#1b1d22', slate: '#8b8f97', stone: '#d9dde3', sand: '#e6d3a3' },
@@ -205,13 +168,10 @@ const LOOK: JsonObject = {
   status: STATUS, status_treatment: { core_min_px: 4, glyph: GLYPHS }, min_distance: 0.1,
   attention_treatment: { line: 'dashed', role: 'ink', glyph: '⚠' }, legend: 'auto',
 };
-/** 428's daylight sky that lights by its environment (`environment: {from: sky}`), with no flat ambient. */
 const SKY: JsonObject = {
   kind: 'sky@1', params: { top: [0.25, 0.4, 0.8, 1], low: [0.8, 0.8, 0.78, 1], ambient_top: [0, 0, 0], ambient_low: [0, 0, 0], environment: { from: 'sky', intensity: 1 } },
 };
-/** 428's AC9 sun: the key light left after the sky's share at EV100 0 (1.2π − the sky's mean, 1.89 lx), from (−40°, 25°). */
 const SUN: JsonObject = { kind: 'light.sun@1', params: { illuminance: 1.8919519189934, color: [1, 1, 1], shadow: false }, at: { rot: [-40, 25, 0] } };
-/** The frame size: 428's AC9 screenshots, where the issue counted the differing pixels. */
 export const SIZE: [number, number] = [1280, 800];
 
 function sceneDoc(f: Fetched): JsonObject {
@@ -230,12 +190,8 @@ function sceneDoc(f: Fetched): JsonObject {
   };
 }
 
-// ---------------------------------------------------------------------------------------------------
-// Drawing frame 0 and comparing runs
-
 type Target = 'final' | 'linear';
 interface Drawn { final: string; linear: string }
-/** One fresh `deep-gpu run` process drawing the sample's frame 0 by `view3d`, targets final and linear. */
 function drawOnce(bin: string, out: string, doc: string, f: Fetched, planted?: GpuPlanted): Drawn {
   const what = `${f.sample.name}${planted ? ` (planted ${planted})` : ''}`;
   const reply = runGpu(bin, out, { call: 'view3d', doc, look: LOOK, size: SIZE, frames: 1, capture: [0], targets: ['final', 'linear'], assets: f.assets, licenses: f.licenses }, planted);
@@ -252,7 +208,6 @@ function drawOnce(bin: string, out: string, doc: string, f: Fetched, planted?: G
   return { final: named('final', 'png'), linear: named('linear', 'f32') };
 }
 
-/** Pixels whose bytes differ between two linear targets (f32 RGBA, 16 bytes a pixel), and the worst relative change. */
 function linearDiff(a: Buffer, b: Buffer): string {
   if (a.length !== b.length) return `sizes differ (${a.length} and ${b.length} bytes)`;
   let n = 0; let worst = 0; let at = '';
@@ -267,7 +222,6 @@ function linearDiff(a: Buffer, b: Buffer): string {
   }
   return `${n} of ${a.length / 16} pixels differ, worst ${(worst * 100).toFixed(3)}% relative at ${at}`;
 }
-/** Pixels whose RGBA differ between two final PNGs. */
 function finalDiff(a: Buffer, b: Buffer): string {
   let pa: Png; let pb: Png;
   try { pa = decodePng(a); pb = decodePng(b); } catch (e) { return `the PNGs could not be compared (${(e as Error).message})`; }
@@ -277,12 +231,6 @@ function finalDiff(a: Buffer, b: Buffer): string {
   return n === 0 ? 'no pixel differs (the PNG bytes differ only in their encoding)' : `${n} of ${pa.width * pa.height} pixels differ`;
 }
 
-/**
- * The check both criteria share: the sample drawn at frame 0 in up to `runs` fresh `deep-gpu run` processes must give
- * byte-identical final and linear targets every time. Returns null when every run matches the first, or a problem that
- * names the sample, each differing run, the target and how many pixels differ. With `stopAtFirst`, it returns as soon as
- * one run differs (AC2, where a planted race need differ in only some runs).
- */
 export function sameEveryRun(bin: string, out: string, f: Fetched, runs: number, planted?: GpuPlanted, stopAtFirst = false): string | null {
   const name = f.sample.name;
   const doc = join(out, `scene-${name}.json`);
@@ -304,9 +252,6 @@ export function sameEveryRun(bin: string, out: string, f: Fetched, runs: number,
   if (problems.length === 0) return null;
   return `${name} at frame 0 is not byte-identical across ${drawn.length} fresh deep-gpu run processes (${distinct('final')} distinct final, ${distinct('linear')} distinct linear targets):\n  ${problems.join('\n  ')}`;
 }
-
-// ---------------------------------------------------------------------------------------------------
-// PNG decoding (8-bit, non-interlaced), copied from tests/acceptance/428/reference.ts's `decodePng`.
 
 interface Png { width: number; height: number; rgba: Uint8Array }
 const paeth = (a: number, b: number, c: number): number => {
