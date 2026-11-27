@@ -1,11 +1,3 @@
-// What a claim leaves open (#323; design: An agent says it's done, Open items, Solved or not). Pure, with no model:
-// the final message's open sections, the bugs it says it found and left, the issues it filed instead of fixing, the
-// limits a change writes into its PR body or its docs, placeholder text left in changed files, the agent's own task
-// list as its adapter's facts name it, and the commands the message tells you to run. Each becomes an open item's
-// words; the core gives it its scope and ID. Beside them: the shape of an error a waiver matches, and a definition's
-// one solve line.
-
-/** Where an open item's words came from. */
 export type LeftFrom = 'section' | 'bug' | 'issue' | 'limit' | 'placeholder' | 'task';
 /** One thing left open: its words, where they came from, and for a section's item the section's heading. */
 export interface LeftOpen { text: string; from: LeftFrom; section?: string }
@@ -52,7 +44,6 @@ function openSections(text: string): { text: string; section: string }[] {
   return out;
 }
 
-/** The sentences of a text, its lines' bullets taken off. */
 function sentences(text: string): string[] {
   return text.split('\n').map((l) => l.replace(BULLET, '$1')).join('\n')
     .split(/(?<=[.!?])\s+|\n+/).map(clean).filter(Boolean);
@@ -62,10 +53,6 @@ const LEFT = /\b(?:left|leave|leaving|follow[- ]?ups?|separately|out of scope|la
 const FILED = /\b(?:filed|opened|created|raised|logged)\b.*?(?:\bissues?\b|#\d+)/i;
 const LIMIT = /\bknown limit(?:ation)?s?\b|\b(?:doesn't|does not|don't|do not|isn't|is not|can't|cannot|won't)\b[^.]*\byet\b|\bnot (?:yet )?supported\b/i;
 
-/**
- * What a final message leaves open: its open sections' items, then each sentence that says it found a bug and left
- * it, or filed one as an issue instead of fixing it. One sentence the sections already hold isn't read twice.
- */
 export function leftOpen(message: string): LeftOpen[] {
   const out: LeftOpen[] = openSections(message).map((o) => ({ ...o, from: 'section' as const }));
   const seen = new Set(out.map((o) => o.text.toLowerCase()));
@@ -79,10 +66,6 @@ export function leftOpen(message: string): LeftOpen[] {
 
 /** What an agent writes when it has nothing to say: Claude Code's "No response requested.", an empty model reply. */
 const NO_CONTENT = /^(?:no response requested|no content|empty response)$/i;
-/**
- * A final message that says nothing (#82; design: Every stop is judged): empty, only marks, or one of the agents'
- * no-content placeholders. A stop that did work and ends on one gets a completion prompt.
- */
 export function endsEmpty(message: string): boolean {
   const words = message.replace(/[\s\p{P}\p{S}]+/gu, ' ').trim();
   return words === '' || NO_CONTENT.test(words);
@@ -107,7 +90,6 @@ export function placeholders(added: { path: string; line: number; text: string }
     .map((a) => ({ text: `placeholder left in ${a.path}:${a.line}: ${clean(a.text).slice(0, 200)}`, from: 'placeholder' as const }));
 }
 
-/** The added lines of a unified diff, by file and new line number. */
 export function addedLines(diff: string): { path: string; line: number; text: string }[] {
   const out: { path: string; line: number; text: string }[] = [];
   let path: string | null = null;
@@ -171,15 +153,12 @@ export function openTasks(facts: TaskListFacts, input: unknown): LeftOpen[] {
   });
 }
 
-// ---- The solve line (design: Solved or not).
-
 const OP = /\b(under|below|less than|fewer than|at most|no more than|within|over|above|more than|at least|no less than)\b|(<=|>=|≤|≥|<|>)/i;
 const THRESHOLD = new RegExp(`(?:${OP.source})\\s*(\\d+(?:\\.\\d+)?)(?:\\s*(%|[A-Za-zµ][\\w/µ]*))?`, 'gi');
 const NOT_UNIT = new Set(['of', 'and', 'or', 'the', 'a', 'an', 'to', 'in', 'on', 'for', 'with', 'at', 'by', 'then', 'when', 'if', 'than', 'is', 'are', 'it']);
 const UPPER = new Set(['under', 'below', 'less than', 'fewer than', 'at most', 'no more than', 'within', '<', '<=', '≤']);
 /** One threshold a requirement's text states: the words before it, which way it bounds, its number and its unit (null when none). */
 interface Threshold { subject: string; upper: boolean; value: number; unit: string | null; text: string }
-/** The thresholds a text states. */
 function thresholds(text: string): Threshold[] {
   const out: Threshold[] = [];
   for (const m of text.matchAll(THRESHOLD)) {
@@ -195,11 +174,6 @@ export const unitless = (text: string): Threshold[] => thresholds(text).filter((
 
 /** A requirement as the solve line reads it: its ID, its words, its check and the digest of the check's bytes. */
 interface SolveRequirement { id: string; text: string; check: string | null; check_sha256?: string | null }
-/**
- * A definition's one solve line: fully covered, or the first of what keeps it from being solved, in this order: a
- * requirement with no check, two checks covering the same thing (the same bytes, or the same words), two that
- * can't both pass (one subject bounded both ways with no value between), a threshold with no unit.
- */
 export function solveLine(requirements: SolveRequirement[]): { solved: boolean; line: string } {
   const unchecked = requirements.filter((r) => !r.check);
   if (unchecked.length) return { solved: false, line: `not solved: ${unchecked.map((r) => `${r.id} has no check ("${clean(r.text).slice(0, 120)}")`).join('; ')}` };

@@ -38,7 +38,7 @@ pub struct Host {
     pub rewrites: u64,
     pub runs: u64,
     /// Each program's check and rewrite, by its sha256 and role: once per program.
-    rewritten: BTreeMap<(String, String), Result<Rewritten, Vec<Refusal>>>,
+    rewritten: BTreeMap<(String, String), Checked>,
     /// Each provider's output, by its content key: once per key.
     outputs: BTreeMap<String, Made>,
     /// The providers each document's current revision ran or took by content key.
@@ -101,12 +101,15 @@ fn refusals_what(r: &[Refusal]) -> String {
         .join("; ")
 }
 
+/// A program's check and rewrite: its rewritten bytes, or why the check refused it.
+type Checked = Result<Rewritten, Vec<Refusal>>;
+
 /// What a passed pack check gave the host it ran in, kept for the next host of this process.
 #[derive(Clone)]
 struct Vetted {
     rows: Vec<Value>,
     programs: Vec<((String, String), Value)>,
-    rewritten: Vec<((String, String), Result<Rewritten, Vec<Refusal>>)>,
+    rewritten: Vec<((String, String), Checked)>,
     validated: Vec<((String, String), Value)>,
     entries: Vec<SealedEntry>,
     vetted: Vec<String>,

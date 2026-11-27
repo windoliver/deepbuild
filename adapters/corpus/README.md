@@ -85,6 +85,7 @@ A Codex turn that no prompt started, such as a goal's continuation, opens with a
 | claude-code `deepbuild-tools` | DeepBuild's two servers as `deep setup` names them (#2897), with no hub in their home: `deep_status`, marked `anthropic/alwaysLoad`, called with no search that loads it, and `deep_search` called only after a ToolSearch loads it (before `deep_status` on 2.1.308, after it on 2.1.299 and 2.1.304); both calls answer that the hub is unreachable |
 | claude-code `file-changed` | a file the session's FileChanged matcher names, in its folder, appended to by a shell call: FileChanged with `event` `change` (#3136) |
 | paseo 0.15.0 `permission-allowed` | one stand-in turn whose shell call asks for permission, allowed in paseo by `paseo permit allow`: the turn's start, the request, the turn's end and the answer from paseo's app (#3136) |
+| paseo 0.17.6 `permission-allowed`, `self-approved-call` | the same two sessions on paseo 0.17.6, recorded when the facts took that release (#3428): the same hooks and fields as 0.15.0 |
 | codex `tools` | shell calls, an `apply_patch` add, and a failing command, which Codex reports through PostToolUse |
 | codex `patches` | a patch through the shell tool, then a resume with a patch whose markers are indented |
 | codex `permission` | a permission request from the terminal UI: a write in a read-only sandbox under `-a on-request` |

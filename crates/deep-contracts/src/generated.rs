@@ -65754,12 +65754,13 @@ pub enum DoctorItemCode {
     FootprintUnknown,
     ProofsUnreadable,
     HookOutsideContract,
+    SourceUnresolved,
     Unknown,
 }
 
 impl DoctorItemCode {
     /// Every value, in the schema's order (#2854: the handshake list's newest is its last).
-    pub const ALL: &'static [Self] = &[Self::Healthy, Self::BinaryMissing, Self::VersionUncovered, Self::HooksMissing, Self::HooksDisabled, Self::HooksUntrusted, Self::McpUnregistered, Self::StatuslineMissing, Self::SignedOut, Self::NestedSession, Self::TimingRelationBroken, Self::TelemetryUnreadable, Self::NotChecked, Self::HubUnreachable, Self::DiskLow, Self::PortsTaken, Self::BillingApiKey, Self::BinaryDiffers, Self::TokenExpiring, Self::PromptFailed, Self::DeprecatedUsed, Self::GpuUnsupported, Self::RenderFailed, Self::JobFailing, Self::HookProgramMissing, Self::NotificationsOff, Self::ServiceUnpromoted, Self::StatuslineShadowed, Self::PackRefused, Self::PolkitActionMissing, Self::HooksModified, Self::ModOverridesGuard, Self::NotLoaded, Self::HandlerSetAside, Self::FootprintUnknown, Self::ProofsUnreadable, Self::HookOutsideContract, Self::Unknown];
+    pub const ALL: &'static [Self] = &[Self::Healthy, Self::BinaryMissing, Self::VersionUncovered, Self::HooksMissing, Self::HooksDisabled, Self::HooksUntrusted, Self::McpUnregistered, Self::StatuslineMissing, Self::SignedOut, Self::NestedSession, Self::TimingRelationBroken, Self::TelemetryUnreadable, Self::NotChecked, Self::HubUnreachable, Self::DiskLow, Self::PortsTaken, Self::BillingApiKey, Self::BinaryDiffers, Self::TokenExpiring, Self::PromptFailed, Self::DeprecatedUsed, Self::GpuUnsupported, Self::RenderFailed, Self::JobFailing, Self::HookProgramMissing, Self::NotificationsOff, Self::ServiceUnpromoted, Self::StatuslineShadowed, Self::PackRefused, Self::PolkitActionMissing, Self::HooksModified, Self::ModOverridesGuard, Self::NotLoaded, Self::HandlerSetAside, Self::FootprintUnknown, Self::ProofsUnreadable, Self::HookOutsideContract, Self::SourceUnresolved, Self::Unknown];
 }
 
 impl Contract for DoctorItemCode {
@@ -65802,6 +65803,7 @@ impl Contract for DoctorItemCode {
             "footprint_unknown" => Ok(Self::FootprintUnknown),
             "proofs_unreadable" => Ok(Self::ProofsUnreadable),
             "hook_outside_contract" => Ok(Self::HookOutsideContract),
+            "source_unresolved" => Ok(Self::SourceUnresolved),
             "unknown" => Ok(Self::Unknown),
             other => Err(format!("{at}: {other:?} is not one of the listed values")),
         }
@@ -65845,6 +65847,7 @@ impl Contract for DoctorItemCode {
             Self::FootprintUnknown => "footprint_unknown",
             Self::ProofsUnreadable => "proofs_unreadable",
             Self::HookOutsideContract => "hook_outside_contract",
+            Self::SourceUnresolved => "source_unresolved",
             Self::Unknown => "unknown",
         }.to_string())
     }
