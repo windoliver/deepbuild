@@ -13,7 +13,7 @@ These hold in the core and every extension:
 
 ## Proof
 
-- Acceptance tests come first, in `tests/acceptance/<issue>/`: a job that sees only the issue, the design and the base commit writes them with the issue's expected values, through surfaces those name. Never edit one; a dispute goes to that job's blind redraft (design: Dogfooding).
+- Acceptance tests come first, in `tests/acceptance/<issue>/`: a job that sees only the issue, the design and the base commit writes them with the issue's expected values, through surfaces those name, with no comments: a test's title says what it is for, a helper's name what it does. Never edit one; a dispute goes to that job's blind redraft (design: Dogfooding).
 - Every behavior fix starts with a test failing for the expected reason. Commit it first only when authorized; otherwise save failing output and leave changes uncommitted. Make it pass unchanged.
 - Reuse sufficient tests; add one only for required behavior or a regression existing coverage misses. It must fail on a wrong program as its criterion names (the merge base or a reverted fix for a fix; a planted twin or a mutant for new code), or it proves nothing.
 - Test behavior, not implementation. A test that would still pass if every function it calls returned nothing is not a test; rewrite or delete it.
