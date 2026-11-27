@@ -16,7 +16,7 @@ Comments are found by token: the TypeScript parser for scripts, `scripts/rust-so
 
 ## What is not counted
 
-- A marker another lint reads, with its reason, in a file that lint reads: `// deadline:` in a test file, `// cache:` with a bound (`entries` or `bytes`) in a crate's Rust, `// copy-exception:`, `// size-literal-exception:` and `// blocking call:` in the Rust of `crates/deep-app/src`, and `// color-literal-exception:` there and in the panel scripts of `crates/deep-app/panels`. The marker without a reason counts, and so does the marker anywhere else. The ratchet doesn't ask whether the lint finds something beside the marker; that stays the lint's.
+- A marker another lint reads, with its reason, in a file that lint reads: `// deadline:` in a test file, `// cache:` with a bound (`entries` or `bytes`) in a crate's Rust, `// copy-exception:`, `// size-literal-exception:` and `// blocking call:` in the Rust of `crates/deep-app/src`, and `// color-literal-exception:` there and in the panel scripts of `crates/deep-app/panels`. The marker without a reason counts, and so does the marker anywhere else. Each is read in the form its lint reads: the two literal exceptions only where they end a line of code. The ratchet doesn't ask whether the lint finds something beside the marker; that stays the lint's.
 - A license notice: a comment that holds `Copyright` and its holder or year, `Licensed under the`, or `SPDX-License-Identifier:` (AGENTS.md: ported code keeps its notice in the receiving file).
 - With either, the comment-only lines next to it.
 

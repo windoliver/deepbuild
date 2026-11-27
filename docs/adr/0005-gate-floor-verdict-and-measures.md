@@ -26,10 +26,10 @@ Status: accepted. Moved from comments in `packages/gate` by #3454's first pass (
 
 - **A final message is read in a fixed order, and no sentence twice.** `packages/gate/src/open.ts`, `leftOpen`. Its open sections' items come first, then each sentence that says it found a bug and left it, or filed one as an issue instead of fixing it. A sentence the sections already hold isn't read again.
 - **A message that says nothing is empty, only marks, or an agent's no-content placeholder.** `packages/gate/src/open.ts`, `endsEmpty`. A stop that did work and ends on one gets a completion prompt (#82).
-- **The solve line names the first thing that keeps a definition from being solved, in one order.** `packages/gate/src/open.ts`, `solveLine`. A requirement with no check, then two checks covering the same thing (the same bytes, or the same words), then two that can't both pass (one subject bounded both ways with no value between), then a threshold with no unit.
+- **The solve line names the first thing that keeps a definition from being solved, in one order.** `packages/gate/src/open.ts`, `solveLine`. A requirement with no check comes first. Then the checks are read pair by pair in their listed order, and the first pair that covers the same thing (the same bytes, or the same words) or can't both pass (one subject bounded both ways with no value between) is named. A threshold with no unit comes last.
 
 ## Admission, price and size
 
 - **A check kind with no budget never runs.** `packages/gate/src/kinds.ts`, `admitKind`. Every kind declares what one run may take in time and cost, so a claim's runs can be planned and billed before they start (#68).
 - **Prices are summed in micro-dollars.** `packages/gate/src/price.ts`, `priceDefinition`. Cents then add up exactly. A price nobody knows leaves the total unknown, never free.
-- **A duplicated block is read from files as the change leaves them.** `packages/gate/src/size.ts`, `duplicatedLines`. Only a regular file within `READ_MAX` is read, never a link followed or a binary. The runs compared are each hunk's added lines, and an untracked file whole.
+- **A duplicated block is read from files as the change leaves them.** `packages/gate/src/size.ts`, `duplicatedLines`. In the work tree only a regular file within `READ_MAX` is read, never a link followed; at a named head the file is read whole from git. A binary is never compared. The runs compared are each hunk's added lines, and an untracked file whole.

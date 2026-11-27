@@ -16,8 +16,9 @@ const TESTS = testPaths.map(glob);
 const MARKERS = [
   [/^\/\/\s*deadline:\s*\S/, (path) => TESTS.some((pattern) => pattern.test(path))],
   [/^\/\/\/?\s*cache:\s*(?:[^,]*,\s*)*(?:entries|bytes)\s+\S/, (path) => /^crates\/.*\.rs$/.test(path)],
-  [/^\/\/\s*(?:copy-exception|size-literal-exception|blocking call):\s*\S/, (path) => /^crates\/deep-app\/src\/.*\.rs$/.test(path)],
-  [/^\/\/\s*color-literal-exception:\s*\S/, (path) => /^crates\/deep-app\/(?:src\/.*\.rs|panels\/.*\.js)$/.test(path)],
+  [/^\/\/ copy-exception: \S|^\/\/\s*blocking call:\s*\S/, (path) => /^crates\/deep-app\/src\/.*\.rs$/.test(path)],
+  [/^\/\/ size-literal-exception: \S/, (path, trails) => trails && /^crates\/deep-app\/src\/.*\.rs$/.test(path)],
+  [/^\/\/ color-literal-exception: \S/, (path, trails) => trails && /^crates\/deep-app\/(?:src\/.*\.rs|panels\/.*\.js)$/.test(path)],
 ];
 const LICENSE = /\bCopyright (?:\(c\)|©|\d{4}|[A-Z])|\bLicensed under the\b|SPDX-License-Identifier:/;
 
@@ -53,7 +54,7 @@ function count(path, text) {
     const last = lineOf(Math.max(from, to - 1));
     for (let at = first; at <= last; at++) commented.add(at);
     const body = text.slice(from, to);
-    if (LICENSE.test(body) || MARKERS.some(([marker, read]) => marker.test(body) && read(path))) kept.push([first, last]);
+    if (LICENSE.test(body) || MARKERS.some(([marker, read]) => marker.test(body) && read(path, coded.has(first)))) kept.push([first, last]);
     code = to;
   }
   codeTo(text.length);

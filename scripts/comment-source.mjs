@@ -34,8 +34,8 @@ function commentsOf(text, literals, script) {
     if (next < literals.length && literals[next][0] <= i) {
       i = literals[next][1];
     } else if (text[i + 1] === '/') {
-      const end = text.indexOf('\n', i);
-      comments.push([i, end < 0 ? text.length : end]);
+      const end = script ? text.slice(i).search(/[\n\r\u2028\u2029]/) : text.indexOf('\n', i) - i;
+      comments.push([i, end < 0 ? text.length : i + end]);
       i = comments.at(-1)[1];
     } else if (text[i + 1] === '*') {
       let end = i + 2;
