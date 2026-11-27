@@ -47,6 +47,12 @@ One page per module topic. Each decision names the file and the symbol it govern
 - [0005](0005-gate-floor-verdict-and-measures.md): the gate's floor, a claim's verdict record, price and size
 - [0006](0006-web-export-set-ceilings.md): the web-export task's set ceilings
 - [0007](0007-kept-pack-checks.md): a pack check's result kept in the store, what a taken row gives a core, and its counts
+- [0010](0010-logic-circuit-and-shell.md): the logic module's circuit judge and its course shell
+- [0011](0011-circuit-2-pack.md): the circuit@2 pack, its reference library and the script that writes it
+- [0012](0012-render-crates-and-spike-3031.md): the scene renderer's shared targets, a shell's replay in the replica, and spike #3031's readers
+- [0013](0013-hub-proof-and-host-packages.md): the hub's paseo readings and table record, the shell journeys check and the Lean runner's flag
+- [0014](0014-proof-lane-scripts.md): the kit ledger lint, a vendored file with no row, and a taste criterion's file
+- [0015](0015-table-import-and-launchd-benchmark.md): the table import tool and the launchd hub benchmark
 
 ## Open
 
