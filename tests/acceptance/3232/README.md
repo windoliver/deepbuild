@@ -7,7 +7,10 @@ blind redraft of this job (design: Dogfooding).
 
 **Run at the base.** Phase 2 ran on 2026-11-24 with the base built: twelve fixture probes, then each of the eight test
 files once, on the files as they stand. All 20 tests fail there and none passes: 19 at their own judge, on the merge
-base's missing announcements, and `live.test.ts` BLOCKED on the Accessibility permission (`BASE-FAILURE.txt`). The
+base's missing announcements, and `live.test.ts` BLOCKED on the Accessibility permission that day. Run on 2026-11-26 at
+`501534ea685b`, with the permission granted and its fixture redrafted (Readings 20), `live.test.ts` fails at its own
+assertion too, on the same missing announcements, in the one of its two runs in which the real window came to the
+front (`BASE-FAILURE.txt`). The
 probes found one fixture wrong, the hold's, and `hold.test.ts` was corrected (The fixtures; Readings 14). A dispute
 over AC9's second test was judged true and that test redrafted, in `hub.test.ts` and `judges.ts` (Readings 16). What
 was run says what each probe showed. No planted program can run at the base; each is the implementer's to add.
@@ -67,7 +70,7 @@ As the lanes run a suite that is alone, each goes through the machine's throttle
     deep-app/test-confirm --target-dir <that base folder>/target`; the binary is used where cargo leaves it,
     `…/target/debug/deep-drive`.
 - **Time.** At the base, on a reference Mac under a load of 40 to 110: `window` 33 s, `state` 45 s, `card` 6 s, `hold` 7 s,
-  `changes` 13 s, `hub` 7 s, `budgets` 4 s, `live` under a second (BLOCKED). No planted run is made there. Each run
+  `changes` 13 s, `hub` 7 s, `budgets` 4 s, `live` 11 s. No planted run is made there. Each run
   starts a hub (and stops and starts it once for each change it makes: 6 times in the journey, 3 in `changes`, once in
   `state`), and one replica; `state` lets 60 s of the replica's clock pass in 240 frames, `hub` up to 91 s in some 370,
   `budgets` 60 s in 3,600. A wrong-program test makes its run twice, shipped then planted.
@@ -408,9 +411,11 @@ Phase 2, with the base built (2026-11-24):
 The redraft of the live run's fixture (2026-11-26), at `501534ea685b` (main, whose last merge is #3500), with that base
 built beforehand: the packages, `deep-hook`, `deep-drive` with `deep-app/test-confirm`, `deep-app` and the Swift probe.
 
-- One test grant, `node scripts/throttle.mjs test --wait 600 -- sh <a script>`, asked at 20:19 and granted at 20:33: a
-  probe of the base, then `live.test.ts` once, on the file as it stands. Every binary was checked first to be newer than
-  every Rust source, and no run compiled a workspace crate.
+- A first test grant, `node scripts/throttle.mjs test --wait 600 -- sh <a script>`, asked at 20:19 and granted at 20:33:
+  a probe of the base, then `live.test.ts` once, on the file as it stands. Every binary was checked first to be newer
+  than every Rust source, and no run compiled a workspace crate. A second, asked and granted at 22:45, was the job's
+  caller's: the same file once more, after `deep-hook` alone was built again (38 s). This job read that run's two logs,
+  the grant's and vitest's, and ran nothing in it.
 - The probe (a scratch vitest file outside this folder, not kept), on `liveWorld`'s hub and the base's `deep-drive`,
   with no real window; three readings:
   1. The feeds as they stood. `held()` returned 28 ms after the hub's `ask.created`. The feed right after it:
@@ -430,19 +435,29 @@ built beforehand: the packages, `deep-hook`, `deep-drive` with `deep-app/test-co
   3. `hold.test.ts`'s middle feed, after the yes and the press: `ask.answered`, `approval.held`, `session.state`, the
      session's row, working, and the ask's row leaving the list (the last three recorded 210 ms after
      `ask.answered`). A feed once the hub was quiet gave nothing more. That file is unchanged.
-- `live.test.ts` at the base, 8 s: BLOCKED at line 45, `the real app's window didn't come to the front
+- `live.test.ts` at the base, the first run, 8 s: BLOCKED at line 45, `the real app's window didn't come to the front
   ({"main":true,"front":false})`. The session was unlocked and the permission granted: the run passed both gates,
   started the real app, placed its window, opened the session's page in it with `deep open` and read it there, and
-  opened the same page in the replica. It stopped before the feeds the redraft changed, so at the base those ran only
-  in the probe's second reading, with no real window. The gate reads the window server's order once, at once after
-  asking for the app to come forward; whether the window was in front a moment later was not read.
+  opened the same page in the replica. It stopped before the feeds the redraft changed. The gate reads the window
+  server's order once, at once after asking for the app to come forward; whether the window was in front a moment
+  later was not read.
+- `live.test.ts` at the base, the second run, 11 s, begun with the Mac idle 116 s, unlocked and the permission granted
+  (the grant's log): past every gate before its first assertion, so the real window was in front and the main one, the
+  hub's listing of the ask was in its record, and the feeds the redraft changed were made in a live run. It fails at
+  that assertion, line 62, as every test of the replica fails at the base: where no problem is expected of the
+  replica's announcements for the ask (`ask:01M8DHSK7ACJXEPT9EXR6DMHJ8`, the held push's), there is one, "the snapshot
+  carries no announcements list (snapshot.announcements is missing)". `BASE-FAILURE.txt` holds this run. Nothing after
+  line 62 ran: the entry asked of the replica, the front gate after the ask, and the live tree's judge on the real
+  window.
 - What the redraft changed: `live.test.ts` (the two waits, its header and its imports of `awaitRecord` and `quiet`);
-  this file (The fixtures: the live run; Readings 20; this list); `BASE-FAILURE.txt` (`live.test.ts`'s entry).
+  this file (The fixtures: the live run; Readings 20; this list; and, after the second run, the words on
+  `live.test.ts`'s run at the base in the first paragraph and under Time); `BASE-FAILURE.txt` (`live.test.ts`'s entry).
 - After the change: the type-check, exit 0.
-- `tests/acceptance/3232/node_modules`, which the run made for vitest's cache, was removed.
-- Not run: `live.test.ts` past its front gate; any other test file (none changed); each judge against planted inputs
-  (`judges.ts` is unchanged); any planted program; `node scripts/repo-rules.mjs` (it starts cargo; the changed files
-  were searched for a home folder's path instead, and hold none).
+- `tests/acceptance/3232/node_modules`, which the first run made for vitest's cache, was removed; none was there after
+  the second.
+- Not run: `live.test.ts` past its first assertion; any other test file (none changed); each judge against planted
+  inputs (`judges.ts` is unchanged); any planted program; `node scripts/repo-rules.mjs` (it starts cargo; the changed
+  files were searched for a home folder's path instead, and hold none).
 
 ## Files
 

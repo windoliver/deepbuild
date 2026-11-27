@@ -90,13 +90,15 @@ hub.test.ts: 2 tests, 2 failed; Start at  20:02:03, Duration  6.45s
       FAILS at hub.test.ts:69:44: nothing to repeat: the hub stopped: the snapshot carries no announcements list
       (snapshot.announcements is missing)
 
-live.test.ts: 1 tests, 1 failed; Start at  20:33:41, Duration  8.16s
+live.test.ts: 1 tests, 1 failed; Start at  22:46:33, Duration  11.25s
   AC10 #3232.a107747a: on the reference Mac, the live window's tree read through AppKit holds one node marked as a
   polite live region whose value is the last line, and the first criterion's run gives the same entries live as in the
   replica; BLOCKED, naming where it stopped, if the platform can't be read
-      BLOCKED: the platform can't be read: the real app's window didn't come to the front
-      ({"main":true,"front":false}), so it isn't the key window (live.test.ts:45:40)
+      FAILS at live.test.ts:62:97: the replica's announcements for the ask ask:01M8DHSK7ACJXEPT9EXR6DMHJ8 ("Run `git
+      push origin main`? It pushes, and no request in this thread names that."): the snapshot carries no announcements
+      list (snapshot.announcements is missing)
       (this entry alone is from a run at 501534ea685b on 2026-11-26; every other entry is from the run before it)
+      (the same day's first run read BLOCKED at the front gate, live.test.ts:45:40; this one had the Mac idle 116 s)
 
 budgets.test.ts: 1 tests, 1 failed; Start at  20:02:11, Duration  5.21s
   AC11 #3232.fec442e2: a window with 30 quiet sessions adds no announcement and no wakeup over 60 s, compared with the
