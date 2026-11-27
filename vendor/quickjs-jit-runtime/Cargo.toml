@@ -1,7 +1,7 @@
-# DeepBuild patch (windoliver/deepbuild#358): quickjs-jit-runtime 0.12.11 at 96593cd from longbridge/quickjs-jit (MIT, LICENSE here).
+# DeepBuild patch (windoliver/deepbuild#358): quickjs-jit-runtime 0.14.1 from crates.io, which is longbridge/quickjs-jit's `jit` folder at rev = "efea66cc2e8717fd2283346c97aef91be4f1a825" (MIT, LICENSE here).
 [package]
 name = "quickjs-jit-runtime"
-version = "0.12.11"
+version = "0.14.1"
 authors = ["Mees Delzenne <mees.delzenne@gmail.com>", "K. <kayo@illumium.org>"]
 edition = "2021"
 rust-version = "1.87"
@@ -14,11 +14,11 @@ build = "build.rs"
 name = "rquickjs_jit"
 
 [build-dependencies]
-rquickjs-sys = { package = "quickjs-jit-sys", version = "=0.12.11", git = "https://github.com/longbridge/quickjs-jit", rev = "96593cd7a54440ac060a391b8baea7e9a3cf1393", features = ["jit-abi"] } # DeepBuild patch (windoliver/deepbuild#358)
+rquickjs-sys = { package = "quickjs-jit-sys", version = "=0.14.1", features = ["jit-abi"] } # DeepBuild patch (windoliver/deepbuild#358): from the registry, as gpui-shell takes it
 
 [dependencies]
 rustc-hash = "2.1"
-rquickjs-core = { package = "quickjs-jit-core", version = "=0.12.11", git = "https://github.com/longbridge/quickjs-jit", rev = "96593cd7a54440ac060a391b8baea7e9a3cf1393", features = ["jit-abi", "loader"] } # DeepBuild patch (windoliver/deepbuild#358)
+rquickjs-core = { package = "quickjs-jit-core", version = "=0.14.1", features = ["jit-abi", "loader"] } # DeepBuild patch (windoliver/deepbuild#358): from the registry, as gpui-shell takes it
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"

@@ -570,7 +570,8 @@ mod notifications {
         cx.update(|cx| {
             for notification in stale {
                 eprintln!("deep-app: withdrew {}", notification.session);
-                cx.dismiss_system_notification(&notification.session);
+                cx.dismiss_system_notification(&notification.session)
+                    .detach();
             }
         });
     }
@@ -741,7 +742,7 @@ mod notifications {
                     .any(|notification| &notification.session == *session)
             }) {
                 eprintln!("deep-app: withdrew {session}");
-                cx.dismiss_system_notification(session);
+                cx.dismiss_system_notification(session).detach();
             }
             for notification in posted {
                 let body = notification

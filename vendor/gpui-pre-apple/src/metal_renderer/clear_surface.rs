@@ -8,6 +8,11 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::RwLock;
 
+use anyhow::Result;
+use objc2::{rc::Retained, runtime::ProtocolObject};
+use objc2_metal::{MTLDevice, MTLLibrary, MTLPixelFormat, MTLRenderPipelineState};
+use objc2_quartz_core::CAMetalLayer;
+
 static CLEARS: RwLock<Vec<u64>> = RwLock::new(Vec::new());
 static DREW: AtomicBool = AtomicBool::new(false);
 /// Whether a clear made an opaque layer transparent, so a frame without one restores it.
@@ -35,35 +40,29 @@ pub(super) fn clears(id: u64) -> bool {
 
 /// After a frame is encoded: the layer is transparent while the frame cleared a region, and
 /// returns to what it was once a frame doesn't.
-pub(super) fn settle(layer: &metal::MetalLayerRef) {
+pub(super) fn settle(layer: &CAMetalLayer) {
     if DREW.swap(false, Ordering::SeqCst) {
-        if layer.is_opaque() {
-            layer.set_opaque(false);
+        if layer.isOpaque() {
+            layer.setOpaque(false);
             MADE_CLEAR.store(true, Ordering::SeqCst);
         }
     } else if MADE_CLEAR.swap(false, Ordering::SeqCst) {
-        layer.set_opaque(true);
+        layer.setOpaque(true);
     }
 }
 
 /// The surface pipeline with blending off: it replaces what's beneath with its texels.
 pub(super) fn pipeline(
-    device: &metal::DeviceRef,
-    library: &metal::LibraryRef,
-) -> metal::RenderPipelineState {
-    let function = |name| {
-        library
-            .get_function(name, None)
-            .expect("error locating a surface function")
-    };
-    let descriptor = metal::RenderPipelineDescriptor::new();
-    descriptor.set_label("surfaces_clear");
-    descriptor.set_vertex_function(Some(function("surface_vertex").as_ref()));
-    descriptor.set_fragment_function(Some(function("surface_bgra_fragment").as_ref()));
-    let color = descriptor.color_attachments().object_at(0).unwrap();
-    color.set_pixel_format(metal::MTLPixelFormat::BGRA8Unorm);
-    color.set_blending_enabled(false);
-    device
-        .new_render_pipeline_state(&descriptor)
-        .expect("could not create the clear surface pipeline")
+    device: &ProtocolObject<dyn MTLDevice>,
+    library: &ProtocolObject<dyn MTLLibrary>,
+) -> Result<Retained<ProtocolObject<dyn MTLRenderPipelineState>>> {
+    super::build_pipeline_state(
+        device,
+        library,
+        "surfaces_clear",
+        "surface_vertex",
+        "surface_bgra_fragment",
+        MTLPixelFormat::BGRA8Unorm,
+        false,
+    )
 }

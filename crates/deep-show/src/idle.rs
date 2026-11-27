@@ -21,6 +21,9 @@ pub enum By {
     PresentOnly,
     /// A pointer move posted into AppKit's event queue for the window.
     Input,
+    /// #3502: notifications withdrawn in a row in one turn of the UI thread, while another thread
+    /// posts a pointer move into AppKit's event queue for the window.
+    Withdrawals,
 }
 
 impl By {
@@ -30,6 +33,7 @@ impl By {
             By::ThreadNotify => "thread_notify",
             By::PresentOnly => "present_only",
             By::Input => "input",
+            By::Withdrawals => "withdrawals",
         }
     }
 }
@@ -39,6 +43,8 @@ pub struct Wake {
     pub after_ms: u64,
     pub by: By,
     pub call: Option<(Call, i64)>,
+    /// #3502: how many notifications a `withdrawals` wake withdraws; 0 for every other kind.
+    pub count: u64,
 }
 
 /// Reads the `wake` list; `None` for one the README doesn't allow.
@@ -54,7 +60,13 @@ pub fn parse(
                 "thread_notify" => By::ThreadNotify,
                 "present_only" => By::PresentOnly,
                 "input" => By::Input,
+                "withdrawals" => By::Withdrawals,
                 _ => return None,
+            };
+            let count = match (by, w.get("count")) {
+                (By::Withdrawals, Some(count)) => count.as_u64().filter(|count| *count > 0)?,
+                (By::Withdrawals, None) | (_, Some(_)) => return None,
+                (_, None) => 0,
             };
             let played = match (by, w.get("call")) {
                 (By::HubEvent, Some(c)) => {
@@ -72,6 +84,7 @@ pub fn parse(
                 after_ms: w.get("after_ms")?.as_u64()?,
                 by,
                 call: played,
+                count,
             })
         })
         .collect()
@@ -83,6 +96,9 @@ pub struct Asked {
     pub by: By,
     pub requested_ns: i64,
     pub frame_seq: Option<u64>,
+    /// #3502: when the window's input callback received a `withdrawals` wake's posted event; the
+    /// frame that answers the wake is the first latched after it.
+    pub heard_ns: Option<i64>,
 }
 
 /// The window from the moment it settled to the end of the run: the first state other than
@@ -92,6 +108,8 @@ pub struct Track {
     shown: bool,
     shown_ns: i64,
     first_other: Option<&'static str>,
+    /// #3502: whether the window was the key window of the active app at every look.
+    focused: bool,
 }
 
 impl Track {
@@ -101,6 +119,7 @@ impl Track {
             shown: false,
             shown_ns: 0,
             first_other: None,
+            focused: true,
         };
         track.note(at, state);
         track
@@ -118,10 +137,16 @@ impl Track {
         }
     }
 
+    /// #3502: whether the window is the key window of the active app, read where its state is.
+    pub fn focus(&mut self, focused: bool) {
+        self.focused &= focused;
+    }
+
     pub fn json(&self) -> Value {
         json!({
             "state": self.first_other.unwrap_or("shown"),
             "shown_ms": self.shown_ns as f64 / 1e6,
+            "focused": self.focused,
         })
     }
 }
@@ -165,11 +190,55 @@ pub unsafe fn window_state(ns_window: *mut AnyObject) -> &'static str {
     "shown"
 }
 
+/// #3502: whether the window is the key window of the active app.
+///
+/// SAFETY: `ns_window` is null or a live NSWindow; this runs on the main thread.
+pub unsafe fn window_focused(ns_window: *mut AnyObject) -> bool {
+    if ns_window.is_null() {
+        return false;
+    }
+    let app: *mut AnyObject = msg_send![class!(NSApplication), sharedApplication];
+    let active: bool = msg_send![&*app, isActive];
+    let key: bool = msg_send![&*ns_window, isKeyWindow];
+    active && key
+}
+
 /// Posts a pointer move over `point` (window coordinates, origin at the bottom left) into
 /// AppKit's event queue for the window, as `NSApplication.postEvent:atStart:` queues any event.
 ///
 /// SAFETY: `ns_window` is a live NSWindow; this runs on the main thread.
 pub unsafe fn post_pointer_move(ns_window: *mut AnyObject, point: NSPoint, uptime_s: f64) {
+    if let Some(event) = pointer_move(ns_window, point, uptime_s) {
+        event.post();
+    }
+}
+
+/// A pointer move made for the window, which any thread may post (#3502: `withdrawals` posts
+/// its event from a thread other than the main one, whatever the main thread is doing).
+pub struct Posted(objc2::rc::Retained<AnyObject>);
+
+// SAFETY: the event is made once and never changed; `postEvent:atStart:` may be called from any
+// thread, and AppKit delivers the event on the main thread.
+unsafe impl Send for Posted {}
+
+impl Posted {
+    pub fn post(self) {
+        // SAFETY: `NSApplication.sharedApplication` exists once the app runs, and the event is live.
+        unsafe {
+            let app: *mut AnyObject = msg_send![class!(NSApplication), sharedApplication];
+            let _: () = msg_send![&*app, postEvent: &*self.0, atStart: false];
+        }
+    }
+}
+
+/// The pointer move `post_pointer_move` posts, not yet posted.
+///
+/// SAFETY: `ns_window` is a live NSWindow; this runs on the main thread.
+pub unsafe fn pointer_move(
+    ns_window: *mut AnyObject,
+    point: NSPoint,
+    uptime_s: f64,
+) -> Option<Posted> {
     let number: isize = msg_send![&*ns_window, windowNumber];
     let nil: *mut AnyObject = std::ptr::null_mut();
     // NSEventTypeMouseMoved is 5.
@@ -185,9 +254,9 @@ pub unsafe fn post_pointer_move(ns_window: *mut AnyObject, point: NSPoint, uptim
         clickCount: 0isize,
         pressure: 0f32
     ];
-    if event.is_null() {
-        return;
-    }
+    // SAFETY: the class method returns an autoreleased event or nil, which `retain` keeps.
+    objc2::rc::Retained::retain(event).map(Posted)
+}
     let app: *mut AnyObject = msg_send![class!(NSApplication), sharedApplication];
     let _: () = msg_send![&*app, postEvent: event, atStart: false];
 }

@@ -106,11 +106,11 @@ struct ChromeVertexOutput {
   float2 pixel;
 };
 
-vertex ChromeVertexOutput chrome_vertex(uint unit_vertex_id [[vertex_id]],
-                                        constant float2 *unit_vertices [[buffer(0)]],
-                                        constant ChromeComposite *composite [[buffer(1)]],
-                                        constant Size_DevicePixels *viewport_size [[buffer(2)]]) {
-  float2 unit_vertex = unit_vertices[unit_vertex_id];
+vertex ChromeVertexOutput chrome_vertex(uint vertex_id [[vertex_id]],
+                                        constant Size_DevicePixels *viewport_size
+                                        [[buffer(GlobalInputIndex_ViewportSize)]],
+                                        constant ChromeComposite *composite [[buffer(2)]]) {
+  float2 unit_vertex = float2(float(vertex_id & 1u), 0.5 * float(vertex_id & 2u));
   Bounds_ScaledPixels drawn = composite->drawn;
   float2 pixel = unit_vertex * float2(drawn.size.width, drawn.size.height) +
                  float2(drawn.origin.x, drawn.origin.y);
@@ -118,7 +118,7 @@ vertex ChromeVertexOutput chrome_vertex(uint unit_vertex_id [[vertex_id]],
 }
 
 fragment float4 chrome_fragment(ChromeVertexOutput input [[stage_in]],
-                                constant ChromeComposite *composite [[buffer(1)]],
+                                constant ChromeComposite *composite [[buffer(2)]],
                                 texture2d<float> source [[texture(0)]]) {
   float distance = quad_sdf(input.pixel, composite->bounds, composite->radii);
   float coverage = composite->edge > 0.0 ? saturate(-distance / composite->edge)

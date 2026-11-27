@@ -2,6 +2,8 @@
 
 use super::MetalAtlasTextures;
 use gpui::{AtlasRectBackend, AtlasTextureKind, AtlasTile, Bounds, DevicePixels};
+use objc2_metal::{MTLOrigin, MTLRegion, MTLSize, MTLTexture as _};
+use std::ptr::NonNull;
 
 impl AtlasRectBackend for MetalAtlasTextures {
     fn write_rect(&mut self, tile: AtlasTile, region: Bounds<DevicePixels>, bytes: &[u8], stride: usize) {
@@ -19,14 +21,23 @@ impl AtlasRectBackend for MetalAtlasTextures {
         if w == 0 || h == 0 || start.len() < (h - 1) * stride + w {
             return;
         }
-        let target = metal::MTLRegion::new_2d(
-            (tile.bounds.origin.x.0 + region.origin.x.0) as u64,
-            (tile.bounds.origin.y.0 + region.origin.y.0) as u64,
-            region.size.width.0 as u64,
-            region.size.height.0 as u64,
-        );
-        texture
-            .metal_texture
-            .replace_region(target, 0, start.as_ptr() as *const _, stride as u64);
+        let target = MTLRegion {
+            origin: MTLOrigin {
+                x: (tile.bounds.origin.x.0 + region.origin.x.0) as usize,
+                y: (tile.bounds.origin.y.0 + region.origin.y.0) as usize,
+                z: 0,
+            },
+            size: MTLSize { width: w, height: h, depth: 1 },
+        };
+        // SAFETY: `start` holds `h` rows of `stride` bytes but for the last, which holds `w`, as checked above, and
+        // the bytes stay borrowed for the copy into this CPU-accessible texture.
+        unsafe {
+            texture.metal_texture.replaceRegion_mipmapLevel_withBytes_bytesPerRow(
+                target,
+                0,
+                NonNull::from(start).cast(),
+                stride,
+            );
+        }
     }
 }

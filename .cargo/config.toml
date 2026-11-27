@@ -1,14 +1,12 @@
-# Issue #337: gpui-kit's own workspace patch, which a dependency's [patch] can't carry.
-# LLRT names `rquickjs`; this routes it to gpui-shell's facade so both share one VM. It lives
-# here, not in Cargo.toml, because it replaces rquickjs alone: gpui-kit and gpui-shell come from
-# upstream at a pinned commit, with no fork (#338 checks the manifests for a [patch] table).
+# The only patches (#338 checks the manifests for a [patch] table): gpui-kit and gpui-shell come from
+# upstream at a pinned commit, with no fork. From gpui-kit 0.8.1 gpui-shell takes QuickJS and its
+# standard modules from the registry, so the `rquickjs` facade #337 routed here is gone (#3502).
 [patch.crates-io]
 # Issue #2359: upstream XML-range fix, without a Typst update (MIT OR Apache-2.0).
 citationberg = { git = "https://github.com/typst/citationberg", rev = "06a591e2f237d25e1dfdedac3f3d1494c496c52d" }
-rquickjs = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49b90f4d7b6808b69924f58796f6f1" }
 
 # Issue #390: the GPUI patch (technical design: Conventions, "the GPUI patch ... adds a tinted mask
-# sprite drawn from the core's glyph atlas"). vendor/gpui-pre is gpui-pre 0.3.9 from crates.io with
+# sprite drawn from the core's glyph atlas"). vendor/gpui-pre is gpui-pre 0.3.14 from crates.io with
 # `AtlasKey::Mask`, `Window::paint_mask_sprite` and `Window::remove_mask_page` added, each marked
 # "DeepBuild patch". gpui-kit and gpui-shell still come from upstream, unforked.
 # Issue #124 adds, for test support only, `Hitbox::element` and `Window::hits_at`: a replica asks the frame's own
@@ -16,7 +14,7 @@ rquickjs = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49
 gpui-pre = { path = "vendor/gpui-pre" }
 # Issue #391: the GPUI patch's exact gradient mode (technical design: Conventions, "an exact
 # gradient mode (no dither, the sRGB curve, premultiplied stops)"). vendor/gpui-pre-apple is
-# gpui-pre-apple 0.3.9 from crates.io with `ColorSpace::OklabExact` drawn by its Metal shader,
+# gpui-pre-apple 0.3.14 from crates.io with `ColorSpace::OklabExact` drawn by its Metal shader,
 # each change marked "DeepBuild patch"; the variant itself is in vendor/gpui-pre's color.rs.
 # Issue #377 adds the GPU layer's handoff to it: BGRA surfaces composited premultiplied, and
 # `gpu_surfaces`, which reports the surfaces each frame command buffer samples and its completion.
@@ -25,26 +23,25 @@ gpui-pre-apple = { path = "vendor/gpui-pre-apple" }
 # table's rows by number. vendor/accesskit_macos is accesskit_macos 0.26.3 with `accessibilityIndex` added, marked
 # "DeepBuild patch".
 accesskit_macos = { path = "vendor/accesskit_macos" }
-# Issue #1551: a still window stops its display link. vendor/gpui-pre-macos is gpui-pre-macos 0.3.9
-# from crates.io, whose shown window ran the request-frame callback every vsync; a tick that neither
-# drew nor was asked again stops the link, and `schedule_frame` and the frame waker start it.
+# Issue #1551: a still window stops its display link. vendor/gpui-pre-macos is gpui-pre-macos 0.3.14
+# from crates.io, which pauses a still window's Metal display link itself (#3502); what we carry on it
+# is the hook that hears each request-frame callback, a screen change that leaves a still window
+# alone, and the planted twins.
 gpui-pre-macos = { path = "vendor/gpui-pre-macos" }
 # Issue #503: our own Vorbis decoder decodes within -90 dBFS of FFmpeg's decode on macOS.
 # vendor/symphonia-codec-vorbis is symphonia-codec-vorbis 0.6.1 from crates.io whose inverse coupling
 # takes a magnitude of +0.0 down the positive branch, as FFmpeg's arm64 decode does, marked
 # "DeepBuild patch".
 symphonia-codec-vorbis = { path = "vendor/symphonia-codec-vorbis" }
-
 # Issue #358: the panel host's JIT switch (technical design: Decided, "Where agent-built panels run").
-# vendor/quickjs-jit-runtime is that crate at the commit gpui-shell pins with `deny_native_code` added,
-# marked "DeepBuild patch". It replaces this one crate; gpui-kit and gpui-shell stay upstream, unforked.
-[patch."https://github.com/longbridge/quickjs-jit"]
+# vendor/quickjs-jit-runtime is that crate at the release gpui-shell asks for, 0.14.1, with
+# `deny_native_code` added, marked "DeepBuild patch". It replaces this one crate; gpui-kit and
+# gpui-shell stay upstream, unforked.
 quickjs-jit-runtime = { path = "vendor/quickjs-jit-runtime" }
-
-# Issue #2359: retain the panel's VM and LLRT pin, but use final RSA's feature names.
-# This Apache-2.0 copy adapts only the manifest and final PKCS#1 type names; tests stay upstream's.
-[patch."https://github.com/awslabs/llrt"]
-llrt_crypto = { path = "vendor/llrt_crypto" }
+# Issue #2359: the panel's crypto module on final RSA. From gpui-kit 0.8.1 that module is in
+# quickjs-jit-stdlib, which asks for an RSA release candidate; vendor/quickjs-jit-stdlib is 0.14.1 from
+# crates.io with final RSA's feature and PKCS#1 type names (#3502), marked "DeepBuild patch".
+quickjs-jit-stdlib = { path = "vendor/quickjs-jit-stdlib" }
 
 # Issue #2359: migrate MiTeX's reader and compiled-in command archive together to rkyv 0.8.
 # Only these Apache-2.0 crates change; the parser/converter and Typst stay at their pins.

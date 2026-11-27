@@ -134,7 +134,10 @@ impl Scene {
         self.chrome_state.open.push((open, Scene::default()));
     }
 
-    /// Closes the innermost layer and places it, as one primitive, where it opened.
+    /// Closes the innermost layer and places it, as one primitive, where it opened: in the scene
+    /// around it, at this place in paint order, and so in that scene's paint layer when one is
+    /// open. Its own paint operation is for that layer's sake only; a replay rebuilds the layer
+    /// from its two markers and passes the operation over.
     pub fn pop_chrome_layer(&mut self) {
         let Some((open, mut scene)) = self.chrome_state.open.pop() else {
             return;
@@ -149,8 +152,8 @@ impl Scene {
             kind: ChromeKind::Layer(open.layer, Arc::new(scene)),
         };
         match self.chrome_state.open.last_mut() {
-            Some((_, parent)) => parent.place_chrome(primitive),
-            None => self.place_chrome(primitive),
+            Some((_, parent)) => parent.insert_primitive(primitive),
+            None => self.insert_primitive(primitive),
         }
     }
 
@@ -160,47 +163,41 @@ impl Scene {
     }
 
     /// While a layer is open, a primitive goes to its scene and only its paint operation stays
-    /// here; otherwise it comes back to be inserted here.
-    pub(super) fn chrome_redirect(&mut self, primitive: Primitive) -> Option<Primitive> {
+    /// here; otherwise it comes back to be inserted here. A sprite's animation belongs to the
+    /// scene it was inserted into, which a layer's scene is not, so in a layer it holds its pose.
+    pub(super) fn chrome_redirect(&mut self, mut primitive: Primitive) -> Option<Primitive> {
         let Some((_, scene)) = self.chrome_state.open.last_mut() else {
             return Some(primitive);
         };
+        if let Primitive::MonochromeSprite(sprite) = &mut primitive {
+            sprite.animation = Default::default();
+        }
         scene.insert_primitive(primitive.clone());
         self.paint_operations
             .push(PaintOperation::Primitive(primitive));
         None
     }
 
-    /// While a layer is open, a paint layer opens or closes in its scene.
-    pub(super) fn chrome_paint_layer(&mut self, bounds: Option<Bounds<ScaledPixels>>) -> bool {
+    /// While a layer is open, a paint layer opens (`open`) or closes in its scene.
+    pub(super) fn chrome_paint_layer(&mut self, open: bool) -> bool {
         let Some((_, scene)) = self.chrome_state.open.last_mut() else {
             return false;
         };
-        match bounds {
-            Some(bounds) => {
-                scene.push_layer(bounds);
-                self.paint_operations
-                    .push(PaintOperation::StartLayer(bounds));
-            }
-            None => {
-                scene.pop_layer();
-                self.paint_operations.push(PaintOperation::EndLayer);
-            }
+        if open {
+            scene.push_layer();
+            self.paint_operations.push(PaintOperation::StartLayer);
+        } else {
+            scene.pop_layer();
+            self.paint_operations.push(PaintOperation::EndLayer);
         }
         true
     }
+}
 
-    fn place_chrome(&mut self, mut primitive: ChromePrimitive) {
-        let clipped = primitive.bounds.intersect(&primitive.content_mask.bounds);
-        if clipped.is_empty() {
-            return;
-        }
-        primitive.order = self
-            .layer_stack
-            .last()
-            .copied()
-            .unwrap_or_else(|| self.primitive_bounds.insert(clipped));
-        self.chrome.push(primitive);
+impl ChromePrimitive {
+    /// Whether this is a layer's finished scene.
+    pub(super) fn is_layer(&self) -> bool {
+        matches!(self.kind, ChromeKind::Layer(..))
     }
 }
 
@@ -286,17 +283,21 @@ impl Scene {
         if effect.backdrop.is_some() {
             READS_BACKDROPS.store(true, std::sync::atomic::Ordering::Relaxed);
         }
-        self.insert_primitive(ChromePrimitive {
+        let primitive = ChromePrimitive {
             order: 0,
             bounds,
             content_mask,
             kind: ChromeKind::Effect(effect),
-        });
+        };
         if EFFECTS_LAST.load(std::sync::atomic::Ordering::SeqCst) && !self.in_chrome_layer() {
-            if let Some(last) = self.chrome.last_mut() {
-                last.order = DrawOrder::MAX - 1;
+            // The planted program: past every paint of the frame, whatever layer is open.
+            if !drawn.is_empty() {
+                self.chrome.push(ChromePrimitive { order: DrawOrder::MAX - 1, ..primitive.clone() });
+                self.paint_operations.push(PaintOperation::Primitive(primitive.into()));
             }
+            return Ok(());
         }
+        self.insert_primitive(primitive);
         Ok(())
     }
 }
