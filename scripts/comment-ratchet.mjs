@@ -100,11 +100,16 @@ try {
   }
   ceilings = {};
 }
-let base = null;
-let landed = new Set();
+let at;
 try {
-  const at = git('merge-base', 'HEAD', 'origin/main').trim();
-  landed = new Set(git('ls-tree', '-r', '-z', '--name-only', at, '--', BLIND).split('\0'));
+  at = git('merge-base', 'HEAD', 'origin/main').trim();
+} catch {
+  console.log(`BLOCKED comments: no merge base with origin/main under ${root}, so which blind suites have landed can't be told\n  Fix: Fetch origin's main, then run the ratchet again.`);
+  process.exit(2);
+}
+let base = null;
+const landed = new Set(git('ls-tree', '-r', '-z', '--name-only', at, '--', BLIND).split('\0'));
+try {
   if (git('ls-tree', '--name-only', at, '--', CEILINGS).trim()) base = parse(git('show', `${at}:${CEILINGS}`), `${CEILINGS} at the merge base`);
 } catch {}
 let listing;
