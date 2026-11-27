@@ -18,7 +18,7 @@ import type { JsonValue } from '@deepbuild/contracts';
 import { readSince, ulid, type Connection, type Event, type EventInput } from '@deepbuild/record';
 import { after, alive as pidAlive, badDeadline, groupCpu, groupMembers, type Grant, type Launch } from '@deepbuild/supervisor';
 import { openForwarder, type Forwarder } from './egress.js';
-import { AGENTS, codexRefused, programRoot, shownVersion, type AgentParts } from './agents.js';
+import { AGENTS, programRoot, shownVersion, type AgentParts } from './agents.js';
 import type { Agent, Blocked, EvaluationWork, JobInput, JobRecord, JobSpec, Runner, RunnerOptions, StopCause, WindowReport } from './types.js';
 
 // Keep the existing internal test surface; the package's public entry still exposes only the runner.
@@ -45,8 +45,6 @@ const ENDED_KEPT = 64;
 const OUTPUT_BYTES = 8 * 1024 * 1024;
 /** The read cap of an event's text field: a result recorded past it is cut there. */
 const TEXT_CAP = 8192;
-/** A result's own subtype that names its stop. */
-const RESULT_CAUSES: Record<string, StopCause> = { error_max_turns: 'max_turns' };
 const KINDS = new Set(['draft', 'review', 'read', 'smoke', 'acceptance', 'eval', 'work']);
 /** All a blind job may read (#1328): nothing of a branch, a transcript or a session has a handle here. */
 const INPUTS = new Set(['issue', 'design', 'base', 'criterion']);
@@ -542,17 +540,7 @@ class LocalRunner implements Runner {
           const billsKey = this.facts(agent).billing.apiKeyVariables.some((k) => this.o.env[k]);
           const token = !billsKey && home && this.o.keychain ? await parts.token(home, this.o.keychain, this.o.env) : undefined;
           const env = { ...this.env(agent), ...parts.reach({ temp, home, env: this.o.env, proxy: `http://127.0.0.1:${forwarder.port}`, ...(token ? { token } : {}) }) };
-          // Read-only Claude jobs must not load the user's hooks or write their transcripts into that home.
-          if (agent === 'claude-code') {
-            const config = join(temp, 'claude-home'); mkdirSync(config);
-            env.HOME = temp; env.CLAUDE_CONFIG_DIR = config;
-            const credentials = join(this.o.env.CLAUDE_CONFIG_DIR || join(home, '.claude'), '.credentials.json');
-            if (!billsKey && existsSync(credentials)) {
-              const value = JSON.parse(readFileSync(credentials, 'utf8')) as { claudeAiOauth?: { accessToken?: string } };
-              if (value.claudeAiOauth?.accessToken) env.CLAUDE_CODE_OAUTH_TOKEN = value.claudeAiOauth.accessToken;
-            }
-            writeFileSync(join(config, 'settings.json'), '{}');
-          }
+          Object.assign(env, parts.ownHome?.({ temp, home, env: this.o.env, billsKey }));
           const args = [...this.facts(agent).launch.readOnlyJob.args];
           const m = Math.max(args.indexOf('--model'), args.indexOf('-m'));
           if (m >= 0) args[m + 1] = model; else args.push('--model', model);
@@ -965,7 +953,7 @@ class LocalRunner implements Runner {
   private env(agent: Agent): Record<string, string> {
     const env: Record<string, string> = {};
     const facts = this.facts(agent);
-    for (const name of [...ALLOWED_ENV, ...facts.billing.apiKeyVariables, ...(agent === 'claude-code' ? ['CLAUDE_CONFIG_DIR'] : [])]) {
+    for (const name of [...ALLOWED_ENV, ...facts.billing.apiKeyVariables, ...(AGENTS[agent]?.passes ?? [])]) {
       const v = this.o.env[name];
       if (typeof v === 'string') env[name] = v;
     }
@@ -1071,64 +1059,12 @@ class LocalRunner implements Runner {
       let e: Obj;
       try { e = JSON.parse(line) as Obj; } catch { continue; }
       if (!isObj(e)) continue;
-      if (job.spec.agent === 'codex') this.codexEvent(job, e);
-      else this.event(job, e);
-    }
-  }
-  /** One line of `codex exec --json`: its thread, its items, and its turn's end. */
-  private codexEvent(job: Job, e: Obj): void {
-    if (e.type === 'thread.started' && typeof e.thread_id === 'string' && !job.rec.session) job.rec.session = e.thread_id;
-    if (e.type === 'item.completed' && isObj(e.item)) {
-      const item = e.item;
-      if (item.type === 'agent_message' && typeof item.text === 'string') job.rec.result = item.text;
-      // Its read-only mode refusing a write: a patch it declined, or a command the sandbox stopped.
-      if (codexRefused(item)) job.stopCause ??= 'refusal';
-    }
-    if (e.type !== 'turn.completed' && e.type !== 'turn.failed') return;
-    job.resultAt ??= Date.now();
-    for (const cancel of job.timers) cancel();
-    if (isObj(e.usage)) {
-      // Codex's input includes the cached tokens, taken back out (its facts' usage).
-      const u = job.rec.usage ?? { input: 0, cached: 0, output: 0 };
-      u.input += num(e.usage.input_tokens) - num(e.usage.cached_input_tokens);
-      u.cached += num(e.usage.cached_input_tokens);
-      u.output += num(e.usage.output_tokens);
-      job.rec.usage = u;
-    }
-    if (e.type === 'turn.failed') { job.errored = true; job.stopCause ??= 'unknown'; }
-    void this.settle(job, job.resultAt);
-  }
-  /** A pi job's own stream: its session line, each message once as it ends, and its settling as its result. */
-  private piEvent(job: Job, e: Obj): void {
-    if (e.type === 'session' && typeof e.id === 'string') job.rec.session ??= e.id;
-    if (e.type === 'message_end' && isObj(e.message) && e.message.role === 'assistant') {
-      const msg = e.message;
-      if (typeof msg.model === 'string') job.answered = msg.model;
-      if (isObj(msg.usage)) {
-        const u = job.rec.usage ?? { input: 0, cached: 0, output: 0 };
-        u.input += num(msg.usage.input) + num(msg.usage.cacheWrite);
-        u.cached += num(msg.usage.cacheRead);
-        u.output += num(msg.usage.output);
-        job.rec.usage = u;
-        const cost = isObj(msg.usage.cost) ? msg.usage.cost.total : undefined;
-        if (typeof cost === 'number') job.rec.cost_usd = (job.rec.cost_usd ?? 0) + cost;
-      }
-      // pi retries some errors itself: only the last message says how the run ended.
-      const failed = msg.stopReason === 'error' || msg.stopReason === 'aborted' || msg.stopReason === 'length';
-      job.errored = failed;
-      delete job.stopCause;
-      delete job.said;
-      if (failed) {
-        job.stopCause = this.causeOf(job.spec.agent, String(msg.errorMessage ?? ''));
-      } else if (Array.isArray(msg.content)) {
-        job.said = msg.content.flatMap((part) => (isObj(part) && part.type === 'text' && typeof part.text === 'string' ? [part.text] : [])).join('');
-      }
-    }
-    if (e.type === 'agent_settled') {
-      job.resultAt ??= Date.now();
-      for (const cancel of job.timers) cancel();
-      if (!job.errored && job.said !== undefined) job.rec.result = job.said;
-      void this.settle(job, job.resultAt);
+      AGENTS[job.spec.agent]?.stream(e, job, {
+        settle: () => { job.resultAt ??= Date.now(); for (const cancel of job.timers) cancel(); void this.settle(job, job.resultAt); },
+        cause: (error) => this.causeOf(job.spec.agent, error),
+        errors: () => this.facts(job.spec.agent).stop.cause.errors,
+        ...(this.o.plant ? { plant: this.o.plant } : {}),
+      });
     }
   }
   /** The cause the facts name for an error's words: a status code only as a word of its own, so no token count reads as one. */
@@ -1137,46 +1073,6 @@ class LocalRunner implements Runner {
     const causes = this.facts(agent).errorTexts.causes ?? {};
     return (Object.entries(causes).find(([needle]) => (/^\d+$/.test(needle) ? new RegExp(`\\b${needle}\\b`).test(text) : text.includes(needle.toLowerCase())))?.[1] ?? 'unknown') as StopCause;
   }
-  private event(job: Job, e: Obj): void {
-    if (job.spec.agent === 'pi') return this.piEvent(job, e);
-    if (typeof e.session_id === 'string' && !job.rec.session) job.rec.session = e.session_id;
-    if (e.type === 'assistant' && isObj(e.message)) {
-      const msg = e.message;
-      if (typeof msg.model === 'string' && msg.model !== '<synthetic>' && this.o.plant !== 'records-launched-model') job.answered = msg.model;
-      // An API error's entry names the stop's cause, as the facts map it; never the agent's words. A job's
-      // stream-json marks it is_api_error_message, where the transcript the facts describe says isApiErrorMessage.
-      const errors = this.facts(job.spec.agent).stop.cause.errors;
-      if ((e.isApiErrorMessage === true || e.is_api_error_message === true) && typeof e[errors.field] === 'string') job.stopCause = (errors.values[e[errors.field] as string] ?? 'unknown') as StopCause;
-      const usage = msg.usage;
-      if (isObj(usage) && typeof msg.id === 'string' && !job.seen.has(msg.id) && msg.model !== '<synthetic>') {
-        job.seen.add(msg.id);
-        const u = job.rec.usage ?? { input: 0, cached: 0, output: 0 };
-        u.input += num(usage.input_tokens) + num(usage.cache_creation_input_tokens);
-        u.cached += num(usage.cache_read_input_tokens);
-        u.output += num(usage.output_tokens);
-        job.rec.usage = u;
-      }
-    }
-    if (e.type === 'result') {
-      job.resultAt ??= Date.now();
-      // Its grace stops it from here; no deadline ends it twice.
-      for (const cancel of job.timers) cancel();
-      if (typeof e.result === 'string') job.rec.result = e.result;
-      if (typeof e.total_cost_usd === 'number') job.rec.cost_usd = e.total_cost_usd;
-      // The model that answered is the one with the most output tokens in its usage (#87): Claude Code lists its own
-      // small calls' models there too, often first.
-      if (isObj(e.modelUsage) && this.o.plant !== 'records-launched-model') {
-        const used = Object.entries(e.modelUsage).map(([name, u]) => [name, isObj(u) ? num(u.outputTokens) : 0] as const);
-        const most = this.o.plant === 'first-model-listed' ? used[0] : [...used].sort((a, b) => b[1] - a[1])[0];
-        if (most) job.answered = most[0];
-      }
-      if (Array.isArray(e.permission_denials) && e.permission_denials.length) job.stopCause ??= 'refusal';
-      // A result marked an error is no answer: the job stopped, for the cause an error named or for none known.
-      if (e.is_error === true) { job.errored = true; job.stopCause ??= RESULT_CAUSES[String(e.subtype)] ?? 'unknown'; }
-      void this.settle(job, job.resultAt);
-    }
-  }
-
   /** A quiet job is stopped only once the platform reports neither CPU nor disk use by it for the whole timeout. */
   private watchQuiet(job: Job, ms: number): void {
     let last: string | undefined;
@@ -1441,7 +1337,6 @@ function ended(d: Obj): Partial<JobRecord> {
   };
 }
 
-const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 function fileDigest(path: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const hash = createHash('sha256');

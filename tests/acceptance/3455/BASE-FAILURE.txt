@@ -1,0 +1,161 @@
+Base commit 345c9ae26, Node v24.22.0, load 72.65 62.85 53.62
+$ node --test 'tests/acceptance/3455/*.test.mjs'
+✖ #3455.b793fb52 AGENTS.md's Proof says a drafted suite holds no comments (3.470083ms)
+✖ #3455.b793fb52 the design's Repo guards says a new suite starts at zero in the comment ratchet (3.890542ms)
+✖ #3455.1e33643c a planted new suite under tests/acceptance/ with one comment fails the lint lane, naming the file, and the same suite with none passes, its files untracked (4661.772459ms)
+✖ #3455.1e33643c a planted new suite under tests/acceptance/ with one comment fails the lint lane, naming the file, and the same suite with none passes, committed on top of the merge base (4987.688792ms)
+✖ #3455.7da213af a suite the merge base holds passes the lint lane with its comments and gets no entry in scripts/comment-ceilings.json, while a new suite beside it with one comment fails naming only its own file (2913.281917ms)
+✖ #3455.868c2194 a planted file under a new suite's twins/ folder passes the lint lane with its comments, while a commented file directly in the same new suite fails naming only that file (3369.816208ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 0
+ℹ fail 6
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 16393.877708
+
+✖ failing tests:
+
+test at tests/acceptance/3455/docs.test.mjs:28:1
+✖ #3455.b793fb52 AGENTS.md's Proof says a drafted suite holds no comments (3.470083ms)
+  AssertionError [ERR_ASSERTION]: no bullet in AGENTS.md's Proof says a suite holds no comments (matched: a bullet with /\bno comments?\b|\bwithout (?:any )?comments?\b|\bcomment-free\b/i and /\bsuites?\b|\bsuite's\b|tests\/acceptance\/|\bblind\b|\bdraft/i); its bullets:
+  - Acceptance tests come first, in `tests/acceptance/<issue>/`: a job that sees only the issue, the design and the base commit writes them with the issue's expected values, through surfaces those name. Never edit one; a dispute goes to that job's blind redraft (design: Dogfooding).
+  - Every behavior fix starts with a test failing for the expected reason. Commit it first only when authorized; otherwise save failing output and leave changes uncommitted. Make it pass unchanged.
+  - Reuse sufficient tests; add one only for required behavior or a regression existing coverage misses. It must fail on a wrong program as its criterion names (the merge base or a reverted fix for a fix; a planted twin or a mutant for new code), or it proves nothing.
+  - Test behavior, not implementation. A test that would still pass if every function it calls returned nothing is not a test; rewrite or delete it.
+  - Use the smallest test on real components: end-to-end for what users see, fast tests for logic, property tests for parsers and numbers. Mock only at boundaries you don't own.
+  - Never edit, skip, weaken, special-case, re-record or delete failing tests, goldens or checks to finish, or retry until green; change one that covers a criterion only by an approved proposal. If they can't pass, stop and report `BLOCKED`.
+  - Run relevant checks once per meaningful change, and only affected ones after corrections: name the corrected paths, `node scripts/affected.mjs <path ...>`, and cite the earlier full run for the rest. Full preflight needs a task or release reason. Docs-only edits need diff review, not code tests.
+  - Verify with `node scripts/affected.mjs`, not whole neighbouring suites: it runs only the tests that can see the change and sets main's known failures (`scripts/known-failures.json`) apart; report its WIDE and INCONCLUSIVE lines.
+  - A PR says `Closes #n` only when every acceptance criterion in the issue is proven. Otherwise it says `Part of #n` and lists what's open.
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3455/docs.test.mjs:31:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3455/docs.test.mjs:34:1
+✖ #3455.b793fb52 the design's Repo guards says a new suite starts at zero in the comment ratchet (3.890542ms)
+  AssertionError [ERR_ASSERTION]: no sentence in the design's Repo guards names a suite, comments and zero together (matched: one sentence with /\bsuites?\b|\bsuite's\b/i, /\bcomments?\b/i and /\bzero\b/i)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3455/docs.test.mjs:36:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3455/ratchet.test.mjs:21:1
+✖ #3455.1e33643c a planted new suite under tests/acceptance/ with one comment fails the lint lane, naming the file, and the same suite with none passes, its files untracked (4661.772459ms)
+  AssertionError [ERR_ASSERTION]: no FAIL line naming tests/acceptance/9002/double.test.mjs (one comment line in tests/acceptance/9002/double.test.mjs, a file of a suite new since the merge base, untracked)
+  exit 0
+  stdout:
+  PASS comments: 1 hand-written source files, 1 of them listed with 1 comment line in all, each at its ceiling
+  
+  stderr:
+  
+      at assertFailsNaming (file://<checkout>/tests/acceptance/3455/helpers.mjs:44:10)
+      at plantEachFile (file://<checkout>/tests/acceptance/3455/ratchet.test.mjs:15:5)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3455/ratchet.test.mjs:26:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3455/ratchet.test.mjs:30:1
+✖ #3455.1e33643c a planted new suite under tests/acceptance/ with one comment fails the lint lane, naming the file, and the same suite with none passes, committed on top of the merge base (4987.688792ms)
+  AssertionError [ERR_ASSERTION]: no FAIL line naming tests/acceptance/9002/double.test.mjs (one comment line in tests/acceptance/9002/double.test.mjs, committed on top of the merge base)
+  exit 0
+  stdout:
+  PASS comments: 1 hand-written source files, 1 of them listed with 1 comment line in all, each at its ceiling
+  
+  stderr:
+  
+      at assertFailsNaming (file://<checkout>/tests/acceptance/3455/helpers.mjs:44:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3455/ratchet.test.mjs:40:5)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3455/ratchet.test.mjs:47:1
+✖ #3455.7da213af a suite the merge base holds passes the lint lane with its comments and gets no entry in scripts/comment-ceilings.json, while a new suite beside it with one comment fails naming only its own file (2913.281917ms)
+  AssertionError [ERR_ASSERTION]: no FAIL line naming tests/acceptance/9002/helpers.ts (one comment line in tests/acceptance/9002/helpers.ts, new since the merge base, beside the landed suite tests/acceptance/9001/)
+  exit 0
+  stdout:
+  PASS comments: 1 hand-written source files, 1 of them listed with 1 comment line in all, each at its ceiling
+  
+  stderr:
+  
+      at assertFailsNaming (file://<checkout>/tests/acceptance/3455/helpers.mjs:44:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3455/ratchet.test.mjs:55:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3455/ratchet.test.mjs:73:1
+✖ #3455.868c2194 a planted file under a new suite's twins/ folder passes the lint lane with its comments, while a commented file directly in the same new suite fails naming only that file (3369.816208ms)
+  AssertionError [ERR_ASSERTION]: no FAIL line naming tests/acceptance/9003/double.test.mjs (one comment line in tests/acceptance/9003/double.test.mjs, directly in the new suite tests/acceptance/9003/)
+  exit 0
+  stdout:
+  PASS comments: 1 hand-written source files, 1 of them listed with 1 comment line in all, each at its ceiling
+  
+  stderr:
+  
+      at assertFailsNaming (file://<checkout>/tests/acceptance/3455/helpers.mjs:44:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3455/ratchet.test.mjs:85:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+exit 1
