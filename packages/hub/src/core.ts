@@ -520,6 +520,7 @@ export class Core {
       }),
       acking: (session) => this.acking(session), queue: (work) => void this.queue(work).catch(() => undefined), wake: (session, text) => this.noticeWake(session, text),
       over: (session) => { const s = this.sessionStarts.runOf(session); return s !== undefined && !this.sessionStarts.live(s.run); },
+      plant: this.options.plant,
     });
     this.delivery.answers = new Answers({
       raw: this.raw, settled: (except) => Promise.allSettled([...this.inflight].flatMap(([append, { id, kind }]) => (id !== except && readsAnswer(kind) ? [append] : []))),
@@ -1595,7 +1596,8 @@ export class Core {
           this.state.midTurn.delete(meta.session);
           // The prompt that opens a turn is its origin, and ends the grace window a loop's last stop started (#965).
           live.turnFrom = String(data.from);
-          this.siblings.turn(meta.session, draft.id, live.turnFrom, this.now());
+          live.turnServer = typeof data.server === 'string' ? data.server : undefined;
+          this.siblings.turn(meta.session, draft.id, live.turnFrom, this.now(), live.turnServer);
           // An adapter with no route to hold a prompt leaves the loop rule watch-only for its session, which says so once (#352).
           if (HOLDS_NO_PROMPT.has(meta.agent) && this.siblings.looping(meta.session) && !this.loopWatched.has(meta.session)) {
             this.loopWatched.add(meta.session);
@@ -1859,6 +1861,15 @@ export class Core {
         if (this.options.plant === 'continuation-by-likeness' && String(data.text).startsWith('The app was quit while you were working')) from = 'continuation';
         data.from = from;
         live.from = from;
+        // A channel's event names its server, as the entry gives it (#3405).
+        const server = this.mapped(meta, draft, { ...meta.fields }, entry ? [entry] : [])?.server;
+        if (from === 'channel' && typeof server === 'string' && server) data.server = server;
+        else delete data.server;
+        // Another session's message names its sender: the live session that reported the address the entry's origin
+        // names (#3405), never the message's text. One no live session reported names none.
+        const sender = from === 'session' && !foreign ? await this.senderOf(meta.session, entry) : undefined;
+        if (sender) data.sender = sender;
+        else delete data.sender;
         // The app's own resume prompt (#82): the stop it leads to gets one automatic continue while asks are open.
         if (from === 'continuation' && live.agent === 'claude-code') { live.resumed = true; this.judging.nudgeable.add(meta.session); this.askingSoon(); }
         // A subagent's report or a command's end notice ends its wait: the call the notice names, or else the oldest
@@ -2401,9 +2412,29 @@ export class Core {
     if (!live?.turnFrom || childPrompt(meta)) return undefined;
     return this.siblings.held(meta, live.turnFrom, async () => {
       const entry = session && meta.fields?.prompt_id ? (await turnFrom(session, meta.fields.prompt_id, this.transcriptReader))[0] : undefined;
-      const origin = entry && isObj(entry.origin) ? entry.origin : undefined;
-      return typeof origin?.from === 'string' ? /^local_(.+)$/.exec(origin.from)?.[1] : undefined;
-    });
+      return this.senderOf(meta.session, entry);
+    }, live.turnServer);
+  }
+  /**
+   * The session whose message a prompt's transcript entry names (#3405): Claude Code writes the sender's inbox address,
+   * `uds:<path>`, which is the path a live session reported at its SessionStart; the desktop app writes `local_<id>`,
+   * which names a session only when it is one the hub knows and is live. Nothing is read from the message's text.
+   */
+  private async senderOf(receiver: string, entry: Obj | undefined): Promise<string | undefined> {
+    const from = entry && isObj(entry.origin) && typeof entry.origin.from === 'string' ? entry.origin.from : undefined;
+    if (!from) return undefined;
+    const live = (id: string | undefined): string | undefined => (id && id !== receiver && this.state.sessions.get(id)?.ended !== true ? id : undefined);
+    const address = /^uds:(.+)$/.exec(from)?.[1];
+    if (address) {
+      const [row] = (await this.record.raw(`SELECT e.session_id AS id FROM events e JOIN sessions s ON s.id = e.session_id WHERE e.kind = 'session.start' AND json_extract(e.data, '$.inbox') = ? AND s.ended_log_pos IS NULL ORDER BY e.log_pos DESC LIMIT 1`, [address])) as { id: string }[];
+      // The planted wrong program names another live session for an address none reported.
+      if (!row && this.options.plant === 'names-other-session-for-unreported-address') return [...this.state.sessions.values()].find((s) => s.id !== receiver && !s.ended)?.id;
+      return live(row?.id);
+    }
+    const local = /^local_(.+)$/.exec(from)?.[1];
+    if (!local) return undefined;
+    const [row] = (await this.record.raw(`SELECT id FROM sessions WHERE id = ? AND ended_log_pos IS NULL`, [local])) as { id: string }[];
+    return live(row?.id);
   }
   /**
    * The messages typed mid-turn since the last acknowledgement (#340): the agent is asked to acknowledge each in one

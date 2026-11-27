@@ -17,7 +17,7 @@ const MOMENTS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   paseo: { 'agent.turn.after': 'Stop', 'agent.permission.before': 'PermissionRequest' },
 };
 const TOOL_KINDS = ['shell', 'read', 'edit', 'write', 'search', 'fetch', 'mcp', 'unknown'];
-const FROM = ['person', 'scheduled', 'subagent', 'session', 'continuation', 'unknown'];
+const FROM = ['person', 'scheduled', 'subagent', 'session', 'channel', 'continuation', 'unknown'];
 const ASKS = ['tool', 'plan', 'question', 'mode'];
 const ATTENTION = ['working', 'waiting', 'finished'];
 /**
@@ -242,6 +242,8 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
   if (request.notes) meta.notes = request.notes;
   if (request.stage) meta.stage = request.stage;
   if (request.heavy) meta.heavy = request.heavy;
+  // The session's own inbox address, as its SessionStart reported it (#3405).
+  if (request.event === 'SessionStart' && typeof request.inbox === 'string' && request.inbox) meta.inbox = request.inbox;
   const fields: NonNullable<HookMeta['fields']> = {};
   for (const key of ['prompt_id', 'prompt', 'error', 'agent_id', 'source', 'last_assistant_message', 'turn_id', 'file_path', 'model'] as const) if (str(payload[key])) fields[key] = str(payload[key]);
   // The agent's own title for the session (#2018), on one line, scrubbed as a prompt's text is.
@@ -315,6 +317,8 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
       data = { agent, worktree: meta.cwd || '-', branch: null, thread: meta.session || '-', loads: [] };
       // Which billing keys the agent had set, never their values.
       if (request.billing) data.billing = request.billing;
+      // Its own inbox address (#3405): another session's message names its sender by it.
+      if (meta.inbox) data.inbox = meta.inbox;
       fill = 'loads';
       v = 3;
       if (typeof mapped.parent === 'string' && mapped.parent) {

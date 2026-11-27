@@ -43,7 +43,7 @@ export interface Live {
    * stop, and what starts its slow checks whatever the loop does: a claim made in the turn, or your words since the
    * last turn end.
    */
-  turnFrom?: string; due?: { at: number; what: 'wake-up' | 'cron' } | null; claimedInTurn?: boolean; words?: 'words' | 'answer' | undefined;
+  turnFrom?: string; /** The channel's server, for a turn a channel's event started (#3405). */ turnServer?: string; due?: { at: number; what: 'wake-up' | 'cron' } | null; claimedInTurn?: boolean; words?: 'words' | 'answer' | undefined;
   /**
    * Its turns as the verdict line judges them (#83): the turn's count and whether the stop rule reads its stop as a
    * claim; the newest claim the line reads and the turn it was made in; the line last delivered to the chat, so
