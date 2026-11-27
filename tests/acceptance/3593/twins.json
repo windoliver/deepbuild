@@ -1,0 +1,19 @@
+{
+  "#3593.419d4752": [
+    "no-line",
+    "reads-pass"
+  ],
+  "#3593.0f5c9115": [
+    "skips-named",
+    "skips-edited",
+    "skips-read"
+  ],
+  "#3593.24d41793": [
+    "admits-off-list",
+    "ignores-folder",
+    "any-issue"
+  ],
+  "#3593.5d85614a": [
+    "missing-is-settled"
+  ]
+}

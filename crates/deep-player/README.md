@@ -6,7 +6,7 @@ The web player (issue #172; canvas primitives: Export: web player): the canvas c
 
 `node scripts/player-wasm.mjs` builds it and writes `web/dist/` (the module, its page glue and `player.json`). That folder is committed and the export embeds its bytes, so nothing compiles per export and every machine writes the same bundle.
 
-It ships as a few fixed module sets (#1490), each a Cargo feature of its name and built into `web/dist/<set>/`: `figure` (text, look, marks2d, data, motion and input), `game2d` (adds physics, and logic on sandbox) and `full` (every module it carries, with the GPU layer and the 3D renderer). `web/dist/sets.json` records each set's compressed size, smallest first; the export takes the smallest set that holds every module a document uses.
+It ships as a few fixed module sets (#1490), each a Cargo feature of its name and built into `web/dist/<set>/`: `figure` (text, look, marks2d, data, motion and input), `game2d` (adds physics, and logic on sandbox) and `full` (every module it carries, with the GPU layer, the 3D renderer and the effects' post stage for a sun's shadow). `web/dist/sets.json` records each set's compressed size, smallest first; the export takes the smallest set that holds every module a document uses.
 
 ## Where new code goes
 
@@ -14,6 +14,8 @@ It ships as a few fixed module sets (#1490), each a Cargo feature of its name an
 - `src/page.rs`: the player's surface to its index page (members, events, `probe()`).
 - `src/play.rs`: the piece played on its recorded track, the saves its steps ask for and a save opened (issue #1041).
 - `web/element.js`: the page's element, and the piece's saves in the browser's storage with the player's own controls for them.
+- `src/play.rs`'s `read` and `set_recorded`, and `web/element.js`'s `#watch`: a piece's data (issue #1042). The readings the export recorded arrive as a bundle file and are what a bound value shows; each public source the bundle declares is asked by the page, with no cookie or credential, and its value enters the track as a reading at the first step not yet run, which `probe()` lists as `readings`. The page shows each value with its source and its age.
+- `src/draw.rs`'s `Light` and `src/gpu.rs`'s `show3d`: today's light (issue #1042). A scene of painted solids casts its key sun's shadow through the effects' post stage, as the app's frames do, so the player hands the 3D renderer that stage for a frame whose sun casts one, and for no other frame. The other shipped effects aren't drawn.
 - `src/net.rs`: a piece's match (#549): the Join prompt's state, the relay's hello checked before anything is sent, the join, and the copy of the lockstep match. `web/element.js` draws the prompt, takes only a person's click and owns the one WebSocket, to the declared relay.
 - `src/page.rs`'s measure members and `src/gpu.rs`'s read of the object-ID target: the viewer's measure tool (#1217), scene3d's own, as the page's session state. `web/element.js` takes its clicks and keys and draws its line, points and readout over the canvas.
 - `src/cxx.rs`: C++'s allocation operators for the 3D module's mesh simplifier on wasm32.

@@ -1589,6 +1589,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "checker_fits_surface" => Planted::CheckerFitsSurface,
                 "deviation_one_way" => Planted::DeviationOneWay,
                 "normals_from_faces" => Planted::NormalsFromFaces,
+                "shaded_count_skips_depth_test" => Planted::ShadedCountSkipsDepthTest,
                 // #499: the mix's wrong programs.
                 "reverb_restores_without_tail" => Planted::ReverbRestoresWithoutTail,
                 "ring_drops_oldest" => Planted::RingDropsOldest,
@@ -2894,6 +2895,13 @@ fn main() {
             }
             let _ = writeln!(out, "{line}");
             let _ = out.flush();
+            // #3356: stderr names the refusal too, so a caller that shows only stderr reads why.
+            eprintln!(
+                "deep-show: seal_refused ({}): modules [{}]: {}",
+                err.code,
+                err.modules.join(", "),
+                err.what
+            );
             std::process::exit(2);
         }
     };

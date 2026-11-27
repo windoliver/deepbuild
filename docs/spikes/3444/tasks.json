@@ -1,0 +1,23 @@
+{
+ "translation": {
+  "issue": 3523,
+  "title": "A cold start makes its pipelines side by side: 46 pipelines made one after the other on one thread are 3.1 s of a 3.2 s first frame",
+  "criteria": [
+   "- [ ] With #3444's harness (`node docs/spikes/3444/run.mjs cold`, nothing kept), the every-pass scene's first settled frame on a reference Mac is at most half of main's read the same way on the same machine in the same hour (drafted; main read 3,223 ms). The harness's output on the merge base is kept beside it",
+   "- [ ] The same run makes the same 46 pipelines by name as the merge base's, each once, and the device's own count of pipelines made equals the rows. A planted renderer that makes one pipeline twice fails, naming it",
+   "- [ ] The every-pass scene's frames 0, 30 and 59 hash as on the merge base, and so does every golden of the scene3d kit. A hash that moves fails, naming the frame",
+   "- [ ] The second open in the same process still makes 0 pipelines, and no pipeline is made on the UI thread. A planted warm-up that compiles on the UI thread fails, naming the thread"
+  ]
+ },
+ "validation": {
+  "issue": 3524,
+  "title": "The app's instance turns indirect-call validation off, with a bound of our own on the one count the GPU writes: wgpu's compute pass before each indirect draw adds 30% to the geometry pass's encode",
+  "criteria": [
+   "- [ ] The app's device reports no indirect validation: read back from the instance, the flag is off, and a frame of the forest encodes no validation pass. On the merge base the flag is on, and the test fails",
+   "- [ ] A planted `compact` that writes its batch's rows plus one as the count draws no row past the batch's last: the frame's pixel hash equals the frame drawn with the count at the rows, on Metal. A planted draw that takes the count unbounded fails, naming the batch",
+   "- [ ] A compute operator dispatched by a count above its `max` runs `max` invocations and writes no row after: #484's fourth criterion's fixture passes unchanged with the flag off",
+   "- [ ] #484's forest and crowd frames hash as on the merge base over the 10 s orbit, and its suite passes unchanged",
+   "- [ ] With #3444's harness, five alternated rounds on one Mac, the geometry pass's encode time on the forest is lower than the merge base's by the paired differences' median (drafted; main read 0.068 ms with the flag on and 0.047 ms off)"
+  ]
+ }
+}

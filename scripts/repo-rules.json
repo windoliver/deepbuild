@@ -1434,6 +1434,22 @@
         "deep-groups-render": {
           "spec": "* path=../deep-groups-render",
           "why": "Issue #1561: `frames` draws a 2D document under a drawn look through the compositor and the passes the live window and film2d run, on the GPU this binary has on macOS; and #1250's clips read their frames' indices through its indexed reader on every platform."
+        },
+        "skera": {
+          "spec": "^0.10",
+          "why": "Issue #1042: subsets each bundled face of a web player's bundle to the glyphs the piece's text can show, renumbering glyphs and closing them over the layout tables so a subset sets the text as the whole face does; the subsetter of the font crates the shaper already reads faces with. In deep-show only, never in the player."
+        },
+        "read-fonts": {
+          "spec": "^0.47",
+          "why": "Issue #1042: the font reader at the version skera takes its font and its sets of characters, tags and name IDs in; the shaper's own, older version stays under parley."
+        },
+        "rustls": {
+          "spec": "^0.23",
+          "why": "Issue #1042: a web export asks each public source it declares once over https, with no key, to refuse one that answers only with a key; ring as its one provider, as deep-relay; already in the lockfile."
+        },
+        "rustls-native-certs": {
+          "spec": "^0.8",
+          "why": "Issue #1042: the platform's own authorities, which the export's one request to a declared public source trusts; already in the lockfile."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
@@ -2897,6 +2913,26 @@
         }
       }
     },
+    "docs/spikes/3444/own-device/Cargo.toml": {
+      "dependencies": {
+        "wgpu": {
+          "spec": "=30.0.1",
+          "why": "Spike #3444: timestamp query sets on the wgpu the app pins, on Metal, with its internal counters on; outside the workspace with its own lockfile, so nothing it pins reaches the app."
+        },
+        "pollster": {
+          "spec": "^0.4",
+          "why": "Spike #3444: blocks on wgpu's adapter, device and error-scope futures in the headless probe."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Spike #3444: the probe's report of each attempt, keys in order."
+        },
+        "log": {
+          "spec": "^0.4",
+          "why": "Spike #3444: the logger that collects wgpu-hal's errors, Metal's own words among them, into the probe's report."
+        }
+      }
+    },
     "tests/acceptance/533/wat/Cargo.toml": {
       "dependencies": {
         "wat": {
@@ -3010,6 +3046,10 @@
         "deep-scene3d-render": {
           "spec": "* path=../deep-scene3d-render",
           "why": "Issue #172: the 3D renderer, on one thread in the web player."
+        },
+        "deep-effects-render": {
+          "spec": "* path=../deep-effects-render",
+          "why": "Issue #1042: the effects' post stage, for the pass that draws a painted scene's sun shadow in the web player as the app's frames draw it."
         },
         "deep-text": {
           "spec": "* path=../deep-text",
