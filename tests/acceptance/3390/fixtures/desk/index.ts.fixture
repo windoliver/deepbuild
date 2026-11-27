@@ -1,0 +1,44 @@
+// The test desk plug-in (#3390 AC3): one plug-in with two change actions, alike in everything but their names. Its store
+// kind ext.desk.pin holds one item per symbol, and it has four actions:
+// - pin-symbol (change, changes ext.desk.pin): puts the pin { symbol, note }
+// - retire-symbol (change, changes ext.desk.pin): puts the pin { symbol, note }, its note marked as retired
+// - list-pins (read, reads ext.desk.pin): every item of the store, its value as the store holds it, as JSON text
+// - runs (read): how many times pin-symbol and retire-symbol ran in this load
+const PIN = 'ext.desk.pin';
+const strict = (properties: Record<string, unknown>) => ({ type: 'object', properties, required: Object.keys(properties), additionalProperties: false });
+
+export default async function (deep: any): Promise<void> {
+  await deep.store(PIN, { generation: 1, schema: { type: 'object', properties: { symbol: { type: 'string' }, note: { type: 'string' } }, required: ['symbol', 'note'] } });
+
+  const runs = { pin_symbol: 0, retire_symbol: 0 };
+  const pin = strict({ symbol: { type: 'string' }, note: { type: 'string' } });
+
+  deep.registerAction('ext.desk.pin_symbol', { declares: 'change', changes: [PIN], input: pin, output: pin }, async ({ symbol, note }: { symbol: string; note: string }) => {
+    runs.pin_symbol++;
+    await deep.store.put(PIN, symbol, { symbol, note });
+    return { output: { symbol, note }, report: { verified: true, checked: `pinned ${symbol}` } };
+  });
+
+  deep.registerAction('ext.desk.retire_symbol', { declares: 'change', changes: [PIN], input: pin, output: pin }, async ({ symbol, note }: { symbol: string; note: string }) => {
+    runs.retire_symbol++;
+    const retired = `retired: ${note}`;
+    await deep.store.put(PIN, symbol, { symbol, note: retired });
+    return { output: { symbol, note: retired }, report: { verified: true, checked: `retired ${symbol}` } };
+  });
+
+  deep.registerAction('ext.desk.list_pins', {
+    declares: 'read',
+    reads: [PIN],
+    input: strict({}),
+    output: strict({ pins: { type: 'array', items: strict({ key: { type: 'string' }, value: { type: 'string' } }) } }),
+  }, async () => {
+    const items: { key: string; value: unknown }[] = await deep.store.list(PIN);
+    return { pins: items.map((i) => ({ key: i.key, value: JSON.stringify(i.value) })) };
+  });
+
+  deep.registerAction('ext.desk.runs', {
+    declares: 'read',
+    input: strict({}),
+    output: strict({ pin_symbol: { type: 'integer' }, retire_symbol: { type: 'integer' } }),
+  }, async () => ({ ...runs }));
+}

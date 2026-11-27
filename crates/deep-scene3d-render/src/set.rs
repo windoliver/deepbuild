@@ -286,11 +286,9 @@ mod tests {
         let gpu = Gpu::open(Backend::Noop).expect("the noop backend gives a device");
         let device = gpu.device();
         let solid = |x: f32, tie| crate::SolidRecord {
-            rows: [
-                [1.0, 0.0, 0.0, x],
-                [0.0, 1.0, 0.0, 0.5],
-                [0.0, 0.0, 1.0, 0.0],
-            ],
+            r0: [1.0, 0.0, 0.0, x],
+            r1: [0.0, 1.0, 0.0, 0.5],
+            r2: [0.0, 0.0, 1.0, 0.0],
             tie,
             ..bytemuck::Zeroable::zeroed()
         };

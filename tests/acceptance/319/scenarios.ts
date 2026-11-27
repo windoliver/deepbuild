@@ -117,8 +117,8 @@ export const choiceFromYourSettings = (plant?: Planting): Promise<void> =>
     expect(data.deadline, `the choice ask ${choice} takes the choice deadline from your own settings`).toBe(T0 + 36 * HOUR);
     expect(data.default, `the choice ask ${choice} takes its recommended option, your settings' choice default`).toBe('files');
     const { v, id, kind, writer, actor, scope, ts } = created;
-    const checked = validate('ask.created@1', { v, id, kind, writer, actor, scope, ts, data: created.data });
-    expect(checked.ok, `the choice ask ${choice} passes ask.created@1`).toBe(true);
+    const checked = validate('ask.created@6', { v, id, kind, writer, actor, scope, ts, data: created.data });
+    expect(checked.ok, `the choice ask ${choice} passes ask.created@6`).toBe(true);
     const row = await w.inboxRow(choice!);
     expect(row?.status, `the choice ask ${choice} reads as waiting on you, never as blocked or undeclared`).toMatch(/^(queued|shown)$/);
     const taste = await w.asks.raise(core('S1'), sourceOf('taste'), ask('taste', 'header'));

@@ -26,6 +26,7 @@ mod memory;
 mod motion;
 mod plant;
 mod play;
+mod said;
 mod see;
 
 use std::{
@@ -225,6 +226,8 @@ struct Replica {
     evidence: Vec<Value>,
     trace: Vec<Value>,
     notified: Vec<Value>,
+    /// Issue #3232: every line the window said, in the order made: its number, when, in flicks since launch, and its words.
+    said: Vec<(u64, u64, String)>,
     /// Issue #1100: each request the app made of macOS to allow notifications, `{t, ask}`: the ask it was posting, or null.
     permission_requests: Vec<Value>,
     /// Issue #1461: how the hub the app reads answers (`answering`, `stopped` or `slow`), and the app's watch of it.
@@ -692,7 +695,7 @@ impl Replica {
                     Some(dir) => {
                         let runtime = deep_app::new_runtime();
                         let loaded = runtime.map_err(|e| e.to_string()).and_then(|runtime| {
-                            let view = deep_app::mount_panel(&runtime, &dir, window, cx)
+                            let view = deep_app::mount_panel_unheld(&runtime, &dir, window, cx)
                                 .map_err(|e| format!("{e:#}"))?;
                             match (&area, replacing) {
                                 (Some(area), _) => deep_app::views::place(
@@ -818,6 +821,7 @@ impl Replica {
             evidence: Vec::new(),
             trace: Vec::new(),
             notified: Vec::new(),
+            said: Vec::new(),
             permission_requests: Vec::new(),
             hub_state,
             watch: deep_app::record::HubWatch::default(),
@@ -876,7 +880,7 @@ impl Replica {
             "feed" => self.feed(call),
             "open" => self.open(call),
             "notification" => self.notification(call),
-            "resize" => self.resize(call),
+            "resize" | "window" => self.window_changes(name, call),
             "wait_for" => self.wait_for(call),
             "see" => self.see(call),
             "probe" => self.probe(call),
@@ -893,7 +897,7 @@ impl Replica {
             "close" => return Ok(self.close()),
             other => Err(fail(
                 "refused",
-                format!("{other:?} is no call; the calls are launch, act, open, notification, wait_for, see, probe, screenshot, record, motion, expect, feed, resize, menus, show, terminal, clipboard, stored, close, ui_check and motion_check"),
+                format!("{other:?} is no call; the calls are launch, act, open, notification, wait_for, see, probe, screenshot, record, motion, expect, feed, resize, window, menus, show, terminal, clipboard, stored, close, ui_check and motion_check"),
             )),
         };
         let mut digested = call.clone();
@@ -1039,36 +1043,6 @@ impl Replica {
 
     fn timeout(call: &Value) -> u64 {
         call["timeout"].as_u64().unwrap_or(TIMEOUT_MS)
-    }
-
-    fn notify(&mut self) {
-        let now = self.now + self.clock.t * 1000 / FLICKS;
-        // The Set up click asks macOS (#1100); the stand-in answers at once, as a person pressing Allow.
-        if deep_app::notify::take_ask() {
-            self.permission_requests
-                .push(json!({"t": self.clock.t, "ask": null}));
-            self.notifier.set_setting(NotificationSetting::Allowed, now);
-        }
-        let notifier = &mut self.notifier;
-        // Sounds off in the box's words (#1998) leave the question unsounded, as in the app.
-        let sounds = deep_app::hub::sounds_on();
-        let due = deep_app::record::with_view(|view| notifier.due(view, now, None, sounds));
-        for posted in due.unwrap_or_default() {
-            // A post while macOS was never asked asks it then, as GPUI's center does on its first post.
-            if self.notifier.reach(false).setting == NotificationSetting::NotAsked {
-                self.permission_requests
-                    .push(json!({"t": self.clock.t, "ask": posted.ask}));
-                self.notifier.set_setting(NotificationSetting::Allowed, now);
-            }
-            #[cfg(target_os = "macos")]
-            if self.plant == Some(Plant::StartsSound) && posted.sound.is_some() {
-                plant::play_sound();
-            }
-            self.notified.push(json!({
-                "t": self.clock.t, "ask": posted.ask, "session": posted.session, "text": posted.text,
-                "sound": posted.sound.map(|_| "question"),
-            }));
-        }
     }
 
     // ---- Acting.

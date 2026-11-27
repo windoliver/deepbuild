@@ -10,6 +10,7 @@ The github extension, the first part of it (#46, #1325): a first-party extension
 - `src/apps.ts`: the gate's app and the agents' app (#1325): a JWT from the key the hub reads, tokens minted per repo, and revoking one. Nothing here keeps a token anywhere but in memory.
 - `src/rules.ts`: the rulesets `deep gate rules` prints. They're printed, never applied.
 - `src/delivery.ts`: what the hub does with it. It reads the record, posts, and hands the hub a record or a session's words through `GitHubOptions`; it decides no verdict.
+- `src/landed.ts`: how each commit the default branch gained was judged (#2750). `readPushes` is one read of the default branch's pushes, which the hub keeps in the record as `pushes.read` when you run `deep numbers refresh`; `landedReadings` folds those and the record's verdicts into the `landed.none` reading. It posts nothing and asks nothing. Its acceptance suite is `tests/acceptance/2750/`.
 - What must outlive a restart goes in `github.json`: the log position read to, the verdicts waiting on a pushed commit, and the last ref change read per repo.
 - The PR comment and `deep report` follow here in R2.
 - Tests: `test/` for regressions beyond the acceptance suite in `tests/acceptance/46/`.

@@ -1,0 +1,11 @@
+{
+  "scripts/known-failures.json": [
+    {
+      "find": ["  \"failures\": {"],
+      "wrong": [
+        "  \"failures\": {",
+        "    \"packages/checks-command/test/regressions.test.ts › what a checkout's config makes the run leave out › a name filter in the checkout's config, which leaves a failing test out of its file, can't pass: Vitest, Jest and pytest\": \"reads uncounted since #33: its control is missing from the report (#2081, added 2026-11-24)\","
+      ]
+    }
+  ]
+}

@@ -8,6 +8,7 @@
 //! Optionally, a renderer factory can be provided to enable real GPU rendering
 //! and screenshot capture via [`HeadlessAppContext::capture_screenshot`].
 
+mod placement; // DeepBuild patch (windoliver/deepbuild#1843)
 mod present_frame; // DeepBuild patch (windoliver/deepbuild#391)
 mod request_frame; // DeepBuild patch (windoliver/deepbuild#1546)
 mod scale_factor; // DeepBuild patch (windoliver/deepbuild#390)

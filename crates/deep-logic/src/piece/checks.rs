@@ -493,7 +493,8 @@ pub(super) fn region_map(
                     "reading".to_string(),
                     read.clone(),
                 ),
-                _ => (4, "i32".to_string(), Read::World),
+                Read::Centre => (24, "vec3".to_string(), Read::Centre),
+                other => (4, "i32".to_string(), other.clone()),
             }
         } else if let Some((other, "hover")) =
             r.split_once('.').filter(|(c, _)| controls.contains_key(*c))
@@ -794,6 +795,12 @@ pub(super) fn sources_of(piece: &Value) -> Result<Sources, Refused> {
     {
         sources.insert(name.to_string(), Read::World);
     }
+    for (field, read) in [("count_reads", Read::Count), ("centre_reads", Read::Centre)] {
+        let names = piece.get(field).and_then(Value::as_array);
+        for name in names.into_iter().flatten().filter_map(Value::as_str) {
+            sources.insert(name.to_string(), read.clone());
+        }
+    }
     for (name, src) in piece
         .get("sources")
         .and_then(Value::as_object)
@@ -803,6 +810,13 @@ pub(super) fn sources_of(piece: &Value) -> Result<Sources, Refused> {
         sources.insert(format!("reading:{name}"), source(name, src)?);
     }
     Ok(sources)
+}
+
+static PIECE_CHECKS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// #3612: how many pieces this process has checked, a refused one counted too.
+pub fn piece_checks() -> u64 {
+    PIECE_CHECKS.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 /// Checks every item of a piece in order: the first refusal answers.
@@ -846,6 +860,7 @@ pub fn check_in(
     stored: &dyn Fn(&str) -> Option<Vec<u8>>,
     services: &[crate::services::Service],
 ) -> Result<Piece, Refused> {
+    PIECE_CHECKS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let bad = || Refused(json!({"ok": false, "code": "bad_input"}));
     let seed = piece.get("seed").and_then(Value::as_i64).ok_or_else(bad)?;
     let class = match piece.get("class") {

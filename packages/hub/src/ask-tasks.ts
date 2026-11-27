@@ -214,6 +214,8 @@ interface AskTaskOptions {
   run(r: { claim: string; session: string; task: string; commit: string; base: string; cwd: string; deliverables: string[]; requirements: { req: string; id: string; text: string; depth: string; oracle: string; on_base: 'fails' | 'passes'; check: string | null }[]; checks: (Pick<ClaimCheck, 'check' | 'approved' | 'on_base' | 'asserts' | 'req' | 'surface' | 'expected_ms' | 'deadline_ms' | 'references' | 'runs' | 'held_out' | 'timing'> & { command?: string; paid?: PaidKind })[]; definition: DefinitionState; joins?: boolean; state?: StatePin }): Promise<void>;
   /** Records the core's INVALID verdict on a claim, naming why: the floor, before any check counts. */
   invalid(claim: string, commit: string, reason: string): Promise<void>;
+  /** The folder of a session on a host (#999), read there: its HEAD, and a file it holds. Undefined for a session here. */
+  far?(session: string): { head(cwd: string): Promise<{ sha: string; branch: string | null } | undefined>; bytes(cwd: string, path: string): Promise<Uint8Array | undefined> } | undefined;
   /** The targets of a claim's requirements that didn't resolve before its runs (#323): each verdict made on it is INVALID, naming them. */
   unresolved(claim: string, targets: { req: string; reason: string }[]): void;
   /** Where work outside a repo lives (#67). */
@@ -300,7 +302,8 @@ export class AskTasks {
     await this.o.append(connection, { v: 1, id: derivedId(t.at, `${t.prompt}:task`), kind: 'task.created', ts: t.at, data: { task_ref: t.task_ref, thread: t.thread, owner: connection.actor, title: (t.item?.title ?? t.text).slice(0, 200) || '-' } });
     // Off the hook's path, but a stop that follows at once claims against the definition, never ahead of it.
     // A task from outside any repo lands in a workspace first (#67), with git to run, so off the hook's path too.
-    const locked = this.o.spaces.land(t).then((folder) => this.lock(folder ? { ...t, cwd: folder } : t)).catch((error: unknown) => this.unlocked(t.task_ref, error));
+    // A session on a host (#999) is in its folder there: no folder here is its task's home.
+    const locked = (this.o.far?.(t.session) ? Promise.resolve(undefined) : this.o.spaces.land(t)).then((folder) => this.lock(folder ? { ...t, cwd: folder } : t)).catch((error: unknown) => this.unlocked(t.task_ref, error));
     const all = Promise.all([this.locking.get(t.session), locked]).then(() => { if (this.locking.get(t.session) === all) this.locking.delete(t.session); });
     this.locking.set(t.session, all);
   }
@@ -390,7 +393,7 @@ export class AskTasks {
       return;
     }
     await this.o.spaces.fill(t.cwd, handed as unknown as Obj);
-    const head = await headOf(t.cwd).catch(() => undefined);
+    const head = await (this.o.far?.(t.session)?.head(t.cwd) ?? headOf(t.cwd)).catch(() => undefined);
     if (!head) return;
     // A drafted check is kept under .deepbuild/, behind its guard: a draft naming one elsewhere doesn't lock, and the record says why.
     const outsideCheck = drafted ? handed.requirements.find((r) => typeof r.check === 'string' && r.check && !normalize(String(r.check)).startsWith(DRAFTED)) : undefined;
@@ -414,11 +417,11 @@ export class AskTasks {
     for (const r of handed.requirements) {
       const check = typeof r.check === 'string' && r.check ? r.check : null;
       const references: { path: string; sha256: string }[] = [];
-      for (const path of Array.isArray(r.references) ? r.references.filter((p): p is string => typeof p === 'string' && p !== '') : []) references.push({ path, sha256: await this.approve(t.cwd, path) });
+      for (const path of Array.isArray(r.references) ? r.references.filter((p): p is string => typeof p === 'string' && p !== '') : []) references.push({ path, sha256: await this.approve(t.session, t.cwd, path) });
       const targets = Array.isArray(r.targets) ? r.targets.filter((p): p is string => typeof p === 'string' && p !== '') : [];
       requirements.push({
         id: String(r.id), text: String(r.text), source_line: String(r.source_line), refuted_by: String(r.refuted_by), check,
-        check_sha256: check ? await this.approve(t.cwd, check) : null, on_base: String(r.on_base ?? 'fails'),
+        check_sha256: check ? await this.approve(t.session, t.cwd, check) : null, on_base: String(r.on_base ?? 'fails'),
         asserts: (r.asserts as string[] | undefined) ?? [], depth: String(r.depth), oracle: String(r.oracle), near_misses: (r.near_misses as string[] | undefined) ?? [],
         author: authorOf(String(r.source_line)), surface: surfaceOf(r.surface),
         ...(typeof r.expected_ms === 'number' ? { expected_ms: r.expected_ms } : {}), ...(typeof r.deadline_ms === 'number' ? { deadline_ms: r.deadline_ms } : {}),
@@ -467,7 +470,7 @@ export class AskTasks {
     const raised = {
       // At its deadline it takes your settings' definition default, leave-out: what the outside text added stays out.
       // With no outside text the default locks it as drafted, so no requirement drops out unanswered.
-      kind: 'definition', question, recommended: 'keep', default: outside.length || waived ? 'leave-out' : 'keep', fallback: 'you', provisional: false, owner: 'you',
+      kind: 'definition', may_answer: 'trusted_path', question, recommended: 'keep', default: outside.length || waived ? 'leave-out' : 'keep', fallback: 'you', provisional: false, owner: 'you',
       options: outside.length || waived
         ? [{ id: 'keep', label: 'Lock it with the outside additions, marked with their author', decision: 'none' }, { id: 'leave-out', label: 'Lock it without them', decision: 'none' }]
         : [{ id: 'keep', label: 'Lock it as drafted: its check runs on the base with no stand-in', decision: 'none' }, { id: 'leave-out', label: `Lock it without ${formless.map((r) => r.id).join(', ')}`, decision: 'none' }],
@@ -555,8 +558,8 @@ export class AskTasks {
     return sha256Hex(canonicalize({ ...d, requirements } as unknown as JsonValue));
   }
   /** A check file's bytes in the session's folder, kept by digest; a check the folder doesn't hold as a file refuses the lock. */
-  private async approve(cwd: string, check: string): Promise<string> {
-    const bytes = await this.bytesOf(cwd, check);
+  private async approve(session: string, cwd: string, check: string): Promise<string> {
+    const bytes = await this.bytesOf(session, cwd, check);
     if (!bytes) throw Error(`its check ${check} is not a file under the session's folder (a path or link out of it, a folder, nothing there, or the folder itself gone)`);
     return this.o.keep(bytes, check);
   }
@@ -574,12 +577,12 @@ export class AskTasks {
    * Why a target, `<file>#<symbol>`, doesn't resolve in the folder, or null when it does: the file is there and
    * defines the symbol (a declaration of it, a property or assignment of it at a line's start, or a method of it).
    */
-  private async unresolvedTarget(cwd: string, target: string): Promise<string | null> {
+  private async unresolvedTarget(session: string, cwd: string, target: string): Promise<string | null> {
     const at = target.lastIndexOf('#');
     if (at <= 0 || at === target.length - 1) return `${target} doesn't resolve: it names no file and symbol (<file>#<symbol>)`;
     const file = target.slice(0, at);
     const symbol = target.slice(at + 1);
-    const bytes = await this.bytesOf(cwd, file);
+    const bytes = await this.bytesOf(session, cwd, file);
     if (!bytes) return `${target} doesn't resolve: ${file} is not in the claim's snapshot`;
     const s = symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const defines = new RegExp(`\\b(?:function\\*?|class|const|let|var|def|fn|struct|enum|trait|type|interface)\\s+${s}\\b|^\\s*(?:export\\s+)?(?:static\\s+)?(?:async\\s+)?['"]?${s}['"]?\\s*(?::|=(?!=)|\\([^)]*\\)\\s*\\{)|\\bexports\\.${s}\\s*=(?!=)`, 'm');
@@ -593,10 +596,11 @@ export class AskTasks {
     return home;
   }
   /** The file a target's file was renamed to since the definition's base, when its symbol resolves there. */
-  private async followed(cwd: string, base: string, target: string): Promise<string | undefined> {
+  private async followed(session: string, cwd: string, base: string, target: string): Promise<string | undefined> {
     const [file, symbol] = target.split('#') as [string, string | undefined];
-    const now = await this.o.renamedSince(cwd, base, file);
-    return now && !(await this.unresolvedTarget(cwd, symbol ? `${now}#${symbol}` : now)) ? now : undefined;
+    // A folder on a host (#999) has no history here to follow a rename by.
+    const now = this.o.far?.(session) ? undefined : await this.o.renamedSince(cwd, base, file);
+    return now && !(await this.unresolvedTarget(session, cwd, symbol ? `${now}#${symbol}` : now)) ? now : undefined;
   }
   /** One proposed diff of a definition for the renames a claim followed; the definition changes only on your approval. */
   private async proposeRenames(connection: Connection, session: string, task_ref: string, id: string, renames: Map<string, string>): Promise<void> {
@@ -609,10 +613,12 @@ export class AskTasks {
       data: { layer: 'learned', target: task_ref, diff, scope: `session:${letters(session)}`, replay: null, applied_by: null, supersedes: null, evidence: [{ at: `claim:${id}`, quote: `the claim followed ${pairs.join(', ')}, by the file's history` }] },
     });
   }
-  /** The bytes of a file the folder holds, by its real path: a link out of the folder, a folder and a missing file are undefined. */
-  private async bytesOf(cwd: string, check: string): Promise<Uint8Array | undefined> {
+  /** The bytes of a file the session's folder holds, by its real path: a link out of the folder, a folder and a missing file are undefined. */
+  private async bytesOf(session: string, cwd: string, check: string): Promise<Uint8Array | undefined> {
     const path = normalize(check);
     if (isAbsolute(path)) return undefined;
+    const far = this.o.far?.(session);
+    if (far) return far.bytes(cwd, path).catch(() => undefined);
     try {
       const [root, file] = await Promise.all([realpath(cwd), realpath(join(cwd, path))]);
       if (!file.startsWith(root + sep) || !(await stat(file)).isFile()) return undefined;
@@ -702,7 +708,7 @@ export class AskTasks {
   /** A claim on a task whose definition hasn't locked: judged on the repo's spec, its definition pending, or held by the plan window. */
   private async claimEarly(session: string, agent: string, from: string, task_ref: string): Promise<string> {
     const cwd = await this.homeOf(task_ref, from);
-    const head = await headOf(cwd).catch(() => undefined);
+    const head = await (this.o.far?.(session)?.head(cwd) ?? headOf(cwd)).catch(() => undefined);
     const commit = head?.sha ?? '0'.repeat(40);
     const [{ n } = { n: 0 }] = await this.o.raw(`SELECT COUNT(*) AS n FROM events WHERE kind = 'claim.made' AND json_extract(data, '$.task_ref') = ?`, [task_ref]) as { n: number }[];
     const ts = this.o.now();
@@ -726,18 +732,18 @@ export class AskTasks {
     const cwd = await this.homeOf(task_ref, from);
     const [row] = (await this.o.raw(`SELECT task_ref, requirements, deliverables, issue_rev, base_commit, budget, hash FROM definitions WHERE task_ref = ? AND state = 'locked' LIMIT 1`, [task_ref])) as Obj[];
     if (!row) throw Error('its definition is not locked');
-    const head = await headOf(cwd).catch(() => undefined);
+    const head = await (this.o.far?.(session)?.head(cwd) ?? headOf(cwd)).catch(() => undefined);
     const stored = JSON.parse(String(row.requirements)) as Requirement[];
     const requirements: Requirement[] = [];
     const changed: { check: string; approved: string | null; now: string | null }[] = [];
     // A stand-in recorded since the lock is the base run's finding, not the definition: the hash leaves it out.
     for (const { stand_in: _found, ...r } of stored) {
-      const bytes = r.check ? await this.bytesOf(cwd, r.check) : undefined;
+      const bytes = r.check ? await this.bytesOf(session, cwd, r.check) : undefined;
       const now = bytes ? sha256Hex(bytes) : null;
       if (r.check && now !== r.check_sha256) changed.push({ check: r.check, approved: r.check_sha256, now });
       const references: { path: string; sha256: string }[] = [];
       for (const ref of r.references ?? []) {
-        const refBytes = await this.bytesOf(cwd, ref.path);
+        const refBytes = await this.bytesOf(session, cwd, ref.path);
         const refNow = refBytes ? sha256Hex(refBytes) : '';
         if (refNow !== ref.sha256) changed.push({ check: ref.path, approved: ref.sha256, now: refNow || null });
         references.push({ path: ref.path, sha256: refNow });
@@ -791,9 +797,9 @@ export class AskTasks {
     const renames = new Map<string, string>();
     for (const [i, r] of stored.entries()) {
       for (const target of r.targets ?? []) {
-        const reason = await this.unresolvedTarget(cwd, target);
+        const reason = await this.unresolvedTarget(session, cwd, target);
         // A target its history shows was renamed is the same target: followed here, and offered as one diff below (#67).
-        const renamed = reason ? await this.followed(cwd, definition.base_commit, target) : undefined;
+        const renamed = reason ? await this.followed(session, cwd, definition.base_commit, target) : undefined;
         if (renamed) renames.set(target.split('#')[0]!, renamed);
         else if (reason) unresolved.push({ req: `req:${letters(task_ref)}#${/^R[1-9][0-9]*$/.test(r.id) ? r.id : `R${i + 1}`}`, reason: `${r.id}'s target ${reason}` });
       }

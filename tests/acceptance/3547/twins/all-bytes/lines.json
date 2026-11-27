@@ -1,0 +1,19 @@
+{
+  "scripts/shards.mjs": [
+    {
+      "find": [
+        "    if (!(Date.now() - statSync(join(dir, '.git/packed-refs'), { throwIfNoEntry: false })?.mtimeMs > IDLE_MS)) continue;"
+      ],
+      "wrong": [
+        "    kb += Number(spawnSync('du', ['-sk', dir], { encoding: 'utf8' }).stdout.split('\\t')[0]);",
+        "    if (!(Date.now() - statSync(join(dir, '.git/packed-refs'), { throwIfNoEntry: false })?.mtimeMs > IDLE_MS)) continue;"
+      ]
+    },
+    {
+      "find": [
+        "      kb += Number(spawnSync('du', ['-sk', dir], { encoding: 'utf8' }).stdout.split('\\t')[0]);"
+      ],
+      "wrong": []
+    }
+  ]
+}

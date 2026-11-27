@@ -74,6 +74,8 @@ export type Plant =
   | 'dispatches-before-help'
   // #1334's: a build that judges every claim the opposite of its gate, and a hub that speaks a contract a major ahead.
   | 'judges-claims-wrongly' | 'contract-major-ahead'
+  // #999's: a hub that speaks a contract a minor ahead, so a host's deep-hook is the older side, within the contract.
+  | 'contract-minor-ahead'
   | 'evidence-checks-path-first' | 'binds-first-stamp' | 'unbound-reads-all' | 'errors-without-actual' | 'errors-unscrubbed' | 'trusts-index'
   | 'adapter-decides' | 'unknown-tool-read' | 'unplaced-is-person' | 'loop-from-origins' | 'holds-stop-anyway' | 'restores-at-session-start-only'
   | 'acts-on-peer-check' | 'off-guards-watch-only' | 'undo-reserializes' | 'gates-before-approval' | 'setup-writes-project-settings'
@@ -106,6 +108,8 @@ export type Plant =
   // counting every accepted taste call as seen, or giving a run's whole median for both its halves.
   | 'unseen-reads-as-card' | 'folds-seen-unseen' | 'one-median-per-run'
   | 'bundle-raw-logs' | 'doctor-hides-token' | 'doctor-not-checked-first' | 'doctor-takes-any-flag' | 'stop-hold-wide-margin'
+  // #3548's: a hub that starts a new log file at each start and keeps the old ones.
+  | 'log-new-file-each-start'
   | 'answer-skips-held-stop' | 'stop-hold-releases-without-answer' | 'both-routes' | 'stop-hold-polls' | 'no-stop-count' | 'stop-count-never-resets'
   | 'waiter-never-wakes' | 'waiter-outlives-session' | 'waiter-gives-up-at-600s' | 'waiter-per-stop' | 'waiter-under-stop-only' | 'waiter-polls' | 'waiter-checks-every-5s'
   | 'delivered-on-waiter-exit' | 'wake-assumed' | 'delivered-to-dead-waiter' | 'routes-from-settings' | 'routes-kept-across-sessions'
@@ -175,6 +179,13 @@ export type Plant =
   // a socket, timer or child left per cycle, and a hub that can't give a full collection or its resident memory.
   | 'churn-keeps-ended-session' | 'churn-keeps-reload-listener' | 'churn-leaves-socket' | 'churn-leaves-timer' | 'churn-leaves-child'
   | 'churn-no-full-collection' | 'churn-no-resident-read'
+  // #1866's: what the churn benchmark must catch, each kept with nothing let go (a claim's lane, an ended session's claims,
+  // its usage tail, a permission prompt's ask, a gone session's routes), and a hub that reads a claim from memory alone.
+  | 'churn-keeps-claim-lane' | 'churn-keeps-ended-claims' | 'churn-keeps-usage-tail' | 'churn-keeps-prompt-ask' | 'churn-keeps-gone-routes'
+  | 'claim-reads-only-memory'
+  // #3389's: a state pass that reads only the session an append was made in, and a hub that forgets when the clock ends a
+  // session's state with the session.
+  | 'state-pass-own-session-only' | 'let-go-forgets-time'
   // #2650's: the four stores the churn benchmark must catch, each kept with nothing let go.
   | 'churn-keeps-every-answer' | 'churn-keeps-every-result' | 'churn-keeps-every-output' | 'churn-keeps-every-name-set'
   // #2402's: a host that counts a hook handler's failures and never clears them.
@@ -183,6 +194,8 @@ export type Plant =
   | 'whose-running-sessions-only'
   // #2648's: a hub that reads gates.json, notices.json and the agents' settings once, at its start.
   | 'reads-files-at-start-only'
+  // #1853's: an extension host that publishes a method with no case, which the walk through a running hub names.
+  | 'unwired-method'
   // #824's per-session reading: deep mcp loading the whole hub package, a waiter keeping its session's transcript, and
   // a platform that reads no process's memory.
   | 'mcp-loads-hub' | 'waiter-keeps-transcript' | 'sessions-no-memory-read'
@@ -239,6 +252,9 @@ export type Plant =
   // #992's: a reading that checks waiting before gone, an adapter that opens an ask from a Notification hook, and an
   // app that reads a session waiting on you as working.
   | 'waiting-first' | 'ask-from-notification' | 'waiting-as-working'
+  // #1456's: a reading recorded with no code read as no reading, so an earlier record loses the states its words gave
+  // (the first suite's name, and its blind redraft's).
+  | 'legacy-readings-unread' | 'legacy-table-skipped'
   // #997's: loop facts read as the merge base did, with no monitor's watch.
   | 'monitor-unread'
   // #322's: criteria read from the GitHub API alone, a comment author's role from the comment's text, every author a
@@ -348,7 +364,10 @@ export type Plant =
   | 'reply-cap-64kb' | 'pager-drops-edge-row' | 'refusal-schema-12000' | 'unknown-client-64kb'
   // #1576's: a sessions.read that returns every row, a page sent a frame more for each event, and an inbox.read that
   // reads each ask with a query of its own.
-  | 'reads-every-row' | 'page-hook-frame-per-event' | 'query-per-row';
+  | 'reads-every-row' | 'page-hook-frame-per-event' | 'query-per-row'
+  // #2060's: a key with no reading of the programs its check's command names, one that holds the run's own link to each,
+  // one whose base run's holds none, and a reader that skips a program it can't find.
+  | 'key-leaves-out-programs' | 'key-holds-program-link' | 'program-readings-head-only' | 'skips-absent-program';
 const PLANTS: readonly string[] = [
   'asks-every-registry-run',
   'statusline-user-settings-only', 'window-unknown-as-zero', 'window-carried-from-other-repo', 'sends-block-whole',
@@ -366,7 +385,7 @@ const PLANTS: readonly string[] = [
   'reap-session-volumes', 'teardown-closes-on-word', 'pool-asks-which-stack', 'reap-on-kill',
   'leaves-codex-session-open',
   'stops-at-first-bad-line', 'remove-spool-after-normal', 'drops-post-tool-use', 'replay-appends-twice',
-  'answer-on-peer-check', 'answer-on-token', 'answer-inside-session', 'skip-default-at-deadline', 'kept-in-service-cgroup', 'dispatches-before-help', 'judges-claims-wrongly', 'contract-major-ahead',
+  'answer-on-peer-check', 'answer-on-token', 'answer-inside-session', 'skip-default-at-deadline', 'kept-in-service-cgroup', 'dispatches-before-help', 'judges-claims-wrongly', 'contract-major-ahead', 'contract-minor-ahead',
   'evidence-checks-path-first', 'binds-first-stamp', 'unbound-reads-all', 'errors-without-actual', 'errors-unscrubbed', 'trusts-index',
   'adapter-decides', 'unknown-tool-read', 'unplaced-is-person', 'loop-from-origins', 'holds-stop-anyway', 'restores-at-session-start-only',
   'acts-on-peer-check', 'off-guards-watch-only', 'undo-reserializes', 'gates-before-approval', 'setup-writes-project-settings',
@@ -375,6 +394,7 @@ const PLANTS: readonly string[] = [
   'hooks-order-ours-first', 'log-raw-command',
   'matches-text', 'fail-closed-only-rules', 'installs-unchecked', 'trusts-hints', 'warn-as-block', 'unknown-as-block',
   'bundle-raw-logs', 'doctor-hides-token', 'doctor-not-checked-first', 'doctor-takes-any-flag', 'stop-hold-wide-margin',
+  'log-new-file-each-start',
   'answer-skips-held-stop', 'stop-hold-releases-without-answer', 'both-routes', 'stop-hold-polls', 'no-stop-count', 'stop-count-never-resets',
   'waiter-never-wakes', 'waiter-outlives-session', 'waiter-gives-up-at-600s', 'waiter-per-stop', 'waiter-under-stop-only', 'waiter-polls', 'waiter-checks-every-5s',
   'delivered-on-waiter-exit', 'wake-assumed', 'delivered-to-dead-waiter', 'routes-from-settings', 'routes-kept-across-sessions',
@@ -402,10 +422,14 @@ const PLANTS: readonly string[] = [
   'rewrites', 'resurrects', 'copies-values', 'merge-by-name', 'never-merge', 'rereads-all', 'deletes-contradicted',
   'churn-keeps-ended-session', 'churn-keeps-reload-listener', 'churn-leaves-socket', 'churn-leaves-timer', 'churn-leaves-child',
   'churn-no-full-collection', 'churn-no-resident-read',
+  'churn-keeps-claim-lane', 'churn-keeps-ended-claims', 'churn-keeps-usage-tail', 'churn-keeps-prompt-ask', 'churn-keeps-gone-routes',
+  'claim-reads-only-memory',
+  'state-pass-own-session-only', 'let-go-forgets-time',
   'churn-keeps-every-answer', 'churn-keeps-every-result', 'churn-keeps-every-output', 'churn-keeps-every-name-set',
   'failures-never-cleared',
   'whose-running-sessions-only',
   'reads-files-at-start-only',
+  'unwired-method',
   'mcp-loads-hub', 'waiter-keeps-transcript', 'sessions-no-memory-read',
   'repeat-reaches-you',
   'deep-wait-polls', 'stop-answers-waiting',
@@ -430,7 +454,7 @@ const PLANTS: readonly string[] = [
   'no-grace-window', 'holds-background-without-limit', 'caps-from-first-stop', 'rechecks-facts-at-stops-only', 'monitor-unread',
   'standin-value-in-env', 'env-loads-by-value', 'standin-every-host', 'run-ca-in-login-keychain',
   'egress-refusals-unrecorded', 'egress-refusal-once-per-operation', 'egress-refusals-seen-without-run',
-  'waiting-first', 'ask-from-notification', 'waiting-as-working',
+  'waiting-first', 'ask-from-notification', 'waiting-as-working', 'legacy-readings-unread', 'legacy-table-skipped',
   'criteria-from-github-api', 'role-from-comment-text', 'every-author-collaborator', 'app-membership-as-collaborator',
   'spec-only-judges-early-claim', 'lint-number-only', 'lock-before-any-check',
   'normalizer-drops-numbers', 'pr-body-only', 'resolved-counts-closed', 'completed-closes-item',
@@ -479,6 +503,7 @@ const PLANTS: readonly string[] = [
   'canvas-world-built-once',
   'reply-cap-64kb', 'pager-drops-edge-row', 'refusal-schema-12000', 'unknown-client-64kb',
   'reads-every-row', 'page-hook-frame-per-event', 'query-per-row',
+  'key-leaves-out-programs', 'key-holds-program-link', 'program-readings-head-only', 'skips-absent-program',
   'unseen-reads-as-card', 'folds-seen-unseen', 'one-median-per-run',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
@@ -507,6 +532,11 @@ export function plantedSessionEnd(plant: Plant | undefined, session: string): vo
   if (plant === 'churn-leaves-timer') leftTimers.push(setInterval(() => undefined, 2 ** 30).unref());
   if (plant === 'churn-leaves-child') leftChildren.push(spawn('/bin/sleep', ['86400'], { stdio: 'ignore' }));
   if (plant === 'leak-file-per-session') leftFiles.push(openSync('/dev/null', 'r'));
+}
+const keptOf = new Map<string, { kept: unknown; pad: string }>();
+/** What a planted hub keeps of `key` where it would let go of it (#1866), with 32 KiB no other value shares. */
+export function plantedKeeps(plant: Plant | undefined, name: Plant, key: string, kept: unknown): void {
+  if (plant === name) keptOf.set(key, { kept, pad: randomBytes(16_384).toString('hex') });
 }
 /** What a planted hub leaves behind as an extension reloads. */
 export function plantedReload(plant: Plant | undefined): void {

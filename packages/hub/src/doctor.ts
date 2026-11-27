@@ -17,8 +17,11 @@ import { claudeSettings, commands, FORWARDER, installed, readJson, shadowedBy, t
 import { call } from './client.js';
 import { deprecatedCalls, rpcTable } from './contracts.js';
 import { keychain } from './keychain.js';
+import { addedHosts } from './host-sessions.js';
 import { controlToken, hubAddress, installedRoot, underTemp } from './paths.js';
+import { majorsApart, outsideContract } from './wire.js';
 import { activePlant as plant } from './plant.js';
+import { counted, rebuilding, replayingOf } from './replay.js';
 import { serviceFile } from './service.js';
 import { relationItems } from './setup.js';
 import { describe, unrunnable } from './hook-programs.js';
@@ -80,8 +83,8 @@ async function firstFree(from: number, to: number): Promise<number | undefined> 
   return undefined;
 }
 
-/** Every item, in the order a person reads them; `prompt` sends each signed-in agent its test prompt. */
-export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boolean; cwd: string }): Promise<Item[]> {
+/** Every item, in the order a person reads them; `prompt` sends each signed-in agent its test prompt; `said` takes a sentence that can't wait for the items. */
+export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boolean; cwd: string; said?: (sentence: string) => void }): Promise<Item[]> {
   const root = installedRoot();
   const items: Item[] = [];
   const add = (item: string, agent: string, code: Item['code'], level: Item['level'], evidence: string, fix: string) => items.push({ item, agent, code, level, evidence, fix });
@@ -96,6 +99,11 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
     // Before setup, `deep hub start` would start a hub that no hook reaches: setup adds the hooks and starts it.
     else add('hub.socket', 'deepbuild', 'hub_unreachable', 'fail', `no hub answers at unix:${socket}`, installed(root) ? 'Run `deep hub start`; deep setup installs it as a login service.' : 'Run `deep setup`, which adds the hooks and starts the hub at login.');
   }
+  // Each added host's deep-hook (#999): within the hub's contract it records, whatever its version; a major apart, its hooks send nothing.
+  for (const [host, h] of Object.entries(addedHosts(root))) {
+    if (majorsApart(h.contract, h.hubContract)) add('host.hook', 'deepbuild', 'hook_outside_contract', 'fail', outsideContract(host, h.version, h.contract!, h.hubVersion, h.hubContract), `Run \`deep host add ${host}\`, which installs the deep-hook this hub's contract speaks; sessions running there keep running.`);
+    else add('host.hook', 'deepbuild', 'healthy', 'ok', `${host}'s deep-hook ${h.version ?? 'of no version it reports'} speaks contract ${h.contract ?? 'none it reports'}, within the hub's ${h.hubContract} (hub ${h.hubVersion})`, 'Nothing to do.');
+  }
   // Linux's trusted path (#70): polkit knows the action only from a root-owned file, and without it nothing you confirm counts.
   if (process.platform === 'linux') {
     const known = await new Promise<boolean>((done) => { execFile('/usr/bin/pkaction', ['--action-id', 'dev.deepbuild.confirm'], { timeout: 5000 }, (error) => done(!error)); });
@@ -108,6 +116,12 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
     try {
       const reply = await call(socket, controlToken(socket), 'hub.health', {});
       if ('error' in reply) throw Error(`${reply.error.code}: ${reply.error.remediation}`);
+      // A hub whose record replays reads none of what follows until the replay ends (#3544): said at once, ahead of the items that take their time.
+      const replaying = replayingOf(reply.result);
+      if (replaying) {
+        options.said?.(rebuilding(replaying));
+        throw Error(`the hub is rebuilding its tables from the log, ${counted(replaying.replayed)} of ${counted(replaying.events)} events replayed, and reads its jobs, packs and notification setting once that ends`);
+      }
       const jobs = isObj(reply.result.jobs) ? reply.result.jobs : {};
       const failing = Object.entries(jobs).flatMap(([name, job]) => {
         const f = isObj(job) && isObj(job.failing) ? job.failing : undefined;
@@ -465,7 +479,7 @@ export async function doctorCommand(args: readonly string[], also: () => Promise
   }
   const json = args.includes('--json');
   const agents: Record<string, string> = { 'claude-code': 'Claude Code', codex: 'Codex', deepbuild: 'DeepBuild' };
-  const items = [...(await doctorItems(process.env, { prompt: args.includes('--prompt'), cwd: process.cwd() })), ...(await also())];
+  const items = [...(await doctorItems(process.env, { prompt: args.includes('--prompt'), cwd: process.cwd(), said: (sentence) => process.stderr.write(`${sentence}\n`) })), ...(await also())];
   // A person reads `Fix:` only where something needs fixing, and how to check an item that wasn't (#1455).
   const fixes = (i: Item) => i.level === 'warn' || i.level === 'fail' || (plant() === 'doctor-healthy-fix' && i.item === 'hub.socket');
   const next = (i: Item) => (fixes(i) ? `\n  Fix: ${i.fix}` : i.code === 'not_checked' ? `\n  To check: ${i.fix}` : '');

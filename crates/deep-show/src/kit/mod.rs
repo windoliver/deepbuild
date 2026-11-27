@@ -27,6 +27,7 @@ pub mod goldens;
 mod gpu;
 pub(crate) mod instance;
 mod interface;
+mod laws;
 pub mod lease;
 pub mod ledger;
 pub mod manifest;
@@ -162,6 +163,7 @@ impl KitCall {
                     && x != REGISTRY_PART
                     && x != REFERENCES_PART
                     && x != SANDBOX_PART
+                    && x != laws::PART
                     && !CONTROL_PARTS.contains(&x.as_str())
             })
         }) {
@@ -442,7 +444,7 @@ impl<'a> Hub<'a> {
             for part in PARTS
                 .into_iter()
                 .chain(INTERFACE_PARTS)
-                .chain([REGISTRY_PART, REFERENCES_PART, SANDBOX_PART])
+                .chain([REGISTRY_PART, REFERENCES_PART, SANDBOX_PART, laws::PART])
                 .chain(CONTROL_PARTS)
             {
                 if !call.runs(part) {
@@ -541,6 +543,7 @@ impl<'a> Hub<'a> {
             REGISTRY_PART => self.registries_part(ctx.module),
             REFERENCES_PART => fixtures::references(self, ctx),
             SANDBOX_PART => sandbox_part(ctx.module),
+            laws::PART => laws::run(self, ctx),
             _ if CONTROL_PARTS.contains(&part) => self.control_part(part, ctx.module),
             _ => None,
         }

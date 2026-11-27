@@ -57,6 +57,7 @@ const NORMAL: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 /// Occlusion in r; the key light's contact shadow in g (#446).
 const VISIBILITY: wgpu::TextureFormat = wgpu::TextureFormat::Rg16Float;
 
+deep_gpu::paired! { ao_uniform: "ao.wgsl", Ao; "ao_shade.wgsl", Ao;
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct AoUniform {
@@ -68,6 +69,7 @@ struct AoUniform {
     /// Toward the key light and the contact shadow's length in m, and its samples in `steps`.
     contact: [f32; 4],
     steps: [u32; 4],
+}
 }
 
 struct Pipes {

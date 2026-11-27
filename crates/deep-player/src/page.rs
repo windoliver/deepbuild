@@ -22,6 +22,18 @@ pub fn provide_font(file: &str, bytes: Vec<u8>) {
     deep_text::provide(file, bytes);
 }
 
+/// #3257: a PNG's or a JPEG's map as [`Player::attach`] makes it where the device has no block
+/// format, every level end to end, largest first: the bytes a check holds to the decode worker's.
+#[cfg(feature = "full")]
+#[wasm_bindgen]
+pub fn map_chain(bytes: &[u8], role: &str, alpha_cutoff: Option<f64>) -> Result<Vec<u8>, JsValue> {
+    use deep_codecs::maps::{ready, Blocks, Role};
+    let role = Role::read(role).unwrap_or(Role::Data);
+    let cutoff = alpha_cutoff.map(|c| c as f32);
+    let made = ready(bytes, role, cutoff, Blocks::None, false).map_err(fail)?;
+    Ok(made.data)
+}
+
 #[wasm_bindgen]
 pub struct Player {
     sealed: &'static Sealed,
@@ -37,7 +49,7 @@ pub struct Player {
     draw: Option<crate::draw::Draw>,
     /// Each picture's level file by its source's SHA-256.
     levels: HashMap<String, String>,
-    /// Each texture map the document's materials name, ready for the device, by its SHA-256.
+    /// Each texture map the document's materials name, ready for the device, by its key.
     maps: crate::draw::Maps,
     /// #549: the piece's match, when its net item declares a relay; the full set's player alone
     /// holds the net module.
@@ -252,11 +264,12 @@ impl Player {
         let Some(p) = self.played.as_ref() else {
             return Ok(());
         };
-        for (sha, role) in material_maps(p.document()) {
-            let role = Role::read(role).unwrap_or(Role::Data);
-            let bytes = (self.files.get(&sha))
+        for (map, of) in material_maps(p.document()) {
+            let role = Role::read(of.role()).unwrap_or(Role::Data);
+            let sha = &of.sha;
+            let bytes = (self.files.get(sha))
                 .ok_or_else(|| fail(format!("the bundle holds no map {sha}")))?;
-            let r = deep_codecs::maps::ready(bytes, role, blocks, false)
+            let r = deep_codecs::maps::ready(bytes, role, of.cutoff, blocks, false)
                 .map_err(|e| fail(format!("the map {sha} doesn't load: {e}")))?;
             let texels = Texels {
                 format: r.format.into(),
@@ -264,7 +277,7 @@ impl Player {
                 mips: r.mips,
                 data: std::sync::Arc::new(r.data),
             };
-            self.maps.insert(sha, std::sync::Arc::new(texels));
+            self.maps.insert(map, std::sync::Arc::new(texels));
         }
         Ok(())
     }
@@ -284,8 +297,8 @@ impl Player {
         match draw.frame(p, size, &self.maps) {
             crate::draw::Frame::Pixels(rgba) => gpu.show(&rgba, size),
             #[cfg(feature = "full")]
-            crate::draw::Frame::Scene(scene, look, over) => {
-                let drew = gpu.show3d(&scene, &look, &over, size);
+            crate::draw::Frame::Scene(scene, look, light, over) => {
+                let drew = gpu.show3d(&scene, &look, &light, &over, size);
                 self.measured = self.measure.on.then_some(scene);
                 drew
             }
@@ -302,6 +315,30 @@ impl Player {
             p.enter(self.sealed, control, value, &read).map_err(fail)?;
         }
         Ok(())
+    }
+
+    /// #1042: the readings the export recorded, the bundle's file `sha256` (`{handle: {value,
+    /// as_of}}`): what the piece's bound values show from its first frame.
+    pub fn recorded_readings(&mut self, sha256: &str) -> Result<(), JsValue> {
+        let bytes = (self.files.get(sha256))
+            .ok_or_else(|| fail(format!("the bundle holds no file {sha256}")))?;
+        let readings = serde_json::from_slice(bytes).map_err(fail)?;
+        if let Some(p) = self.played.as_mut() {
+            p.set_recorded(readings);
+        }
+        Ok(())
+    }
+
+    /// #1042: a value one of the piece's public sources gave the page, its value JSON, with its
+    /// as-of time in microseconds: the input track gains it as a reading at the first step not
+    /// yet run, and the entry it became is answered as JSON.
+    pub fn reading(&mut self, source: &str, value: &str, as_of: f64) -> Result<String, JsValue> {
+        let value: Value = serde_json::from_str(value).map_err(fail)?;
+        let files = &self.files;
+        let read = |sha: &str| files.get(sha).cloned();
+        let p = self.played.as_mut().ok_or_else(|| fail("no piece plays"))?;
+        let entry = p.read(self.sealed, source, value, as_of as i64, &read);
+        entry.map(|e| e.to_string()).map_err(fail)
     }
 
     /// The piece's saves as the page keeps them (Logic: saves): `{piece, slots, gives, takes,

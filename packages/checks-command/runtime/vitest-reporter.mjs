@@ -1,7 +1,7 @@
-// The command check kind's Vitest reporter (#30): one JSON line per test that ran, per file that failed to load and
-// per error outside any test, written to the file the runner names, so testsRun, each attempt, each failure's place
-// and kind, and a numeric contract's counts come from the tool's own report, never from its printed output. It ends
-// with a trailer counting its lines, so the runner can tell a report the suite truncated.
+// The command check kind's Vitest reporter (#30): one JSON line per test that ran, per file that failed to load, per
+// suite its own hook failed and per error outside any test, written to the file the runner names, so testsRun, each
+// attempt, each failure's place and kind, and a numeric contract's counts come from the tool's own report, never from its
+// printed output. It ends with a trailer counting its lines, so the runner can tell a report the suite truncated.
 import { openSync, writeSync } from 'node:fs';
 
 // Opened once, appending: each line is written as its test ends, so a run stopped at its deadline keeps its count so far.
@@ -51,7 +51,14 @@ const errorOf = (e) => ({
   frames: Array.isArray(e?.stacks) ? e.stacks.map((f) => ({ file: f.file, line: f.line })) : [],
 });
 
+/** A control's name (src/controls.ts). */
+const CONTROL = /^deepbuild control [0-9a-f]{12}$/;
+const failed = (task) => task.result?.state === 'fail' || (task.tasks ?? []).some(failed);
+
 export default class DeepCheckReporter {
+  // The failed results of this run's controls, and of the files that fail by their control alone.
+  byControls = [];
+
   // The runner's preload moves the clock of the processes it loads into; a vm pool runs tests in a context of its
   // own, with a Date of its own, and browser mode runs them in a browser, so a run whose clock should be ahead can't pass there.
   onInit(vitest) {
@@ -60,18 +67,20 @@ export default class DeepCheckReporter {
     if (update && update !== 'none') write({ type: 'run:error', file: null, errors: [{ name: 'Error', message: `snapshots are written, not compared (updateSnapshot ${update})`, stack: null, frames: [] }] });
     // A run that replays the blob reports of earlier runs runs nothing.
     const merged = vitest?.config?.mergeReports;
-    if (merged) write({ type: 'run:error', file: null, errors: [{ name: 'Error', message: `results replayed from earlier runs, not run (mergeReports ${merged})`, stack: null, frames: [] }] });
+    if (merged) write({ type: 'run:error', file: null, by: `mergeReports ${merged}`, replayed: true, errors: [{ name: 'Error', message: `results replayed from earlier runs, not run (mergeReports ${merged})`, stack: null, frames: [] }] });
     // Type tests are judged from tsc's incremental build info, which the checkout holds: errors it leaves out never show.
     const configs = [vitest?.config, ...(vitest?.projects ?? []).map((p) => p?.config)];
+    // A control's failure would end a run that stops at its first failures.
+    for (const c of configs) if (c?.bail) c.bail = 0;
     if (configs.some((c) => c?.typecheck?.enabled)) write({ type: 'run:error', file: null, errors: [{ name: 'Error', message: 'type tests are judged from tsc\'s build info in the checkout (typecheck)', stack: null, frames: [] }] });
     // A name filter leaves tests of a file out while the file still runs: the runner keeps it only when the check's command names it.
     const filter = configs.map((c) => c?.testNamePattern).find(Boolean);
-    if (filter) write({ type: 'run:error', file: null, filter: String(filter.source ?? filter), errors: [{ name: 'Error', message: `tests left out by name (${filter}) that the check's command doesn't name`, stack: null, frames: [] }] });
+    if (filter) write({ type: 'run:error', file: null, filter: String(filter.source ?? filter), by: `testNamePattern ${filter}`, errors: [{ name: 'Error', message: `tests left out by name (${filter}) that the check's command doesn't name`, stack: null, frames: [] }] });
     // Tag filters leave tests out the same way.
-    for (const tag of configs.flatMap((c) => c?.tagsFilter ?? [])) write({ type: 'run:error', file: null, filter: String(tag), errors: [{ name: 'Error', message: `tests left out by tag (${tag}) that the check's command doesn't name`, stack: null, frames: [] }] });
+    for (const tag of configs.flatMap((c) => c?.tagsFilter ?? [])) write({ type: 'run:error', file: null, filter: String(tag), by: `tagsFilter ${tag}`, errors: [{ name: 'Error', message: `tests left out by tag (${tag}) that the check's command doesn't name`, stack: null, frames: [] }] });
     // A tag's options in the config skip its tests, mark them todo, run them alone, or pass them when they fail.
     const turned = configs.flatMap((c) => c?.tags ?? []).find((t) => t?.skip || t?.fails || t?.todo || t?.only);
-    if (turned) write({ type: 'run:error', file: null, errors: [{ name: 'Error', message: `the config's options for tag ${turned.name} change which of its tests run or how they end`, stack: null, frames: [] }] });
+    if (turned) write({ type: 'run:error', file: null, by: `the config's options for tag ${turned.name}`, errors: [{ name: 'Error', message: `the config's options for tag ${turned.name} change which of its tests run or how they end`, stack: null, frames: [] }] });
     // Vite's dependency optimizer reuses bundles from its cache in the checkout, checked only against the lockfile and
     // the config: code no source holds. A run that bundles afresh (optimizeDeps.force) may use it.
     const servers = [vitest?.vite, ...(vitest?.projects ?? []).map((p) => p?.vite)];
@@ -98,13 +107,29 @@ export default class DeepCheckReporter {
     });
   }
 
+  // A control fails by construction. Once its failure is in the report, Vitest counts it as passed: its exit, its coverage
+  // and its thresholds are then what the check's own tests give, and a step chained after it runs.
+  onTestModuleEnd(module) {
+    const file = module.task;
+    const controls = (file?.tasks ?? []).filter((t) => CONTROL.test(t.name) && t.result?.state === 'fail').map((t) => t.result);
+    for (const result of controls) result.state = 'pass';
+    this.byControls.push(...controls);
+    if (!controls.length || file.result?.state !== 'fail' || file.result.errors?.length || file.tasks.some(failed)) return;
+    file.result.state = 'pass';
+    this.byControls.push(file.result);
+  }
+
   onTestRunEnd(modules, unhandled) {
     for (const m of modules ?? []) {
       // Each file that ran, so the runner can list its tests from its source and find any that never ran.
       write({ type: 'file:ran', tool: 'vitest', file: m.moduleId, errors: [] });
       for (const e of m.errors?.() ?? []) write({ type: 'file:fail', file: m.moduleId, errors: [errorOf(e)] });
+      for (const s of m.children?.allSuites() ?? []) for (const e of s.errors()) write({ type: 'suite:fail', name: s.fullName, file: m.moduleId, errors: [errorOf(e)] });
     }
     for (const e of unhandled ?? []) write({ type: 'run:error', file: null, errors: [errorOf(e)] });
     close();
+    // Vitest's own reporters, which come after this one, still print each control's failure; its coverage comes after them.
+    for (const result of this.byControls) result.state = 'fail';
+    return Promise.resolve().then(() => { for (const result of this.byControls) result.state = 'pass'; });
   }
 }

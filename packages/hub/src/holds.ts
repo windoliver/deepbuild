@@ -15,7 +15,7 @@
 import { readFileSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { AskRefused, type Asks, type PlanInput, type Target } from '@deepbuild/asks';
+import { AskRefused, subjectKey, type Asks, type PlanInput, type Target } from '@deepbuild/asks';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { ulid, type Connection, type EventInput } from '@deepbuild/record';
 import { execFile } from 'node:child_process';
@@ -180,8 +180,8 @@ export class Holds {
     const pinned_to = await this.o.pin(cwd, question);
     const options = [{ id: 'approve', label: yes, decision: 'allow' }, { id: 'decline', label: no, decision: 'deny' }];
     const ask = this.o.plant === 'hold-as-choice'
-      ? { kind: 'choice', question, options, recommended: 'approve', default: 'approve', fallback: 'you', provisional: false, owner: 'you', key: k, pinned_to }
-      : { kind: 'authority', question, options, recommended: null, default: 'decline', fallback: 'you', provisional: false, owner: 'you', key: k, pinned_to };
+      ? { kind: 'choice', may_answer: 'verified_channel', question, options, recommended: 'approve', default: 'approve', fallback: 'you', provisional: false, owner: 'you', key: k, pinned_to }
+      : { kind: 'authority', may_answer: 'trusted_path', question, options, recommended: null, default: 'decline', fallback: 'you', provisional: false, owner: 'you', key: k, pinned_to };
     return this.o.plant === 'hold-as-choice'
       ? this.o.asks().raise(this.o.connection(session, agent), 'deep_ask.choice', ask)
       : this.o.asks().raise(this.o.connection(session, agent), source, ask, plan);
@@ -371,7 +371,7 @@ export class Holds {
     const pinned_to = await this.o.pin(meta.cwd, about.question);
     const options = [{ id: 'approve', label: about.options[0], decision: 'allow' }, { id: 'decline', label: about.options[1], decision: 'deny' }];
     const ask = await this.o.asks().raise(this.o.connection(meta.session, meta.agent), about.source, {
-      kind: 'authority', question: about.question, options, recommended: null, default: 'decline', fallback: 'you', provisional: false, owner: 'you', subject: about.subject, pinned_to,
+      kind: 'authority', may_answer: 'trusted_path', question: about.question, options, recommended: null, default: 'decline', fallback: 'you', provisional: false, owner: 'you', subject: about.subject, pinned_to,
     }, planFor(about.source, `${about.options[0]}: ${about.subject.target.ref}`, [about.subject.target.ref]));
     return { ask, ...(await this.applied(ask)) };
   }
@@ -381,6 +381,28 @@ export class Holds {
     if (!applied) return {};
     const [saved] = (await this.o.raw(`SELECT json_extract(data, '$.answer') AS answer, json_extract(data, '$.ask') AS ask FROM events WHERE kind = 'decision.created' AND id = ?`, [applied.decision.slice('decision:'.length)])) as { answer: string; ask: string }[];
     return saved ? { decision: applied.decision, option: saved.answer, answered: saved.ask } : {};
+  }
+
+  /** The ask a plug-in's send already raised (#363): one per call, read back after a restart, so it is never asked twice. */
+  async raisedAbout(about: About): Promise<string | undefined> {
+    const asked = await this.askOf(subjectKey({ kind: 'authority', subject: about.subject }, ''));
+    return asked && `ask:${asked.id}`;
+  }
+  /**
+   * Where a plug-in call's ask stands: allow or deny, by your answer or by the decision that answered it for you while
+   * that decision stands; the ask it waits for, itself or the open one of its thread that superseded it; undefined when
+   * it closed with neither.
+   */
+  async stands(ask: string): Promise<string | undefined> {
+    const [row] = (await this.o.raw(`SELECT a.status, a.decision, d.answer, d.state = 'revoked' OR EXISTS (SELECT 1 FROM events o WHERE o.kind = 'decision.overruled' AND o.subject = 'decision:' || d.id AND o.log_pos > e.log_pos) AS lapsed
+      FROM asks a LEFT JOIN events e ON e.kind = 'decision.applied' AND e.subject = 'ask:' || a.id LEFT JOIN decisions d ON 'decision:' || d.id = json_extract(e.data, '$.decision')
+      WHERE a.id = ? ORDER BY e.log_pos LIMIT 1`, [ask.slice(4)])) as { status: string; decision: string | null; answer: string | null; lapsed: number | null }[];
+    if (row?.decision === 'allow' || row?.decision === 'deny') return row.decision;
+    if (row?.status === 'decided') return row.answer === null || row.lapsed ? undefined : JSON.parse(row.answer) === 'approve' ? 'allow' : 'deny';
+    if (row?.status !== 'superseded') return ask;
+    const [next] = (await this.o.raw(`WITH RECURSIVE newer(id) AS (VALUES (?) UNION SELECT substr(json_extract(e.data, '$.by'), 5) FROM newer JOIN events e ON e.kind = 'ask.superseded' AND e.subject = 'ask:' || newer.id)
+      SELECT a.id FROM newer JOIN asks a ON a.id = newer.id WHERE a.status IN ('open', 'later')`, [ask.slice(4)])) as { id: string }[];
+    return next && `ask:${next.id}`;
   }
 
   /** A call a standing rule decides: allowed or denied by your rule, naming it; held by an ask when none covers it. */

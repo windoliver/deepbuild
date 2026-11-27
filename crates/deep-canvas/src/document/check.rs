@@ -19,7 +19,7 @@ use crate::grammar::{
 use crate::kinds::{
     lookup, parse_kind, parse_required, Entry, Lookup, ParamType, Registry, Version,
 };
-use crate::registry::{self, core_name, Cost, Range, Rule, Sealed, SealedModule};
+use crate::registry::{self, core_name, Cost, Range, Rule, Sealed, SealedModule, Semver};
 
 /// The closed list of item roles.
 const ROLES: &[&str] = &["part", "control", "label", "data", "decoration"];
@@ -451,6 +451,7 @@ fn finish(
                 Tail::Document => {
                     check_id_maps(lowered, &mut issues);
                     check_controls(lowered, sealed, &mut issues);
+                    check_control_reads(lowered, sealed, &mut issues);
                     check_constraints(lowered, sealed, &mut issues);
                     check_assemblies(lowered, &mut issues);
                     check_viewer_tools(lowered, &mut issues);
@@ -1290,11 +1291,20 @@ fn required_minors(doc: &Value, sealed: &Sealed, issues: &mut Vec<Issue>) -> BTr
         let wrong = |what: &str| Issue::envelope("out_of_range", path.clone(), value.clone(), what);
         match field.as_str() {
             "kinds" => {}
-            "core" => {
-                if !value.is_string() {
-                    issues.push(wrong("not a version"));
+            // The core the document needs against the build's own (#2058): a newer one changed
+            // meanings this build would misread, so the document is refused as a module at
+            // another version is.
+            "core" => match value.as_str().and_then(Semver::parse) {
+                None => issues.push(wrong("not a version")),
+                Some(needs) => {
+                    let build = registry::core_semver();
+                    if needs > build {
+                        issues.push(wrong(&format!(
+                            "the document requires core {needs}; this build has core {build}"
+                        )));
+                    }
                 }
-            }
+            },
             "modules" => match value.as_object() {
                 Some(modules) => {
                     for (module, range) in modules {
@@ -1633,12 +1643,12 @@ fn check_item(
             None
         }
         Lookup::Malformed => {
-            issues.push(Issue::error(
-                "out_of_range",
+            // Another tool's word is refused as a pack's census holds it (#3032).
+            issues.push(super::close::no_kind(
                 key,
-                at("kind"),
-                json!(text),
-                "not family.name@major",
+                text,
+                (ctx.packs, ctx.resolved),
+                ctx.sealed.close_fault,
             ));
             None
         }
@@ -2080,6 +2090,22 @@ fn check_key(section: &str, key: &str, issues: &mut Vec<Issue>) {
             format!("{section}/{key}"),
             json!(key),
             &r.what,
+        ));
+    }
+}
+
+/// A declared field that reads a control the document doesn't hold (#3379): `ref_unresolved`
+/// at the field, so a revision that removes or renames a control something still reads is
+/// refused, as one that removes an item something names is.
+fn check_control_reads(doc: &Value, sealed: &Sealed, issues: &mut Vec<Issue>) {
+    for (id, path, control) in crate::refs::unresolved_controls(doc, sealed) {
+        let what = format!("{id} reads the control {control}, which the document doesn't hold");
+        issues.push(Issue::error(
+            "ref_unresolved",
+            &id,
+            path,
+            json!(control),
+            &what,
         ));
     }
 }

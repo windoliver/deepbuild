@@ -487,7 +487,7 @@ export class Agents {
         if (!plan.steps.length) plan.steps.push({ does: `Record ${itemName(sync.item)} as synced; no agent file needs writing`, changes: [join(this.dir, sync.item.kind === 'skill' ? 'skills.json' : 'servers.json')], undo: `deep undo sync:${id}`, public: false, cost: 0 });
         // The per-file diff itself is the Agents page's to show (agents.read); the plan binds its digest.
         sync.ask = await this.o.raise('agents.sync', {
-          kind: 'authority', question, options: [{ id: 'apply', label: 'Apply it', decision: 'allow' }, { id: 'keep', label: 'Leave the agents as they are', decision: 'deny' }],
+          kind: 'authority', may_answer: 'trusted_path', question, options: [{ id: 'apply', label: 'Apply it', decision: 'allow' }, { id: 'keep', label: 'Leave the agents as they are', decision: 'deny' }],
           recommended: null, deadline: this.o.now() + 7 * 86_400_000, fallback: 'you', default: 'keep', provisional: false, owner: 'you',
           key: sha(canonical({ kind: 'agents.sync', sync: id })), pinned_to: { kind: 'evidence', ref: sha(canonical({ kind: 'agents.sync', sync: id })) },
         }, plan);
@@ -768,7 +768,7 @@ export class Agents {
   private async askConflict(s: Sync, t: Target): Promise<void> {
     const question = `${shownPath(t.path)} changed while sync:${s.id} was writing it, and the change ${s.reason ? `means: ${s.reason}` : 'changes what you approved'}. DeepBuild left it as you have it. Write DeepBuild's entry over it, or keep yours?`;
     const ask = await this.o.raise('agents.conflict', {
-      kind: 'choice', question, options: [{ id: 'apply', label: 'Write DeepBuild\'s entry', decision: 'none' }, { id: 'keep', label: 'Keep mine', decision: 'none' }],
+      kind: 'choice', may_answer: 'verified_channel', question, options: [{ id: 'apply', label: 'Write DeepBuild\'s entry', decision: 'none' }, { id: 'keep', label: 'Keep mine', decision: 'none' }],
       recommended: 'keep', deadline: this.o.now() + 7 * 86_400_000, fallback: 'you', default: 'keep', provisional: false, owner: 'you',
       key: sha(canonical({ kind: 'agents.conflict', sync: s.id, path: t.path })), pinned_to: { kind: 'evidence', ref: sha(canonical({ kind: 'agents.conflict', sync: s.id, path: t.path })) },
     });
@@ -958,7 +958,7 @@ export class Agents {
     const daemons = [...new Set(served.map((s) => s.pid))];
     const question = `Restart ${facts.name}'s daemon${daemons.length ? ` (pid ${daemons.join(', ')})` : ''} with \`${facts.binary} ${command.join(' ')}\`? It interrupts ${served.length ? `the sessions it serves: ${served.map((s) => s.id).join(', ')}` : 'no session DeepBuild knows of'}, which then start with the new set of MCP servers and hooks.`;
     const ask = await this.o.raise('agents.restart', {
-      kind: 'authority', question, options: [{ id: 'restart', label: 'Restart it', decision: 'allow' }, { id: 'later', label: 'Not now', decision: 'deny' }],
+      kind: 'authority', may_answer: 'trusted_path', question, options: [{ id: 'restart', label: 'Restart it', decision: 'allow' }, { id: 'later', label: 'Not now', decision: 'deny' }],
       recommended: null, deadline: this.o.now() + 86_400_000, fallback: 'you', default: 'later', provisional: false, owner: 'you',
       key: sha(canonical({ kind: 'agents.restart', agent, at: this.o.now() })), pinned_to: { kind: 'evidence', ref: sha(canonical({ kind: 'agents.restart', agent, sessions: served.map((s) => s.id) })) },
     }, { steps: [{ does: `Run ${facts.binary} ${command.join(' ')}`, changes: served.length ? served.map((s) => `session:${s.id}`) : [`${facts.name}'s daemon`], undo: CANT_UNDO, public: false, cost: 0 }], diff: sha(question) });

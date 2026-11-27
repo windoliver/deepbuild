@@ -1,0 +1,69 @@
+{
+ "commit": "390c3f39067e7520ca7d2405d86578d17fe4f668",
+ "binary": {
+  "name": "deep-gpu",
+  "sha256": "49cd1d7dd17dcaee2366f582ae0a1ae1a07b6ad9f473f6de18dc3a1d446b56de"
+ },
+ "machine": {
+  "model": "Mac17,10",
+  "chip": "Apple M5 Max",
+  "memoryBytes": 68719476736,
+  "power": "ac",
+  "lowPowerMode": false,
+  "thermalState": "nominal",
+  "macosBuild": "26B8119"
+ },
+ "adapter": {
+  "backend": "metal",
+  "name": "Apple M5 Max"
+ },
+ "state": "one_window",
+ "device": {
+  "label": "deep-gpu"
+ },
+ "windows": 1,
+ "views_3d": 1,
+ "frames": 120,
+ "reads_taken": 240,
+ "reads": [
+  {
+   "at": "2026-11-25T20:53:35.374Z",
+   "hal": {
+    "buffers": 63,
+    "textures": 18,
+    "query_sets": 1,
+    "render_pipelines": 21,
+    "compute_pipelines": 18,
+    "shader_modules": 13
+   }
+  },
+  {
+   "at": "2026-11-25T20:53:39.908Z",
+   "hal": {
+    "buffers": 42,
+    "textures": 18,
+    "query_sets": 1,
+    "render_pipelines": 21,
+    "compute_pipelines": 18,
+    "shader_modules": 13
+   }
+  }
+ ],
+ "sets_at_most": [
+  "live passes x128"
+ ],
+ "sets_before_the_windows": 0,
+ "started": "2026-11-25T20:53:35.179Z",
+ "ended": "2026-11-25T20:53:40.095Z",
+ "load": {
+  "start": 20.732421875,
+  "end": 19.55224609375
+ },
+ "lease": "the file ~/.cache/deepbuild-gpu/lease",
+ "probe": {
+  "path": "state-one-window.probe.jsonl",
+  "sha256": "1fdd53b4be6a3816e9b1b7919e72aec426eb9010d6d09c60ed135836a425eeb7",
+  "rows": 6,
+  "written": 2249
+ }
+}

@@ -249,7 +249,14 @@ impl Hub<'_> {
         let Some(name) = &q.named else {
             return refused("bad_input");
         };
-        let mut all = deep_canvas::refs::refs_to(doc, &self.startup.sealed, name);
+        // #3379: a bare ID names an item or a control; the two may share it.
+        let mut all = match name {
+            deep_canvas::refs::Name::Item(id) => {
+                let control = deep_canvas::refs::Name::Control(id.clone());
+                deep_canvas::refs::refs_to_any(doc, &self.startup.sealed, &[name, &control])
+            }
+            _ => deep_canvas::refs::refs_to(doc, &self.startup.sealed, name),
+        };
         let items = doc.get("items").and_then(Value::as_object);
         let total_items = items.map_or(0, Map::len);
         let mut read = total_items;

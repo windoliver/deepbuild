@@ -10,6 +10,7 @@
 //! while it runs; and the delivery is read back from its own bytes in a fresh decode worker
 //! (export.color, export.fidelity) before it takes its name. Any failure leaves no file.
 
+mod draft;
 mod feed;
 mod fidelity;
 mod frames;
@@ -24,6 +25,7 @@ mod planes;
 mod pptx;
 mod program;
 mod qualify;
+mod reuse;
 #[cfg(feature = "test-export-guards")]
 mod test_guards;
 #[cfg(feature = "test-encode-tools")]
@@ -31,7 +33,10 @@ pub(crate) mod test_tools;
 pub(crate) mod tools;
 // #2892: `ship.bytes` and the ship checks' test server.
 pub(crate) mod ship;
+mod sources;
+mod subset;
 mod web;
+mod work;
 pub(crate) use web::full_player;
 
 use std::collections::BTreeMap;
@@ -151,6 +156,21 @@ pub enum Guard {
     WebPlayerOver12mb,
     /// #2892: the `ship` call's `bytes` sums each file's inflated bytes, not its stored bytes.
     ShipBytesSumsInflated,
+    /// #231: the reuse compares what frames show with every reading and status binding left out.
+    ReuseAcrossReadings,
+    /// #231: the receipt's `wall` is the sum of its eight phases.
+    WallSumsPhases,
+    /// #231: pipeline compiles are timed under `draw`, not `prepare`.
+    BooksCompilesUnderDraw,
+    /// #231: a frame that shows what the frame before it showed reuses it whatever that frame's
+    /// `valid_until`.
+    ReuseIgnoresValidUntil,
+    /// #231: one export guard waits 8.4 ms on every frame.
+    GuardWaits,
+    /// #231: the content key of an item that reads a spectrum array leaves the band levels out.
+    KeyWithoutSpectrumBand,
+    /// #231: each frame is read back and hashed with BLAKE3 on the CPU.
+    HashesOnCpu,
     /// A wrong encoder, muxer or reader in the helper processes, by its name there.
     Codec(&'static str),
 }
@@ -259,6 +279,13 @@ pub(crate) fn planted(name: &str) -> Option<Planted> {
         "web_gzip_header_time" => Planted::Export(G::WebGzipHeaderTime),
         "web_player_over_12mb" => Planted::Export(G::WebPlayerOver12mb),
         "ship_bytes_sums_inflated" => Planted::Export(G::ShipBytesSumsInflated),
+        "reuse_across_readings" => Planted::Export(G::ReuseAcrossReadings),
+        "receipt_wall_sums_phases" => Planted::Export(G::WallSumsPhases),
+        "receipt_books_compiles_under_draw" => Planted::Export(G::BooksCompilesUnderDraw),
+        "reuse_ignores_valid_until" => Planted::Export(G::ReuseIgnoresValidUntil),
+        "guard_waits_8_4_ms" => Planted::Export(G::GuardWaits),
+        "content_key_without_spectrum_band" => Planted::Export(G::KeyWithoutSpectrumBand),
+        "export_hashes_on_cpu" => Planted::Export(G::HashesOnCpu),
         other => Planted::Export(G::Codec(CODEC_PLANTS.iter().find(|p| **p == other)?)),
     })
 }
@@ -284,10 +311,27 @@ impl Hub<'_> {
         size: Option<[u16; 2]>,
         opaque: bool,
     ) -> Result<(Vec<u8>, [u16; 2]), Unfit> {
+        let drawing = self.export_evaluated(sched, session, doc, t)?;
+        self.export_drawn(sched, session, doc, t, drawing, size, opaque)
+    }
+
+    /// #231: what the export frame at `t` draws, evaluated and not yet drawn: the session's
+    /// drawing under the look's boil, with the frame's videos and caption set on the renderer.
+    pub(crate) fn export_evaluated(
+        &mut self,
+        sched: &mut Scheduler<'_>,
+        session: &mut DocSession,
+        doc: &Value,
+        t: i64,
+    ) -> Result<crate::frames::Painted, Unfit> {
         // #504: each variant set's pick at `t`, loaded only on the frame it changes.
         crate::played::load_at(sched, session, doc, t);
         let shown = crate::played::at(doc, t);
         let doc = shown.as_ref();
+        // #231: the record as the film's clock has it at `t`.
+        if !self.media.readings.is_empty() {
+            session.set_readings(self.readings_at(t));
+        }
         session.frame(sched, t, &default_view(doc));
         let (block, pictures) = self.videos_at(doc, t, true);
         // #157: a video the decode worker couldn't decode at this frame stops the frame.
@@ -299,12 +343,49 @@ impl Hub<'_> {
         }
         self.renderer.videos = pictures;
         self.caption_at(doc, t);
-        let unfit = |code| Unfit {
-            code,
+        let drawing = drawing_of(sched, session).ok_or_else(|| Unfit {
+            code: "no_drawing",
             path: "frames".into(),
-        };
-        let drawing = drawing_of(sched, session).ok_or_else(|| unfit("no_drawing"))?;
-        let drawing = self.boiled(doc, t, false, drawing);
+        })?;
+        Ok(self.boiled(doc, t, false, drawing))
+    }
+
+    /// #231: the record's readings a frame at `t` reads: the scenario's record, then each of the
+    /// export's `readings` whose time has come, in the order given.
+    fn readings_at(&self, t: i64) -> BTreeMap<String, Value> {
+        let mut record = self.readings();
+        let t = self.media.readings_until.map_or(t, |until| t.min(until));
+        let come = |r: &&Value| r["t"].as_i64().is_some_and(|at| at <= t);
+        for change in self.media.readings.iter().filter(come) {
+            let Some(handle) = change["handle"].as_str() else {
+                continue;
+            };
+            let object = record
+                .entry(handle.to_string())
+                .or_insert_with(|| json!({}));
+            for field in ["value", "state", "as_of"] {
+                if let Some(v) = change.get(field) {
+                    object[field] = v.clone();
+                }
+            }
+        }
+        record
+    }
+
+    /// #231: the frame [`Hub::export_evaluated`] gave `drawing` for, drawn.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn export_drawn(
+        &mut self,
+        sched: &mut Scheduler<'_>,
+        session: &mut DocSession,
+        doc: &Value,
+        t: i64,
+        drawing: crate::frames::Painted,
+        size: Option<[u16; 2]>,
+        opaque: bool,
+    ) -> Result<(Vec<u8>, [u16; 2]), Unfit> {
+        let shown = crate::played::at(doc, t);
+        let doc = shown.as_ref();
         #[allow(unused_mut)]
         let (mut rgba, size) = if deep_canvas_scene3d::scene::has_3d(doc) {
             self.rgba3d(doc, t, &drawing, size)?
@@ -473,6 +554,14 @@ pub struct Job {
     pub pins: Vec<String>,
     /// #1250: `gif: {scale}` (or `video.gif`), an indexed look's GIF's options.
     pub gif: Value,
+    /// #1042: `web: {sources}` (or `video.web`), the web player's public sources.
+    pub web: Value,
+    /// #231: `purpose: draft`: an export that runs film.blank and frames.finite but not the
+    /// delivery decode, stays in the app's store and is never shared, attached or sent.
+    pub draft: bool,
+    /// #231: `readings: [{t, handle, value?, state?, as_of?}]`: the record's changes on the
+    /// film's clock, which a frame at or after `t` reads.
+    pub readings: Vec<Value>,
 }
 
 impl Default for Job {
@@ -509,6 +598,9 @@ impl Default for Job {
             tool: None,
             pins: Vec::new(),
             gif: Value::Null,
+            web: Value::Null,
+            draft: false,
+            readings: Vec::new(),
         }
     }
 }
@@ -695,6 +787,23 @@ pub fn parse(c: &Map<String, Value>) -> Option<Job> {
             .or_else(|| video.and_then(|v| v.get("gif")))
             .cloned()
             .unwrap_or(Value::Null),
+        web: c
+            .get("web")
+            .or_else(|| video.and_then(|v| v.get("web")))
+            .cloned()
+            .unwrap_or(Value::Null),
+        draft: match c.get("purpose") {
+            None => false,
+            Some(p) => match p.as_str()? {
+                "draft" => true,
+                "delivery" => false,
+                _ => return None,
+            },
+        },
+        readings: match c.get("readings") {
+            None => Vec::new(),
+            Some(r) => r.as_array().cloned()?,
+        },
     })
 }
 

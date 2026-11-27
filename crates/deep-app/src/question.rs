@@ -25,8 +25,10 @@ use crate::{
     states,
 };
 
+mod escapes;
 mod faults;
 pub use faults::Faults;
+mod look;
 
 /// The card's least size, in window points, tall enough for a batch of four with its switches (it draws about 525
 /// tall): a slot smaller than this, or than the card as drawn, never arms.
@@ -438,6 +440,9 @@ impl Controller {
             crate::pictures::HALF
         };
         self.now = now;
+        // A frame drawn while nobody can see the window shows you nothing.
+        let none = Default::default();
+        let drawn = if self.machine.seen() { drawn } else { &none };
         self.pictures.frame(drawn, half, now);
         self.lefts() != left
     }
@@ -662,7 +667,7 @@ impl Controller {
 
     /// Everything the card draws, in reading order, each row's words through [`visible`].
     pub fn rows(&self) -> Vec<Row> {
-        self.unmarked_rows().into_iter().map(Row::marked).collect()
+        escapes::drawn(self.model.kind, self.unmarked_rows())
     }
 
     fn unmarked_rows(&self) -> Vec<Row> {
@@ -1220,7 +1225,7 @@ impl Controller {
             return self.took(outcome, now, events, now);
         }
         if let Some(waiting) = self.send_waiting.take() {
-            if confirmed && waiting.seq == self.machine.seq() && self.machine.accepts(now) {
+            if confirmed && self.machine.confirms(waiting.seq) {
                 self.answer_words(now, events, now);
                 return Did::Answered;
             }

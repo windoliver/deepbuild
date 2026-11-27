@@ -780,13 +780,11 @@ impl World {
                 Read::Seed => region[at..at + 8]
                     .copy_from_slice(&step_seed(piece.seed, &item.id, k).to_le_bytes()),
                 // #182: the last value the world's steps before this step's time recorded.
-                Read::World => {
+                Read::World | Read::Count | Read::Centre => {
                     let list = self.track.get(&e.name).map_or(&[][..], Vec::as_slice);
                     let before = list.partition_point(|x| x.t < t);
-                    let on = before
-                        .checked_sub(1)
-                        .is_some_and(|i| matches!(list[i].value, Given::Number(n) if n != 0.0));
-                    region[at..at + 4].copy_from_slice(&i32::from(on).to_le_bytes());
+                    let last = before.checked_sub(1).map(|i| &list[i].value);
+                    super::count::fill(last, &e.read, &mut region[at..at + e.size as usize]);
                 }
                 Read::Draws => self
                     .draw
