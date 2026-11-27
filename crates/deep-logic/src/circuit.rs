@@ -694,11 +694,6 @@ fn part_of(
             x[2] = constant(major, "rcd/time/value").unwrap_or(f64::NAN);
             x[3] = constant(major, "rcd/floor/value").unwrap_or(f64::NAN);
             test = input("test_by", true)?;
-            if test.is_some() && x[1] == 0.0 {
-                return Err(bad(
-                    "has test_by and no test_r: its test path is test_r ohms".into(),
-                ));
-            }
             reset = input("reset_by", true)?;
         }
         Kind::Changeover => input_src = input("at_b_by", false)?,
