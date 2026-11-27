@@ -158,17 +158,19 @@ fn write_source(per_frame: bool, release_always: bool) -> String {
 pub fn serve(dir: &Path) -> std::io::Result<()> {
     let path = dir.join(SERVED);
     let folder = path.parent().expect("the module's folder");
-    for link in [folder, path.as_path()] {
-        if std::fs::symlink_metadata(link).is_ok_and(|meta| meta.is_symlink()) {
-            std::fs::remove_file(link)?;
-        }
+    if std::fs::symlink_metadata(folder).is_ok_and(|meta| meta.is_symlink()) {
+        std::fs::remove_file(folder)?;
     }
     let source = source();
-    if std::fs::read_to_string(&path).is_ok_and(|text| text == source) {
+    if std::fs::symlink_metadata(&path).is_ok_and(|meta| meta.is_file())
+        && std::fs::read_to_string(&path).is_ok_and(|text| text == source)
+    {
         return Ok(());
     }
     std::fs::create_dir_all(folder)?;
-    std::fs::write(path, source)
+    let written = folder.join(format!(".panel.js.{}", std::process::id()));
+    std::fs::write(&written, source)?;
+    std::fs::rename(written, path)
 }
 
 /// Checks a panel's scripts: `Err` names the file and line of the first import no panel may make, and why.
@@ -1110,7 +1112,6 @@ mod tests {
         .unwrap();
         std::fs::write(outside.join("kept"), "kept").unwrap();
         std::os::unix::fs::symlink(outside.join("kept"), dir.join(SERVED)).unwrap();
-        let _ = check(&dir);
         serve(&dir).unwrap();
         assert_eq!(
             std::fs::read_to_string(outside.join("kept")).unwrap(),
@@ -1119,6 +1120,14 @@ mod tests {
         assert!(!std::fs::symlink_metadata(dir.join(SERVED))
             .unwrap()
             .is_symlink());
+        assert_eq!(std::fs::read_to_string(dir.join(SERVED)).unwrap(), source());
+        std::fs::remove_file(dir.join(SERVED)).unwrap();
+        std::fs::hard_link(outside.join("kept"), dir.join(SERVED)).unwrap();
+        serve(&dir).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(outside.join("kept")).unwrap(),
+            "kept"
+        );
         assert_eq!(std::fs::read_to_string(dir.join(SERVED)).unwrap(), source());
         std::fs::remove_dir_all(dir.join("@deepbuild")).unwrap();
         std::os::unix::fs::symlink(&outside, dir.join("@deepbuild")).unwrap();
