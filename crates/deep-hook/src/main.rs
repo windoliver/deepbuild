@@ -29,8 +29,8 @@ mod cow;
 mod heavy;
 mod heavy_entry;
 mod remote;
+mod session_start;
 mod spool_file;
-mod start_keys;
 mod tool_paths;
 
 use cow::clone;
@@ -1259,25 +1259,7 @@ fn forward(agent: &str, event: &str) -> ExitCode {
             )
         })
         .unwrap_or_default();
-    // At SessionStart, whether each billing and route key is set in the environment the agent gave this process.
-    let billing = if event == "SessionStart" {
-        // The session's own inbox address, the path Claude Code exports to its hooks (#3405), never the token beside it.
-        let inbox = env::var("CLAUDE_CODE_MESSAGING_SOCKET")
-            .ok()
-            .filter(|path| !path.is_empty())
-            .map(|path| format!(",\"inbox\":{}", quoted(&path)))
-            .unwrap_or_default();
-        // The planted wrong program (#3405's AC7) reports the token beside the address.
-        let token = match hub_plant().as_deref() {
-            Some("session-start-reports-token") => env::var("CLAUDE_CODE_MESSAGING_TOKEN")
-                .map(|token| format!(",\"inbox_token\":{}", quoted(&token)))
-                .unwrap_or_default(),
-            _ => String::new(),
-        };
-        format!("{}{inbox}{token}", start_keys::reported())
-    } else {
-        String::new()
-    };
+    let billing = session_start::session_start_fields(event);
     let force =
         cfg!(feature = "plant-f-test") && env::var("DEEP_HOOK_FORCE_F_TEST").as_deref() == Ok("1");
     let line = |on: &[&str]| {

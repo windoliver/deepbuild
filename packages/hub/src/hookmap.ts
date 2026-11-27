@@ -242,7 +242,6 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
   if (request.notes) meta.notes = request.notes;
   if (request.stage) meta.stage = request.stage;
   if (request.heavy) meta.heavy = request.heavy;
-  // The session's own inbox address, as its SessionStart reported it (#3405).
   if (request.event === 'SessionStart' && typeof request.inbox === 'string' && request.inbox) meta.inbox = request.inbox;
   const fields: NonNullable<HookMeta['fields']> = {};
   for (const key of ['prompt_id', 'prompt', 'error', 'agent_id', 'source', 'last_assistant_message', 'turn_id', 'file_path', 'model'] as const) if (str(payload[key])) fields[key] = str(payload[key]);
@@ -321,7 +320,6 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
         const route = routeAt(name, request.route, request.billing ?? {}, meta.transcript);
         if (route) data.route = route;
       }
-      // Its own inbox address (#3405): another session's message names its sender by it.
       if (meta.inbox) data.inbox = meta.inbox;
       fill = 'loads';
       v = 3;
@@ -348,7 +346,6 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
         data.disposition = 'handled';
         v = 2;
       }
-      // A channel's event, and the sender or server a prompt names, are user.ask@2's (#3405).
       if (data.from === 'channel') v = 2;
       break;
     }

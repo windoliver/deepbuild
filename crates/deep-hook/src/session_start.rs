@@ -1,5 +1,7 @@
 use std::env;
 
+use crate::{hub_plant, quoted};
+
 const BILLING_KEYS: &[&str] = &[
     "ANTHROPIC_API_KEY",
     "ANTHROPIC_AUTH_TOKEN",
@@ -19,8 +21,11 @@ const ROUTE_KEYS: &[&str] = &[
     "OPENAI_BASE_URL",
 ];
 
-pub(crate) fn reported() -> String {
-    let billing = BILLING_KEYS
+pub(crate) fn session_start_fields(event: &str) -> String {
+    if event != "SessionStart" {
+        return String::new();
+    }
+    let keys = BILLING_KEYS
         .iter()
         .map(|key| {
             let value = env::var(key).unwrap_or_default().to_ascii_lowercase();
@@ -43,5 +48,16 @@ pub(crate) fn reported() -> String {
         })
         .collect::<Vec<_>>()
         .join(",");
-    format!(",\"billing\":{{{billing}}},\"route\":{{{route}}}")
+    let inbox = env::var("CLAUDE_CODE_MESSAGING_SOCKET")
+        .ok()
+        .filter(|path| !path.is_empty())
+        .map(|path| format!(",\"inbox\":{}", quoted(&path)))
+        .unwrap_or_default();
+    let token = match hub_plant().as_deref() {
+        Some("session-start-reports-token") => env::var("CLAUDE_CODE_MESSAGING_TOKEN")
+            .map(|token| format!(",\"inbox_token\":{}", quoted(&token)))
+            .unwrap_or_default(),
+        _ => String::new(),
+    };
+    format!(",\"billing\":{{{keys}}},\"route\":{{{route}}}{inbox}{token}")
 }
