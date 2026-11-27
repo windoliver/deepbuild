@@ -1,6 +1,3 @@
-// #2568: on a pi `tool_call`, a rules.json deep-hook can't read holds the call with the hub answering, as it does with
-// the hub away; a fail_closed entry's hub-away denial stays the hub's to decide when the hub answers. Real pi 1.4.0,
-// the pi package, the real hub and target/debug/deep-hook in a temp home that `deep setup` set up (README).
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -15,17 +12,12 @@ const AWAY = /while the hub doesn't answer/;
 
 afterEach(cleanup);
 
-/**
- * With the hub up and rules.json whole, `pkill -f node` is blocked by no-kill-by-name in the hub's words: the package,
- * the hub and deep-hook are all in place and the hub answers this session. Anything else is a setup that can't judge.
- */
 async function control(pi: Pi, n: number, client: Client): Promise<void> {
   const r = await nextCall(pi, n);
   if (r.byNet || !r.blocked || !r.words.includes('no-kill-by-name')) blocked(`the control \`${CALL}\` with rules.json whole and the hub up wasn't blocked by no-kill-by-name: ${r.words.slice(0, 600)}`);
   if (AWAY.test(r.words) || r.ms >= ANSWERED_MS || !(await before(client, r.id))) inconclusive(`the hub didn't answer the control call in time (${r.ms} ms, its words: ${r.words.slice(0, 300)}); rerun alone`);
 }
 
-/** A blocked call counts as decided with the hub running only if the hub took it and answered within pi's wait. */
 async function answered(r: Ended, client: Client, what: string): Promise<void> {
   if (!r.blocked || r.byNet) return;
   if (r.ms >= ANSWERED_MS) inconclusive(`${what} took ${r.ms} ms, past what the hub's reply may take before the package decides with the hub away; rerun alone`);
@@ -37,12 +29,6 @@ function judgeBlocked(r: Ended, what: string): void {
   expect(r.blocked, `${what} must be blocked; the pi package let \`${CALL}\` run: ${r.words.slice(0, 600)}`).toBe(true);
 }
 
-/**
- * A pi session after setup whose control call the hub answered; then that hub is stopped, `spoil` leaves rules.json
- * as the criterion has it, and a second hub starts that never read the file. A hub that read it writes it back at the
- * next hook's connection, before deep-hook reads the call (README, Readings), so only a hub that never read it keeps
- * the state the criterion names. `ready` confirms that state with the second hub up, or throws BLOCKED.
- */
 async function spoiledUnderNewHub(spoil: (h: Home) => void, ready: (h: Home) => Promise<void>): Promise<{ h: Home; pi: Pi; client: Client }> {
   const h = await setUp();
   const pi = await Pi.start(h, [bash(CALL), { text: 'Done.' }, bash(CALL), { text: 'Done.' }]);
@@ -77,9 +63,7 @@ describe(`${AC1} hub running, rules.json cut to its first 40 bytes`, () => {
 describe(`${AC2} hub running, setup finished, rules.json removed, a hub that never read it`, () => {
   it(`${AC2} a pi tool_call for \`${CALL}\` is blocked, naming rules.json`, async () => {
     const { h, pi, client } = await spoiledUnderNewHub((h) => rmSync(h.rules), async (h) => {
-      // The base's hub installs its product-store entry at start (products.ts), writing a rules.json of that one entry
-      // where there is none, which its own reader hasn't read; it is removed too, as the criterion has the file gone.
-      try { await waitFor(() => existsSync(h.rules), 10_000, 'the product-store entry'); rmSync(h.rules); } catch { /* none written */ }
+      try { await waitFor(() => existsSync(h.rules), 10_000, 'the product-store entry'); rmSync(h.rules); } catch {}
       const probe = await Client.open(h.hub);
       probe.close();
       await sleep(1000);
@@ -112,7 +96,6 @@ describe(`${AC3} hub stopped: each of those two states blocks the call, as today
   }, 240_000);
 });
 
-/** A discard of edits in a git repository whose tree is clean: no-discarding-edits (fail_closed) matches it. */
 const DISCARD = 'git checkout -- a.txt';
 
 describe(`${AC4} readable rules.json, hub running: a fail_closed entry's call is the hub's to decide`, () => {
@@ -123,14 +106,12 @@ describe(`${AC4} readable rules.json, hub running: a fail_closed entry's call is
     execFileSync('sh', ['-c', 'echo a > a.txt'], { cwd: h.cwd });
     git('add', 'a.txt');
     git('commit', '-q', '-m', 'a');
-    // The criterion's premise, from the real deep-hook: a fail_closed entry matches the call, with a hub-away denial.
     const entries = (JSON.parse(readFileSync(h.rules, 'utf8')) as Line).entries as Record<string, Line>;
     const read = JSON.parse(execFileSync(DEEP_HOOK, ['match'], { input: `${JSON.stringify({ tool_name: 'bash', tool_input: { command: DISCARD }, cwd: h.cwd })}\n`, env: env(h.home), encoding: 'utf8' }).split('\n')[0]!) as Line;
     const closed = (read.matched as string[] | undefined ?? []).filter((n) => entries[n]?.fail_closed === true);
     if (!closed.length || !(read.denials as unknown[] | undefined)?.length) blocked(`\`${DISCARD}\` isn't matched by a fail_closed entry with a hub-away denial: deep-hook match said ${JSON.stringify(read).slice(0, 600)}`);
 
     const client = await Client.open(h.hub);
-    // One run, both calls: a run that did work ends in the hub's stop hold, which a second prompt would wait behind.
     const pi = await Pi.start(h, [bash(DISCARD), bash('ls'), { text: 'Done.' }]);
     const [r, ls] = await prompt(pi, 1, 2, false);
     await answered(r!, client, `\`${DISCARD}\``);

@@ -49,6 +49,9 @@ through. The tests read its words as "the package let the call run". As a second
 with a `pkill` that only leaves a file. Processes are stopped only by their own PID; temp homes are removed after each
 test.
 
+The hub and pi starts are this suite's own, not #40's: a second hub start must leave `config.json` as setup wrote
+it, and pi loads `fixtures/net.ts` too. Temp folders are kept short so the hub's socket path fits.
+
 ## Readings where the issue leaves a choice
 
 - **"Blocked"** is pi's `tool_execution_end` with `isError` and not the net's words. **"Runs"** is that event without
