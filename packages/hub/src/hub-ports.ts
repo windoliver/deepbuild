@@ -267,7 +267,7 @@ export interface McpOperationsPort {
   agentConnection(session: string): Connection;
   checksOf(worktree: string): Map<string, { run: string; deadline?: unknown; type?: string; host?: string; runs?: unknown; accept?: unknown; min_tests?: unknown; memory_mb?: unknown }>;
   pinOf(worktree: string, question: string): Promise<Obj>;
-  propose(session: string, args: Obj): Promise<Obj>;
+  proposeRuleRemoval(session: string, repo: string, target: string, change: string): Promise<Obj>;
 }
 
 /** The control capabilities consumed by another hub domain. */

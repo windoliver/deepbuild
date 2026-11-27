@@ -687,16 +687,27 @@ export class McpOperations {
     const target = scrubText(String(args.target), { held: this.options.settings.held }).slice(0, 1000);
     const change = scrubText(String(args.change), { held: this.options.settings.held }).slice(0, 4000);
     // A direction you rejected isn't asked about again: the agent hears your decision, and you hear nothing (#111).
-    const revived = await revives(this.options.services.raw, change, repoOf(this.options.state().sessions.get(session)!.cwd), session);
+    const cwd = this.options.state().sessions.get(session)!.cwd;
+    const revived = await revives(this.options.services.raw, change, repoOf(cwd), session);
     if (revived) throw refuse('rejected', '/params/arguments/change', `You can't propose \`${revived.direction}\`: the person rejected it (${revived.decision}). Take another direction; only they can overrule that decision.`, revived.decision);
+    return this.raiseProposal(session, cwd, target, change, (args.evidence as { at: string; quote: string }[] | null) ?? []);
+  }
+
+  async proposeRuleRemoval(session: string, repo: string, target: string, change: string): Promise<Obj> {
+    if (this.options.settings.plant === 'hold-raise-fails') throw Error('DEEP_HUB_PLANT=hold-raise-fails: the planted raise failed');
+    const scrub = (text: string, max: number) => scrubText(text, { held: this.options.settings.held }).slice(0, max);
+    return this.raiseProposal(session, repo, scrub(target, 1000), scrub(change, 4000), []);
+  }
+
+  private async raiseProposal(session: string, cwd: string, target: string, change: string, cited: { at: string; quote: string }[]): Promise<Obj> {
     const question = `Apply this change an agent proposed to ${target}? ${change}`;
-    const pinned = await this.pinOf(this.options.state().sessions.get(session)!.cwd, question);
+    const pinned = await this.pinOf(cwd, question);
     const options = [{ id: 'apply', label: 'Apply it', decision: 'none' }, { id: 'keep', label: 'Keep it as it is', decision: 'none' }];
     const raised = { kind: 'choice', may_answer: 'trusted_path', question, options, recommended: 'keep', fallback: 'you', provisional: false, owner: 'you', key: sha256Hex(canonicalize({ kind: 'propose', target, change, session } as JsonValue)), pinned_to: pinned };
     const ask = await this.options.services.asks.raise(this.agentConnection(session), 'deep_propose.choice', raised);
     const ts = this.options.services.now();
     const id = ulid(ts);
-    const evidence = [...((args.evidence as { at: string; quote: string }[] | null) ?? []), { at: ask, quote: change }];
+    const evidence = [...cited, { at: ask, quote: change }];
     try {
       await this.options.events.append(this.agentConnection(session), {
         v: 1, id, kind: 'learn.proposed', ts,

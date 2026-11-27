@@ -101,7 +101,7 @@ for (const [reason, entries] of Object.entries({
     'packages/github/test/', 'tests/acceptance/2078/', 'tests/acceptance/2218/', 'tests/acceptance/2648/', 'tests/acceptance/167/', 'tests/acceptance/1328/',
     'tests/acceptance/18/install/coexist.test.ts', 'tests/acceptance/18/install/disable.test.ts', 'tests/acceptance/18/install/install.test.ts',
     'tests/acceptance/18/install/stophold.test.ts', 'tests/acceptance/18/install/tamper.test.ts', 'tests/acceptance/18/install/waiter.test.ts', 'tests/acceptance/19/',
-    'tests/acceptance/629/', 'tests/acceptance/25/routes/', 'tests/acceptance/25/fallbacks/', 'tests/acceptance/321/', 'tests/acceptance/303/', 'tests/acceptance/344/',
+    'tests/acceptance/629/', 'tests/acceptance/25/routes/', 'tests/acceptance/25/fallbacks/', 'tests/acceptance/321/', 'tests/acceptance/303/', 'tests/acceptance/344/', 'tests/acceptance/2076/',
     'tests/acceptance/1514/', 'tests/acceptance/322/', 'tests/acceptance/323/', 'tests/acceptance/324/', 'tests/acceptance/325/', 'tests/acceptance/347/', 'tests/acceptance/340/',
     'tests/acceptance/29/hub.test.ts', 'tests/acceptance/29/slots.test.ts', 'tests/acceptance/907/slots.test.ts', 'tests/acceptance/907/background.test.ts',
     'tests/acceptance/965/', 'packages/hub/test/loop-starters.test.ts', 'packages/hub/test/loop-transcript.test.ts', 'tests/acceptance/1175/', 'tests/acceptance/23/permissions/',

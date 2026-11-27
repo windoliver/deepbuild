@@ -57,9 +57,9 @@ export interface SessionMemoryOptions {
     readonly durable: Durable;
   };
   delivery: () => Pick<AnswerDeliveryPort, "routes">;
-  mcp: () => Pick<McpOperationsPort, "propose">;
+  mcp: () => Pick<McpOperationsPort, "proposeRuleRemoval">;
   state: () => Pick<SessionStatePort, "agentAbove">;
-  events: Pick<HubEvents, "connection" | "append">;
+  events: Pick<HubEvents, "connection" | "append" | "appendReading">;
 kernel: Pick<HubRuntime, "config">;
 
 }
@@ -120,13 +120,16 @@ export class SessionMemory {
 
   /** The rule lines an agent's edit removed, still in force; each leaves once you apply the proposal it became. */
   private async heldRules(): Promise<Held[]> {
-    const held = readHeld(this.options.services.root.dir);
-    const kept: Held[] = [];
-    for (const h of held) {
+    const dir = this.options.services.root.dir;
+    const applied = new Set<Held>();
+    for (const h of readHeld(dir)) {
       const [answer] = (await this.options.services.record.raw(`SELECT json_extract(data, '$.answer') AS answer FROM events WHERE kind = 'ask.answered' AND subject = ? ORDER BY log_pos DESC LIMIT 1`, [h.ask])) as { answer: unknown }[];
-      if (answer?.answer !== 'apply') kept.push(h);
+      if (answer?.answer === 'apply') applied.add(h);
     }
-    if (kept.length !== held.length) saveHeld(this.options.services.root.dir, kept);
+    const gone = (h: Held) => [...applied].some((a) => a.id === h.id && a.repo === h.repo && a.ask === h.ask);
+    const held = readHeld(dir);
+    const kept = held.filter((h) => !gone(h));
+    if (kept.length !== held.length) saveHeld(dir, kept);
     return kept;
   }
 
@@ -266,23 +269,42 @@ export class SessionMemory {
     const before = meta.event === 'PostToolUse' ? st.editing.get(key) : undefined;
     const repo = before ? repoRoot(meta.cwd) : undefined;
     if (before) st.editing.delete(key);
-    if (before && repo) await this.holdRemoved(meta.session, repo, before);
+    if (before && repo) await this.holdRemoved(meta.session, meta.agent, repo, before);
   }
 
   /** Each rule line an agent's edit removed stays in force, held, and becomes one proposal to you, as deep_propose's are. */
-  private async holdRemoved(session: string, repo: string, before: { file: string; scope: string; rules: string[] }[]): Promise<void> {
+  private async holdRemoved(session: string, agent: string, repo: string, before: { file: string; scope: string; rules: string[] }[]): Promise<void> {
     this.ruleFiles.delete(repo);
     const held = readHeld(this.options.services.root.dir);
+    const fresh: Held[] = [];
     for (const b of before) {
       const after = new Set(rulesInFile(join(repo, b.file)).map(sameRule));
       for (const text of b.rules.filter((r) => !after.has(sameRule(r)))) {
         const id = ruleId(b.file, text);
         if (held.some((h) => h.id === id && h.repo === repo)) continue;
-        const made = await this.options.mcp().propose(session, { target: `wiki:rules#${id}`, change: `Remove the rule “${text}” from ${b.file}. An agent's edit took this line out; the rule stays in force on the rules page until you apply this.`, evidence: null }).catch(() => undefined);
-        if (made) held.push({ id, text, file: b.file, scope: b.scope, repo, proposal: String(made.proposal), ask: String(made.ask) });
+        const h: Held = { id, text, file: b.file, scope: b.scope, repo, proposal: null, ask: null, session };
+        held.push(h);
+        fresh.push(h);
       }
     }
     saveHeld(this.options.services.root.dir, held);
+    for (const h of fresh) {
+      const error = await this.raiseHeld(h);
+      if (error !== undefined) await this.options.events.appendReading(session, agent, `The rule “${h.text.slice(0, 3000)}” in ${h.file.slice(0, 500)} stays held: an agent's edit took its line out, and its proposal to you couldn't be raised (${error.slice(0, 3000)}). It is raised again at the next rules sync.`).catch(() => undefined);
+    }
+  }
+
+  private async raiseHeld(h: Held): Promise<string | undefined> {
+    try {
+      const made = await this.options.mcp().proposeRuleRemoval(h.session ?? '', h.repo, `wiki:rules#${h.id}`, `Remove the rule “${h.text}” from ${h.file}. An agent's edit took this line out; the rule stays in force on the rules page until you apply this.`);
+      const held = readHeld(this.options.services.root.dir);
+      const at = held.find((x) => x.id === h.id && x.repo === h.repo);
+      if (at) Object.assign(at, { proposal: String(made.proposal), ask: String(made.ask) });
+      saveHeld(this.options.services.root.dir, held);
+      return undefined;
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
   }
 
   /**
@@ -319,6 +341,7 @@ export class SessionMemory {
 
   /** `deep rules sync`: the rules page, each rule with its file, scope, size and what enforces it, written through the wiki. */
   async syncRules(): Promise<Obj> {
+    for (const h of readHeld(this.options.services.root.dir)) if (h.ask === null) await this.raiseHeld(h);
     this.ruleFiles.clear();
     this.ruleLost.clear();
     const { rules, files, repos } = await this.allRules(await this.ruleGuards());
