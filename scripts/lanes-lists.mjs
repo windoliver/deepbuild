@@ -1,7 +1,7 @@
 // The lane lists, moved out of scripts/lanes.mjs whole (#2360): the files the unit lane runs alone, slow, exclusive,
 // by hand or under a timed grant, each suite's entries in them, and the blind redrafts that run in their originals' place.
 // scripts/lanes.mjs re-exports each list and is still the one entry every reader imports them from.
-import { existsSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -44,21 +44,36 @@ export const alone = ['tests/acceptance/149/', 'tests/acceptance/1523/', 'tests/
   'tests/acceptance/1334-redraft-2565/'];
 
 /**
- * A suite's own lane file (#1327): `tests/acceptance/<issue>/lane.json` says its folder runs alone, and why, as
- * `{ "alone": true, "why": "<reason>" }` and nothing else. Running alone only makes a run stricter, so a new one lands
- * with its suite with no approval; anything else a lane decides (a skip, by hand, a timed grant, leaving a lane) stays
- * in this file. The folder runs alone while the disk holds the file, whatever it holds, so nothing in it can loosen a
- * run; the guard refuses any other shape or place, and the edit or removal of a landed one
- * (docs/parallel-proof.md, section 7).
+ * A suite's own lane file (#1327, #3419), in `tests/acceptance/<issue>/`, a redraft or oracle folder `<issue>-<suffix>/`
+ * or a redraft or oracle subfolder: `{ "alone": true, "why": "<reason>" }`, with `timed` and `slow` lists of its own
+ * folder's files. The folder runs alone while the disk holds the file, whatever it holds; its lists count only in that
+ * shape. Anything else a lane decides stays in this file; the guard refuses any other shape or place, and the edit or
+ * removal of a landed one (docs/parallel-proof.md, section 7).
  */
-export const LANE_FILE = /^tests\/acceptance\/(\d+)\/lane\.json$/;
-// A copy of scripts/ with no suites beside it reads none.
-const suites = join(root, 'tests/acceptance');
-for (const folder of existsSync(suites) ? readdirSync(suites, { withFileTypes: true }) : []) {
-  if (!folder.isDirectory() || !LANE_FILE.test(`tests/acceptance/${folder.name}/lane.json`)) continue;
-  // As the disk finds it, so a name it folds to lane.json counts too and can't stand in for one.
-  if (statSync(join(suites, folder.name, 'lane.json'), { throwIfNoEntry: false })?.isFile()) alone.push(`tests/acceptance/${folder.name}/`);
+export const LANE_FILE = /^tests\/acceptance\/(\d+)(-[a-z0-9-]*(?:redraft|oracle)[a-z0-9-]*)?\/(?:([a-z0-9-]*(?:redraft|oracle)[a-z0-9-]*)\/)?lane\.json$/;
+function laneLists(text, folder, isFile) {
+  let lane;
+  try { lane = JSON.parse(text); } catch { return null; }
+  if (!lane || typeof lane !== 'object' || Array.isArray(lane) || lane.alone !== true || typeof lane.why !== 'string' || !lane.why.trim()) return null;
+  if (Object.keys(lane).some((key) => !['alone', 'why', 'timed', 'slow'].includes(key))) return null;
+  const names = (key) => lane[key] ?? [];
+  const fits = (list) => Array.isArray(list) && list.every((name) => typeof name === 'string' && /^(?!\.{1,2}(?:\/|$))(?:[\w.-]+\/)*[\w.-]+\.test\.(?:ts|mjs|js)$/.test(name) && !name.split('/').includes('..') && isFile(`${folder}${name}`));
+  return fits(names('timed')) && fits(names('slow')) ? { timed: names('timed').map((name) => `${folder}${name}`), slow: names('slow').map((name) => `${folder}${name}`) } : null;
 }
+// As the disk finds them, so a name it folds to lane.json counts too. A copy of scripts/ with no suites reads none.
+const suites = join(root, 'tests/acceptance');
+const isFile = (path) => statSync(join(root, path), { throwIfNoEntry: false })?.isFile() ?? false;
+const laneFolders = [];
+export const fromLaneFiles = { alone: [], timed: [], slow: [] };
+for (const folder of existsSync(suites) ? readdirSync(suites, { withFileTypes: true }) : []) {
+  if (!folder.isDirectory() || !/^\d+(?:-[a-z0-9-]*(?:redraft|oracle)[a-z0-9-]*)?$/.test(folder.name)) continue;
+  const at = `tests/acceptance/${folder.name}/`;
+  const subfolders = readdirSync(join(suites, folder.name), { withFileTypes: true }).filter((sub) => sub.isDirectory()).map((sub) => `${at}${sub.name}/`);
+  for (const entry of [at, ...subfolders]) if (LANE_FILE.test(`${entry}lane.json`) && isFile(`${entry}lane.json`)) laneFolders.push(entry);
+}
+// Landed where lanes.mjs read none before #3419, so it stays unread until an approved edit takes it out of here.
+const unread = ['tests/acceptance/231-oracle/'];
+for (const entry of laneFolders) if (!unread.includes(entry) && !alone.includes(entry)) alone.push(entry), fromLaneFiles.alone.push(entry);
 
 /**
  * Files whose recorded run takes over two minutes on this machine, by the fastest run each that vitest's results caches
@@ -1380,6 +1395,9 @@ timed.push('tests/acceptance/1255/ac5-budget.test.ts');
 // #1181's folder (blind) runs alone by its lane.json; ac09-budget.test.ts times a 64-node, 128-part circuit's step with
 // judgeLimit.
 timed.push('tests/acceptance/1181/ac09-budget.test.ts');
+// #3604's folder (blind) runs alone by its lane.json; ac15-budget.test.ts times a 64-node, 128-part board with breakers, RCDs,
+// changeovers and a transformer with judgeLimit.
+timed.push('tests/acceptance/3604/ac15-budget.test.ts');
 
 // #2898's files (blind) each start real hubs, plug-ins and jobs and hold 40 s deep_wait calls; no timing.
 alone.push('tests/acceptance/2898/');
@@ -1632,6 +1650,14 @@ Object.assign(redrafted, Object.fromEntries([['1113', 'cli'], ['3238', 'serial']
   .map(([issue, file]) => [`tests/acceptance/${issue}/${file}.test.mjs`, `tests/acceptance/${issue}-redraft-3549/`])));
 byHand.push(...Object.keys(redrafted).filter((path) => redrafted[path].endsWith('-redraft-3549/')));
 
+// #3694 admits a plain test request without the load and gives it a turn on the pool, so these files, whose scene held
+// such a request on the load or ran its command beside a pool all held, no longer hold it on the right program
+// (tests/acceptance/<issue>/DISPUTE-3694.md). Each, kept as written, maps to its blind redraft, which runs in its place
+// with every test of the file; the originals run by hand until the owner rules on the swap.
+Object.assign(redrafted, Object.fromEntries([['2924', 'test-grants'], ['2924', 'blocked'], ['2924', 'log'], ['3238', 'inherited'], ['3549', 'passes'], ['3549', 'timed'], ['3549', 'window']]
+  .map(([issue, file]) => [`tests/acceptance/${issue}/${file}.test.mjs`, `tests/acceptance/${issue}-redraft-3694/`])));
+byHand.push(...Object.keys(redrafted).filter((path) => redrafted[path].endsWith('-redraft-3694/')));
+
 // #3507's folder (blind) runs alone by its lane.json: its files build deep-show and deep-gpu and draw on Metal.
 // ac3-timing.test.mjs times the geometry pass against the merge base's on the reference Mac, where a pass changed.
 timed.push('tests/acceptance/3507/ac3-timing.test.mjs');
@@ -1678,3 +1704,11 @@ for (const [folder, originals] of Object.entries(redrafts3525)) {
 }
 // The redrafted budget files time the six-stem render, as #154's and #154-redraft's do.
 timed.push('tests/acceptance/154-redraft-3525/budgets.test.ts', 'tests/acceptance/154-redraft-3525b/budgets.test.ts');
+
+for (const entry of laneFolders.filter((folder) => !unread.includes(folder))) {
+  let text = '';
+  try { text = readFileSync(join(root, entry, 'lane.json'), 'utf8'); } catch {}
+  const lists = laneLists(text, entry, isFile);
+  for (const file of lists?.timed ?? []) if (!timed.includes(file)) timed.push(file), fromLaneFiles.timed.push(file);
+  for (const file of lists?.slow ?? []) if (!slow.includes(file)) slow.push(file), fromLaneFiles.slow.push(file);
+}

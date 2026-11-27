@@ -1,0 +1,1 @@
+{ "alone": true, "why": "binary: runs.test.mjs runs a budget task's planted run, which starts a hub, and a hub runs deep-hook from its checkout's target/; every file but tasks.test.mjs runs the built deep" }
