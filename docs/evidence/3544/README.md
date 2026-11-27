@@ -68,3 +68,17 @@ column renamed in the closed file and the record opened again. Under a test gran
 
 The rebuild took 7.6 s of an 8.1 s open, and the record's own reading says so. A reading, not a budget: the criterion
 `#3544.37bd1895` is the budget window's to measure, 20 samples a side, through `record-replay-100k`.
+
+## The nearest suites, as a reading
+
+Not `node scripts/affected.mjs`, which was not run to its end here. Under one test grant on the change's own build, at
+a load of 28 to 46:
+
+| Suite | Result |
+|---|---|
+| `tests/acceptance/2801/` (the hub's health while it starts) | 3 of 3 pass |
+| `tests/acceptance/14/ac6-redraft-2/` (every projection rebuilds from the log) | 1 of 1 passes |
+| `packages/record/test/` (`record`, `lifecycle`, `replay-hash`) | 88 of 88 pass |
+| `packages/cli/test/cli.test.ts` | 51 of 52 pass; one reads BLOCKED, no Node older than 24.22.0 on this machine |
+| `tests/acceptance/1812/hub-start.test.ts`, `hub-down.test.ts` | 1 passes; `hub-down` reads BLOCKED on a command its own table doesn't list, `deep host add` |
+| `tests/acceptance/2570/` (`deep hub start` beside a hub that is exiting) | 4 pass, 3 fail; the same 3 fail on the base `2edb19ff4`, run in the same grant: their own `deep hub stop --root` step gets no answer in 15 s |
