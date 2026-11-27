@@ -27,12 +27,14 @@
         "      \"initialReason\": \"Issue #16 first measurement: the merge base has no hub. One process starts the hub on a temp home and leaves it idle for seven seconds, reading its CPU and resident memory; the issue's 0.5% idle CPU and 150 MB with 30 days of history stay in tests/acceptance/16/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task.\",",
         "      \"criteria\": [",
         "        \"#2646.0e7e5ac3\",",
+        "        \"#3548.4bf12cec\",",
         "        \"#3438.ac71a3bd\""
       ],
       "wrong": [
         "      \"initialReason\": \"Issue #16 first measurement: the merge base has no hub. One process starts the hub on a temp home and leaves it idle for seven seconds, reading its CPU and resident memory; the issue's 0.5% idle CPU and 150 MB with 30 days of history stay in tests/acceptance/16/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task.\",",
         "      \"criteria\": [",
-        "        \"#2646.0e7e5ac3\""
+        "        \"#2646.0e7e5ac3\",",
+        "        \"#3548.4bf12cec\""
       ]
     },
     {
