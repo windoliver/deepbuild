@@ -590,8 +590,6 @@ pub(crate) fn row_element(
         // The mark: its state's drawn glyph tinted in its core, in a slot of 16 with 8 after it (#1592). A working
         // session's turns a quarter for each event its hooks send (#2021).
         .child(
-            // An ask's mark is named by its state word, the word deep and the hub's row give every open ask (#1463,
-            // #2690): its state-word slot draws its kind (#1461 AC27), and its row's name stays its question.
             row_slot(id, "mark", mark_name(ask, &drawn.value, drawn.entry))
                 .aria_value(drawn.entry.to_owned())
                 .flex_none()
@@ -975,8 +973,6 @@ pub(crate) fn in_lane(
         }))
 }
 
-/// A row's mark slot's name: an open ask's is its state word, the word deep and the hub's row give it (#1463, #2690);
-/// any other row's, an ask's that waits, is held or is leaving answered among them, is its mark's glyph.
 fn mark_name(ask: bool, value: &str, entry: &str) -> String {
     if ask && value == "needs_you" {
         states::shown(states::State::NeedsYou.word()).to_owned()
@@ -993,7 +989,6 @@ mod tests {
     fn only_an_open_asks_mark_says_needs_you() {
         let needs_you = states::shown(states::State::NeedsYou.word());
         assert_eq!(mark_name(true, "needs_you", "needs_you"), needs_you);
-        // An ask that left answered, or is folded, set for later or held, keeps its row's glyph (#2690 review).
         for value in ["answered", "folded", "later", "held"] {
             assert_eq!(
                 mark_name(true, value, "needs_you"),
