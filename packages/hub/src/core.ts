@@ -555,7 +555,7 @@ export class Core {
       older: (sync) => this.olderSet(sync),
     });
     this.box = new Box({
-      root: this.root.dir, plant: options.plant, now: this.now,
+      root: this.root.dir, plant: options.plant, now: this.now, approved: async (folder, change, ask) => { await this.ready; await this.judging.approveSpec(folder, change, ask); },
       raise: async (source, ask, plan) => { await this.ready; return this.asks.raise(this.connection('core'), source, ask, plan as never); },
       folders: async () => { await this.ready; return [...new Set([...[...this.state.sessions.values()].map((s) => s.cwd), ...(await repoFolders(this.record, this.store, this.providers.knowledge.cwdOf)).values()])]; },
       lessons: async () => { await this.ready; return (await this.memory.lessons()).map((l) => ({ id: l.id, text: l.text })); },
