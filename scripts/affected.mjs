@@ -18,9 +18,9 @@
 // each test's result too. --kept, from scripts/preflight alone, names the kept results of this tree (#3296, section 7b):
 // a file done there is read, and each job that ends keeps its own.
 //
-// A suite of a closed issue on the main watch's settled list that the change reaches only through a process the suite
-// starts is left to the watch, named on one SETTLED line, and the run reads INCONCLUSIVE; --settled runs it (settled,
-// below; #3064).
+// A suite of a closed issue on the main watch's settled list that the change reaches, by import or through a process
+// the suite starts, is left to the watch, named on one SETTLED line, and the run reads INCONCLUSIVE; --settled runs it
+// (settled, below; #3064, #3593).
 //
 // The alone block's folders run side by side, each in a shard of its own (scripts/shards.mjs), so no sibling's cargo
 // build rewrites a binary under it; those lanes.mjs names exclusive run after, one at a time, with nothing beside them.
@@ -40,7 +40,7 @@ import { dirname, join, posix, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { alone, aloneCommand, byHand, cargoResults, changedPaths, checks, crates, exactTree, exclusive, listed, ownLane, readSkips, reportResults, slow, timed, worst } from './lanes.mjs';
-import { isTestFile, listFiles, named, underTestPaths } from './proof-change.mjs';
+import { isTestFile, listFiles, named, testImports, underTestPaths } from './proof-change.mjs';
 import { namedByConfig } from './proof-guard.mjs';
 import { childEnv } from './proof-runs.mjs';
 import { binaryNames, binaryPlan, buildBinaries, buildInPlace, builtIn, commandFiles, watchBinaries } from './proof-binaries.mjs';
@@ -210,9 +210,9 @@ export function graph(cwd, files, workspace, tasks = []) {
  * watch and the release preflight run it.
  * Of the budget `tasks` given, `tasks` names those a budget window runs: each the change reaches or marks wide, each
  * the graph can't place, and all of them when it changes a file every suite reads (#1981).
- * `through` names the tests, selected or wide, that the change reaches only through a process they start, a Rust binary
- * or a package's build: none of its paths reaches them, or any test of their suite's folder, by import or by a file
- * they or their helpers read by path, and none is in a package one of those imports from (#3064).
+ * `byPath` names the acceptance suites' folders a test of which, or its helper, reads a changed file by path, as the
+ * file or a folder holding it and not as a module it imports, and those holding a fixture the change edits that no
+ * test names (#3593).
  */
 export function select(cwd, changed, { files = listFiles(cwd), workspace = crates(cwd), tasks = [] } = {}) {
   const all = [...new Set([...files, ...changed])];
@@ -239,12 +239,6 @@ export function select(cwd, changed, { files = listFiles(cwd), workspace = crate
   const ends = (nodes) => [...nodes].filter((node) => (isTestFile(node) && !/^packages\/[^/]+\/fixtures\//.test(node)) || /^(?:crate|task):/.test(node));
   const task = (node) => node.startsWith('task:');
   const onward = (nodes) => [...nodes, ...up(nodes.filter((node) => !node.startsWith('crate:')))];
-  // The tests a package is their own to (#3064): those that import one of its files, near or far, with no process between.
-  const owned = new Map();
-  const ownTests = (folder) => {
-    if (!owned.has(folder)) owned.set(folder, new Set(ends(up(all.filter((file) => within(folder, file))))));
-    return owned.get(folder);
-  };
   const reach = (path) => {
     const owners = ownersOf(path);
     const code = up([path, ...owners]);
@@ -259,27 +253,26 @@ export function select(cwd, changed, { files = listFiles(cwd), workspace = crate
     // A task runs a binary as cargo builds it, from its crate and every crate that one depends on.
     const built = [...runs].filter(([, targets]) => [...targets].some((target) => target.startsWith('crate:') && code.has(target))).map(([node]) => node);
     const found = new Set(ends([...code, ...onward([...ran, ...started]), ...onward(deeper).filter(own), ...onward(built).filter(task)]));
-    // Reached with no process between (#3064): by import, or by a file a test or its helper reads by path.
-    const read = [...runs].filter(([, targets]) => [...targets].some((target) => !target.startsWith('crate:') && hit(target))).map(([node]) => node);
-    return { found: [...found], wide: ends(onward(deeper)).filter((node) => !found.has(node)), near: new Set(ends([...code, ...onward(read)])) };
+    // A test or its helper reads the changed file itself by path, or a folder holding it, and doesn't import it (#3593).
+    const read = [...runs].filter(([node, targets]) => [...targets].some((target) => (target === path || (target.endsWith('/') && path.startsWith(target))) && !imports.get(node)?.has(target))).map(([node]) => node);
+    return { found: [...found], wide: ends(onward(deeper)).filter((node) => !found.has(node)), byPath: ends(onward(read)) };
   };
-  const tests = new Set(), reached = new Set(), wide = new Set(), every = [], none = [], touched = new Set(), direct = new Set();
+  const tests = new Set(), reached = new Set(), wide = new Set(), every = [], none = [], touched = new Set(), byPath = new Set();
   // The files a runner config names, as the guard reads them: its setup files and the config modules it imports.
   const setup = namedByConfig(cwd, null, all);
   const feedsEvery = (path) => EVERY.includes(path) || setup.has(path);
   for (const path of changed) {
     if (feedsEvery(path)) every.push(path);
-    let { found, wide: far, near } = reach(path);
+    let { found, wide: far, byPath: read } = reach(path);
     for (const node of [...found, ...far].filter(task)) touched.add(node.slice(5));
     [found, far] = [found, far].map((nodes) => nodes.filter((node) => !task(node)));
     // A fixture no test names by path is read by the tests of its own folder.
     if (!found.length && underTestPaths(path)) {
       const folder = path.match(/^(?:tests\/acceptance\/[^/]+|packages\/[^/]+\/test|tests)\//)?.[0];
       found = folder ? all.filter((file) => file.startsWith(folder) && isTestFile(file)) : [];
-      near = new Set(found);
+      read = found;
     }
-    const home = packageOf(path);
-    for (const node of [...near, ...(home ? ownTests(home) : [])]) direct.add(node);
+    for (const node of read) byPath.add(node);
     // A test the change deletes has nothing to run.
     for (const node of found) if (node.startsWith('crate:') || existsSync(join(cwd, node))) (node.startsWith('crate:') ? reached : tests).add(node.replace(/^crate:/, ''));
     for (const node of far) wide.add(node.replace(/^crate:/, 'cargo test -p '));
@@ -287,10 +280,7 @@ export function select(cwd, changed, { files = listFiles(cwd), workspace = crate
   }
   const owners = [...new Set(changed.filter((path) => path.endsWith('.rs')).flatMap(ownersOf))].map((node) => node.slice(6));
   const runsTask = ({ id }) => every.length || touched.has(id) || !imports.has(`task:${id}`);
-  // A suite is reached with no process between when any test of its folder is, selected or not.
-  const directly = new Set([...direct].map(suiteOf));
-  const through = [...new Set([...tests, ...wide])].filter((file) => isTestFile(file) && !direct.has(file) && !(suiteOf(file) && directly.has(suiteOf(file)))).sort();
-  return { tests: [...tests].sort(), crates: [...reached].sort(), wide: [...wide].filter((node) => !tests.has(node) && !reached.has(node.replace('cargo test -p ', ''))).sort(), every, none, owners, tasks: tasks.filter(runsTask).map(({ id }) => id), through };
+  return { tests: [...tests].sort(), crates: [...reached].sort(), wide: [...wide].filter((node) => !tests.has(node) && !reached.has(node.replace('cargo test -p ', ''))).sort(), every, none, owners, tasks: tasks.filter(runsTask).map(({ id }) => id), byPath: [...new Set([...byPath].map(suiteOf).filter(Boolean))].sort() };
 }
 
 // The main watch's settled list (docs/parallel-proof.md, sections 7a and 12b; #3064), in the HOME the run was given.
@@ -299,10 +289,11 @@ const suiteOf = (file) => file.match(/^tests\/acceptance\/\d+\//)?.[0];
 
 /**
  * The selected suites left to the main watch, as their folders: each on the watch's list with the files the worktree
- * holds for it, whose selected files the change reaches only through a process (select's `through`), and which the
- * change neither names by its issue nor touches. `problem` says why no list could be read: nothing is settled then.
+ * holds for it, however the change reaches it, by import or through a process, unless the change names it by its
+ * issue, touches a file under it, or edits a file a test of it reads by path (select's `byPath`; #3593). `problem` says
+ * why no list could be read: nothing is settled then.
  */
-function settled(cwd, { tests, through }, changed) {
+function settled(cwd, { tests, byPath }, changed) {
   let suites;
   try {
     const list = JSON.parse(readFileSync(LIST, 'utf8'));
@@ -311,9 +302,32 @@ function settled(cwd, { tests, through }, changed) {
   } catch (error) {
     return { folders: [], problem: error.code === 'ENOENT' ? `${LIST} is missing` : `${LIST} can't be read (${error.message})` };
   }
-  const far = new Set(through);
+  // A changed file that a test of the suite, or a file under the test paths it imports, spells in a string of its own
+  // as a path from the checkout's root, as 'docs/technical-design.md', './scripts/lanes.mjs' or a root joined to
+  // 'scripts/lanes.mjs': read by path, though the graph may not place it (#3593).
+  const spelled = changed.map((path) => RegExp(`(?<![\\w./-])${path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w.-])`));
+  // Each file once, however many suites import it.
+  const spells = new Map();
+  const spellsOne = (file, source) => {
+    if (!spells.has(file)) {
+      let found = false;
+      const visit = (node) => {
+        if ((ts.isStringLiteralLike(node) || ts.isTemplateLiteralToken(node)) && spelled.some((pattern) => pattern.test(node.text.replace(/^\.?\//, '')))) found = true;
+        else if (!found) ts.forEachChild(node, visit);
+      };
+      if (CODE.test(file)) visit(ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true));
+      spells.set(file, found);
+    }
+    return spells.get(file);
+  };
+  const files = listFiles(cwd).filter(isTestFile);
+  const reads = (folder) => {
+    const sources = new Map();
+    for (const file of files.filter((file) => file.startsWith(folder))) testImports(cwd, null, file, sources);
+    return [...sources].some(([file, source]) => spellsOne(file, source));
+  };
   const candidates = [...new Set(tests.map(suiteOf))].filter((folder) => folder && Object.hasOwn(suites, folder)
-    && tests.filter((file) => file.startsWith(folder)).every((file) => far.has(file)) && !changed.some((path) => path.startsWith(folder)));
+    && !byPath.includes(folder) && !changed.some((path) => path.startsWith(folder)) && !reads(folder));
   if (!candidates.length) return { folders: [] };
   const git = (...args) => spawnSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 2 ** 28 });
   // The issues the change's commits name, by the pattern the trace lane reads them with (readIssue, proof-change.mjs),

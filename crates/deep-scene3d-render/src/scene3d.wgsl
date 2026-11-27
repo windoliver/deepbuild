@@ -1717,10 +1717,10 @@ fn cascade_pcss(i: u32, p: vec3<f32>, n: vec3<f32>, t: Tap, size: f32, px: vec2<
     return lit / f32(count);
 }
 
-// A local light's visibility at `world` (#446; Light policy: local shadows): PCSS over a disk
-// its radius sizes, its taps read wherever each lands, so a disk crosses a cube's faces; the
-// tent without soft shadows.
-fn local_lit(l: Local, world: vec3<f32>, n: vec3<f32>, px: vec2<f32>) -> f32 {
+// A local light's visibility at `world` (#446; Light policy: local shadows): PCSS (taps read where each lands, so a
+// disk crosses a cube's faces), Castaño's filter or the tent. Biased as `cascade_lit` is: a flat face along the ray, so
+// its shadow's edge stays put, and by half a texel in depth, never a fixed step, metres far out (#2033).
+fn local_lit(l: Local, world: vec3<f32>, n: vec3<f32>, curved: bool, px: vec2<f32>) -> f32 {
     if l.size.z > 0.5 {
         return tile_lit(l, world, n, px);
     }
@@ -1729,12 +1729,12 @@ fn local_lit(l: Local, world: vec3<f32>, n: vec3<f32>, px: vec2<f32>) -> f32 {
     let ray = to / dist;
     let size = lights.local_size.x;
     let texel = 2.0 * l.info.z * dist / size;
-    let bias = 1e-5;
-    let p = world + n * 1.5 * texel - ray * texel;
+    let p = world + select(-ray * (1.0 + 1.5 * min(tan(acos(clamp(dot(n, -ray), 0.05, 1.0))), 4.0)), n * 1.5 - ray, curved) * texel;
     let t = local_tap(l, p);
     if !inside_map(t) {
         return 1.0;
     }
+    let bias = l.info.x * l.pos.w / (l.pos.w - l.info.x) / pow(local_distance(l, t.z), 2.0) * 0.5 * texel;
     var lit = 1.0;
     if lights.soft.x > 0.5 && lights.soft.x < 1.5 {
         lit = castano(local_maps, t.uv, t.z - bias, t.layer, size);
@@ -2215,7 +2215,7 @@ fn answer_light(in: MeshOut, n: vec3<f32>, v: vec3<f32>, s: Surface, i: u32, cur
         }
         let local = u32(li.cone.z);
         if local > 0u {
-            shadow = local_lit(lights.locals[local - 1u], in.world, n, in.pos.xy);
+            shadow = local_lit(lights.locals[local - 1u], in.world, n, curved, in.pos.xy);
         }
     }
     if planted(P_SHADOW_ONE) {
@@ -2343,7 +2343,7 @@ fn direct(in: MeshOut, n: vec3<f32>, s: Surface, spread: f32, curved: bool) -> D
         }
         let local = u32(li.cone.z);
         if local > 0u && (in.flags & NO_RECEIVE) == 0u && any(add > vec3<f32>(0.0)) {
-            lit = local_lit(lights.locals[local - 1u], in.world, n, in.pos.xy);
+            lit = local_lit(lights.locals[local - 1u], in.world, n, curved, in.pos.xy);
         }
         if catches {
             let y = dot(add, vec3<f32>(0.2126, 0.7152, 0.0722));

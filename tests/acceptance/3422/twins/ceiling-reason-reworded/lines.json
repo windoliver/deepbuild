@@ -1,0 +1,12 @@
+{
+  "scripts/size-ratchet.mjs": [
+    {
+      "find": [
+        "  } else if (lines > ceiling) fail(path, `${lines} lines, over its ceiling of ${ceiling}`, `${split(ceiling)} A ceiling never rises.`);"
+      ],
+      "wrong": [
+        "  } else if (lines > ceiling) fail(path, `${lines} lines, past its ceiling of ${ceiling}`, `${split(ceiling)} A ceiling never rises.`);"
+      ]
+    }
+  ]
+}

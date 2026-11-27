@@ -1,0 +1,8 @@
+{
+  "packages/cli/src/main.ts": [
+    {
+      "find": ["    const end = logEnd(path, process.env.DEEP_CLI_PLANT === 'bundle-cuts-by-bytes');"],
+      "wrong": ["    const end = logEnd(path, true);"]
+    }
+  ]
+}

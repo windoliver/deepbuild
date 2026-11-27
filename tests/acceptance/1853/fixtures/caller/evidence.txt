@@ -1,0 +1,1 @@
+evidence for #1853: a file inside the caller package

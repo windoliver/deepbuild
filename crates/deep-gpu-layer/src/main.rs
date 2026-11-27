@@ -1041,7 +1041,12 @@ impl Planted {
             "raster_lists_nothing" => Planted::RasterListsNothing,
             _ => {
                 let named = deep_canvas_scene3d::spans::PLANTED.iter().map(|p| p.0);
-                Planted::Named(named.chain(particles::PLANTED).find(|p| *p == name)?)
+                Planted::Named(
+                    named
+                        .chain(particles::PLANTED)
+                        .chain(frames::PLANTED)
+                        .find(|p| *p == name)?,
+                )
             }
         })
     }

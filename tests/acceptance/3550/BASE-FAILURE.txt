@@ -1,0 +1,166 @@
+# #3550 acceptance tests on the base 2edb19ff4 (macOS, arm64, 18 cores, node v24.22.2; 1-minute load 61 at the start
+# and 69 at the end), each file run once, one after another, from the checkout.
+# A digest: each run's verdicts and counts, and each failure's place and message. Left out: the stacks, node's dump of
+# each error object, the diagnostics and, but for the report tests, the rest of each message, which dumps load.log and
+# so lists the machine's own processes; a report test whose message repeats the one above it says so. Paths: the
+# checkout as <checkout>, a test's temporary folder as <sandbox>, a home folder as ~.
+#
+# Verdicts: 12 tests, 12 fail, 0 pass, 0 skipped, in 12 s. Every failure is at an assertion of the suite's and for the
+# expected reason: the base's sampler (#3067, #3240) makes no thread listing, so no sample holds procs, threads,
+# runnable, runTop or threadsUnread, and its report has none of the new lines.
+#   #3550.31d7907e report.test.mjs  FAIL  5 tests: the report has no "threads read in <n> of <m> samples" line
+#   #3550.02fff002 unread.test.mjs  FAIL  3 tests: the samples hold no threadsUnread (the base asked the sandbox's ps for
+#                                         0 thread listings), and the report has no "threads read in" line
+#   #3550.20462570 sample.test.mjs  FAIL  the stub grant's entry holds no procs (the message names the grant by its ID)
+#   #3550.106a37e8 sample.test.mjs  FAIL  the outer grant's entry holds no procs
+#   #3550.712a690c sample.test.mjs  FAIL  at its precondition: the sample holds no runTop, so the log isn't read with
+#                                         the new fields in it; a wrong program fails it at the criterion's own words
+#   #3550.397ab2ea cost.test.mjs    FAIL  the first sample holds no thread reading (at once, in 2 s, not after 10 min)
+
+$ node --test --test-reporter=spec tests/acceptance/3550/report.test.mjs
+✖ #3550.31d7907e load --report over a fixture log prints the runnable threads by class and outside, each a mean over the samples above the cores whose threads were read, with shares that add up to 100.0 (241.303625ms)
+✖ #3550.31d7907e load --report over a fixture log prints the median load by what was held in the minute, over every sample whose threads were read: one line a set of classes, the most minutes first (211.267417ms)
+✖ #3550.31d7907e load --report over a fixture log prints the five commands under no grant with the most runnable threads, each a mean over the samples above the cores whose threads were read (207.721625ms)
+✖ #3550.31d7907e load --report goes on with these lines after the ones it printed before, in section 6's order: the samples read, the runnable threads, the minutes held and, last, the commands (206.627625ms)
+✖ #3550.31d7907e load --report over a log written before the threads were read says so and prints no more of these lines (206.654959ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 0
+ℹ fail 5
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1139.744375
+
+✖ failing tests:
+
+test at tests/acceptance/3550/report.test.mjs:18:1
+✖ #3550.31d7907e load --report over a fixture log prints the runnable threads by class and outside, each a mean over the samples above the cores whose threads were read, with shares that add up to 100.0 (241.303625ms)
+  AssertionError [ERR_ASSERTION]: the report goes on with "threads read in 11 of 13 samples", over every sample
+  53.8% of minutes above the cores (7 of 13)
+  build 22.7%
+  bay-pair 0.3%
+  test 14.1%
+  outside 62.9% (compile 29.6%, node 15.0%, other 18.3%)
+  mean CPU read 13.63 of 18.00 cores, at a mean load of 62.71
+  top commands under no grant, mean cores: rustc 1.92, node 0.47, swiftc 0.42, clang 0.33, ld 0.15
+  1 of 13 samples failed and count in no share
+  16.7% of minutes with a request waiting beside two or more idle cores (2 of 12)
+  GPU read in 12 of 13 samples, 0.000 s in all
+  
+  + actual - expected
+  
+  + []
+  - [
+  -   'threads read in 11 of 13 samples'
+  - ]
+
+test at tests/acceptance/3550/report.test.mjs:34:1
+✖ #3550.31d7907e load --report over a fixture log prints the median load by what was held in the minute, over every sample whose threads were read: one line a set of classes, the most minutes first (211.267417ms)
+  AssertionError [ERR_ASSERTION]: the report goes on with "threads read in 11 of 13 samples", over every sample
+  (the report printed, and the test expected, what the failure above shows)
+
+test at tests/acceptance/3550/report.test.mjs:65:1
+✖ #3550.31d7907e load --report over a fixture log prints the five commands under no grant with the most runnable threads, each a mean over the samples above the cores whose threads were read (207.721625ms)
+  AssertionError [ERR_ASSERTION]: the report goes on with "threads read in 11 of 13 samples", over every sample
+  (the report printed, and the test expected, what the failure above shows)
+
+test at tests/acceptance/3550/report.test.mjs:79:1
+✖ #3550.31d7907e load --report goes on with these lines after the ones it printed before, in section 6's order: the samples read, the runnable threads, the minutes held and, last, the commands (206.627625ms)
+  AssertionError [ERR_ASSERTION]: the report goes on with "threads read in 11 of 13 samples", over every sample
+  (the report printed, and the test expected, what the failure above shows)
+
+test at tests/acceptance/3550/report.test.mjs:91:1
+✖ #3550.31d7907e load --report over a log written before the threads were read says so and prints no more of these lines (206.654959ms)
+  AssertionError [ERR_ASSERTION]: the report says the threads were read in 0 of 3 samples
+  66.7% of minutes above the cores (2 of 3)
+  build 8.3%
+  test 33.3%
+  outside 58.4% (compile 0.0%, node 0.0%, other 58.4%)
+  mean CPU read 6.00 of 18.00 cores, at a mean load of 27.50
+  top commands under no grant, mean cores: WindowServer 0.25
+  33.3% of minutes with a request waiting beside two or more idle cores (1 of 3)
+  GPU read in 2 of 3 samples, 7.000 s in all
+  GPU build 0.000 s, 0.0%
+  GPU test 3.000 s, 42.9%
+  GPU outside 4.000 s, 57.1%
+  
+  + actual - expected
+  
+  + []
+  - [
+  -   'threads read in 0 of 3 samples'
+  - ]
+
+$ node --test --test-reporter=spec tests/acceptance/3550/unread.test.mjs
+✖ #3550.02fff002 with the thread listing made to fail, the sample says the threads weren't read (threadsUnread, with no procs, threads, runnable or runTop, never a zero), and load --report counts it in no share (1635.156084ms)
+✖ #3550.02fff002 with a thread listing that names no thread, the sample says the threads weren't read (threadsUnread, with no procs, threads, runnable or runTop, never a zero), and load --report counts it in no share (1521.932792ms)
+✖ #3550.02fff002 load --report over a fixture log counts a sample whose threads weren't read in no share: not in the means, not in a class's line, not in a minute held, not in the commands (207.867667ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 0
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3430.946
+
+✖ failing tests:
+
+test at tests/acceptance/3550/unread.test.mjs:50:1
+✖ #3550.02fff002 with the thread listing made to fail, the sample says the threads weren't read (threadsUnread, with no procs, threads, runnable or runTop, never a zero), and load --report counts it in no share (1635.156084ms)
+  AssertionError [ERR_ASSERTION]: the sample taken while the thread listing was made to fail doesn't say the threads weren't read, in threadsUnread, a short reason
+  the sandbox's ps was asked for 0 thread listings (was made to fail)
+
+test at tests/acceptance/3550/unread.test.mjs:55:1
+✖ #3550.02fff002 with a thread listing that names no thread, the sample says the threads weren't read (threadsUnread, with no procs, threads, runnable or runTop, never a zero), and load --report counts it in no share (1521.932792ms)
+  AssertionError [ERR_ASSERTION]: the sample taken while the thread listing named no thread doesn't say the threads weren't read, in threadsUnread, a short reason
+  the sandbox's ps was asked for 0 thread listings (named no thread)
+
+test at tests/acceptance/3550/unread.test.mjs:60:1
+✖ #3550.02fff002 load --report over a fixture log counts a sample whose threads weren't read in no share: not in the means, not in a class's line, not in a minute held, not in the commands (207.867667ms)
+  AssertionError [ERR_ASSERTION]: the report counts the samples whose threads were read, 1 of 3
+
+$ node --test --test-reporter=spec tests/acceptance/3550/sample.test.mjs
+✖ #3550.20462570 one stub grant whose child spins 8 threads and one ungranted process spinning 4: the sample gives each its runnable threads within 1, to the grant's ID and to outside (2895.967541ms)
+✖ #3550.106a37e8 a process under two nested grants has its threads counted once, under the outer one: the outer grant holds them, the inner one none, and outside none of them (3122.442292ms)
+✖ #3550.712a690c the log still holds PIDs, grant IDs, classes and command names only: procs, threads, runnable and runTop add no argument, no path under a home folder, no environment value and no reason text (0.57275ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 0
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6092.28325
+
+✖ failing tests:
+
+test at tests/acceptance/3550/sample.test.mjs:99:1
+✖ #3550.20462570 one stub grant whose child spins 8 threads and one ungranted process spinning 4: the sample gives each its runnable threads within 1, to the grant's ID and to outside (2895.967541ms)
+  AssertionError [ERR_ASSERTION]: the grant 75bc18f2ae33ea79 holds no whole number procs (undefined): a sample that didn't fail gives it its processes, their threads and those runnable
+
+test at tests/acceptance/3550/sample.test.mjs:146:1
+✖ #3550.106a37e8 a process under two nested grants has its threads counted once, under the outer one: the outer grant holds them, the inner one none, and outside none of them (3122.442292ms)
+  AssertionError [ERR_ASSERTION]: the outer grant 1e82a6788b642564 holds no whole number procs (undefined): a sample that didn't fail gives it its processes, their threads and those runnable
+
+test at tests/acceptance/3550/sample.test.mjs:199:1
+✖ #3550.712a690c the log still holds PIDs, grant IDs, classes and command names only: procs, threads, runnable and runTop add no argument, no path under a home folder, no environment value and no reason text (0.57275ms)
+  AssertionError [ERR_ASSERTION]: the sample holds no runTop, the commands with runnable threads, beside stubs that spin 12: the log isn't read with the new fields in it
+
+$ node --test --test-reporter=spec tests/acceptance/3550/cost.test.mjs
+✖ #3550.397ab2ea the sampler's own cost, with the thread listing it makes at each sample, is under 1% of one core over 10 minutes of sampling each minute (1528.883ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1595.269542
+
+✖ failing tests:
+
+test at tests/acceptance/3550/cost.test.mjs:18:1
+✖ #3550.397ab2ea the sampler's own cost, with the thread listing it makes at each sample, is under 1% of one core over 10 minutes of sampling each minute (1528.883ms)
+  AssertionError [ERR_ASSERTION]: the first sample holds no thread reading (procs, threads and runnable for outside and each grant, and runTop), so its cost isn't the cost with the thread listing

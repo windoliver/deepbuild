@@ -62,6 +62,8 @@ const generated = (bytes) => {
 
 const findings = [];
 const fail = (path, why, fix) => findings.push(`FAIL size: ${path}: ${why}\n  Fix: ${fix}`);
+// How a file comes down to `lines` (#3422): by one concept moved out whole, never by names pushed to the nearest file.
+const split = (lines) => `Bring the file to ${lines} lines or fewer: move one named concept to a file of its own, which imports what it needs by name. No \`use super::*\` in the new file, and no name moved to a shared file that only one file reads.`;
 const sources = new Set(git('ls-files', '-z', '--cached', '--others', '--exclude-standard').split('\0').filter((path) => SOURCE.test(path) && !/(?:^|\/)vendor\//.test(path) && !TWIN.test(path)));
 let over = 0;
 for (const path of sources) {
@@ -83,11 +85,11 @@ for (const path of sources) {
   if (lines > LIMIT) over++;
   const was = base && (base[path] ?? LIMIT);
   if (ceiling === undefined) {
-    if (lines > LIMIT) fail(path, `${lines} lines, over ${LIMIT} with no ceiling`, `Split the file to ${LIMIT} lines or fewer: a file new over ${LIMIT} lines gets no ceiling.`);
-  } else if (lines > ceiling) fail(path, `${lines} lines, over its ceiling of ${ceiling}`, `Split or shrink the file to ${ceiling} lines or fewer: a ceiling never rises.`);
+    if (lines > LIMIT) fail(path, `${lines} lines, over ${LIMIT} with no ceiling`, `${split(LIMIT)} A file new over ${LIMIT} lines gets no ceiling.`);
+  } else if (lines > ceiling) fail(path, `${lines} lines, over its ceiling of ${ceiling}`, `${split(ceiling)} A ceiling never rises.`);
   else if (lines <= LIMIT) fail(path, `${lines} lines, at most ${LIMIT}, under its ceiling of ${ceiling}`, `Remove its entry from ${CEILINGS}.`);
   else if (lines < ceiling) fail(path, `${lines} lines, under its ceiling of ${ceiling}; lower it to ${lines}`, `Set its ceiling in ${CEILINGS} to ${lines}.`);
-  else if (was !== null && ceiling > was) fail(path, `${lines} lines, its ceiling of ${ceiling} above the merge base's ${was}`, `Split or shrink the file to ${was} lines or fewer and set its ceiling to that: a ceiling never rises.`);
+  else if (was !== null && ceiling > was) fail(path, `${lines} lines, its ceiling of ${ceiling} above the merge base's ${was}`, `${split(was)} Set its ceiling to the size it comes to: a ceiling never rises.`);
 }
 for (const [path, ceiling] of Object.entries(ceilings))
   if (!sources.has(path)) fail(path, `not a hand-written source file the work tree holds, with a ceiling of ${ceiling}`, `Remove its entry from ${CEILINGS}.`);

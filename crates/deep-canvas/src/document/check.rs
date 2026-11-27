@@ -19,7 +19,7 @@ use crate::grammar::{
 use crate::kinds::{
     lookup, parse_kind, parse_required, Entry, Lookup, ParamType, Registry, Version,
 };
-use crate::registry::{self, core_name, Cost, Range, Rule, Sealed, SealedModule};
+use crate::registry::{self, core_name, Cost, Range, Rule, Sealed, SealedModule, Semver};
 
 /// The closed list of item roles.
 const ROLES: &[&str] = &["part", "control", "label", "data", "decoration"];
@@ -1291,11 +1291,20 @@ fn required_minors(doc: &Value, sealed: &Sealed, issues: &mut Vec<Issue>) -> BTr
         let wrong = |what: &str| Issue::envelope("out_of_range", path.clone(), value.clone(), what);
         match field.as_str() {
             "kinds" => {}
-            "core" => {
-                if !value.is_string() {
-                    issues.push(wrong("not a version"));
+            // The core the document needs against the build's own (#2058): a newer one changed
+            // meanings this build would misread, so the document is refused as a module at
+            // another version is.
+            "core" => match value.as_str().and_then(Semver::parse) {
+                None => issues.push(wrong("not a version")),
+                Some(needs) => {
+                    let build = registry::core_semver();
+                    if needs > build {
+                        issues.push(wrong(&format!(
+                            "the document requires core {needs}; this build has core {build}"
+                        )));
+                    }
                 }
-            }
+            },
             "modules" => match value.as_object() {
                 Some(modules) => {
                     for (module, range) in modules {

@@ -1,0 +1,12 @@
+{
+  "scripts/known-failures-record.mjs": [
+    {
+      "find": [
+        "        return { ...item, prevOpen: prevNum && openIssues().some((it) => it.number === prevNum) ? prevNum : null };"
+      ],
+      "wrong": [
+        "        return { ...item, prevOpen: prevNum || null };"
+      ]
+    }
+  ]
+}
