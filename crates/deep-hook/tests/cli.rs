@@ -255,25 +255,15 @@ fn a_call_whose_agent_closes_stdin_late_is_decided_and_spooled_without_waiting_f
         let mut control = hook(&control_home, "PreToolUse");
         feed(&mut control, CALL);
         // The late-close hook's stdin closes only after it has had its second: one that waits for the close is killed
-        // by then. Both hooks are watched in one loop, so each one's time is when it exited.
-        let mut ended: [Option<(Option<std::process::ExitStatus>, std::time::Duration)>; 2] =
-            [None, None];
-        while ended.iter().any(Option::is_none) {
-            for (end, proc) in ended.iter_mut().zip([&mut child, &mut control]) {
-                if end.is_none() {
-                    if let Some(status) = proc.try_wait().unwrap() {
-                        *end = Some((Some(status), start.elapsed()));
-                    } else if start.elapsed() > SECOND {
-                        proc.kill().unwrap();
-                        proc.wait().unwrap();
-                        *end = Some((None, start.elapsed()));
-                    }
-                }
-            }
-            std::thread::sleep(std::time::Duration::from_millis(2));
-        }
+        // by then. Each hook is watched on a thread of its own, so each one's time is when it exited.
+        let [(exited, took), (control_exited, control_took)] = std::thread::scope(|watch| {
+            [&mut child, &mut control]
+                .map(|hook| {
+                    watch.spawn(move || (exit_within(hook, start, SECOND), start.elapsed()))
+                })
+                .map(|watched| watched.join().unwrap())
+        });
         drop(stdin);
-        let [(exited, took), (control_exited, control_took)] = ended.map(Option::unwrap);
         let spooled = spool(&home);
         let control_spooled = spool(&control_home).contains("echo closed late");
         std::fs::remove_dir_all(&home).unwrap();
