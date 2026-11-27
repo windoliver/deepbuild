@@ -6,7 +6,7 @@ import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { inputs as configInputs } from './config-eval.mjs';
 import { inputs as verdictInputs } from './verdict-proofs.mjs';
-import { alone, byHand, exclusive, LANE_FILE, ownLane, redrafted, slow, timed } from './lanes-lists.mjs';
+import { alone, byHand, exclusive, fromLaneFiles, LANE_FILE, ownLane, redrafted, slow, timed } from './lanes-lists.mjs';
 // Lane definitions are imported without the build tooling by runner configs and minimal fixture repositories.
 const require = createRequire(import.meta.url);
 
@@ -20,7 +20,7 @@ export const testGlobs = (extension) => testPaths
   .filter((glob) => glob.endsWith(`.test.${extension}`) && !glob.startsWith('crates/'));
 
 // The lane lists, in lanes-lists.mjs.
-export { alone, byHand, exclusive, LANE_FILE, ownLane, redrafted, slow, timed };
+export { alone, byHand, exclusive, fromLaneFiles, LANE_FILE, ownLane, redrafted, slow, timed };
 
 // #3178: these files expect deep_ask to wait on a choice with a recommended option, which goes on at once as
 // provisional (#84; the design's "Work goes on while you decide"), so they stop BLOCKED on main, and
