@@ -1,5 +1,5 @@
 {
-  "schema": "adapter.facts@10",
+  "schema": "adapter.facts@11",
   "versions": [
     "0.15.0"
   ],
@@ -94,7 +94,8 @@
             "bind": "string"
           },
           "optional": {
-            "turn_id": "string"
+            "turn_id": "string",
+            "mode": "string"
           }
         },
         "agent.turn.after": {
@@ -259,6 +260,14 @@
       "hooks": "plugin",
       "bridge": "1.0.105",
       "permissions": "Each tool call asks through ACP's session/request_permission with allow_once, allow_always and reject_once options; only allow_once is ever chosen, from your decision or your answer, never by default.",
+      "modes": {
+        "asks": [
+          "https://agentclientprotocol.com/protocol/session-modes#agent"
+        ],
+        "approvesOwnCalls": [
+          "allow-all"
+        ]
+      },
       "modelCheck": "The session's model, as paseo's snapshot reads it in runtimeInfo.model, is checked against the model you picked before the first prompt goes in; a different one holds the prompt and asks you.",
       "timeouts": {
         "initialize": 30000,

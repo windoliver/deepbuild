@@ -11,7 +11,7 @@ import { execFile } from 'node:child_process';
 import { Answers, deepCommand, hubSocket, sendHook, token, type Obj, type Reply } from './hub.ts';
 import { plant } from './plant.ts';
 
-interface Snapshot { status?: string; pendingPermissions?: { id: string }[]; runtimeInfo?: { sessionId?: string | null } | null; persistence?: { sessionId?: string } | null }
+interface Snapshot { status?: string; currentModeId?: string | null; pendingPermissions?: { id: string }[]; runtimeInfo?: { sessionId?: string | null } | null; persistence?: { sessionId?: string } | null }
 interface Handle {
   refresh(): Promise<{ agent: Snapshot } | null>;
   send(text: string, options?: Obj): Promise<void>;
@@ -69,8 +69,11 @@ export function contribute(server: Server): () => void {
     return a.session;
   }
 
-  /** A hook for the agent's session, sent once the one before it is acknowledged; its reply when the hub gives it. */
-  async function hook(a: Agent, event: string, fields: Obj): Promise<Obj | undefined> {
+  /**
+   * A hook for the agent's session, sent once the one before it is acknowledged; its reply when the hub gives it.
+   * Fields that are read when it is sent take their place in that order first.
+   */
+  async function hook(a: Agent, event: string, fields: Obj | (() => Promise<Obj>)): Promise<Obj | undefined> {
     let acked!: () => void;
     const ack = new Promise<void>((done) => { acked = done; });
     const before = a.sending;
@@ -81,7 +84,7 @@ export function contribute(server: Server): () => void {
       acked();
       return undefined;
     }
-    const payload = { hook_event_name: event, session_id: session, cwd: a.cwd, provider: a.provider, paseo_agent: a.id, bind: a.bind, ...fields };
+    const payload = { hook_event_name: event, session_id: session, cwd: a.cwd, provider: a.provider, paseo_agent: a.id, bind: a.bind, ...(typeof fields === 'function' ? await fields() : fields) };
     const reply = parsed(await sendHook(hubSocket(a.cwd), event, payload, acked));
     if (typeof reply.owner === 'string') {
       a.owner = reply.owner;
@@ -169,7 +172,12 @@ export function contribute(server: Server): () => void {
     },
     'agent.turn.before': ({ agent, turnId }: { agent: HookAgent; turnId: string | null }, context) => {
       const a = agentOf(agent, context);
-      later(() => hook(a, 'agent.turn.before', { turn_id: turnId ?? '' }));
+      // The agent's mode as paseo's snapshot reads it when the turn starts (#3429): the facts say what each mode does to
+      // a call, and a turn whose snapshot names none goes with none, which the hub reads as not known.
+      later(() => hook(a, 'agent.turn.before', async () => {
+        const mode = (await snapshot(a))?.currentModeId;
+        return { turn_id: turnId ?? '', ...(typeof mode === 'string' && mode ? { mode } : {}) };
+      }));
     },
     'agent.turn.after': ({ agent, turnId, outcome }: { agent: HookAgent; turnId: string | null; outcome: { kind: string; error?: { message?: string }; reason?: string } }, context) => {
       const a = agentOf(agent, context);
