@@ -1655,12 +1655,6 @@ for (const name of ['ac1-section', 'ac3-agent-routes', 'ac5-taste-call']) {
   byHand.push(`tests/acceptance/1352/${name}.test.mjs`);
 }
 
-// #138's manifest.test.ts holds a sidecar check's keys to nine, so a planted fixture of a check kind with fields of its
-// own (the design's loop kinds, logic.tuning's catalogs, motion's instruments) fails it, though #138.9e9940d1 needs
-// one for every catalog code (tests/acceptance/138-redraft-3648/DISPUTE.md, #3648). Kept as written, by hand only;
-// its blind redraft, which holds a check's keys to the shared fields and its own kind's, and carries the file's other
-// three tests over unchanged, runs in its place.
 Object.assign(redrafted, { 'tests/acceptance/138/manifest.test.ts': 'tests/acceptance/138-redraft-3648/' });
 byHand.push('tests/acceptance/138/manifest.test.ts');
-// Its files build deep-show's full set, and with test-kit-formula, into target/debug, as #138's own folder does.
 alone.push('tests/acceptance/138-redraft-3648/');
