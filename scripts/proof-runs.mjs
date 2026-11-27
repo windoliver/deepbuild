@@ -11,7 +11,8 @@ import { claimPair, isBay } from './bays.mjs';
 import { listed } from './lanes.mjs';
 import { buildBinaries, placeHubBinaries, selectBinaries } from './proof-binaries.mjs';
 import { acquire, release } from './throttle.mjs';
-import { addedLines, git, isTestFile, listFiles, named, outsideTests, RUNNER_CONFIG, show, spans, tagsIn, tagsWithImports, TEST_DATA, testImports, testPattern, underTestPaths } from './proof-change.mjs';
+import { addedLines, git, isTestFile, listFiles, named, outsideTests, relativeImports, resolveModule, RUNNER_CONFIG, show, spans, tagsIn, tagsWithImports, TEST_DATA, testImports, testPattern, underTestPaths } from './proof-change.mjs';
+import { namedByConfig } from './proof-guard.mjs';
 
 const REPORTER = pathToFileURL(fileURLToPath(new URL('./proof-reporter.mjs', import.meta.url))).href;
 const VITEST_REPORTER = fileURLToPath(new URL('./proof-vitest-reporter.mjs', import.meta.url));
@@ -371,7 +372,8 @@ function atAssertion(directory, { name = 'Error', code, message = '', stack = ''
 function failure(directory, error) {
   const { name = 'Error', code, message = '' } = error;
   const cause = `${name}${code && !name.includes(code) ? ` [${code}]` : ''}: ${firstLine(message)}`.split(`${directory}/`).join('');
-  return { atAssertion: atAssertion(directory, error), bySubtests: error.failureType === 'subtestsFailed', cause };
+  const through = [...frames(error.stack ?? '', directory), ...frames(error.thrown?.stack ?? '', directory)];
+  return { atAssertion: atAssertion(directory, error), bySubtests: error.failureType === 'subtestsFailed', cause, through };
 }
 
 // A run that outlasts this is stopped, and its files count as not run, never as passed or failed.
@@ -522,6 +524,8 @@ function laneLists(root) {
 }
 
 const failedAtAssertion = (result) => result?.status === 'fail' && result.failure.atAssertion;
+
+const DATA = /(?:^|\/)(?:__snapshots__|__fixtures__|fixtures|goldens?|testdata)\//;
 
 // The twins file of a test's acceptance folder: criterion tags, each to the names of its twins.
 function twinsOf(root, path) {
@@ -708,19 +712,32 @@ export function prepareRuns({ root, change, issue }, { coverage = false } = {}) 
     for (const { key } of test.twins) needs.set(key, [...new Set([...(needs.get(key) ?? []), test.path])]);
   }
   const all = listFiles(root);
+  const fold = (path) => {
+    try {
+      return relative(root, realpathSync(join(root, path))).toLowerCase();
+    } catch {
+      return path.toLowerCase();
+    }
+  };
+  const configured = new Set([...namedByConfig(root, null, all)].map(fold));
   for (const [folder, twinFiles] of needs) {
     const own = all.filter((path) => path.startsWith(`${folder}/`));
     // A twin is a wrong program: it replaces code under test, never a test's own files, or a test that asserts nothing
-    // could fail on a twin that rewrites what it compares; code its tests run but don't import is code under test (#3689).
+    // could fail on a twin that rewrites what it compares; code its tests run but don't import is code under test, and a failure through it is none (#3689).
     // Nor installed packages, whose frames a failure's origin passes over.
     const { overlay, paths, stale } = twinOverlay(root, folder, own, all);
-    const imported = new Set(twinFiles.flatMap((file) => [...testImports(root, null, file).keys()]));
-    const run = (path) => testPattern.test(path) && !TEST_DATA.test(path) && !isTestFile(path) && !path.startsWith('tests/acceptance/') && /\.(?:rs|[cm]?js|tsx?|[cm]ts)$/.test(path) && !imported.has(path);
+    const reach = twinFiles.flatMap((file) => [...testImports(root, null, file)]);
+    const imported = new Set(reach.map(([path]) => fold(path)));
+    const unresolved = reach.flatMap(([path, source]) => relativeImports(path, source).filter(underTestPaths)).filter((file) => show(root, null, resolveModule(root, null, file)) === null);
+    const run = (path) => !unresolved.length && testPattern.test(path) && !DATA.test(path) && !isTestFile(path) && !RUNNER_CONFIG.test(path) && !configured.has(fold(path))
+      && !fold(path).startsWith('tests/acceptance/') && /\.(?:rs|[cm]?js|tsx?|[cm]ts)$/.test(path) && !imported.has(fold(path));
     const tests = paths.filter((path) => (underTestPaths(path) && !run(path)) || path.split('/').includes('node_modules'));
     if (!own.length || tests.length) {
-      runs.twins.set(folder, { refused: own.length ? `replaces files under the test paths or node_modules (${tests.join(', ')})` : 'has no files', ...empty() });
+      const why = unresolved.length && tests.some((path) => !path.split('/').includes('node_modules')) ? `; its tests import ${[...new Set(unresolved)].join(', ')}, which don't resolve` : '';
+      runs.twins.set(folder, { refused: own.length ? `replaces files under the test paths or node_modules (${tests.join(', ')})${why}` : 'has no files', ...empty() });
       continue;
     }
+    const planted = new Set(paths.filter(underTestPaths).map(fold));
     if (stale) {
       runs.twins.set(folder, { stale, ...empty() });
       continue;
@@ -745,7 +762,9 @@ export function prepareRuns({ root, change, issue }, { coverage = false } = {}) 
       runs.twins.set(folder, { refused, ...empty() });
       continue;
     }
-    runs.twins.set(folder, failed ? { ...empty(), unrunnable: new Map(twinFiles.map((file) => [file, failed])) } : runTests(directory, twinFiles, { timed }));
+    const ran = failed ? { ...empty(), unrunnable: new Map(twinFiles.map((file) => [file, failed])) } : runTests(directory, twinFiles, { timed });
+    for (const result of ran.results.values()) if (result.failure?.through.some((path) => planted.has(fold(path)))) result.failure.atAssertion = false;
+    runs.twins.set(folder, ran);
   }
   return runs;
 }
