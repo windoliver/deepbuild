@@ -69528,7 +69528,7 @@ impl Contract for HookRequestV3 {
         deep_contracts::check_member(members, at, "notes", &RULE_233)?;
         deep_contracts::check_member(members, at, "stage", &RULE_236)?;
         deep_contracts::check_member(members, at, "billing", &RULE_231)?;
-        deep_contracts::check_member(members, at, "inbox", &RULE_234)?;
+        deep_contracts::check_member(members, at, "inbox", &RULE_6)?;
         Ok(Self {
             v: deep_contracts::required(members, at, "v")?,
             agent: deep_contracts::required(members, at, "agent")?,
@@ -94502,7 +94502,7 @@ impl Contract for SessionStartV3Data {
         deep_contracts::check_member(members, at, "branch", &RULE_16)?;
         deep_contracts::check_member(members, at, "thread", &RULE_6)?;
         deep_contracts::check_member(members, at, "billing", &RULE_231)?;
-        deep_contracts::check_member(members, at, "inbox", &RULE_234)?;
+        deep_contracts::check_member(members, at, "inbox", &RULE_6)?;
         Ok(Self {
             agent: deep_contracts::required(members, at, "agent")?,
             worktree: deep_contracts::required(members, at, "worktree")?,
@@ -94785,7 +94785,7 @@ impl Contract for SessionStartV4Data {
         deep_contracts::check_member(members, at, "branch", &RULE_16)?;
         deep_contracts::check_member(members, at, "thread", &RULE_6)?;
         deep_contracts::check_member(members, at, "billing", &RULE_231)?;
-        deep_contracts::check_member(members, at, "inbox", &RULE_234)?;
+        deep_contracts::check_member(members, at, "inbox", &RULE_6)?;
         deep_contracts::check_member(members, at, "parent", &RULE_6)?;
         Ok(Self {
             agent: deep_contracts::required(members, at, "agent")?,

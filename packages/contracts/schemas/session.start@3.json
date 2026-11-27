@@ -94,7 +94,7 @@
         "inbox": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 4096,
+          "maxLength": 8192,
           "description": "The session's own inbox address, as deep-hook reported it at SessionStart (#3405): the path its agent exports to its hooks, never the token beside it. Another session's message names its sender by this address. A minor of session.start@3."
         },
         "loads": {

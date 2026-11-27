@@ -126,7 +126,7 @@
     "inbox": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 4096,
+      "maxLength": 8192,
       "description": "At SessionStart, the session's own inbox address: the path the agent exports to its hooks (Claude Code's CLAUDE_CODE_MESSAGING_SOCKET), never the token beside it (#3405). A minor of hook.request@3."
     }
   },
