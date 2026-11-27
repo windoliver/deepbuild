@@ -1,12 +1,12 @@
 {
   "issue": 1042,
   "criterion": "#1042.ed73d00d",
-  "verdict": "looks_wrong",
+  "verdict": "looks_right",
   "who": "The implementing agent (model Claude Fable 5.2), on the owner's delegation in the session (the owner asked it to validate for them, November 26, 2026); not the owner's own call",
-  "when": "2026-11-26T21:23:11Z",
+  "when": "2026-11-27T00:56:45Z",
   "screenshots": {
-    "player-ray-shadow-fallback.png": "0548f6af223d10cbc9d6826bb115b7cf68ad5ea344283da120179aa1e1a5cc7d",
+    "player-ray-shadow-fallback.png": "72db0a84d8ac5ebef71314e51e049f04eb363de497680155c97602fbaf1e83c5",
     "player-cjk-subset.png": "c3053d6e89dcd2b89272a9bb60fa7fcfb838c5cf73bfa1f5a3325c916015cd19"
   },
-  "note": "Checked each against the piece and the issue. player-cjk-subset.png looks right: the scroll's forty Han graphemes in two lines, dark on the page, each one whole and none a box or a gap, with the dot and the dark band under them. player-ray-shadow-fallback.png does not: the yard 2 s in shows the floor, the sky and the crate with its darker side, but no shadow on the floor, though its one light casts one. The app's own render of the same piece at the same time (docs/evidence/1042/app-yard-2s.png, a png_seq still) shows the crate's shadow on the floor behind its right side, and the issue says light in the player is today's light. The app draws a painted scene's sun shadow in deep-effects-render; the web player draws 3D through deep-scene3d-render alone, so the shadow is dropped in the browser and the receipt doesn't say so."
+  "note": "Checked each against the piece and the issue. player-ray-shadow-fallback.png: the yard 2 s in, drawn by the player with today's light: the floor, the sky, the crate with its darker side and the crate's shadow on the floor behind its right side, where the app's own render of the same piece at the same time has it (docs/evidence/1042/app-yard-2s.png, a png_seq still). The floor and the crate's side are the app's colors where sampled, and the shadow covers the same patch of floor. player-cjk-subset.png: the scroll's forty Han graphemes in two lines, dark on the page, each one whole and none a box or a gap, with the dot and the dark band under them. An earlier call on the pictures of this branch said the yard looked wrong, because the player drew no shadow; the player now draws it. Two small things that don't make them wrong: the player's picture is three times the app still's size, so the shadow's edge is finer in it, and a still shows no motion."
 }
