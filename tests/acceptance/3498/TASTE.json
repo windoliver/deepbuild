@@ -1,0 +1,9 @@
+{
+  "issue": 3498,
+  "criterion": "#3498.826f8cd5",
+  "verdict": null,
+  "who": null,
+  "when": null,
+  "files": {},
+  "note": "No call recorded yet. A person fills this in once, on what one run of shown.test.ts wrote to $DA3498_SHOWN: verdict reads_right or reads_wrong, who, when, and files with the SHA-256 of before.txt and of after.txt, as that run printed them."
+}
