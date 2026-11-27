@@ -35,7 +35,9 @@ import { isRecord as isObj, canonicalize, sha256Hex, type JsonValue } from '@dee
 import type { SendBoundary, SendRequest, Receipt } from '@deepbuild/evidence';
 import type { ExtensionHost } from '@deepbuild/extension-host';
 import { ulid } from '@deepbuild/record';
+import type { Used } from '@deepbuild/supervisor';
 import type { RunningJob } from './rows.js';
+import { tableRecord } from './table-record.js';
 
 type Obj = Record<string, unknown>;
 type Host = Pick<ExtensionHost, 'jobs' | 'jobParams' | 'runJobTool' | 'jobHostReport' | 'runCheck'>;
@@ -79,10 +81,11 @@ export interface JobDeps {
   charge(run: string, usd: number): Promise<void>;
   /** Your yes to a paid run's ask, approving a budget of that run's price for its tool (#509). */
   approve(ask: string, budget: BudgetInput): Promise<unknown>;
-  /** A table asset's record the evidence store keeps beside its bytes (`tables/<sha256>.json`, #397), or undefined. */
-  table(sha: string): Obj | undefined;
-  /** Keeps a table's record beside its bytes (#3569). */
-  keepTable(sha: string, record: Obj): void;
+  /** A file the hub fetched through the Source block, by its hash: the URL and the time it fetched it (#1820), else undefined. */
+  fetched?(sha: string): { url: string; fetched: number } | undefined;
+  readTable?(sha: string): Obj | undefined;
+  /** Writes a table output's record beside its bytes in the evidence store, `tables/<sha256>.json` (#3570). */
+  table?(sha: string, record: Record<string, unknown>): Promise<void>;
   plant?: string | undefined;
 }
 interface Cached { outputs: Record<string, string>; build: string | null }
@@ -232,7 +235,6 @@ export class Jobs {
     }
     const missing = declared.filter((n) => !bytes[n]);
     if (missing.length) return refused(`${kind} takes the inputs ${declared.join(', ')}; give ${missing.join(', ')}`);
-    // A kind of tables (#3569) reads each table its params name by hash: its bytes, and its record's key and units.
     const tables = held.descriptor.schema.tables;
     if (tables !== undefined) {
       const named = params[tables];
@@ -242,7 +244,7 @@ export class Jobs {
       for (const name of Object.keys(named).sort()) {
         const sha = named[name];
         if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) || typeof sha !== 'string' || !HASH.test(sha)) return refused(`${kind}'s ${tables} names each table by a name of letters, digits and _, and its SHA-256`);
-        const probed = this.d.table(sha)?.probe;
+        const probed = this.d.readTable?.(sha)?.probe;
         const probe = isObj(probed) && isObj(probed.table) ? probed.table : undefined;
         if (!probe) return refused(`the input ${name} names ${sha}, which is no table asset the evidence store holds a record of`);
         try { bytes[name] = await this.d.read(sha); } catch (e) { return refused(`the input ${name}: ${message(e)}`); }
@@ -409,6 +411,7 @@ export class Jobs {
     const job: RunningJob = { key, kind, tool, started: this.d.now() };
     this.d.row(job, true);
     let wrote: Record<string, Uint8Array>;
+    let used: Used | undefined;
     try {
       // A paid call is charged its price as it starts: from here it may be spent, whatever it answers.
       if (spend) await this.d.charge(spend.run, spend.usd);
@@ -416,7 +419,7 @@ export class Jobs {
         job.counter = counter;
         job.at = this.d.now();
         this.d.row(job, true);
-      });
+      }, (u) => { used = u; });
     } catch (e) {
       // The host holds the run on its inputs (#509), such as a word its engine can't say: BLOCKED with its cause, no ask.
       const blocked = e instanceof Error && e.name === 'JobBlocked' ? (e as { blocked?: unknown }).blocked : undefined;
@@ -427,12 +430,12 @@ export class Jobs {
     } finally {
       this.d.row(job, false);
     }
-    const outputs = Object.keys(held.descriptor.outputs);
+    // A tool writes the kind's outputs its format names (#3570), or all of them.
+    const outputs = pinned.descriptor.outputs ?? Object.keys(held.descriptor.outputs);
     const absent = outputs.filter((n) => !wrote[n]);
     if (absent.length) return { status: 'failed', reason: `${tool} wrote no ${absent.join(', ')}, which ${kind} declares; nothing was kept`, receipt: receipt(pinned.build, 'miss') };
     // Its outputs are held here until every output check passes: before that, no store, no cache, nothing an item can name.
     const encoded = Object.fromEntries(outputs.map((n) => [n, Buffer.from(wrote[n]!).toString('base64')]));
-    // A check that recounts the outputs from what the tool read (#3569) gets the job's params and its inputs' bytes too.
     const read = Object.fromEntries(Object.entries(bytes).map(([n, b]) => [n, Array.isArray(b) ? b.map((x) => Buffer.from(x).toString('base64')) : Buffer.from(b).toString('base64')]));
     for (const check of held.descriptor.output_checks) {
       const spec = { kind: check, runner: tool, inputs: [], depth: 'job', oracle: 'code', contract: null, outputs: encoded, job: { params, inputs: read } } as CheckSpec;
@@ -442,7 +445,6 @@ export class Jobs {
         return { status: 'failed', check, outcome: ran.outcome, reason: `${tool}'s output fails ${kind}'s output check ${check} (${ran.outcome}${why ? `: ${why}` : ''}); nothing was kept, so no item can name it`, receipt: receipt(pinned.build, 'miss') };
       }
     }
-    // The table a kind of tables wrote (#3569) is a table asset: its record beside it, its source the job, never the tool's say.
     const tables = held.descriptor.schema.tables;
     let record: unknown;
     if (tables !== undefined) {
@@ -451,10 +453,21 @@ export class Jobs {
     }
     const kept: Record<string, string> = {};
     for (const n of outputs) kept[n] = await this.d.keep(wrote[n]!, `job:${kind}/${tool}#${n}`);
-    if (tables !== undefined && isObj(record)) this.d.keepTable(kept.table!, { ...record, sha256: kept.table!, kind: 'table', source: { job: { kind, tool, input: params[tables] ?? null } }, lineage: kept.lineage! });
+    // A table output is a table asset (#3570): its record names the job and its inputs, each with the URL and fetch time
+    // the hub recorded, so a number read from it traces through the job to the file the hub fetched.
+    if (tables !== undefined && isObj(record)) {
+      await this.d.table?.(kept.table!, { ...record, sha256: kept.table!, kind: 'table', source: { job: { kind, tool, input: params[tables] ?? null } }, lineage: kept.lineage! });
+    } else if (kept['table']) {
+      const input = Object.fromEntries(Object.entries(hashes(bytes)).map(([n, h]) => [n, (Array.isArray(h) ? h : [h]).map((sha) => ({ sha256: sha, ...(this.d.fetched?.(sha) ?? { origin: 'agent' }) }))]));
+      const tableRec = tableRecord(kept['table'], wrote['table']!, params['key'], { job: { kind, tool, input } });
+      if (tableRec) await this.d.table?.(kept['table'], tableRec);
+    }
     this.saved.cache[key] = { outputs: kept, build: pinned.build };
     this.save();
-    return done(kept, pinned.build, 'miss');
+    const answer = done(kept, pinned.build, 'miss');
+    // What the tool's run used, as the supervisor read it (#3220), never the tool's word.
+    if (used && isObj(answer.receipt)) answer.receipt.used = used;
+    return answer;
   }
   /**
    * The key: the tool's name@version, the canonical params and each input's hash, and an open model's weight files by

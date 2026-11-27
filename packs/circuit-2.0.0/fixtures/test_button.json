@@ -1,0 +1,215 @@
+{
+  "name": "test_button",
+  "item": {
+    "kind": "logic@1",
+    "params": {
+      "program": "ff0c077ab734e636c01d299880721f41eabecfc069af455fd3aa57e7256bdc87",
+      "step_rate": 1000,
+      "reads": [
+        "test"
+      ],
+      "writes": {
+        "v": {
+          "type": "f64",
+          "count": 4
+        },
+        "i_rms": {
+          "type": "f64",
+          "count": 3
+        },
+        "i": {
+          "type": "f64",
+          "count": 3
+        },
+        "p": {
+          "type": "f64",
+          "count": 3
+        },
+        "r": {
+          "type": "f64",
+          "count": 3
+        },
+        "on": {
+          "type": "i32",
+          "count": 3
+        },
+        "energy": {
+          "type": "f64",
+          "count": 3
+        },
+        "kwh": {
+          "type": "f64",
+          "count": 3
+        },
+        "drift": {
+          "type": "f64",
+          "count": 3
+        },
+        "drift_x": {
+          "type": "f64",
+          "count": 3
+        },
+        "heat": {
+          "type": "f64",
+          "count": 3
+        },
+        "residual": {
+          "type": "f64",
+          "count": 3
+        },
+        "i2_rms": {
+          "type": "f64",
+          "count": 3
+        },
+        "i2": {
+          "type": "f64",
+          "count": 3
+        }
+      },
+      "circuit": {
+        "nodes": [
+          "neutral",
+          "live",
+          "load_live",
+          "load_neutral"
+        ],
+        "parts": [
+          {
+            "id": "mains",
+            "kind": "source_ac",
+            "from": "neutral",
+            "to": "live",
+            "v_rms": 230,
+            "f": 50
+          },
+          {
+            "id": "rcd",
+            "kind": "rcd",
+            "live": [
+              "live",
+              "load_live"
+            ],
+            "neutral": [
+              "neutral",
+              "load_neutral"
+            ],
+            "test_r": 3000,
+            "test_by": "test"
+          },
+          {
+            "id": "lamp",
+            "kind": "load",
+            "from": "load_live",
+            "to": "load_neutral",
+            "p_rated": 60,
+            "v_rated": 230
+          }
+        ]
+      },
+      "budget": {
+        "fuel": 10000000
+      }
+    }
+  },
+  "controls": {
+    "test": {
+      "kind": "slider"
+    }
+  },
+  "track": [
+    {
+      "t": 0,
+      "seq": 1,
+      "control": "test",
+      "value": 0,
+      "writer": "you",
+      "player": 1
+    },
+    {
+      "t": 1411200,
+      "seq": 2,
+      "control": "test",
+      "value": 1,
+      "writer": "you",
+      "player": 1
+    }
+  ],
+  "steps": 84,
+  "expect": {
+    "arrays": {
+      "1": {
+        "i_rms": [
+          0.2608695652173913,
+          0.2608695652173913,
+          0.2608695652173913
+        ],
+        "residual": [
+          0,
+          0,
+          0
+        ],
+        "p": [
+          60,
+          0,
+          60
+        ]
+      },
+      "2": {
+        "i_rms": [
+          0.33753623188405796,
+          0.33753623188405796,
+          0.2608695652173913
+        ],
+        "i2_rms": [
+          0,
+          0.2608695652173913,
+          0
+        ],
+        "residual": [
+          0,
+          0.07666666666666666,
+          0
+        ],
+        "p": [
+          77.63333333333333,
+          17.633333333333333,
+          60
+        ],
+        "on": [
+          1,
+          1,
+          1
+        ]
+      },
+      "80": {
+        "on": [
+          1,
+          1,
+          1
+        ]
+      },
+      "81": {
+        "i_rms": [
+          0,
+          0,
+          0
+        ],
+        "residual": [
+          0,
+          0,
+          0
+        ],
+        "on": [
+          1,
+          0,
+          1
+        ]
+      }
+    },
+    "tolerance": {
+      "abs": 1e-12,
+      "rel": 1e-9
+    }
+  },
+  "answer": "The test path puts 3,000 Ω from the load-side live to the supply-side neutral: 230 ÷ 3,000 = 76.667 mA through the live pole that never comes back through the neutral pole, so the residual is 76.667 mA, 2.5556 times the 30 mA rating, and the path takes 230² ÷ 3,000 = 17.633 W, which the RCD's p holds. The count rises by 1 ms ÷ 78.26 ms a step and reaches 1 after 78.26 steps: both poles open at step 2 + 79 = 81."
+}
