@@ -21,6 +21,7 @@ the commit, and requires both to read the same tags. The lanes themselves (`node
 not driven: `before` waits on a bay-pair grant this machine may not give within the run, and the issue puts the fault
 in the shared resolver both lanes read through, so the function is the smallest real surface. The planted issue is
 `#9001`; its tags are built at runtime from criterion texts (`criterionId` from `../569/helpers.mjs`).
+So no file here holds a tag a real issue's trace lane could read as its own.
 
 ## Tests
 

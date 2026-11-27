@@ -1,11 +1,3 @@
-// #3585: the proof lanes read a criterion tag through the modules a test imports (tagsWithImports in
-// scripts/proof-change.mjs, which the before and trace lanes call). A TypeScript test names a sibling
-// `helpers.ts` as `./helpers.js`, as TypeScript and vite resolve it; the lanes must read that module's tags,
-// and a specifier naming a `.js` file that exists must still read that file.
-//
-// Each test builds a scratch git repository and calls tagsWithImports on it, both on the worktree (rev null)
-// and on a commit. The planted issue is #9001; its tags are built at runtime, so no file here holds a tag a
-// real issue's trace lane could read as its own.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { tagsWithImports } from '../../../scripts/proof-change.mjs';
@@ -17,7 +9,6 @@ const FAR = criterionId(N, 'A module the helper imports holds this tag');
 const WRONG = criterionId(N, 'Only the TypeScript module beside the named JavaScript file holds this tag');
 const DIR = `tests/acceptance/${N}`;
 
-/** A repository with `files` committed on main; returns its folder and the commit. */
 function repo(t, files) {
   const cwd = scratch(t, 'deep-proof-3585-');
   git(cwd, 'init', '-q', '-b', 'main');
@@ -27,11 +18,9 @@ function repo(t, files) {
   return { cwd, head: git(cwd, 'rev-parse', 'HEAD').trim() };
 }
 
-/** A test file that names its test with a tag it imports from `specifier`. */
 const testFile = (specifier) =>
   `import { it } from 'vitest';\nimport { AC } from '${specifier}';\n\nit(\`\${AC} holds\`, () => {});\n`;
 
-/** Reads the tags as the lanes do, on the worktree and on the commit; both must agree. */
 function tags(scene, path) {
   const worktree = tagsWithImports(scene.cwd, null, path);
   const committed = tagsWithImports(scene.cwd, scene.head, path);
@@ -39,7 +28,6 @@ function tags(scene, path) {
   return worktree;
 }
 
-// TypeScript's mapping of a JavaScript extension to the TypeScript sources it names.
 const CASES = [
   { specifier: './helpers.js', file: 'helpers.ts' },
   { specifier: './helpers.js', file: 'helpers.tsx' },
@@ -70,8 +58,6 @@ test('#3585.53dc07b0 tags reach through a chain of .js specifiers naming .ts mod
   assert.ok(found.includes(FAR), `the far module's tag is missing: got ${JSON.stringify(found)}`);
 });
 
-// Where the named JavaScript file exists, it is the module, as node, vite and TypeScript take it; the
-// TypeScript file beside it is not imported and its tags are not the test's.
 const KEPT = [
   { specifier: './helpers.js', file: 'helpers.js', beside: 'helpers.ts' },
   { specifier: './helpers.mjs', file: 'helpers.mjs', beside: 'helpers.mts' },
