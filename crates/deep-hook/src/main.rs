@@ -655,7 +655,11 @@ fn matching() -> ExitCode {
         // A running hub puts a removed rules.json back before it says hello (#1856), as `forward` reads it; a line
         // it can't read waits for nothing.
         let rules = match rules() {
-            Err(why) if why == REMOVED && parsed.is_some() && hub_said_hello(Instant::now() + PUT_BACK) => {
+            Err(why)
+                if why == REMOVED
+                    && parsed.is_some()
+                    && hub_said_hello(Instant::now() + PUT_BACK) =>
+            {
                 self::rules()
             }
             read => read,
