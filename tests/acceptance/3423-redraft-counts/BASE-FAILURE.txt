@@ -1,0 +1,196 @@
+The #3423 redraft suite for criteria #3423.a2928d51 (AC1) and #3423.e825ce4d (AC7) on its base commit, 940479f81
+(main's 345c9ae2675bbf006a04450a1088928ddabd9548 plus the first-draft suite; HEAD's merge base with main is
+345c9ae26), run as `npx vitest run tests/acceptance/3423-redraft-counts` under Node 24.22.0 on November 27, 2026.
+5 tests, 5 fail, each at an assertion (vitest AssertionError in `reply()`), none at load or by a crash.
+
+Per test, the expected reason: the base has no scripts/taste.mjs ("Cannot find module"), so `reply()` asserts the
+script printed a JSON object and that fails. The surface doesn't exist; no count, list or reopen is read.
+
+The run's full output follows, the checkout's absolute path shown as <checkout>.
+
+
+ RUN  v5.0.5 <checkout>
+
+ ❯ tests/acceptance/3423-redraft-counts/ac7-owner-list.test.ts (3 tests | 3 failed) 1605ms
+   ❯ #3423.e825ce4d the list of readings put to the owner (3)
+     × #3423.e825ce4d the list holds all 103 with their issue, criterion and hashes 475ms
+     × #3423.e825ce4d a recorded overrule reopens its issue 409ms
+     × #3423.e825ce4d a list that drops a record fails, naming it 461ms
+ ❯ tests/acceptance/3423-redraft-counts/ac1-lane-counts.test.ts (2 tests | 2 failed) 14397ms
+   ❯ #3423.a2928d51 the lane over main's taste records (2)
+     × #3423.a2928d51 on the records ebf1e7f44 held the lane counts 14 calls by a person and 103 readings by an agent, 4 of them signed for by a person 282ms
+     × #3423.a2928d51 on the merge base the lane fails, naming a record whose maker is prose 13964ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/3423-redraft-counts/ac1-lane-counts.test.ts > #3423.a2928d51 the lane over main's taste records > #3423.a2928d51 on the records ebf1e7f44 held the lane counts 14 calls by a person and 103 readings by an agent, 4 of them signed for by a person
+AssertionError: lane on the change: `node scripts/taste.mjs` printed no JSON object (exit 1):
+
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/scripts/taste.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.0
+: expected null not to be null
+ ❯ reply tests/acceptance/3423/helpers.ts:105:129
+    103| /** The run's JSON, asserted to be there: a missing script or a non-JS…
+    104| export function reply(r: Run, what: string): JsonObject {
+    105|   expect(r.json, `${what}: \`node scripts/taste.mjs\` printed no JSON …
+       |                                                                                                                                 ^
+    106|   return r.json as JsonObject;
+    107| }
+ ❯ tests/acceptance/3423-redraft-counts/ac1-lane-counts.test.ts:14:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  tests/acceptance/3423-redraft-counts/ac1-lane-counts.test.ts > #3423.a2928d51 the lane over main's taste records > #3423.a2928d51 on the merge base the lane fails, naming a record whose maker is prose
+AssertionError: lane --rev 345c9ae2675bbf006a04450a1088928ddabd9548: `node scripts/taste.mjs` printed no JSON object (exit 1):
+
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/scripts/taste.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.0
+: expected null not to be null
+ ❯ reply tests/acceptance/3423/helpers.ts:105:129
+    103| /** The run's JSON, asserted to be there: a missing script or a non-JS…
+    104| export function reply(r: Run, what: string): JsonObject {
+    105|   expect(r.json, `${what}: \`node scripts/taste.mjs\` printed no JSON …
+       |                                                                                                                                 ^
+    106|   return r.json as JsonObject;
+    107| }
+ ❯ tests/acceptance/3423-redraft-counts/ac1-lane-counts.test.ts:35:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  tests/acceptance/3423-redraft-counts/ac7-owner-list.test.ts > #3423.e825ce4d the list of readings put to the owner > #3423.e825ce4d the list holds all 103 with their issue, criterion and hashes
+AssertionError: list on the change: `node scripts/taste.mjs` printed no JSON object (exit 1):
+
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/scripts/taste.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.0
+: expected null not to be null
+ ❯ reply tests/acceptance/3423/helpers.ts:105:129
+    103| /** The run's JSON, asserted to be there: a missing script or a non-JS…
+    104| export function reply(r: Run, what: string): JsonObject {
+    105|   expect(r.json, `${what}: \`node scripts/taste.mjs\` printed no JSON …
+       |                                                                                                                                 ^
+    106|   return r.json as JsonObject;
+    107| }
+ ❯ tests/acceptance/3423-redraft-counts/ac7-owner-list.test.ts:21:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  tests/acceptance/3423-redraft-counts/ac7-owner-list.test.ts > #3423.e825ce4d the list of readings put to the owner > #3423.e825ce4d a recorded overrule reopens its issue
+AssertionError: reopen on the scratch repository: `node scripts/taste.mjs` printed no JSON object (exit 1):
+
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/scripts/taste.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.0
+: expected null not to be null
+ ❯ reply tests/acceptance/3423/helpers.ts:105:129
+    103| /** The run's JSON, asserted to be there: a missing script or a non-JS…
+    104| export function reply(r: Run, what: string): JsonObject {
+    105|   expect(r.json, `${what}: \`node scripts/taste.mjs\` printed no JSON …
+       |                                                                                                                                 ^
+    106|   return r.json as JsonObject;
+    107| }
+ ❯ tests/acceptance/3423-redraft-counts/ac7-owner-list.test.ts:50:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  tests/acceptance/3423-redraft-counts/ac7-owner-list.test.ts > #3423.e825ce4d the list of readings put to the owner > #3423.e825ce4d a list that drops a record fails, naming it
+AssertionError: list on the scratch repository: `node scripts/taste.mjs` printed no JSON object (exit 1):
+
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/scripts/taste.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.0
+: expected null not to be null
+ ❯ reply tests/acceptance/3423/helpers.ts:105:129
+    103| /** The run's JSON, asserted to be there: a missing script or a non-JS…
+    104| export function reply(r: Run, what: string): JsonObject {
+    105|   expect(r.json, `${what}: \`node scripts/taste.mjs\` printed no JSON …
+       |                                                                                                                                 ^
+    106|   return r.json as JsonObject;
+    107| }
+ ❯ tests/acceptance/3423-redraft-counts/ac7-owner-list.test.ts:69:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  5 failed (5)
+   Start at  01:03:45
+   Duration  14.94s (tests 97%, transform 2%, setup 1%, import 1%)
+
