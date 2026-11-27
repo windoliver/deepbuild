@@ -25,6 +25,8 @@ pub trait Screens {
     fn frame(&mut self, doc: &Value, size: [f64; 2], veil: f64) -> Option<String>;
     /// Frames kept by `frame`, as one recording: its sha256.
     fn recording(&mut self, frames: &[String]) -> Option<String>;
+    /// #3605: each text item the document draws at `size`, with the string it shows.
+    fn texts(&mut self, doc: &Value, size: [f64; 2]) -> Result<BTreeMap<String, String>, Value>;
 }
 
 /// The replica's planted shells (`DEEP_DRIVE_PLANT`): a pause that lets the level's clock run; focus left on a control
@@ -34,6 +36,12 @@ pub struct Plants {
     pub pause_runs_clock: bool,
     pub focus_stays_disabled: bool,
     pub prompts_keep_keys: bool,
+    /// #3605: a level marked done when it is entered.
+    pub done_on_enter: bool,
+    /// #3605: `done` kept in a run's save, not the profile record.
+    pub done_in_save: bool,
+    /// #3605: a setting handed through the level's read region with no entry on its track.
+    pub setting_in_read_region: bool,
 }
 
 /// One device input, as a journey or a replica gives it.
@@ -87,9 +95,30 @@ pub struct LevelRun {
     /// Touch zones in the view's pixels: the action each writes and its box.
     pub zones: Vec<(String, Box4)>,
     pending: Vec<(String, f64)>,
+    /// #3605: each setting the level takes that the shell declares: its place in `custom` and the
+    /// value its track last gave it.
+    given: Vec<(String, usize, f64)>,
+    /// Planted: the setting entries it read are left off the track it gives.
+    hides_settings: bool,
 }
 
 impl LevelRun {
+    /// `{level, entries, steps}`: the load's track and the steps it ran.
+    pub fn given_track(&self) -> Value {
+        json!({"level": self.index, "entries": self.track(), "steps": self.steps})
+    }
+
+    /// The level's input track, every entry in time order, as a piece's replay reads it.
+    pub fn track(&self) -> Vec<Value> {
+        self.world
+            .entries()
+            .iter()
+            // Planted: the settings the shell handed the level kept off the track it gives.
+            .filter(|e| !(self.hides_settings && e.control.starts_with("settings.")))
+            .map(Entry::to_json)
+            .collect()
+    }
+
     fn hash(&mut self) -> String {
         full(&self.world.deep_hashes(), &self.ids)
     }
@@ -146,6 +175,12 @@ pub struct Run<'a> {
     pub frames: Vec<String>,
     /// The document the last frame outside a transition drew, which a fade draws out of.
     drawn: Option<Value>,
+    /// #3605: the shell's profile record, where its saves are kept.
+    pub keeper: super::profile::Keeper,
+    /// Each level load's input track, `{level, entries, steps}`, in the order levels were left.
+    pub tracks: Vec<Value>,
+    /// #3605: each completion, `{level, step}`: the shell step at which the level's own `done` turned true.
+    pub completions: Vec<Value>,
 }
 
 const STEP: i64 = 705_600_000 / 60;
@@ -183,6 +218,9 @@ impl<'a> Run<'a> {
             keep_frames: false,
             frames: Vec::new(),
             drawn: None,
+            keeper: super::profile::Keeper::new(&Value::Null, plants.done_in_save),
+            tracks: Vec::new(),
+            completions: Vec::new(),
         }
     }
 
@@ -211,7 +249,9 @@ impl<'a> Run<'a> {
         if let Some(b) = self.boxes.get(&s) {
             return Ok(b.clone());
         }
-        let b = self.screens.boxes(&self.shell.screens[s].doc, self.size)?;
+        // The screen as it draws, the shell's arrays baked in, so its drivers and flips over them evaluate.
+        let doc = self.prompted(s);
+        let b = self.screens.boxes(&doc, self.size)?;
         self.boxes.insert(s, b.clone());
         Ok(b)
     }
@@ -325,6 +365,18 @@ impl<'a> Run<'a> {
                 .iter()
                 .position(|t| t == a)
                 .map_or(0.0, |i| f64::from(u8::from(self.state.toggle[i]))),
+            // #3605: a choice's value is its option's index; a slider's and a toggle's the setting.
+            Some(("custom", n)) => self.shell.custom(n).map_or(0.0, |i| {
+                let now = self.state.custom[i];
+                match c.kind {
+                    Kind::Choice => c
+                        .options
+                        .iter()
+                        .position(|o| o.as_f64() == Some(now))
+                        .unwrap_or(0) as f64,
+                    _ => now,
+                }
+            }),
             _ => 0.0,
         }
     }
@@ -554,10 +606,26 @@ impl<'a> Run<'a> {
                     && crate::carry::differs(&piece, r).is_empty()
             })
             .cloned();
-        let entries: Vec<Entry> = taken
+        let mut entries: Vec<Entry> = taken
             .iter()
             .map(|(_, _, h, r)| crate::carry::entry(h, r))
             .collect();
+        // #3605: each setting the level lists that the shell declares enters its track at step 0.
+        let mut given: Vec<(String, usize, f64)> = Vec::new();
+        for item in &piece.items {
+            for (name, _) in &item.settings {
+                let Some(i) = self.shell.custom(name) else {
+                    continue;
+                };
+                if given.iter().any(|(n, _, _)| n == name) {
+                    continue;
+                }
+                given.push((name.clone(), i, self.state.custom[i]));
+            }
+        }
+        for (name, _, v) in &given {
+            entries.push(setting_entry(name, 0, 0, *v));
+        }
         let mut rec = Record::default();
         let world = World::new(
             piece.clone(),
@@ -587,6 +655,8 @@ impl<'a> Run<'a> {
             actions,
             zones,
             pending: Vec::new(),
+            given,
+            hides_settings: self.plants.setting_in_read_region,
         });
         Ok(())
     }
@@ -597,6 +667,22 @@ impl<'a> Run<'a> {
             return Ok(());
         };
         let k = level.steps;
+        // #3605: a setting changed since its last entry, on a screen the pause menu opened, enters the track at
+        // this, the level's next step.
+        for (name, i, last) in &mut level.given {
+            let now = self.state.custom[*i];
+            if now != *last {
+                let key = crate::piece::setting_read(name);
+                let seq = level.world.track.get(&key).map_or(0, Vec::len) as u32;
+                level
+                    .world
+                    .append(setting_entry(name, k * level.step, seq, now))
+                    .map_err(
+                        |e| json!({"ok": false, "code": "refused", "what": format!("{e:?}")}),
+                    )?;
+                *last = now;
+            }
+        }
         for (control, value) in std::mem::take(&mut level.pending) {
             let seq = level.world.track.get(&control).map_or(0, Vec::len) as u32;
             level
@@ -637,15 +723,24 @@ impl<'a> Run<'a> {
                 self.carry.push(json!({"level": level.index, "step": k, "sha256": hash, "arrays": record["arrays"]}));
                 self.records.push((level.index, k, hash, record));
             }
+            self.completions
+                .push(json!({"level": level.index, "step": self.step}));
             self.state.completed();
-            self.level = None;
+            self.unload();
             self.change();
         } else if def.lost.as_ref().is_some_and(|l| level.truthy(l)) {
             self.state.lost();
-            self.level = None;
+            self.unload();
             self.change();
         }
         Ok(())
+    }
+
+    /// The loaded level left: its input track kept for the reply, as a piece's replay reads it.
+    fn unload(&mut self) {
+        if let Some(l) = self.level.take() {
+            self.tracks.push(l.given_track());
+        }
     }
 
     /// A screen changed: its transition starts, and focus starts over.
@@ -664,12 +759,18 @@ impl<'a> Run<'a> {
             None => Then::Nothing,
         };
         match then {
-            Then::Load(l) => self.load(l)?,
-            Then::Leave => self.level = None,
+            Then::Load(l) => {
+                self.load(l)?;
+                // Planted: a level marked done when it is entered.
+                if self.plants.done_on_enter {
+                    self.state.done[l] = true;
+                }
+            }
+            Then::Leave => self.unload(),
             Then::Nothing => {}
         }
         if self.state.level < 0 {
-            self.level = None;
+            self.unload();
         }
         if (self.state.screen, self.state.paused) != before {
             let resumed = before.0 == PAUSE && self.state.screen == PLAYING;
@@ -695,6 +796,7 @@ impl<'a> Run<'a> {
                 self.focus = focus::settle(&order, &enabled, self.focus);
             }
         }
+        self.keeper.keep(self.shell, &self.state, self.step);
         self.row();
         if self.keep_frames {
             self.keep_frame();
@@ -715,6 +817,7 @@ impl<'a> Run<'a> {
 
     fn row(&mut self) {
         let level_hash = self.level.as_mut().map(LevelRun::hash);
+        let values = self.level.as_ref().map(LevelRun::values);
         let hash = self.state.hash(level_hash.as_deref());
         let shown = self.shown();
         let (focus, enabled, prompts) = match shown {
@@ -748,6 +851,10 @@ impl<'a> Run<'a> {
             "level_step": self.level.as_ref().map_or(0, |l| l.steps),
             "paused": self.state.paused,
             "unlocked": self.state.unlocked,
+            "done": self.state.done,
+            "custom": self.state.custom,
+            "values": values,
+            "level_hash": level_hash,
             "focus": focus,
             "enabled": enabled,
             "prompts": prompts,
@@ -796,12 +903,66 @@ impl<'a> Run<'a> {
     pub fn prompted(&self, s: usize) -> Value {
         let screen = &self.shell.screens[s];
         let mut doc = screen.doc.clone();
+        // #3605: the shell's arrays as the screen's flips, keyed copy and drivers read them, by `<shell ID>.<array>`.
+        if let Some(d) = doc.as_object_mut() {
+            let arrays = d.entry("arrays").or_insert_with(|| json!({}));
+            if let Some(a) = arrays.as_object_mut() {
+                a.extend(self.baked());
+            }
+        }
         for p in &screen.prompts {
             if let Some(params) = doc.pointer_mut(&format!("/items/{}/params", p.item)) {
                 params["text"] = json!(self.glyph(&p.action));
             }
         }
         doc
+    }
+}
+
+impl Run<'_> {
+    /// The shell's arrays baked as a logic item's are (Logic `logic@1`; the column view): each element held from
+    /// step 0, a bool as 0 or 1.
+    pub fn baked(&self) -> Map<String, Value> {
+        self.state
+            .arrays()
+            .into_iter()
+            .map(|(name, v)| {
+                let list: Vec<Value> = v
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .map(|x| match x {
+                        Value::Bool(b) => json!(i32::from(*b)),
+                        x => x.clone(),
+                    })
+                    .collect();
+                let ty = if matches!(name, "volume" | "custom") {
+                    "f64"
+                } else {
+                    "i32"
+                };
+                let n = list.len();
+                (
+                    format!("{}.{name}", self.shell.id),
+                    json!({"type": ty, "count": n, "every": STEP, "linear": false,
+                           "steps": [{"step": 0, "changed": [[0, n]], "values": [[0, list]]}]}),
+                )
+            })
+            .collect()
+    }
+}
+
+/// #3605: a shell setting's entry on a level's track, as a number control's.
+fn setting_entry(name: &str, t: i64, seq: u32, v: f64) -> Entry {
+    Entry {
+        t,
+        seq,
+        control: crate::piece::setting_read(name),
+        value: Given::Number(v),
+        writer: "shell".into(),
+        player: 1,
+        as_of: None,
+        arrived: 0,
     }
 }
 
@@ -948,6 +1109,9 @@ pub fn plants_of(name: Option<&str>) -> Plants {
         pause_runs_clock: name == Some("pause-runs-level-clock"),
         focus_stays_disabled: name == Some("focus-stays-on-disabled"),
         prompts_keep_keys: name == Some("prompts-keep-key-glyphs"),
+        done_on_enter: name == Some("done-on-enter"),
+        done_in_save: name == Some("done-in-save"),
+        setting_in_read_region: name == Some("setting-through-reads"),
     }
 }
 

@@ -13,6 +13,7 @@ import { check } from './check.js';
 import { locateKani } from './kani.js';
 import { locateLean } from './lean.js';
 import { outcomeOf } from './run.js';
+import type { Locate } from './run.js';
 import type { Cause, Checked, Fault, ProofFill, ProofResult, ProofSpec, Statement } from './types.js';
 
 const SLOT = 'check.kind@1';
@@ -40,30 +41,33 @@ interface CaseInput { spec: ProofSpec; checkout: string; deadline: number }
 
 // ---- The fixtures.
 
-const dirOf = (runner: ProofSpec['runner']): string => (runner === 'kani' ? 'kani' : 'lean');
-const spec = (runner: ProofSpec['runner'], theorem: string, file: string, target: string, statement?: string): ProofSpec => ({
-  kind: 'proof', runner, toolchain: runner === 'kani' ? KANI : LEAN, inputs: [file], depth: 'unit', oracle: 'code', contract: null,
+/** Each fixture's runner, with its toolchain pin, its folder under fixtures/ and how its statements are found. */
+interface Side { runner: ProofSpec['runner']; toolchain: string; dir: string; locate: Locate }
+const KANI_SIDE: Side = { runner: 'kani', toolchain: KANI, dir: 'kani', locate: locateKani };
+const LEAN_SIDE: Side = { runner: 'lean4', toolchain: LEAN, dir: 'lean', locate: locateLean };
+const spec = (side: Side, theorem: string, file: string, target: string, statement?: string): ProofSpec => ({
+  kind: 'proof', runner: side.runner, toolchain: side.toolchain, inputs: [file], depth: 'unit', oracle: 'code', contract: null,
   theorems: [theorem], assumptions: [], targets: [target], deadline: LONG,
-  statements: [{ theorem, file, text: statement ?? (runner === 'kani' ? locateKani : locateLean)(readFileSync(join(FIXTURES, dirOf(runner), file), 'utf8'), theorem)?.text ?? '' }],
+  statements: [{ theorem, file, text: statement ?? side.locate(readFileSync(join(FIXTURES, side.dir, file), 'utf8'), theorem)?.text ?? '' }],
 });
-const kani = (theorem: string, statement?: string): ProofSpec => spec('kani', `proofs::${theorem}`, 'src/proofs.rs', 'src/lib.rs#clamp', statement);
-const lean = (theorem: string): ProofSpec => spec('lean4', `Kit.${theorem}`, 'Kit/Proofs.lean', 'Kit/Code.lean#Kit.twice');
+const kani = (theorem: string, statement?: string): ProofSpec => spec(KANI_SIDE, `proofs::${theorem}`, 'src/proofs.rs', 'src/lib.rs#clamp', statement);
+const lean = (theorem: string): ProofSpec => spec(LEAN_SIDE, `Kit.${theorem}`, 'Kit/Proofs.lean', 'Kit/Code.lean#Kit.twice');
 const harness = (name: string, body: string): string => `#[kani::proof]\nfn ${name}() {\n    let value: u8 = kani::any();\n    kani::cover!(value > 0, "a value above zero");\n    ${body}\n}`;
-const fixture = (id: string, s: ProofSpec, expected: Expected, deadline = LONG): Fixture =>
-  ({ id, input: { spec: { ...s, deadline }, checkout: join(FIXTURES, dirOf(s.runner)), deadline } as unknown as Fixture['input'], expected: expected as unknown as Fixture['input'] });
+const fixture = (id: string, side: Side, s: ProofSpec, expected: Expected, deadline = LONG): Fixture =>
+  ({ id, input: { spec: { ...s, deadline }, checkout: join(FIXTURES, side.dir), deadline } as unknown as Fixture['input'], expected: expected as unknown as Fixture['input'] });
 
 // In the order the preflight's check meets them, so each planted runner is refused at its own case first; the slow
 // Lean cases come last, where only the reference reaches them.
 const fixtures = (): Fixture[] => [
-  fixture('kani-proved', kani('clamp_within'), { outcome: 'passed', rule: 'checker', proposals: 0 }),
-  fixture('kani-unfound-theorem', kani('clamp_vanished', harness('clamp_vanished', 'assert!(clamp(value, 0, 255) == value);')), { outcome: 'ran_nothing', rule: 'found' }),
-  fixture('kani-unreached-cover', kani('clamp_never'), { outcome: 'ran_nothing', rule: 'checker' }),
-  fixture('kani-weakened', kani('clamp_exact', harness('clamp_exact', 'assert!(clamp(value, 10, 20) == value);')), { outcome: 'failed', rule: 'approved', proposals: 1, assertion: 'all' }),
-  fixture('kani-before-obligation', kani('clamp_exact', harness('clamp_exact', 'assert!(crate::clamp_wide(value, 0, 255) == value);')), { outcome: 'failed', rule: 'obligation', assertion: 'none' }),
-  fixture('kani-other-version', { ...kani('clamp_within'), toolchain: 'kani 0.0.1' }, { outcome: 'missing', rule: 'pinned' }),
-  fixture('kani-past-deadline', kani('clamp_within'), { outcome: 'overran', rule: 'deadline' }, 1),
-  fixture('lean-proved', lean('twice_eq'), { outcome: 'passed', rule: 'checker', proposals: 0 }),
-  fixture('lean-sorry', lean('twice_sorry'), { outcome: 'ran_nothing', rule: 'checker' }),
+  fixture('kani-proved', KANI_SIDE, kani('clamp_within'), { outcome: 'passed', rule: 'checker', proposals: 0 }),
+  fixture('kani-unfound-theorem', KANI_SIDE, kani('clamp_vanished', harness('clamp_vanished', 'assert!(clamp(value, 0, 255) == value);')), { outcome: 'ran_nothing', rule: 'found' }),
+  fixture('kani-unreached-cover', KANI_SIDE, kani('clamp_never'), { outcome: 'ran_nothing', rule: 'checker' }),
+  fixture('kani-weakened', KANI_SIDE, kani('clamp_exact', harness('clamp_exact', 'assert!(clamp(value, 10, 20) == value);')), { outcome: 'failed', rule: 'approved', proposals: 1, assertion: 'all' }),
+  fixture('kani-before-obligation', KANI_SIDE, kani('clamp_exact', harness('clamp_exact', 'assert!(crate::clamp_wide(value, 0, 255) == value);')), { outcome: 'failed', rule: 'obligation', assertion: 'none' }),
+  fixture('kani-other-version', KANI_SIDE, { ...kani('clamp_within'), toolchain: 'kani 0.0.1' }, { outcome: 'missing', rule: 'pinned' }),
+  fixture('kani-past-deadline', KANI_SIDE, kani('clamp_within'), { outcome: 'overran', rule: 'deadline' }, 1),
+  fixture('lean-proved', LEAN_SIDE, lean('twice_eq'), { outcome: 'passed', rule: 'checker', proposals: 0 }),
+  fixture('lean-sorry', LEAN_SIDE, lean('twice_sorry'), { outcome: 'ran_nothing', rule: 'checker' }),
 ];
 
 // ---- The seeded part: a Kani crate written from the draw, one harness that verifies and one no input reaches.

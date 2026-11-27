@@ -1,0 +1,178 @@
+# #3428's acceptance tests, run once on the merge base d303e2b64 (origin/main), built
+# (npm run build --workspaces; cargo build --locked -q -p deep-hook), Nov 27 2026, 05:35 EST, 1-minute load about 97 to
+# 168 on 18 cores in the hours before. Every file but real.test.ts runs against the stand-in paseo (fixtures/paseo.mjs).
+# DEEP_PASEO_CLI was a real @getpaseo/cli 0.17.6 installed in a scratch folder, so AC1's daemon half shows the guard it
+# stops at; no paseo daemon was started, since the base's facts name 0.15.0.
+#
+#   DEEP_PASEO_CLI=<scratch>/paseo/node_modules/.bin/paseo sh scripts/lease nice -n 10 \
+#     node node_modules/vitest/vitest.mjs run --root tests/acceptance/3428 --no-file-parallelism --testTimeout=600000
+#
+# Redacted: the home folder as ~, each test's /tmp/dh27-* folder as <tmp>, the registry's port as <port>, ANSI colours.
+# Six tests fail at an assertion of this suite's. Three read BLOCKED: two hold their assertions and stop at the missing
+# covered release (AC1's second sentence), and AC1's daemon half stops because the facts name 0.15.0, not 0.17.6.
+
+The hub isn't answering; start it with deep hub start. `nice -n 10 node node_modules/vitest/vitest.mjs run --root tests/acceptance/3428 --no-file-parallelism --testTimeout=600000` runs with no lease.
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/github-issue-3428-a17779/agent-a75322db43fefbceb/tests/acceptance/3428
+
+ ❯ real.test.ts (2 tests | 2 failed) 985ms
+   ❯ AC1 #3428.c21bc24c #55's real-daemon cases pass on the newest stable paseo, and the facts and the plugin's range name that release (2)
+     × AC1 #3428.c21bc24c the facts' newest version is paseo's newest stable release, and the plugin's range holds it and every version the facts cover 605ms
+     × AC1 #3428.c21bc24c #55's real-daemon cases (tests/acceptance/55/real.test.ts) pass on a real daemon of that release 380ms
+ ❯ setup.test.ts (3 tests | 3 failed) 5854ms
+   ❯ AC2 #3428.ffe37f29 With a paseo newer than the facts on the PATH, deep setup runs no paseo plugin install, leaves paseo's config.json byte-equal, and its line names paseo's version and the versions covered (2)
+     × AC2 #3428.ffe37f29 paseo one minor past the facts' newest: no paseo plugin install, config.json byte-equal, and a line naming both versions 2577ms
+     × AC2 #3428.ffe37f29 AC5 #3428.53c885f5 the other side of the line: on the facts' newest paseo, with the source resolving, deep setup installs the plugin through paseo's own manager from the facts' source, once 1624ms
+   ❯ AC3 #3428.25c11692 With the plugin listed in paseo and refused at load, deep setup doesn't report paseo as set up (1)
+     × AC3 #3428.25c11692 paseo lists deepbuild, failed at load with paseo's own reason: deep setup reports no paseo set up, in its line or the record, and says paseo's reason 1652ms
+ ❯ doctor.test.ts (3 tests | 3 failed) 5352ms
+   ❯ AC3 #3428.25c11692 With the plugin listed in paseo and refused at load, deep doctor shows the plugin's item at its error level with paseo's reason (1)
+     × AC3 #3428.25c11692 paseo lists deepbuild failed at load: the plugin's item reads fail, with a stable code and paseo's reason 1463ms
+   ❯ AC4 #3428.cfb1bd37 On a covered paseo with the plugin loaded, every paseo item reads ok. With no paseo on the PATH there is no paseo item (2)
+     × AC4 #3428.cfb1bd37 paseo at the facts' newest, the plugin installed from the facts' source and running, the source resolving: paseo's items for its version, the plugin and the source all read ok 3211ms
+     × AC4 #3428.cfb1bd37 with no paseo on the PATH, though ~/.paseo stays, deep doctor has no paseo item 677ms
+ ❯ source.test.ts (1 test | 1 failed) 1629ms
+   ❯ AC5 #3428.53c885f5 A source that answers 404 is named before paseo's config.json is written, and deep setup --undo afterwards changes nothing (1)
+     × AC5 #3428.53c885f5 the facts' source answers 404 from npm's registry: deep setup names it and hands paseo nothing to write, and deep setup --undo changes nothing 1628ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 9 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  doctor.test.ts > AC3 #3428.25c11692 With the plugin listed in paseo and refused at load, deep doctor shows the plugin's item at its error level with paseo's reason > AC3 #3428.25c11692 paseo lists deepbuild failed at load: the plugin's item reads fail, with a stable code and paseo's reason
+AssertionError: AC3 #3428.25c11692 paseo 0.15.0 lists deepbuild with status failed: Plugin "deepbuild" requires Paseo >=0.14.0 <0.15.0. Your daemon is 0.15.0. deep doctor has an item for the plugin, its agent paseo; paseo's items: []: expected 0 to be greater than 0
+ ❯ doctor.test.ts:20:140
+     18|     const plugin = ours.filter((i) => /plugin/i.test(String(i.item)));
+     19|     const state = `paseo ${newestCovered()} lists deepbuild with statu…
+     20|     expect(plugin.length, `${AC[3]} ${state} deep doctor has an item f…
+       |                                                                                                                                            ^
+     21|     const failing = plugin.filter((i) => i.level === 'fail');
+     22|     expect(failing.length, `${AC[3]} ${state} the plugin's item reads …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/9]⎯
+
+ FAIL  doctor.test.ts > AC4 #3428.cfb1bd37 On a covered paseo with the plugin loaded, every paseo item reads ok. With no paseo on the PATH there is no paseo item > AC4 #3428.cfb1bd37 paseo at the facts' newest, the plugin installed from the facts' source and running, the source resolving: paseo's items for its version, the plugin and the source all read ok
+AssertionError: AC4 #3428.cfb1bd37 deep doctor shows paseo's items: its version 0.15.0 against the versions covered, the plugin installed, enabled and loaded, and the source it installs from (npm:@deepbuild/paseo@0.1.0); paseo's items: []: expected { version: false, plugin: false, …(1) } to deeply equal { version: true, plugin: true, …(1) }
+
+- Expected
++ Received
+
+  {
+-   "plugin": true,
+-   "source": true,
+-   "version": true,
++   "plugin": false,
++   "source": false,
++   "version": false,
+  }
+
+ ❯ doctor.test.ts:41:243
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/9]⎯
+
+ FAIL  doctor.test.ts > AC4 #3428.cfb1bd37 On a covered paseo with the plugin loaded, every paseo item reads ok. With no paseo on the PATH there is no paseo item > AC4 #3428.cfb1bd37 with no paseo on the PATH, though ~/.paseo stays, deep doctor has no paseo item
+Error: BLOCKED: no paseo item with no paseo on the PATH held on this program, but the facts' newest paseo is 0.15.0, not paseo's newest stable release (0.17.6 or later); until #55's real-daemon cases pass on the newest stable paseo and the facts and the plugin's range name it (AC1 #3428.c21bc24c), this reads BLOCKED, never PASS
+ ❯ needCoveredRelease world.ts:66:22
+
+ ❯ doctor.test.ts:56:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/9]⎯
+
+ FAIL  real.test.ts > AC1 #3428.c21bc24c #55's real-daemon cases pass on the newest stable paseo, and the facts and the plugin's range name that release > AC1 #3428.c21bc24c the facts' newest version is paseo's newest stable release, and the plugin's range holds it and every version the facts cover
+AssertionError: AC1 #3428.c21bc24c adapters/paseo.facts.json's versions end at paseo's newest stable release 0.17.6; they are 0.15.0: expected '0.15.0' to be '0.17.6' // Object.is equality
+
+Expected: "0.17.6"
+Received: "0.15.0"
+
+ ❯ real.test.ts:29:159
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/9]⎯
+
+ FAIL  real.test.ts > AC1 #3428.c21bc24c #55's real-daemon cases pass on the newest stable paseo, and the facts and the plugin's range name that release > AC1 #3428.c21bc24c #55's real-daemon cases (tests/acceptance/55/real.test.ts) pass on a real daemon of that release
+Error: BLOCKED: DEEP_PASEO_CLI is paseo 0.17.6, and the facts' newest version is 0.15.0 with the plugin's range >=0.15.0 <0.16.0 (packages/paseo/paseo-plugin.json): #55's real-daemon cases run on the release the facts pin, so they can't run on 0.17.6 until the facts and the range name it
+ ❯ real.test.ts:38:76
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/9]⎯
+
+ FAIL  setup.test.ts > AC2 #3428.ffe37f29 With a paseo newer than the facts on the PATH, deep setup runs no paseo plugin install, leaves paseo's config.json byte-equal, and its line names paseo's version and the versions covered > AC2 #3428.ffe37f29 paseo one minor past the facts' newest: no paseo plugin install, config.json byte-equal, and a line naming both versions
+AssertionError: AC2 #3428.ffe37f29 paseo 0.16.0 runs, newer than every version paseo's facts cover (0.15.0): deep setup must run no paseo plugin install; it ran paseo plugin ls --json; paseo plugin install npm:@deepbuild/paseo@0.1.0, and said of paseo ["paseo: + plugin deepbuild from npm:@deepbuild/paseo@0.1.0, through paseo plugin install; ~/.paseo/config.json is kept as it is now, and deep setup --undo puts it back.","paseo was left out of setup: Command failed: <tmp>/bin/paseo plugin install npm:@deepbuild/paseo@0.1.0","Trusting plugin code: server code and preparation commands run unsandboxed on the daemon host; client code runs inside Paseo. Dependencies and future updates are part of the codebase you trust.","Error: Plugin \"deepbuild\" requires Paseo >=0.15.0 <0.16.0. Your daemon is 0.16.0. Use a compatible plugin version or update the daemon.",". Run deep setup again once paseo's daemon runs."]: expected [ { args: [ 'plugin', …(2) ], …(3) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "args": [
++       "plugin",
++       "install",
++       "npm:@deepbuild/paseo@0.1.0",
++     ],
++     "at": 1795777245646,
++     "cwd": "~/dev/claude-worktrees/github-issue-3428-a17779/agent-a75322db43fefbceb",
++     "words": [
++       "plugin",
++       "install",
++       "npm:@deepbuild/paseo@0.1.0",
++     ],
++   },
++ ]
+
+ ❯ setup.test.ts:22:249
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/9]⎯
+
+ FAIL  setup.test.ts > AC2 #3428.ffe37f29 With a paseo newer than the facts on the PATH, deep setup runs no paseo plugin install, leaves paseo's config.json byte-equal, and its line names paseo's version and the versions covered > AC2 #3428.ffe37f29 AC5 #3428.53c885f5 the other side of the line: on the facts' newest paseo, with the source resolving, deep setup installs the plugin through paseo's own manager from the facts' source, once
+Error: BLOCKED: the install on paseo 0.15.0 held on this program, but the facts' newest paseo is 0.15.0, not paseo's newest stable release (0.17.6 or later); until #55's real-daemon cases pass on the newest stable paseo and the facts and the plugin's range name it (AC1 #3428.c21bc24c), this reads BLOCKED, never PASS
+ ❯ needCoveredRelease world.ts:66:22
+
+ ❯ setup.test.ts:38:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/9]⎯
+
+ FAIL  setup.test.ts > AC3 #3428.25c11692 With the plugin listed in paseo and refused at load, deep setup doesn't report paseo as set up > AC3 #3428.25c11692 paseo lists deepbuild, failed at load with paseo's own reason: deep setup reports no paseo set up, in its line or the record, and says paseo's reason
+AssertionError: AC3 #3428.25c11692 paseo 0.15.0 lists deepbuild with status failed: Plugin "deepbuild" requires Paseo >=0.14.0 <0.15.0. Your daemon is 0.15.0. deep setup must not report paseo as set up; it said of paseo ["DeepBuild's hooks are in Claude Code's and paseo's settings, and it read their history into the wiki with your own agent, on your plan; deep setup --undo removes it all. 30 of DeepBuild's guard entries block commands that could break other work on this machine from now, each saying why; everything else is in watch-only mode until you approve a project's checks, and the hub starts at login."]: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "DeepBuild's hooks are in Claude Code's and paseo's settings, and it read their history into the wiki with your own agent, on your plan; deep setup --undo removes it all. 30 of DeepBuild's guard entries block commands that could break other work on this machine from now, each saying why; everything else is in watch-only mode until you approve a project's checks, and the hub starts at login.",
++ ]
+
+ ❯ setup.test.ts:50:147
+     48|     // setup's one line (#1455): the agents whose settings now hold De…
+     49|     const setUp = lines.filter((l) => /DeepBuild's hooks are in [^;]*p…
+     50|     expect(setUp.map((l) => redact(w, l)), `${AC[3]} ${state} deep set…
+       |                                                                                                                                                   ^
+     51|     const steps = (await allEvents(w.hub!)).filter((e) => e.kind === '…
+     52|     expect(steps.map((e) => e.data), `${AC[3]} ${state} the record hol…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/9]⎯
+
+ FAIL  source.test.ts > AC5 #3428.53c885f5 A source that answers 404 is named before paseo's config.json is written, and deep setup --undo afterwards changes nothing > AC5 #3428.53c885f5 the facts' source answers 404 from npm's registry: deep setup names it and hands paseo nothing to write, and deep setup --undo changes nothing
+AssertionError: AC5 #3428.53c885f5 npm:@deepbuild/paseo@0.1.0 answers 404 from npm's registry: deep setup handed paseo's ~/.paseo/config.json to paseo plugin install before checking the source; it said ["paseo: + plugin deepbuild from npm:@deepbuild/paseo@0.1.0, through paseo plugin install; ~/.paseo/config.json is kept as it is now, and deep setup --undo puts it back.","paseo was left out of setup: Command failed: <tmp>/bin/paseo plugin install npm:@deepbuild/paseo@0.1.0","Trusting plugin code: server code and preparation commands run unsandboxed on the daemon host; client code runs inside Paseo. Dependencies and future updates are part of the codebase you trust.","Error: npm error code E404","npm error 404 Not Found - GET http://127.0.0.1:<port>/@deepbuild%2fpaseo - Not found","npm error 404  '@deepbuild/paseo@0.1.0' is not in this registry.",". Run deep setup again once paseo's daemon runs."]: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "paseo plugin install npm:@deepbuild/paseo@0.1.0",
++ ]
+
+ ❯ source.test.ts:19:238
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/9]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  9 failed (9)
+   Start at  06:00:42
+   Duration  14.56s (tests 98%, transform 1%, import 1%)
+
+suite-exit 1
