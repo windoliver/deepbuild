@@ -1,0 +1,13 @@
+{
+  "scripts/proof-binaries.mjs": [
+    {
+      "find": [
+        "  if (!names.length) return bin;"
+      ],
+      "wrong": [
+        "  if (!names.length) return bin;",
+        "  delete process.env.DEEP_THROTTLE;"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "scripts/proof-binaries.mjs": [
+    {
+      "find": [
+        "  if (!names.length) return bin;"
+      ],
+      "wrong": [
+        "  if (!names.length) return bin;",
+        "  const fixed = acquire('build', { wait: 0.05 });",
+        "  if (!fixed) throw Error('INCONCLUSIVE no grant: no build grant came within 0.05 min for test binaries');",
+        "  release(fixed);"
+      ]
+    }
+  ]
+}
