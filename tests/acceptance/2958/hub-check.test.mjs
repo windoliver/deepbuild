@@ -1,5 +1,3 @@
-// #2958 AC1 and AC2: `deep-app --hub-check` against a real hub, from the built app and the built CLI. The surfaces are
-// pinned in README.md.
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -10,7 +8,6 @@ after(cleanup);
 
 const REFUSAL = /refus|credential/i;
 
-/** The check's answer is the hub's, as the app, with no refusal: `hub ok` first on stdout, exit 0, no refusal said. */
 function answeredAsApp(r, where) {
   assert.ok(!r.timedOut, `${where}: deep-app --hub-check didn't finish within 60 s: ${shown(r)}`);
   assert.match(r.stdout.split('\n')[0] ?? '', /^hub ok/, `${where}: stdout's first line doesn't start with "hub ok": ${shown(r)}`);
@@ -20,7 +17,6 @@ function answeredAsApp(r, where) {
 
 test('AC1 #2958.9c0089ca with hub.address pointing at a hub run with --root in another folder, deep-app --hub-check is answered by that hub as the app, with no refusal', { timeout: 240_000 }, async () => {
   needBuilt();
-  // Two states of the installed root: a control token of its own that isn't the dev hub's, and none at all.
   for (const installed of ['a different control.token', 'no control.token']) {
     const tmp = tempDir();
     const home = join(tmp, 'h');

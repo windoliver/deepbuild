@@ -1,6 +1,3 @@
-// #2958 AC3: a site in crates/deep-app/src or crates/deep-replica/src naming `control.token` outside the one function
-// fails, naming its file and line. The one function is pinned in README.md: one function body in
-// crates/deep-app/src/hub.rs.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ONE_FILE, sources, strays } from './helpers.mjs';
@@ -8,7 +5,6 @@ import { ONE_FILE, sources, strays } from './helpers.mjs';
 const DIRS = ['crates/deep-app/src', 'crates/deep-replica/src'];
 
 test('AC3 #2958.2a729810 a source site in crates/deep-app/src or crates/deep-replica/src naming control.token outside the one function fails, naming the file and line', () => {
-  // The reader on twins first, so a pass below is the sources' and not a reader that sees nothing.
   const fixed = {
     [ONE_FILE]: [
       '//! The control token (`control.token`) beside the socket.',
