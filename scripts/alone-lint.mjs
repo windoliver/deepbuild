@@ -14,7 +14,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, s
 import { tmpdir } from 'node:os';
 import { dirname, join, normalize } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { alone, aloneReasons, listed } from './lanes.mjs';
+import { alone, aloneReasons, fromLaneFiles, listed, slow, timed } from './lanes.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const REASON = /^(?:binary|timing|shared: \S.*)$/;
@@ -37,9 +37,9 @@ function mergeBase() {
     const tar = join(dir, 'scripts.tar');
     if (git('archive', '-o', tar, base.stdout.trim(), 'scripts').status !== 0 || spawnSync('tar', ['-xf', tar, '-C', dir]).status !== 0) return null;
     symlinkSync(join(root, 'node_modules'), join(dir, 'node_modules'));
-    const code = `const lanes = await import(${JSON.stringify(pathToFileURL(join(dir, 'scripts/lanes.mjs')).href)}); console.log(JSON.stringify({ alone: lanes.alone, reasons: lanes.aloneReasons ?? null }));`;
+    const code = `const lanes = await import(${JSON.stringify(pathToFileURL(join(dir, 'scripts/lanes.mjs')).href)}); console.log(JSON.stringify({ alone: lanes.alone, timed: lanes.timed, slow: lanes.slow, reasons: lanes.aloneReasons ?? null }));`;
     const read = spawnSync(process.execPath, ['--input-type=module', '-e', code], { cwd: dir, encoding: 'utf8', maxBuffer: 2 ** 28 });
-    return read.status === 0 ? JSON.parse(read.stdout) : null;
+    return read.status === 0 ? { sha: base.stdout.trim(), ...JSON.parse(read.stdout) } : null;
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -78,6 +78,22 @@ if (base) {
     if (reason !== 'binary') findings.push(`${entry} left the alone list, and its reason on the merge base is ${reason ?? 'not named'}: only a binary entry moves\n  Fix: put it back in scripts/lanes.mjs's alone.`);
     const still = reason === 'binary' ? reader(left) : null;
     if (still) findings.push(`${entry} left the alone list while ${still}\n  Fix: put it back in scripts/lanes.mjs's alone until a blind redraft of its files reads their binaries from DEEP_BIN_DIR.`);
+  }
+}
+
+function newLaneFolder(entry, sha) {
+  const [, top, sub] = entry.match(/^(tests\/acceptance\/\d+(?:-[a-z0-9-]*(?:redraft|oracle)[a-z0-9-]*)?\/)(?:([a-z0-9-]*(?:redraft|oracle)[a-z0-9-]*\/))?/) ?? [];
+  const isNew = (folder) => existsSync(join(root, folder)) && !spawnSync('git', ['ls-tree', '--name-only', sha, '--', folder], { cwd: root, encoding: 'utf8' }).stdout.trim();
+  return [top, sub && `${top}${sub}`].find((folder) => folder && isNew(folder)) ?? null;
+}
+
+if (base) {
+  for (const [list, now, was] of [['alone', alone, base.alone], ['timed', timed, base.timed ?? []], ['slow', slow, base.slow ?? []]]) {
+    for (const entry of now) {
+      if (was.includes(entry) || fromLaneFiles[list].includes(entry)) continue;
+      const folder = newLaneFolder(entry, base.sha);
+      if (folder) findings.push(`${entry} is a new ${list} entry the lane lists name for ${entry === folder ? 'a folder' : 'a file'} the change adds\n  Fix: take it out of scripts/lanes-lists.mjs (or scripts/lanes.mjs) and say it in ${folder}lane.json: ${list === 'alone' ? '{ "alone": true, "why": "<reason>" }' : `{ "alone": true, "why": "<reason>", "${list}": ["${entry.slice(folder.length)}"] }`}.`);
+    }
   }
 }
 

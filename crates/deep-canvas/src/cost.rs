@@ -855,15 +855,16 @@ mod tests {
     }
 
     #[test]
-    fn a_patch_to_a_budgeted_document_nothing_costly_applies_to_is_rechecked_incrementally() {
+    fn a_patch_nothing_costly_applies_to_is_rechecked_incrementally_unless_a_budget_is_named() {
         let sealed = sized_with_tick();
-        let mut before = board(2, false);
-        before["budget"] = json!({"class": "data_view"});
+        let before = board(2, false);
         let prev = crate::document::check_in(&before, &sealed).issues;
         let mut after = before.clone();
         after["items"]["s0"]["params"]["box"] = json!([0, 0, 2, 2]);
         let changed = std::collections::BTreeSet::from(["s0".to_string()]);
         assert!(crate::document::recheck(&mut after, &prev, &changed, &sealed).is_some());
+        after["budget"] = json!({"class": "data_view"});
+        assert!(crate::document::recheck(&mut after, &prev, &changed, &sealed).is_none());
     }
 
     #[test]
