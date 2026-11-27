@@ -1,5 +1,3 @@
-// #3587: preflight's measured checks end at the budget with its margin, and a stop still reaches them. Each test runs
-// scripts/preflight in a scratch entry of its own (helpers.mjs). Run with node --test, one file, its tests in order.
 import assert from 'node:assert/strict';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -7,11 +5,8 @@ import test from 'node:test';
 import { entry, GATED, HANG, left, PASS, shown, SLOW, TIMEOUT, within } from './helpers.mjs';
 
 const STARTED = /^stub check started$/m;
-// Long enough for the warm-up's failing builds and the grant in an entry with nothing to build.
 const START_MS = 60_000;
 
-// Criteria 1 to 3 read one run: a check that never ends, with a child that never ends, under a 4 s budget with margin
-// 0.5, so a 6.00 s allowance. Preflight is given the allowance plus 30 s from its start to exit.
 const HANG_BUDGET = { budgetMs: 4_000, margin: 0.5 };
 const ALLOWANCE_MS = 6_000;
 let hangRun;
@@ -21,7 +16,6 @@ const hung = () => (hangRun ??= (async () => {
   const exit = within(run.exited, ALLOWANCE_MS + 30_000);
   const began = await run.line(STARTED, START_MS);
   const ended = await exit;
-  // What it printed last reaches the pipe after its exit; a process still holding the pipe is read as it stands.
   if (ended !== TIMEOUT) await within(run.closed, 5_000);
   const reading = { box, run, began, exit: ended === TIMEOUT ? null : ended, left: left(box), roles: box.recorded().map(({ role }) => role), log: box.log(), table: box.table(), out: run.out };
   box.stop();
@@ -55,7 +49,6 @@ test('#3587.1c61ab9b in that run the throttle log records the preflight\'s timed
 });
 
 test('#3587.4d67f808 checks that end past the budget but within the allowance are not stopped: their output is complete, with checks took and no were stopped line', { timeout: 180_000 }, async () => {
-  // A 3 s budget with margin 1, so a 6.00 s allowance; the check takes 3.2 s after the warm-up.
   const box = entry({ checks: SLOW(3_200), budgetMs: 3_000, margin: 1 });
   const run = box.start();
   const closed = await within(run.closed, START_MS + 30_000);
@@ -67,7 +60,6 @@ test('#3587.4d67f808 checks that end past the budget but within the allowance ar
 });
 
 test('#3587.62b7650e a SIGINT to preflight\'s process group while a never-ending check and its child run ends it within 30 s with exit 130, neither left alive, timed released', { timeout: 180_000 }, async () => {
-  // A budget the run never reaches, so only the stop ends it.
   const box = entry({ checks: HANG, budgetMs: 600_000, margin: 0.5 });
   const run = box.start();
   const began = await run.line(STARTED, START_MS);
@@ -84,7 +76,6 @@ test('#3587.62b7650e a SIGINT to preflight\'s process group while a never-ending
 });
 
 test('#3587.c4fdbceb when the process scripts/preflight becomes is SIGKILLed while the checks run, and they then end and pass, nothing more runs: no perf, no harness lane', { timeout: 180_000 }, async () => {
-  // A budget the run never reaches; a harness budget is declared, so the harness lane is one the work could start.
   const box = entry({ checks: GATED, budgetMs: 600_000, margin: 0.5, harness: true });
   const run = box.start();
   const began = await run.line(STARTED, START_MS);
@@ -92,21 +83,16 @@ test('#3587.c4fdbceb when the process scripts/preflight becomes is SIGKILLed whi
   process.kill(run.pid, 'SIGKILL');
   const killed = await within(run.exited, 10_000);
   assert.notEqual(killed, TIMEOUT, 'preflight outlived its SIGKILL');
-  // The checks may end now, and pass.
   writeFileSync(join(box.state, 'go'), '');
-  // The output pipe closes once every process holding it, preflight's work among them, is gone.
   const closed = await within(run.closed, 30_000);
   const roles = box.recorded().map(({ role }) => role);
   assert.notEqual(closed, TIMEOUT, `a process of the run still held its output 30 s after the checks could end: ${left(box).join(', ')}${shown(run)}`);
   assert.ok(!roles.includes('perf'), `scripts/perf.mjs started with no preflight watching${shown(run)}`);
-  // The perf lane starts through scripts/lease, which names the command it runs; here, with no grant outside a test
-  // run, the orphan's lease is refused before perf.mjs starts, so its try shows only in that line.
   assert.doesNotMatch(run.out, /scripts\/perf\.mjs/, `the work went on to start the perf run with no preflight watching${shown(run)}`);
   assert.ok(!roles.includes('harness'), `the harness lane started with no preflight watching${shown(run)}`);
 });
 
 test('#3587.4323e662 a budget whose allowance is not whole milliseconds (margin 0.1) still runs and times the checks: no BLOCKED check workload, and checks that pass read as passed', { timeout: 180_000 }, async () => {
-  // 3001 ms × 1.1 = 3301.1 ms.
   const box = entry({ checks: PASS, budgetMs: 3_001, margin: 0.1 });
   const run = box.start();
   const closed = await within(run.closed, START_MS + 30_000);
