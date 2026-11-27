@@ -1,0 +1,19 @@
+# The public text lane (node scripts/public-text.mjs) at 840f932d2, on main d303e2b64 plus this change; listed words are written <withheld>.
+
+== 1. before: main's scripts/studied-names.json (this change's lane)
+FAIL 4 dependency, adapter and pack names read as listed in scripts/studied-names.json, which never lists a name DeepBuild runs, links, calls, reads or writes
+  <withheld>-1.0.0 (packs/<withheld>-1.0.0) reads as listed: "<withheld>"
+  <withheld>-1.0.0 (packs/<withheld>-1.0.0) reads as listed: "<withheld>"
+  <withheld>-1.1.0 (packs/<withheld>-1.1.0) reads as listed: "<withheld>"
+  <withheld>-1.0.0 (packs/<withheld>-1.0.0) reads as listed: "<withheld>"
+exit 1
+
+== 2. after: this change's list
+public text: 212 dependency, adapter and pack names read as not listed
+public text: 9 changed files, 2 commit messages and 1201 open issues name no studied product
+exit 0
+
+== 3. planted: a pack folder packs/<withheld>-1.0.0 named after a word the list still holds
+FAIL 1 dependency, adapter and pack names read as listed in scripts/studied-names.json, which never lists a name DeepBuild runs, links, calls, reads or writes
+  <withheld>-1.0.0 (packs/<withheld>-1.0.0) reads as listed: "<withheld>"
+exit 1

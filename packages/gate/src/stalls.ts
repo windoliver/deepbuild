@@ -1,9 +1,3 @@
-// Stalled claims (#325; design: Stalled claims): the hold stops sending an agent back at whichever comes first, its
-// claim's open items unchanged on two stops in a row with no new passing evidence, or three send-backs without new
-// evidence, and the claim becomes one decision for you. New evidence is a check passing that didn't at the stop
-// before; a check run again with the same result is none. The hub keeps one count per task and skips the stops a
-// question holds, which count toward neither limit.
-
 import { canonicalize, sha256Hex } from '@deepbuild/contracts';
 
 /** What one stop that would be sent back shows: its open items, the checks passing on it and the runs it made. */
@@ -30,7 +24,6 @@ export function judgeStop(count: StallCount, stop: StopReading, anyRun = false):
     count.rounds = 0;
     delete count.stalled;
   }
-  // A claim that stalled stays with you until new evidence comes: no further send-back, and no second decision.
   if (count.stalled) return { sendBack: false };
   const rule: StallRule | undefined = !fresh && same ? 'two stops with the same open items' : count.rounds >= ROUNDS ? 'three send-backs without new evidence' : undefined;
   if (rule) {
