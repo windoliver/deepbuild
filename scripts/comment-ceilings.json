@@ -2949,7 +2949,6 @@
   "scripts/known-failures-record.mjs": 16,
   "scripts/lane-remote.mjs": 48,
   "scripts/lane-x86.mjs": 24,
-  "scripts/lanes-lists.mjs": 770,
   "scripts/lanes-pack.mjs": 38,
   "scripts/lanes.d.mts": 1,
   "scripts/lanes.mjs": 288,
