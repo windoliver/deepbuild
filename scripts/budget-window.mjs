@@ -35,6 +35,8 @@ function blocked(message, fix) {
 }
 // The window's own record (#2674), beside its commits' records once it runs: its grant, start and end, the machine and
 // its load, the commits it measured, the tasks it ran and those it reached on no commit, and the task that took longest.
+// From the throttle it holds `drain`, the milliseconds from its request to its grant, and `waited`, the grants it
+// waited on, by class (#3551).
 // A window over one day's merges should end within two hours; its note names the longest task when it doesn't.
 const LONG_MS = 2 * 60 * 60 * 1000;
 let opened = null;
@@ -228,7 +230,7 @@ try {
 // Read once: a commit merged from here on is the next window's.
 const tip = git('rev-parse', 'origin/main');
 const from = existsSync(mark) ? readFileSync(mark, 'utf8').trim() : null;
-opened = { lane: 'budget-window', grant: process.env.DEEP_WINDOW ?? null, start: new Date().toISOString(), machine: fingerprint(), cores: cpus().length, loadStart: loadavg()[0], from, tip, commits: [], records: {}, rows: [], unreached: [] };
+opened = { lane: 'budget-window', grant: process.env.DEEP_WINDOW ?? null, ...JSON.parse(process.env.DEEP_WINDOW_DRAIN ?? '{}'), start: new Date().toISOString(), machine: fingerprint(), cores: cpus().length, loadStart: loadavg()[0], from, tip, commits: [], records: {}, rows: [], unreached: [] };
 if (!from) {
   writeFileSync(mark, tip);
   closeWindow('PASS', `the first window on this machine marks ${tip}`);
