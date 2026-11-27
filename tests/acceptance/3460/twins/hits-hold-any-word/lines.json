@@ -1,0 +1,12 @@
+{
+  "packages/hub/src/search.ts": [
+    {
+      "find": [
+        "  return wanted.every((w) => (spaceless(w) ? lower.includes(w) : have.has(w)));"
+      ],
+      "wrong": [
+        "  return wanted.some((w) => (spaceless(w) ? lower.includes(w) : have.has(w)));"
+      ]
+    }
+  ]
+}
