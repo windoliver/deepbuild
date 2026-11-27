@@ -216,8 +216,6 @@ export function checkManifest(value: unknown, release = false): Validation {
   // check (#1922): the kind's one slot keeps the name the package's own.
   const kinds = Array.isArray(jobs) ? jobs.filter((k): k is string => typeof k === 'string') : [];
   const kindCheck = (name: string): boolean => kinds.some((k) => name.length > k.length + 1 && name.startsWith(k) && '_.'.includes(name[k.length]!) && OWN_NAME.test(name.slice(k.length + 1)));
-  // A package that registers job kinds may name a kind's output check as the design does, such as table.derive's
-  // `data.derived` (#3569); the host refuses one that none of its kinds lists as an output check.
   const outputCheck = (name: string): boolean => kinds.length > 0 && /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/.test(name);
   for (const list of NAME_LISTS) {
     const firstParty = (name: string): boolean => release && (list === 'checks' || list === 'codes') && /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)?$/.test(name);

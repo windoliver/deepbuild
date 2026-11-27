@@ -113,7 +113,7 @@
       "kind": "table.derive",
       "tool": "table-derive@1.0.0",
       "key": "0fece090ce94c9697e55958b96cbcb997f73b621d0edba0e4dc996b4d2ad6c7c",
-      "build": "d1:9d26996a71a7e43fbe1a4bd8a2700e8d9cc724e96a6ffa9d5420fb08e75718b7",
+      "build": "d1:bb1110963db3ecba683429e679661a420620f02ef81d1fc2c75ebaf6f6ee2e04",
       "cache": "miss",
       "inputs": {
         "county": "1b5e87a42140a67be69a93490f9f9c8a0406be36eba9f0c78a2445e3cc8bb72b",

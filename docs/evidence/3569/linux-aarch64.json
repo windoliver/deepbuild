@@ -1,0 +1,41 @@
+{
+  "mac": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "node": "v24.22.2"
+  },
+  "linux": {
+    "platform": "linux",
+    "arch": "arm64",
+    "kernel": "Linux 7.0.0-44-generic aarch64 GNU/Linux",
+    "node": "v24.22.0",
+    "env": { "TZ": "Pacific/Chatham", "LC_ALL": "C" }
+  },
+  "byte_identical": true,
+  "hashes": {
+    "ac1": {
+      "table": "3708e196e44986f5366fbbff264a1cdac29e8ce5edcb4deccaa6b15dc4fe160b",
+      "lineage": "2ea8179b8c0b51b589bdb4449204e8d90dff166eb5823d68d0a6b68c4632908e",
+      "receipt": "33e45da4dd3818b5b249d972a9cfe8a5521604ce59fe106e9ab0e6476af45650",
+      "record": "5af6819146326126c61d5229173d6f30e3c58274ea036472c67d6079665ee323"
+    },
+    "ac6": {
+      "table": "1eb03cd61e752d85ee7c87eecac2b4052ef9fd55428313b7c145a811c2836fd3",
+      "lineage": "c4a4d95280d77b1910c8bbfc77d270f15c41c87f57bc92f23dddcbd5177957f9",
+      "receipt": "fef5bb41e40e822de6ffed3d09e4edaa1e74dbbbf403bc965082759e6420a13e",
+      "record": "3b17993020e7be5feaa0cf93d277de397d7b84a71fd9dabae9a9c4675321d1ab"
+    },
+    "ac9": {
+      "table": "0a6ba81109226e6cf3b7fd7dd7249f7e6373bc6b0c898893a6f4a7bbe043bbcc",
+      "lineage": "5984acc8dac18af06f40cfa8a10b2f411686bb0b371cb6ffc258312d3856b5dd",
+      "receipt": "33e45da4dd3818b5b249d972a9cfe8a5521604ce59fe106e9ab0e6476af45650",
+      "record": "8afed4b379eb3f88c475564e3758210259e11f61c25876f81d78c263f92c725d"
+    },
+    "special": {
+      "table": "4177c655965bbad43755e73fa36de0c93bbc30e5761d16708060d10a171abfea",
+      "lineage": "611671922b26eb1ae42cb48f90e9942bb42fb4db3a762df3eacba3b6390fbf3b",
+      "receipt": "a6bbbd5880ceb9ecfd66eb8a60e8c6a1a6e05bbf93948e7de05e246185cef4c7",
+      "record": "ddedaaad9257d15693baf69d6c222ee588fbda1249df812798621319d83181aa"
+    }
+  }
+}

@@ -28,7 +28,6 @@ pub enum MediaCall {
     Table {
         from: TableFrom,
         key: String,
-        /// #3569: each named column's unit, which the probe then writes; a column not named has none.
         units: Map<String, Value>,
     },
     /// #194: a catalog's table files, each by its path, packed under its schema in the decode
@@ -521,7 +520,6 @@ impl Hub<'_> {
         let Some(probe) = reply.get("probe") else {
             return reply;
         };
-        // #3569: the units the import names, each on its column; a unit for no column of the table is refused.
         let mut table = probe["table"].clone();
         for (column, unit) in units {
             let named = table["columns"]

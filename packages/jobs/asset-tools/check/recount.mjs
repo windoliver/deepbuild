@@ -1,12 +1,92 @@
-// data.derived's recount (#3569): table.derive's output recomputed from the input files' bytes by code that shares
-// nothing with the job's tool (./tool). It reads the inputs column-wise, evaluates expressions through its own reverse
-// Polish form, sums integers exactly and numbers with compensation, and compares every output cell: integers exactly,
-// numbers within 1e-12 relative. It holds each sum to its inputs, the receipt to what it counted and the lineage to
-// the rows it saw. It answers each disagreement as a sentence naming the output cell, and none when all agree.
-
 const REL = 1e-12;
+const I64_LO = -(2n ** 63n);
+const I64_HI = 2n ** 63n - 1n;
+const SQRT_PI = Math.sqrt(Math.PI);
+const HALF_LN_2PI = 0.5 * Math.log(2 * Math.PI);
+const STIRLING = [1 / 12, -1 / 360, 1 / 1260, -1 / 1680, 1 / 1188, -691 / 360360, 1 / 156];
 
-/** A CSV split into lines of fields: quoted fields unquoted, a CR before LF dropped, blank lines skipped. */
+function erfcContinuedFraction(ax) {
+  let c = 1e30;
+  let d = 1 / ax;
+  let h = d;
+  for (let n = 1; n <= 80; n++) {
+    const a = n * 0.5;
+    d = ax + a * d;
+    if (Math.abs(d) < 1e-30) d = 1e-30;
+    c = ax + a / c;
+    if (Math.abs(c) < 1e-30) c = 1e-30;
+    d = 1 / d;
+    const delta = c * d;
+    h *= delta;
+    if (Math.abs(delta - 1) < 1e-16) break;
+  }
+  return (Math.exp(-ax * ax) / SQRT_PI) * h;
+}
+
+function erfSeries(x) {
+  if (Number.isNaN(x)) return NaN;
+  const ax = Math.abs(x);
+  if (ax === 0) return 0;
+  if (ax > 3.5) {
+    const r = ax > 27 ? 1 : 1 - erfcContinuedFraction(ax);
+    return x < 0 ? -r : r;
+  }
+  const x2 = ax * ax;
+  let term = ax;
+  let sum = ax;
+  for (let k = 1; k <= 90; k++) {
+    term *= (2 * x2) / (2 * k + 1);
+    sum += term;
+    if (Math.abs(term) <= Math.abs(sum) * 1e-16) break;
+  }
+  const r = (2 / SQRT_PI) * Math.exp(-x2) * sum;
+  return x < 0 ? -r : r;
+}
+
+function erfcSeries(x) {
+  if (Number.isNaN(x)) return NaN;
+  const ax = Math.abs(x);
+  if (ax <= 3.5) return 1 - erfSeries(x);
+  const pos = ax > 27 ? 0 : erfcContinuedFraction(ax);
+  return x < 0 ? 2 - pos : pos;
+}
+
+function lgammaStirling(x) {
+  if (Number.isNaN(x)) return NaN;
+  if (x <= 0 && x === Math.trunc(x)) return Infinity;
+  if (x < 0) return Math.log(Math.PI / Math.abs(Math.sin(Math.PI * x))) - lgammaStirling(1 - x);
+  let y = x;
+  let shift = 0;
+  while (y < 12) {
+    shift += Math.log(y);
+    y += 1;
+  }
+  const inv = 1 / (y * y);
+  let series = 0;
+  for (let i = STIRLING.length - 1; i >= 0; i--) series = series * inv + STIRLING[i];
+  return (y - 0.5) * Math.log(y) - y + HALF_LN_2PI + series / y - shift;
+}
+
+function gammaStirling(x) {
+  if (Number.isNaN(x)) return NaN;
+  if (x === 0) return Infinity;
+  if (x < 0 && x === Math.trunc(x)) return NaN;
+  if (x < 0) return Math.PI / (Math.sin(Math.PI * x) * gammaStirling(1 - x));
+  return Math.exp(lgammaStirling(x));
+}
+
+function factorialStirling(n) {
+  if (!Number.isFinite(n) || n < 0 || n > 170 || n !== Math.trunc(n)) return NaN;
+  const v = Math.exp(lgammaStirling(n + 1));
+  return n <= 22 ? Math.round(v) : v;
+}
+
+function binomStirling(n, k) {
+  if (!Number.isFinite(n) || !Number.isFinite(k) || n !== Math.trunc(n) || k !== Math.trunc(k) || k < 0 || n < k || n > 1e15) return NaN;
+  const v = Math.exp(lgammaStirling(n + 1) - lgammaStirling(k + 1) - lgammaStirling(n - k + 1));
+  return v < 2 ** 53 ? Math.round(v) : v;
+}
+
 function fields(src) {
   const out = [];
   let line = [];
@@ -30,7 +110,6 @@ function fields(src) {
   return out;
 }
 
-/** A table column by column: {names, col: {name → [text]}, n}. */
 function columnar(bytes) {
   const [head, ...body] = fields(Buffer.from(bytes).toString('utf8'));
   const col = {};
@@ -39,33 +118,42 @@ function columnar(bytes) {
 }
 
 const isInt = (s) => /^[+-]?[0-9]+$/.test(s);
+const inI64 = (s) => {
+  if (!isInt(s)) return false;
+  const v = BigInt(s);
+  return v >= I64_LO && v <= I64_HI;
+};
 const kindOf = (texts) => {
   const xs = texts.filter((s) => s.length > 0);
-  if (xs.every(isInt)) return 'int';
+  if (xs.every(inI64)) return 'int';
   if (xs.every((s) => !/^\s*$/.test(s) && Number.isFinite(+s))) return 'num';
   return 'text';
 };
 
-/** Order of two key texts in one column of a kind: numbers by value, text by UTF-8 bytes. */
 const order = (kind) => (a, b) => {
   if (kind === 'int') { const x = BigInt(a); const y = BigInt(b); return x === y ? 0 : x < y ? -1 : 1; }
   if (kind === 'num') return +a - +b;
   return Buffer.compare(Buffer.from(a), Buffer.from(b));
 };
 
-/** Compensated sum of numbers (Neumaier). */
+const compareTyped = (kind, a, b) => {
+  if (kind === 'int') return a === b ? 0 : a < b ? -1 : 1;
+  if (kind === 'num') return a - b;
+  return Buffer.compare(Buffer.from(String(a)), Buffer.from(String(b)));
+};
+
 function fsum(xs) {
   let s = 0;
   let c = 0;
   for (const x of xs) {
     const t = s + x;
+    if (!Number.isFinite(t)) return t;
     c += Math.abs(s) >= Math.abs(x) ? s - t + x : x - t + s;
     s = t;
   }
   return s + c;
 }
 
-// The expression's own reader: tokens to reverse Polish by precedence, then a stack machine.
 const PREC = { '||': 1, '&&': 2, '==': 3, '!=': 3, '<': 4, '<=': 4, '>': 4, '>=': 4, '+': 5, '-': 5, '*': 6, '/': 6, '%': 6, '^': 8 };
 const FN = {
   min: (a, b) => (a < b ? a : b), max: (a, b) => (a > b ? a : b), clamp: (x, lo, hi) => (x < lo ? lo : x > hi ? hi : x),
@@ -74,7 +162,9 @@ const FN = {
   exp: Math.exp, log: Math.log, sin: Math.sin, cos: Math.cos, tan: Math.tan, asin: Math.asin, acos: Math.acos, atan: Math.atan,
   atan2: Math.atan2, deg: (x) => x * (180 / Math.PI), rad: (x) => x * (Math.PI / 180), sinh: Math.sinh, cosh: Math.cosh, tanh: Math.tanh,
   asinh: Math.asinh, acosh: Math.acosh, atanh: Math.atanh, log2: Math.log2, log10: Math.log10, log1p: Math.log1p, expm1: Math.expm1,
-  hypot: (a, b) => Math.hypot(a, b), cbrt: Math.cbrt, sinc: (x) => (x ? Math.sin(x) / x : 1), mix: (a, b, t) => a * (1 - t) + b * t,
+  hypot: (a, b) => Math.hypot(a, b), cbrt: Math.cbrt, sinc: (x) => (x ? Math.sin(x) / x : 1),
+  erf: erfSeries, erfc: erfcSeries, gamma: gammaStirling, lgamma: lgammaStirling, factorial: factorialStirling, binom: binomStirling,
+  mix: (a, b, t) => a * (1 - t) + b * t,
   smoothstep: (a, b, x) => { let t = (x - a) / (b - a); t = t < 0 ? 0 : t > 1 ? 1 : t; return t * t * (3 - 2 * t); },
   remap: (x, a, b, c, d) => c + ((d - c) * (x - a)) / (b - a),
 };
@@ -112,7 +202,6 @@ function rpn(src) {
       while (ops.length) {
         const top = ops.at(-1);
         if (typeof top !== 'string' || top === '(' || top === '?' || top === ':') break;
-        // A leading minus binds looser than ^ and tighter than the rest: −x^2 is −(x²).
         const tp = top.startsWith('u') ? 7 : PREC[top];
         if (tp > p || (tp === p && t !== '^')) out.push(ops.pop()); else break;
       }
@@ -124,7 +213,6 @@ function rpn(src) {
   return out;
 }
 
-/** The value of a reverse Polish form over a row: undefined when a cell it reads is missing. */
 function run(code, row) {
   const st = [];
   for (const c of code) {
@@ -144,13 +232,16 @@ function run(code, row) {
 
 const plain = (v) => (v === undefined ? '' : typeof v === 'number' && v === 0 ? '0' : String(v));
 
-/**
- * The recount: `params` the job's, `inputs` {name → {bytes, key}} and `outputs` {table, lineage, receipt} as bytes.
- * Answers the disagreements, each naming the output cell or the receipt's field.
- */
+function parseAgg(spec) {
+  const m = typeof spec === 'string' ? /^\s*(\w+)\s*(?:\(\s*(\w*)\s*(?:,\s*weight\s*:\s*(\w+))?\s*\))?\s*$/.exec(spec) : null;
+  const fn = m ? m[1] : Object.keys(spec).find((k) => k !== 'weight');
+  const col = m ? m[2] : spec[fn];
+  const weight = m ? m[3] : spec.weight;
+  return { fn, col, weight };
+}
+
 export function recount(params, inputs, outputs) {
   const wrong = [];
-  // Each input as rows of {col → typed value}, keyed by its key, in key order.
   const tables = {};
   for (const [name, input] of Object.entries(inputs)) {
     const t = columnar(input.bytes);
@@ -166,28 +257,42 @@ export function recount(params, inputs, outputs) {
   const startName = first[0];
   let kinds = { ...tables[startName].kinds };
   let rows = tables[startName].rows.map((r) => ({ v: { ...r.v }, src: r.src }));
-  // Where each column's cells come from, for the sums held to their inputs: the start input's own column, or none.
   let origin = Object.fromEntries(Object.keys(kinds).map((h) => [h, h]));
   const count = { rows_in: rows.length, dropped: 0, skipped: {}, nonfinite: {} };
   const droppedRows = [];
   const sums = [];
   const bump = (o, k) => { o[k] = (o[k] ?? 0) + 1; };
-  const join = (a, b) => { const s = { ...a }; for (const [n, ks] of Object.entries(b)) s[n] = [...(s[n] ?? []), ...ks]; return s; };
+  const joinSrc = (a, b) => { const s = { ...a }; for (const [n, ks] of Object.entries(b)) s[n] = [...(s[n] ?? []), ...ks]; return s; };
   const keyText = (r, cols) => cols.map((c) => plain(r.v[c])).join('\u0000');
   for (const step of steps) {
     const [op] = Object.keys(step);
     const s = step[op];
     if (op === 'join') {
       const right = tables[s.with];
+      const expect = s.expect ?? 'many_to_one';
       const m = new Map();
-      for (const r of right.rows) if (s.on.every((c) => r.v[c] !== undefined)) m.set(keyText(r, s.on), r);
+      for (const r of right.rows) {
+        if (!s.on.every((c) => r.v[c] !== undefined)) continue;
+        const k = keyText(r, s.on);
+        if (m.has(k)) wrong.push(`data.derived: join with ${s.with} repeats ${s.on.map((c) => `${c} ${plain(r.v[c])}`).join(', ')} under expect ${expect}`);
+        m.set(k, r);
+      }
+      if (expect === 'one_to_one') {
+        const leftSeen = new Set();
+        for (const r of rows) {
+          if (!s.on.every((c) => r.v[c] !== undefined)) continue;
+          const k = keyText(r, s.on);
+          if (leftSeen.has(k)) wrong.push(`data.derived: join with ${s.with} repeats ${s.on.map((c) => `${c} ${plain(r.v[c])}`).join(', ')} in the left table under expect one_to_one`);
+          leftSeen.add(k);
+        }
+      }
       const next = [];
       for (const r of rows) {
         const hit = s.on.every((c) => r.v[c] !== undefined) ? m.get(keyText(r, s.on)) : undefined;
         if (!hit && (s.kind ?? 'inner') === 'inner') { count.dropped++; droppedRows.push(r); continue; }
         const v = { ...r.v };
         for (const [c, x] of Object.entries(hit?.v ?? Object.fromEntries(Object.keys(right.kinds).map((c) => [c, undefined])))) if (!s.on.includes(c)) v[c] = x;
-        next.push({ v, src: hit ? join(r.src, hit.src) : r.src });
+        next.push({ v, src: hit ? joinSrc(r.src, hit.src) : r.src });
       }
       for (const c of Object.keys(right.kinds)) if (!s.on.includes(c)) { kinds[c] = right.kinds[c]; origin[c] = null; }
       rows = next;
@@ -196,7 +301,11 @@ export function recount(params, inputs, outputs) {
       const next = [];
       for (const r of rows) {
         const x = run(code, (c) => (r.v[c] === undefined ? undefined : Number(r.v[c])));
-        if (x === undefined || x !== x || x === 0) { count.dropped++; droppedRows.push(r); } else next.push(r);
+        if (x === undefined || x !== x || x === 0) {
+          count.dropped++;
+          droppedRows.push(r);
+          for (const sum of sums) if (sum.name in r.v && r.v[sum.name] !== undefined) sum.droppedGroups.push(r.v[sum.name]);
+        } else next.push(r);
       }
       rows = next;
     } else if (op === 'derive') {
@@ -220,38 +329,47 @@ export function recount(params, inputs, outputs) {
       }
       const nk = Object.fromEntries(by.map((c) => [c, kinds[c]]));
       const no = Object.fromEntries(by.map((c) => [c, null]));
+      const aggList = Object.entries(s.agg ?? {}).map(([name, spec]) => ({ name, ...parseAgg(spec) }));
+      for (const a of aggList) {
+        nk[a.name] = a.fn === 'count' ? 'int' : a.fn === 'mean' ? 'num' : kinds[a.col];
+        no[a.name] = null;
+      }
       const next = [];
       for (const members of buckets.values()) {
         const v = Object.fromEntries(by.map((c) => [c, members[0].v[c]]));
-        for (const [name, spec] of Object.entries(s.agg ?? {})) {
-          const m = typeof spec === 'string' ? /^\s*(\w+)\s*(?:\(\s*(\w*)\s*(?:,\s*weight\s*:\s*(\w+))?\s*\))?\s*$/.exec(spec) : null;
-          const fn = m ? m[1] : Object.keys(spec).find((k) => k !== 'weight');
-          const col = m ? m[2] : spec[fn];
-          const weight = m ? m[3] : spec.weight;
-          if (fn === 'count') { v[name] = BigInt(members.length); nk[name] = 'int'; continue; }
+        const label = by.map((c) => `${c} ${plain(v[c])}`).join(', ') || 'the whole table';
+        for (const { name, fn, col, weight } of aggList) {
+          if (fn === 'count') { v[name] = BigInt(members.length); continue; }
           const xs = [];
           let hole = false;
           for (const r of members) {
             if (r.v[col] === undefined || (weight && r.v[weight] === undefined)) { if (s.skip_missing === true) bump(count.skipped, name); else hole = true; } else xs.push(r);
           }
-          nk[name] = fn === 'mean' ? 'num' : kinds[col];
           if (hole || xs.length === 0) { v[name] = undefined; continue; }
-          if (fn === 'sum') v[name] = kinds[col] === 'int' ? xs.reduce((a, r) => a + r.v[col], 0n) : fsum(xs.map((r) => r.v[col]));
-          else if (fn === 'min') v[name] = xs.map((r) => r.v[col]).reduce((a, b) => (b < a ? b : a));
+          if (fn === 'sum') {
+            if (kinds[col] === 'int') {
+              let acc = 0n;
+              for (const r of xs) {
+                acc += r.v[col];
+                if (acc < I64_LO || acc > I64_HI) wrong.push(`data.derived: sum of ${col} for ${label} passes i64`);
+              }
+              v[name] = acc;
+            } else {
+              const acc = fsum(xs.map((r) => r.v[col]));
+              if (Number.isFinite(acc)) v[name] = acc; else { v[name] = undefined; bump(count.nonfinite, name); }
+            }
+          } else if (fn === 'min') v[name] = xs.map((r) => r.v[col]).reduce((a, b) => (b < a ? b : a));
           else if (fn === 'max') v[name] = xs.map((r) => r.v[col]).reduce((a, b) => (b > a ? b : a));
           else {
             const w = xs.map((r) => (weight ? Number(r.v[weight]) : 1));
             const x = fsum(xs.map((r, i) => w[i] * Number(r.v[col]))) / fsum(w);
             if (Number.isFinite(x)) v[name] = x; else { v[name] = undefined; bump(count.nonfinite, name); }
           }
-          if (fn === 'sum' && origin[col] && !sums.some((x) => x.name === name)) sums.push({ name, col: origin[col] });
+          if (fn === 'sum' && origin[col] && !sums.some((x) => x.name === name)) {
+            sums.push({ name, col: origin[col], droppedBefore: [...droppedRows], droppedGroups: [], skipMissing: s.skip_missing === true });
+          }
         }
-        next.push({ v, src: members.reduce((a, r) => join(a, r.src), {}) });
-      }
-      for (const [name, spec] of Object.entries(s.agg ?? {})) {
-        const fn = typeof spec === 'string' ? /^\s*(\w+)/.exec(spec)[1] : Object.keys(spec).find((k) => k !== 'weight');
-        no[name] = null;
-        if (fn === 'count') nk[name] = 'int';
+        next.push({ v, src: members.reduce((a, r) => joinSrc(a, r.src), {}) });
       }
       kinds = nk;
       origin = no;
@@ -262,11 +380,12 @@ export function recount(params, inputs, outputs) {
       const parts = new Map();
       for (const r of rows) { const k = keyText(r, within); if (!parts.has(k)) parts.set(k, []); parts.get(k).push(r); }
       const keyOrder = order(kinds[params.key]);
+      const byKind = kinds[s.by];
       for (const part of parts.values()) {
         const has = part.filter((r) => r.v[s.by] !== undefined);
         has.sort((a, b) => {
-          const x = Number(a.v[s.by]); const y = Number(b.v[s.by]);
-          if (x !== y) return desc ? y - x : x - y;
+          const d = compareTyped(byKind, a.v[s.by], b.v[s.by]);
+          if (d !== 0) return desc ? -d : d;
           return keyOrder(plain(a.v[params.key]), plain(b.v[params.key]));
         });
         for (const r of part) r.v[s.into] = undefined;
@@ -305,18 +424,19 @@ export function recount(params, inputs, outputs) {
     }
   }
   for (const k of expected.keys()) if (!seen.has(k)) wrong.push(`data.derived: the recount writes a row ${key} ${k}, which the table lacks`);
-  // Each sum held to its inputs: what the output's groups hold plus what was dropped equals the start input's column.
-  for (const { name, col } of sums) {
+  for (const { name, col, droppedBefore, droppedGroups, skipMissing } of sums) {
+    if (!Object.hasOwn(kinds, name)) continue;
     const cells = rows.map((r) => r.v[name]);
-    if (cells.includes(undefined) && !(params.steps ?? []).some((st) => st.group?.skip_missing === true)) continue;
+    if (cells.includes(undefined) && !skipMissing) continue;
+    if (count.nonfinite[name]) continue;
     const at = got.names.includes(name) ? got.col[name] : [];
     const total = tables[startName].rows.map((r) => r.v[col]).filter((x) => x !== undefined);
-    const lost = droppedRows.map((r) => r.v[col]).filter((x) => x !== undefined);
-    const int = total.every((x) => typeof x === 'bigint');
+    const lost = [...droppedBefore.map((r) => r.v[col]).filter((x) => x !== undefined), ...droppedGroups];
+    const int = total.every((x) => typeof x === 'bigint') && lost.every((x) => typeof x === 'bigint');
     const shown = at.filter((s) => s !== '');
     const ok = int && shown.every(isInt)
       ? shown.reduce((a, s) => a + BigInt(s), 0n) + lost.reduce((a, x) => a + x, 0n) === total.reduce((a, x) => a + x, 0n)
-      : Math.abs(fsum(shown.map(Number)) + fsum(lost.map(Number)) - fsum(total.map(Number))) <= REL * Math.abs(fsum(total.map(Number)));
+      : Math.abs(fsum(shown.map(Number)) + fsum(lost.map(Number)) - fsum(total.map(Number))) <= REL * Math.max(Math.abs(fsum(total.map(Number))), 1);
     if (!ok) wrong.push(`data.derived: ${name}: the table's total plus what was dropped or skipped isn't the total of ${col} in ${startName}`);
   }
   let receipt;

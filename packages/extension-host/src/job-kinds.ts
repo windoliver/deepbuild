@@ -13,11 +13,6 @@ type FixtureFile = string | { base64: string };
 export interface JobFixture { name: string; params: Record<string, JsonValue>; inputs: Record<string, FixtureFile>; expect: Texts }
 export interface JobKind {
   /** Each input by name; one declared `many` (#154) takes zero or more files, in order, all of them in the key. */
-  /**
-   * `tables` (#3569) names the params field that maps input names to table assets by hash: the hub reads each table's
-   * bytes and its record's key and units from the evidence store, hands them to the tool under those names and
-   * `#tables`, and keeps the record of the table the kind writes as its `table` output beside it.
-   */
   schema: { params: Schema; inputs: Record<string, { media?: string; many?: boolean }>; tables?: string };
   outputs: Record<string, { media?: string }>;
   key: string[];

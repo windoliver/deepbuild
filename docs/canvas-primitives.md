@@ -8102,6 +8102,8 @@ For: a data story's dataset; a chart's values and labels; a template's numbers: 
 
 **As built (#3570):** A table an import job wrote gets the same record beside its bytes as a fetched one (`tables/<sha256>.json`), written by the hub with the source `job {kind, tool, input}`, each input the URL and fetch time the hub recorded when it fetched the file, or `origin: agent` where no fetch of the hub's brought it, which counts as the agent's word.
 
+**As built (#3569):** `table.derive` (`packages/jobs/asset-tools`, tool `table-derive@1.0.0`, check `data.derived`) reads each table named in `params.inputs` by hash (its bytes, key and units) and writes `table`, `lineage`, `receipt` and `record`; once `data.derived` passes, the hub keeps `tables/<sha256>.json` with `source: {job: {kind, tool, input}}` and `lineage`, and honest numbers follows the lineage to each input file and key, treating any derived table with an agent input as story numbers. `deep-show run`'s `table_import` takes `units: {column → unit}`, and the table probe treats empty cells as missing in number columns.
+
 **Lands:** R2, with data views
 
 #### Asset: tables: catalogs `table.layout@1`

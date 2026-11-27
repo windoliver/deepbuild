@@ -330,7 +330,6 @@ export class JobTools {
       if (!ext.jobKinds.has(kind)) refuse(`${entry.id}'s manifest declares the job kind ${kind}, which its code doesn't register`);
       try { kinds[kind] = kindOf(kind, ext.jobKinds.get(kind)); } catch (e) { refuse(message(e)); }
     }
-    // A check named like no plug-in's own name or kind's (#3569) is let in only as one of its kinds' output checks.
     const plugin = entry.id.slice(entry.id.indexOf('/') + 1);
     const listed = new Set(Object.values(kinds).flatMap((k) => k.output_checks));
     for (const check of manifest.checks ?? []) {

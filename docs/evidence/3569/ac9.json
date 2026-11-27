@@ -106,7 +106,7 @@
       "kind": "table.derive",
       "tool": "sums-in-f32@1.0.0",
       "key": "a766ce6b18bb0d3da1c3a68e560314c9566c6ef72a2675d303c9092979dabae1",
-      "build": "d1:c395df58360405d05f46f7931e119ec4c62964ed4bb0251b947c6424a0e4bf1a",
+      "build": "d1:032928fe44f168e2e9d0b7bb9f0030919a3d454b03c26c673bb7ac59a2853b36",
       "cache": "miss",
       "inputs": {
         "county": "a36de293e201c15e0516d69ac6f10fbfec1131886b7c7a4e36961cbd7c27947b",
@@ -124,7 +124,7 @@
       "kind": "table.derive",
       "tool": "counts-row-twice@1.0.0",
       "key": "7d6ff26fefe3637eb65c31e9ea58c0331bc48acab01ac11dd5fc985edd35bc57",
-      "build": "d1:620ed3b18f13659c68456b96acf0460fa2cbdf2b3751c5310ef92a22ea971402",
+      "build": "d1:da1a8750a73fb07aa22fd7a4613aa63db8a34d8f6341f3a75a0503ca21352a39",
       "cache": "miss",
       "inputs": {
         "county": "a36de293e201c15e0516d69ac6f10fbfec1131886b7c7a4e36961cbd7c27947b",
