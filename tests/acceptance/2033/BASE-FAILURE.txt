@@ -1,0 +1,34 @@
+Base commit: 1b4929ae7 (main, merge of #3436). Machine: Mac18,1 (a reference Mac, owner decision #2956), macOS,
+Node 24.22.0, deep-gpu built through the throttle queue (cargo build --locked --bin deep-gpu, CARGO_INCREMENTAL=0
+CARGO_PROFILE_DEV_DEBUG=0). Date: 2026-11-25, 12:51-13:00 PST. Load averages at start: 31 (first run), 7.6 / 29 / 32
+(second run). Hardware adapter (full lane), not a software one.
+
+Commands (from the repo root, one file after another):
+  npx vitest run tests/acceptance/2033/ac1-sun-lit.test.ts tests/acceptance/2033/ac2-sun-wall.test.ts \
+    tests/acceptance/2033/ac3-local-lit.test.ts tests/acceptance/2033/ac4-local-wall.test.ts \
+    --testTimeout=1200000 --no-file-parallelism --reporter=verbose
+The first run failed AC3 and AC4 on two of the tests' own guards (AC3: a share-of-bright-pixels guard failing on a
+spot 1 m away, whose far lit pixels are dim; AC4: a visible-lit-area guard failing for the spot 1 m behind the wall,
+whose lit area the wall hides from the camera). Both guards were corrected (see README, Guards) and AC3 and AC4 were
+run again; AC1 and AC2 were not changed. The results below are the final files.
+
+Result:
+  AC1 #2033.572c2d31  PASS on the base (41.7 s). 7 elevations x 4 cascades: 0 judged lit px over 4 codes in every
+                      config; worst 3 codes. Every occluded guard 100% darkened. Cascade texels 0.0127, 0.0105,
+                      0.0100, 0.0100 m.
+  AC2 #2033.6912f5fe  PASS on the base (15.3 s). 0 lit px behind the wall in all 28 configs (1,972 to 34,205 judged
+                      px each).
+  AC3 #2033.51cea4a6  PASS on the base (15.8 s). Spot and point x 1/4/16 m x sphere2/sphere4/box: 0 judged lit px
+                      over 4 codes, worst 0 codes, every config.
+  AC4 #2033.4b94b05f  FAIL on the base (6.8 s), for the expected reason, naming the light and the distance:
+                        the spot light at 16 m: 896 lit px behind the wall: of 29837 plane px whose ray to the light
+                        runs 0.25 m or more inside it, 896 read more than 4 codes over the light-off frame, worst 105
+                        codes at (431, 381)
+                        the point light at 16 m: 435 lit px behind the wall: of 29837 plane px ..., worst 109 codes
+                        at (429, 381)
+                      1 m and 4 m: 0 lit px behind the wall for both lights.
+
+AC1, AC2 and AC3 pass on the base, so their proof that they can fail rests on their planted twins (twins.json):
+no-bias for AC1 and AC3, two-metre-bias for AC2 and AC4 (see README, What was run).
+
+Type check: npx tsc --noEmit -p tests/acceptance/2033/tsconfig.json reports no errors.

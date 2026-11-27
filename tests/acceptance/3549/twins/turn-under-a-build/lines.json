@@ -1,0 +1,12 @@
+{
+  "scripts/throttle.mjs": [
+    {
+      "find": [
+        "      const admitted = !turn && turns && cls !== 'timed' && held.find((grant) => grant.class === 'test' && grant.run === true);"
+      ],
+      "wrong": [
+        "      const admitted = !turn && turns && cls !== 'timed' && held.find((grant) => grant.run === true);"
+      ]
+    }
+  ]
+}

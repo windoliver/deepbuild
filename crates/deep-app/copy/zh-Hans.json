@@ -1201,6 +1201,34 @@
     "text": "仅文本",
     "source": "3c8249cff04275cf5a1056321d7cd37b79d97001835a1d01d09cd181d58f639a"
   },
+  "said.can_be_undone": {
+    "text": "可以撤销",
+    "source": "f1c1fd06987c43004013d101b42c8187cd7192511f08973a1985b4a8bb5ad268"
+  },
+  "said.changes": {
+    "text": {
+      "other": "{0} 项变化"
+    },
+    "source": "1dfd6c4b789d6f9f1e8b4fc456787ef503073edf478a14106b0243a0a002fc1f"
+  },
+  "said.hub_back": {
+    "text": "中枢恢复响应",
+    "source": "d0fcf655bab8d3991d3f357aa4479f87acd7984d2f3abc1d373372267c43b6dd"
+  },
+  "said.new": {
+    "text": {
+      "other": "{0} 个新请求"
+    },
+    "source": "242acb695afc913a8ec69438834308d68a54b79da545c807b8b2f4b9378f3f51"
+  },
+  "said.question_changed": {
+    "text": "问题已更改",
+    "source": "ededa39cea494a1893a10b7436cd0cd0234041894f8c7f5536bab86ac234dff3"
+  },
+  "said.withdrawn": {
+    "text": "开始前已撤回",
+    "source": "3d95829b04c904ab5383542ca605c75e465540d759213a4cafc1a092bdc2e401"
+  },
   "setup.adds": {
     "text": "为 {0} 添加钩子。钩子是{1}。",
     "source": "4a2a9ea39879ee4375a78103e11c9b7d88dafb0ab79218f4fde9ff773eafc7a2"

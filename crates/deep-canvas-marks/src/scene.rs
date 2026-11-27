@@ -1423,13 +1423,7 @@ impl Mark {
                     });
                 }
                 if let Some(t) = tile {
-                    k.text("tile").int(t.index as i64).int(i64::from(t.flip));
-                    [t.cell, t.margin, t.separation]
-                        .iter()
-                        .flatten()
-                        .for_each(|v| {
-                            k.number(*v);
-                        });
+                    t.feed(k);
                 }
                 // Unturned is the default, so an image without a turn keeps its key.
                 if *turn != 0.0 {

@@ -1,0 +1,97 @@
+{
+  "scene": "surface-handoff",
+  "format": "bgra8_premultiplied",
+  "color_space": "srgb",
+  "size": [1936, 1584],
+  "frames": 600,
+  "fence_frames": 10000,
+  "stale_frames": 250,
+  "resize": {
+    "every": 50,
+    "sizes": [
+      [1936, 1584],
+      [1452, 1188],
+      [968, 792],
+      [1600, 1300]
+    ]
+  },
+  "device_loss_at": 125,
+  "window": [2000, 1648],
+  "view": [32, 32],
+  "page": {
+    "cell": 32,
+    "colors": [
+      [120, 140, 150],
+      [100, 80, 60]
+    ]
+  },
+  "background": [70, 50, 40, 255],
+  "regions": [
+    {
+      "name": "alpha_ramp",
+      "rect": [0, 0, 768, 64],
+      "fill": {
+        "ramp": {
+          "step": 3,
+          "channels": "bgra"
+        }
+      }
+    },
+    {
+      "name": "grey_ramp",
+      "rect": [0, 64, 768, 64],
+      "fill": {
+        "ramp": {
+          "step": 3,
+          "channels": "bgr",
+          "alpha": 255
+        }
+      }
+    },
+    {
+      "name": "glow",
+      "rect": [0, 128, 256, 256],
+      "fill": {
+        "color": [24, 48, 96, 0]
+      }
+    },
+    {
+      "name": "object",
+      "rect": [64, 192, 128, 128],
+      "fill": {
+        "color": [40, 60, 200, 255]
+      }
+    },
+    {
+      "name": "pane",
+      "rect": [320, 128, 256, 256],
+      "fill": {
+        "color": [100, 50, 25, 128]
+      }
+    },
+    {
+      "name": "stamp",
+      "rect": [0, 384, 256, 8],
+      "fill": {
+        "stamp": {
+          "bits": 16,
+          "cell": 16,
+          "one": [255, 255, 255, 255],
+          "zero": [0, 0, 0, 255]
+        }
+      }
+    },
+    {
+      "name": "marker",
+      "rect": [776, 0, 8, null],
+      "fill": {
+        "color": [255, 0, 255, 255]
+      },
+      "moves": {
+        "dx": 8,
+        "dy": 0,
+        "period": 23
+      }
+    }
+  ]
+}
