@@ -173,7 +173,6 @@ export class AnswerDelivery {
     this.routesOf(session, cwd).later.push(text);
   }
 
-  /** Words for the agent that can wait (#2669): the next prompt that reaches the model carries them. */
   notice(session: string, cwd: string, text: string): void {
     const r = this.routesOf(session, cwd);
     (r.notices ??= []).push(text);
