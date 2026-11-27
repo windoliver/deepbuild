@@ -1,0 +1,145 @@
+{
+  "title": "host.link@1",
+  "description": "A host's link came up or went down (#999): the SSH link that forwards the host's hook socket to this hub. While it is down the host's deep-hook spools, and each of its sessions reads unknown, never finished; once it is back the hub replays that spool in order. Up, it names the version and contract the host's deep-hook reports and the hub's own, so a deep-hook a contract major apart from the hub says so on its sessions' rows and in deep doctor. Only the core appends it.",
+  "x-since": "R3",
+  "x-stability": "preview",
+  "x-tracking": "#999",
+  "x-preview_since": "R3",
+  "x-decide_by": "R6",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "host.link"
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "host": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The host, as your SSH config names it."
+        },
+        "up": {
+          "type": "boolean",
+          "description": "True once the forward is up; false when it ended or could not start."
+        },
+        "why": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "Why it is down, in ssh's words where it gave any; null when it is up."
+        },
+        "hook_version": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The version the host's deep-hook reports (deep-hook --version); null when the link is down or it reported none."
+        },
+        "hook_contract": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The hub contract the host's deep-hook speaks, major.minor (deep-hook --contract); null when the link is down or it reported none, as a deep-hook older than the report does."
+        },
+        "hub_version": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The hub's own version; null when the link is down."
+        },
+        "hub_contract": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The hub contract the hub speaks, major.minor; null when the link is down."
+        }
+      },
+      "required": [
+        "host",
+        "up",
+        "why",
+        "hook_version",
+        "hook_contract",
+        "hub_version",
+        "hub_contract"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,156 @@
+{
+ "main": "390c3f39067e7520ca7d2405d86578d17fe4f668",
+ "pipelines": {
+  "scene": {
+   "path": "tests/acceptance/2189/fixtures/every-pass.json",
+   "sha256": "07e5dd1cccfe7ccdbd512643e1111eb4114c8a3f3b61095623bca217c59a86ed"
+  },
+  "main": {
+   "command": "node docs/spikes/3444/run.mjs cold --bin <deep-gpu of main with the probe> --commit <main> --out docs/spikes/3444/out/cold-main.json",
+   "out": "out/cold-main.json",
+   "sha256": "4e14c89b16ded630cede34e193ea5c9ca1a434ae8e687e2227ad5b2e812365b4"
+  },
+  "split": {
+   "command": "node docs/spikes/3444/run.mjs cold --bin <deep-gpu of main with split-module.patch and the probe> --commit <main> --patch docs/spikes/3444/split-module.patch --out docs/spikes/3444/out/cold-split.json",
+   "out": "out/cold-split.json",
+   "sha256": "9e5640ce8f75dcdb1d66ab74c23e878009940453601249c1f1360d0de0e64a5f",
+   "patch": {
+    "path": "split-module.patch",
+    "sha256": "88b4552c4284bd89e61ec1079726643feaafad961133ce95712f4d9fdaaca4b6"
+   }
+  }
+ },
+ "indirect": {
+  "rounds": [
+   {
+    "on": {
+     "command": "node docs/spikes/3444/run.mjs indirect --bin <deep-gpu of main with the probe> --commit <main> --flag on --out docs/spikes/3444/out/indirect-1-on.json",
+     "out": "out/indirect-1-on.json",
+     "sha256": "635ed1eca6e030391af5acfb822b7986c91e50938151fabd8cc8fb9ea671d224"
+    },
+    "off": {
+     "command": "node docs/spikes/3444/run.mjs indirect --bin <deep-gpu of main with the probe> --commit <main> --flag off --out docs/spikes/3444/out/indirect-1-off.json",
+     "out": "out/indirect-1-off.json",
+     "sha256": "9092e91d0b59875580d451d72ff60ab236ea7c5a0b839aeb382ea8d20c8ab446"
+    }
+   },
+   {
+    "on": {
+     "command": "node docs/spikes/3444/run.mjs indirect --bin <deep-gpu of main with the probe> --commit <main> --flag on --out docs/spikes/3444/out/indirect-2-on.json",
+     "out": "out/indirect-2-on.json",
+     "sha256": "b0c5fcd1cbd1c74a1f492b0fb3df3b44ddcb3749778bc7b0ab9b745c243cc359"
+    },
+    "off": {
+     "command": "node docs/spikes/3444/run.mjs indirect --bin <deep-gpu of main with the probe> --commit <main> --flag off --out docs/spikes/3444/out/indirect-2-off.json",
+     "out": "out/indirect-2-off.json",
+     "sha256": "107d64e098cf2ee9b1de5fa7bf64fa9a13fd32e2b13f4b18f1e0771976f7a83a"
+    }
+   },
+   {
+    "on": {
+     "command": "node docs/spikes/3444/run.mjs indirect --bin <deep-gpu of main with the probe> --commit <main> --flag on --out docs/spikes/3444/out/indirect-3-on.json",
+     "out": "out/indirect-3-on.json",
+     "sha256": "dfccb6de55a7b0bdbee3a397c7f3ab9b4e8d782ebbe82efca9ef394f72e95a08"
+    },
+    "off": {
+     "command": "node docs/spikes/3444/run.mjs indirect --bin <deep-gpu of main with the probe> --commit <main> --flag off --out docs/spikes/3444/out/indirect-3-off.json",
+     "out": "out/indirect-3-off.json",
+     "sha256": "0de28261ac312f705a72401cadfaef4a1443793df588078e8e3fc15b675f55d6"
+    }
+   },
+   {
+    "on": {
+     "command": "node docs/spikes/3444/run.mjs indirect --bin <deep-gpu of main with the probe> --commit <main> --flag on --out docs/spikes/3444/out/indirect-4-on.json",
+     "out": "out/indirect-4-on.json",
+     "sha256": "064dbdaba69e143af0371432e6b9ac0d3777548fef0552fdd3073a7984f576ce"
+    },
+    "off": {
+     "command": "node docs/spikes/3444/run.mjs indirect --bin <deep-gpu of main with the probe> --commit <main> --flag off --out docs/spikes/3444/out/indirect-4-off.json",
+     "out": "out/indirect-4-off.json",
+     "sha256": "01cc687a3399cae13ae5235d5d70e1cdd658b606ec10df832a1850d202056e07"
+    }
+   },
+   {
+    "on": {
+     "command": "node docs/spikes/3444/run.mjs indirect --bin <deep-gpu of main with the probe> --commit <main> --flag on --out docs/spikes/3444/out/indirect-5-on.json",
+     "out": "out/indirect-5-on.json",
+     "sha256": "3740237bbb2099c757286e1a17ccf9701ecfc74cfbd355dd2acfde9b14a002e0"
+    },
+    "off": {
+     "command": "node docs/spikes/3444/run.mjs indirect --bin <deep-gpu of main with the probe> --commit <main> --flag off --out docs/spikes/3444/out/indirect-5-off.json",
+     "out": "out/indirect-5-off.json",
+     "sha256": "bdb1ec98c30dc003d30c0130a95273fbb95edd6c7f3811438c12073d9f99571b"
+    }
+   }
+  ]
+ },
+ "query_sets": {
+  "states": {
+   "one_window": {
+    "command": "node docs/spikes/3444/run.mjs state --bin <deep-gpu of main with the probe> --commit <main> --state one_window --out docs/spikes/3444/out/state-one-window.json",
+    "out": "out/state-one-window.json",
+    "sha256": "a6bb7fa9827862d5e73554eac5f41c01a87804d47d9a19eded96988223fdcba3"
+   },
+   "four_windows": {
+    "command": "node docs/spikes/3444/run.mjs state --bin <deep-gpu of main with the probe> --commit <main> --state four_windows --out docs/spikes/3444/out/state-four-windows.json",
+    "out": "out/state-four-windows.json",
+    "sha256": "b49c119eed724685fa4deaec3b04a9655149fbdf42db2f5cccd1195c73a1e871"
+   },
+   "export": {
+    "command": "node docs/spikes/3444/run.mjs state --bin <deep-show of main with the probe> --commit <main> --state export --out docs/spikes/3444/out/state-export.json",
+    "out": "out/state-export.json",
+    "sha256": "de9d9129d346b7ff20af82903b42376214d8458ad905cc0eef28ecddf1391d73"
+   }
+  },
+  "one_more": {
+   "command": "node docs/spikes/3444/run.mjs one-more --bin <spike-3444, own-device/> --commit <main> --out docs/spikes/3444/out/one-more.json",
+   "out": "out/one-more.json",
+   "sha256": "5aa48f09adc2e2d7f76fc0aa0f514ab11630a15d6d419cdfdd510d7be7667d55"
+  }
+ },
+ "thresholds": {
+  "translation": {
+   "reading": 3078.263918,
+   "of": 3223.123083,
+   "more": true
+  },
+  "validation encode": {
+   "reading": 0.020541000000000004,
+   "of": 0.067667,
+   "more": true
+  },
+  "validation gpu": {
+   "reading": -0.36641666520154104,
+   "of": 8.223166665629833,
+   "more": false
+  },
+  "query sets": {
+   "reading": 1,
+   "of": 16,
+   "more": false
+  }
+ },
+ "tasks": {
+  "translation": {
+   "issue": 3523,
+   "title": "A cold start makes its pipelines side by side: 46 pipelines made one after the other on one thread are 3.1 s of a 3.2 s first frame",
+   "criteria": [
+    "- [ ] With #3444's harness (`node docs/spikes/3444/run.mjs cold`, nothing kept), the every-pass scene's first settled frame on a reference Mac is at most half of main's read the same way on the same machine in the same hour (drafted; main read 3,223 ms). The harness's output on the merge base is kept beside it",
+    "- [ ] The same run makes the same 46 pipelines by name as the merge base's, each once, and the device's own count of pipelines made equals the rows. A planted renderer that makes one pipeline twice fails, naming it",
+    "- [ ] The every-pass scene's frames 0, 30 and 59 hash as on the merge base, and so does every golden of the scene3d kit. A hash that moves fails, naming the frame",
+    "- [ ] The second open in the same process still makes 0 pipelines, and no pipeline is made on the UI thread. A planted warm-up that compiles on the UI thread fails, naming the thread"
+   ]
+  },
+  "validation": {
+   "issue": 3524,
+   "title": "The app's instance turns indirect-call validation off, with a bound of our own on the one count the GPU writes: wgpu's compute pass before each indirect draw adds 30% to the geometry pass's encode",
+   "criteria": [
+    "- [ ] The app's device reports no indirect validation: read back from the instance, the flag is off, and a frame of the forest encodes no validation pass. On the merge base the flag is on, and the test fails",
+    "- [ ] A planted `compact` that writes its batch's rows plus one as the count draws no row past the batch's last: the frame's pixel hash equals the frame drawn with the count at the rows, on Metal. A planted draw that takes the count unbounded fails, naming the batch",
+    "- [ ] A compute operator dispatched by a count above its `max` runs `max` invocations and writes no row after: #484's fourth criterion's fixture passes unchanged with the flag off",
+    "- [ ] #484's forest and crowd frames hash as on the merge base over the 10 s orbit, and its suite passes unchanged",
+    "- [ ] With #3444's harness, five alternated rounds on one Mac, the geometry pass's encode time on the forest is lower than the merge base's by the paired differences' median (drafted; main read 0.068 ms with the flag on and 0.047 ms off)"
+   ]
+  }
+ }
+}

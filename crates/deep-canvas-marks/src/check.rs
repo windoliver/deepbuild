@@ -639,7 +639,9 @@ pub fn check(doc: &Map<String, Value>, look: &Look, min: Option<f64>) -> Vec<Iss
                 .strip_prefix("items/")
                 .and_then(|rest| rest.split(['/', ':']).next())
                 .unwrap_or("");
-            if let Some(issue) = text_refusal(items, id, &r) {
+            // #2039: a sliced row smaller than its corners is named, with the smallest size.
+            let named = text_refusal(items, id, &r).or_else(|| crate::atlas::short_row(id, &r));
+            if let Some(issue) = named {
                 issues.push(issue);
                 break;
             }

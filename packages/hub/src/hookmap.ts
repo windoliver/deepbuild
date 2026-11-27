@@ -274,7 +274,22 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
   const rule = (facts.mapping as JsonObject)[request.event];
   let kind = isObj(rule) && typeof rule.kind === 'string' ? rule.kind : undefined;
   if (!kind) return { kind: 'hook', drafts: [], meta };
-  const mapped = registry().mapHook({ ...request, agent: name }, newest(name)).events.find((e) => e.kind === kind)?.data ?? {};
+  const read = registry().mapHook({ ...request, agent: name }, newest(name));
+  // A hook whose payload field says what it is (#3430) takes the kind of the entry its value lists. A value the facts
+  // don't list maps to no event, and the hook is recorded unverified with a reading that names the value.
+  if (isObj(rule) && isObj(rule.by)) {
+    const field = str(rule.by.field);
+    if (read.readings.some((r) => r.code === 'unlisted_value')) {
+      meta.unlisted = `${request.event}: ${field} ${scrub(JSON.stringify(at(payload, field) ?? null)).slice(0, 200)} is a value its facts don't list, so this hook is recorded unverified and read as no event`;
+      // No stop either: the hub's stop moment (a hold, a stop reply, a send-back) is for a turn its facts read as one.
+      meta.event = request.event;
+      return { kind: 'hook', drafts: [], meta };
+    }
+    // The hook's own event: a turn no prompt started may open with its user.ask first (turnWithoutPrompt).
+    kind = read.events.find((e) => !e.rule.startsWith('/turnWithoutPrompt/'))?.kind;
+    if (!kind) return { kind: 'hook', drafts: [], meta };
+  }
+  const mapped = read.events.find((e) => e.kind === kind)?.data ?? {};
   let data: Record<string, unknown> | undefined;
   let fill: Draft['fill'];
   let v = 1;
@@ -392,9 +407,15 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
     case 'session.compact':
     case 'subagent.start':
     case 'turn.interrupted': {
-      // What Codex says beside a turn is a reading, which is no event of its turn: it names the hook it came from.
-      const said = kind === 'turn.interrupted' ? 'you interrupted this turn' : kind === 'subagent.start' ? `subagent ${str(payload.agent_id) || 'unknown'} (${str(mapped.type) || 'unknown'}) started` : `the context compacts (${str(mapped.trigger) || 'unknown'})`;
+      // What an agent says beside a turn is a reading, which is no event of its turn: it names the hook it came from. A
+      // turn you interrupted keeps the reason its agent gave, as it came (#3430), and ends there with no stop.
+      const reason = scrub(str(mapped.reason)).slice(0, 200);
+      const said = kind === 'turn.interrupted' ? `you interrupted this turn${reason ? ` (${reason})` : ''}` : kind === 'subagent.start' ? `subagent ${str(payload.agent_id) || 'unknown'} (${str(mapped.type) || 'unknown'}) started` : `the context compacts (${str(mapped.trigger) || 'unknown'})`;
       meta.reading = `${request.event}: ${scrub(said)}`;
+      if (kind === 'turn.interrupted') meta.readingCode = 'interrupted';
+      // An interrupted turn is no stop, whichever hook ended it (#3430): it takes the hook's own moment, as Codex's
+      // Interrupt does, so nothing holds, judges or sends back into a turn you stopped.
+      if (kind === 'turn.interrupted') Object.assign(meta, { interrupted: true, event: request.event });
       return { kind: 'hook', drafts: [], meta };
     }
     case 'agent.stop':

@@ -125,6 +125,9 @@ pub struct Gpu {
     deep: Arc<deep_gpu::device::Device>,
     #[cfg(feature = "full")]
     scene: Option<deep_scene3d_render::Renderer>,
+    /// #1042: the effects' post stage, made on the first frame whose light it draws.
+    #[cfg(feature = "full")]
+    fx: Option<deep_effects_render::frame::Effects>,
     layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
     size: [u32; 2],
@@ -326,6 +329,8 @@ pub async fn open_gpu(canvas: web_sys::HtmlCanvasElement, needs: String) -> Resu
         deep,
         #[cfg(feature = "full")]
         scene: None,
+        #[cfg(feature = "full")]
+        fx: None,
         layout,
         sampler,
         size,
@@ -394,9 +399,17 @@ impl Gpu {
     }
 
     /// Draws `scene` in `look` onto the canvas with scene3d's renderer, as the app's 3D frames are
-    /// drawn, and `over` (the 2D writer layers, straight RGBA with no ground) over it.
+    /// drawn, through the effects' post stage where `light` holds a shadow (#1042), and `over`
+    /// (the 2D writer layers, straight RGBA with no ground) over it.
     #[cfg(feature = "full")]
-    pub fn show3d(&mut self, scene: &Scene, look: &Look3, over: &[u8], size: [u32; 2]) -> bool {
+    pub fn show3d(
+        &mut self,
+        scene: &Scene,
+        look: &Look3,
+        light: &crate::draw::Light,
+        over: &[u8],
+        size: [u32; 2],
+    ) -> bool {
         let Some(frame) = self.frame() else {
             return false;
         };
@@ -406,8 +419,15 @@ impl Gpu {
             deep_scene3d_render::Renderer::new(&deep, deep_scene3d_render::Planted::default())
         });
         renderer.prepare(&deep, scene, look);
+        let post = light.shadow.is_some().then(|| {
+            let fx = self.fx.get_or_insert_with(|| {
+                deep_effects_render::frame::Effects::new(Default::default(), Default::default())
+            });
+            fx.settings = light.clone();
+            fx as &mut dyn deep_scene3d_render::Post
+        });
         let mut encoder = self.device.create_command_encoder(&Default::default());
-        for (_, job) in renderer.jobs(&deep, &target, None, None) {
+        for (_, job) in renderer.jobs(&deep, &target, post, None) {
             job(&mut encoder);
         }
         self.picture(&mut encoder, &target, over, size, true);

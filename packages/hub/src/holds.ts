@@ -174,8 +174,8 @@ export class Holds {
     const pinned_to = await this.o.pin(cwd, question);
     const options = [{ id: 'approve', label: yes, decision: 'allow' }, { id: 'decline', label: no, decision: 'deny' }];
     const ask = this.o.plant === 'hold-as-choice'
-      ? { kind: 'choice', question, options, recommended: 'approve', default: 'approve', fallback: 'you', provisional: false, owner: 'you', key: k, pinned_to }
-      : { kind: 'authority', question, options, recommended: null, default: 'decline', fallback: 'you', provisional: false, owner: 'you', key: k, pinned_to };
+      ? { kind: 'choice', may_answer: 'verified_channel', question, options, recommended: 'approve', default: 'approve', fallback: 'you', provisional: false, owner: 'you', key: k, pinned_to }
+      : { kind: 'authority', may_answer: 'trusted_path', question, options, recommended: null, default: 'decline', fallback: 'you', provisional: false, owner: 'you', key: k, pinned_to };
     return this.o.plant === 'hold-as-choice'
       ? this.o.asks().raise(this.o.connection(session, agent), 'deep_ask.choice', ask)
       : this.o.asks().raise(this.o.connection(session, agent), source, ask, plan);
@@ -365,7 +365,7 @@ export class Holds {
     const pinned_to = await this.o.pin(meta.cwd, about.question);
     const options = [{ id: 'approve', label: about.options[0], decision: 'allow' }, { id: 'decline', label: about.options[1], decision: 'deny' }];
     const ask = await this.o.asks().raise(this.o.connection(meta.session, meta.agent), about.source, {
-      kind: 'authority', question: about.question, options, recommended: null, default: 'decline', fallback: 'you', provisional: false, owner: 'you', subject: about.subject, pinned_to,
+      kind: 'authority', may_answer: 'trusted_path', question: about.question, options, recommended: null, default: 'decline', fallback: 'you', provisional: false, owner: 'you', subject: about.subject, pinned_to,
     }, planFor(about.source, `${about.options[0]}: ${about.subject.target.ref}`, [about.subject.target.ref]));
     return { ask, ...(await this.applied(ask)) };
   }

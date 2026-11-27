@@ -16,10 +16,14 @@ export function moved(a: unknown, b: unknown): number {
   return Math.sqrt(p.reduce((s, x, i) => s + (x - (q[i] ?? 0)) ** 2, 0));
 }
 
+/** The step a play starts at, its first checkpoint's: 0, or (#1047) the step of the save it starts from. What it recorded for each step is listed from there. */
+export const startOf = (play: PlayAnswer): number => play.checkpoints[0]?.step ?? 0;
+
 /** The first step each goal is true in a play, or undefined for one it never reaches. */
 export function goalSteps(play: PlayAnswer, goals: Judged[]): Map<string, number | undefined> {
+  const at = startOf(play);
   return new Map(goals.map((g) => {
-    for (let k = 0; k < play.steps; k++) if (g.at(play.values, k)) return [g.name, k];
+    for (let k = 0; k < play.steps; k++) if (g.at(play.values, k)) return [g.name, at + k];
     return [g.name, undefined];
   }));
 }
@@ -30,6 +34,7 @@ export function goalSteps(play: PlayAnswer, goals: Judged[]): Map<string, number
  */
 export function outcomeOf(play: PlayAnswer, goals: Judged[], stuck: { measure: string; by: number; within: number } | undefined, active?: (k: number) => boolean): Outcome {
   if (play.bot_trap) return { kind: 'invalid', step: Number(play.bot_trap['step'] ?? 0), why: `its bot trapped at its step ${String(play.bot_trap['step'])} (${String(play.bot_trap['kind'])})` };
+  const at = startOf(play);
   const reached = [...goalSteps(play, goals).values()];
   const done = goals.length && reached.every((k) => k !== undefined) ? Math.max(...(reached as number[])) : undefined;
   const failures: Outcome[] = [];
@@ -37,11 +42,11 @@ export function outcomeOf(play: PlayAnswer, goals: Judged[], stuck: { measure: s
   for (const [item, list] of Object.entries(play.fuel)) {
     const ceiling = play.ceilings[item] ?? Infinity;
     const k = list.findIndex((f) => f > ceiling);
-    if (k >= 0) failures.push({ kind: 'over_budget', step: k, item, fuel: list[k]!, ceiling });
+    if (k >= 0) failures.push({ kind: 'over_budget', step: at + k, item, fuel: list[k]!, ceiling });
   }
   if (stuck) {
     const list = play.values[stuck.measure] ?? [];
-    const until = Math.min(done ?? Infinity, list.length);
+    const until = Math.min(done === undefined ? Infinity : done - at, list.length);
     let anchor = 0;
     let still = 0;
     for (let k = 1; k < until; k++) {
@@ -49,14 +54,14 @@ export function outcomeOf(play: PlayAnswer, goals: Judged[], stuck: { measure: s
         anchor = k;
         still = 0;
       } else if ((still += !active || active(k) ? 1 : 0) >= stuck.within) {
-        failures.push({ kind: 'stuck', step: k, from_step: anchor, measure: stuck.measure });
+        failures.push({ kind: 'stuck', step: at + k, from_step: at + anchor, measure: stuck.measure });
         break;
       }
     }
   }
   const first = failures.sort((a, b) => a.step - b.step)[0];
   if (first) return first;
-  return done !== undefined ? { kind: 'reached', step: done } : { kind: 'ended', step: play.steps };
+  return done !== undefined ? { kind: 'reached', step: done } : { kind: 'ended', step: at + play.steps };
 }
 
 /** The first checkpoint step whose full-state hash differs between a run and its replay, or undefined when none does. */
@@ -66,5 +71,5 @@ export function firstDiffering(run: PlayAnswer, replay: PlayAnswer): number | un
   const ours = new Map(run.checkpoints.map((c) => [c.step, c.hash]));
   const k = steps.find((s) => ours.get(s) !== theirs.get(s));
   if (k !== undefined) return k;
-  return run.final !== replay.final ? Math.min(run.steps, replay.steps) : undefined;
+  return run.final !== replay.final ? startOf(run) + Math.min(run.steps, replay.steps) : undefined;
 }
