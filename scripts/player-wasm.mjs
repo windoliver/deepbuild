@@ -25,6 +25,7 @@ import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { brotliCompressSync, constants } from 'node:zlib';
+import { SHADER_RECORD, shaderRecord } from './player-shaders.mjs';
 
 // The module sets, smallest first: figure (text, look, marks2d, data, motion and input), game2d (adds physics and
 // logic on sandbox) and full (every module the player carries).
@@ -112,6 +113,7 @@ for (const set of SETS) {
   console.log(`${set}: player_bg.wasm ${wasm.length} bytes sha256 ${files['player_bg.wasm']}, ${record[set].compressed} bytes Brotli-11`);
 }
 writeFileSync(join(built, 'sets.json'), `${JSON.stringify({ compression: 'brotli-11', sets: record }, null, 2)}\n`);
+writeFileSync(join(built, SHADER_RECORD), `${JSON.stringify(shaderRecord(root, built), null, 2)}\n`);
 rmSync(dist, { recursive: true, force: true });
 renameSync(built, dist);
 const sizes = Object.entries(record).map(([n, r]) => `${n} ${r.compressed} B (${((1 - r.compressed / record.full.compressed) * 100).toFixed(1)}% under full)`);
