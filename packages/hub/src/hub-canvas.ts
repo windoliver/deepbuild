@@ -369,8 +369,8 @@ export class HubCanvas {
    * no session; a refusal is the canvas core's error@2, at its path under the call's arguments.
    */
   async kinds(args: Obj): Promise<Obj> {
-    // Asset search and fetch (#1731) span the enabled libraries, which the hub reads; the canvas core holds none.
-    if (args.op === 'assets' || args.op === 'fetch') return this.assets(args);
+    // Asset search (#1731) spans the enabled libraries, which the hub reads; the canvas core holds none.
+    if (args.op === 'assets') return this.assets(args);
     this.packsNeeded = true;
     const call: Obj = { call: 'deep_kinds' };
     for (const [k, v] of Object.entries(args)) if (v !== null) call[k] = v;
@@ -381,12 +381,12 @@ export class HubCanvas {
   }
 
   /**
-   * deep_kinds `assets` and `fetch` (#1731): one ranked list over the enabled libraries' rows, and a fetch of one row
-   * by its library and id, held on your answer, refused naming why, or BLOCKED with one unblock ask.
+   * deep_kinds `assets` and deep_job `fetch` (#1731, #3525): one ranked list over the enabled libraries' rows, and a
+   * fetch of one row by its library and id, held on your answer, refused naming why, or BLOCKED with one unblock ask.
    */
-  private async assets(args: Obj): Promise<Obj> {
+  async assets(args: Obj): Promise<Obj> {
     const libraries = this.options.libraries();
-    if (!libraries) throw refuse('unavailable', '', 'The hub has no extension host yet; try again once it is ready.', 'deep_kinds', true);
+    if (!libraries) throw refuse('unavailable', '', 'The hub has no extension host yet; try again once it is ready.', args.op === 'fetch' ? 'deep_job' : 'deep_kinds', true);
     for (const k of Object.keys(args)) {
       const takes = args.op === 'assets' ? ['op', 'query', 'kind', 'size_m', 'license', 'limit'] : ['op', 'library', 'id', 'pack', 'asset'];
       if (args[k] !== null && args[k] !== undefined && !takes.includes(k)) throw refuse('unlisted_field', `/params/arguments/${k}`, `Leave out ${k}: ${String(args.op)} takes only ${takes.slice(1).join(', ')}.`, k);

@@ -78,9 +78,9 @@
   },
   "deep_kinds": {
     "title": "Look up what the canvas can draw",
-    "readOnlyHint": false,
+    "readOnlyHint": true,
     "destructiveHint": false,
-    "idempotentHint": false,
+    "idempotentHint": true,
     "openWorldHint": true
   },
   "deep_query": {

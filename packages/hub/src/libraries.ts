@@ -256,7 +256,7 @@ export class Libraries {
     return this.authorize(library, path, picked, this.saved.packRules?.[this.packs.get(pack)!.id]);
   }
 
-  /** A deep_kinds fetch of a row a library gave: held on your answer, fetched, refused naming why, or BLOCKED with one unblock ask. */
+  /** A deep_job fetch of a row a library gave: held on your answer, fetched, refused naming why, or BLOCKED with one unblock ask. */
   async fetch(library: string, id: string): Promise<FetchReply> {
     if (!this.saved.on.includes(library) || !this.registered(library)) {
       const on = this.saved.on.includes(library);

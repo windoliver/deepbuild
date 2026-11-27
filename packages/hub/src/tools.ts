@@ -174,7 +174,7 @@ const SCHEMAS: Readonly<Record<string, Schema>> = {
     })),
   }),
   deep_kinds: object({
-    op: { type: 'string', enum: ['list', 'word', 'search', 'read', 'gallery', 'sheet', 'step_ceilings', 'field', 'closure', 'bindings', 'assets', 'fetch'], description: 'list the registries and their entries; word for another tool\'s word; search the entries, guides and gallery; read an example by hash or a guide; gallery for the examples and whether each is verified here; sheet for every available name, on one page when it fits what your client keeps of a reply and else in pages by next; step_ceilings for the fuel one logic step may use in a live frame, by step rate, budget class and host; field for one line per field of a kind or of a patch, by path; closure for one list of words a document sets, by name: its words and its closure, a registry, open, or closed with its reason, what would reopen it and what to write instead; bindings for a logic item\'s typed bindings in Rust, each read, write and emit entry a field at its region map offset, with its layout digest as regions_digest; assets to search the enabled model libraries for models, HDRIs and textures, fetching nothing but thumbnails; fetch to bring one row\'s asset in, with its license, by its library and id.' },
+    op: { type: 'string', enum: ['list', 'word', 'search', 'read', 'gallery', 'sheet', 'step_ceilings', 'field', 'closure', 'bindings', 'assets'], description: 'list the registries and their entries; word for another tool\'s word; search the entries, guides and gallery; read an example by hash or a guide; gallery for the examples and whether each is verified here; sheet for every available name, on one page when it fits what your client keeps of a reply and else in pages by next; step_ceilings for the fuel one logic step may use in a live frame, by step rate, budget class and host; field for one line per field of a kind or of a patch, by path; closure for one list of words a document sets, by name: its words and its closure, a registry, open, or closed with its reason, what would reopen it and what to write instead; bindings for a logic item\'s typed bindings in Rust, each read, write and emit entry a field at its region map offset, with its layout digest as regions_digest; assets to search the enabled model libraries for models, HDRIs and textures, fetching nothing but thumbnails.' },
     registry: maybe(str('list: one registry or hub slot, name@major; null for all.')),
     cursor: maybe(str('The next an earlier page gave; null for the first page.')),
     word: maybe(str('word: the word, as the other tool spells it.')),
@@ -183,10 +183,6 @@ const SCHEMAS: Readonly<Record<string, Schema>> = {
     size_m: maybe({ type: 'array', items: { type: 'number' }, description: 'assets: [least, most] size in metres, as the library states it; null for any size.' }),
     license: maybe({ type: 'array', items: { type: 'string' }, description: 'assets: the licenses a row may have, by SPDX ID; null for any.' }),
     limit: maybe({ type: 'integer', description: 'assets: at most this many rows, up to 50; null for 50.' }),
-    library: maybe(str('fetch: the library a row came from, as its from names it.')),
-    id: maybe(str('fetch: the row\'s id.')),
-    pack: maybe(str('fetch: an installed pack pinned as owner/name@version, instead of library.')),
-    asset: maybe(str('fetch: one path in the pinned pack\'s assets list.')),
     example: maybe(str('read: an example, by the hash a listing or a hit gave.', '^[0-9a-f]{64}$')),
     guide: maybe(str('read: a guide, by the name a hit gave.')),
     offset: maybe({ type: 'integer', description: 'read of a guide, or sheet: the next a page gave; null for its start.' }),
@@ -197,11 +193,15 @@ const SCHEMAS: Readonly<Record<string, Schema>> = {
     language: oneOf(['rust'], 'bindings: the pinned language they are written in.'),
   }),
   deep_job: object({
-    op: { type: 'string', enum: ['list', 'run'], description: 'list the job kinds, each with its qualified tools, their builds and each one\'s cost: {usd} a run, 0 when free; run a kind on one pinned tool, returning its outputs by hash with a receipt.' },
+    op: { type: 'string', enum: ['list', 'run', 'fetch'], description: 'list the job kinds, each with its qualified tools, their builds and each one\'s cost: {usd} a run, 0 when free; run a kind on one pinned tool, returning its outputs by hash with a receipt; fetch to bring one row\'s asset in, with its license, by its library and id.' },
     kind: maybe(str('run: the job kind, as the list names it.')),
     tool: maybe(str('run: the tool, pinned by name@version as the list names it.')),
     params: maybe(str('run: the kind\'s params as JSON text; null for its defaults.')),
     inputs: maybe({ type: 'array', items: object({ name: str('The input, as the kind names it.'), sha256: maybe(str('The file whose bytes it is, by its SHA-256 in the evidence store; a tool that runs off the machine takes files only this way.', '^[0-9a-f]{64}$')), path: maybe(str('The file whose bytes it is, by absolute path, for a tool that runs on this machine; null when sha256 names it.')) }), description: 'run: each input the kind takes, once.' }),
+    library: maybe(str('fetch: the library a row came from, as its from names it.')),
+    id: maybe(str('fetch: the row\'s id.')),
+    pack: maybe(str('fetch: an installed pack pinned as owner/name@version, instead of library.')),
+    asset: maybe(str('fetch: one path in the pinned pack\'s assets list.')),
   }),
   deep_env: object({ action:{ type: 'string', enum: ['up', 'down'], description: 'up brings your worktree\'s stack up and answers its leased ports; down takes it down.' } }),
   deep_root_plan: object({
@@ -296,6 +296,11 @@ export function toolList(): (Listed & { _meta?: Obj })[] {
     .map(([name, inputSchema]) => ({ name, description: text[name]!, inputSchema, annotations: annotations(name), ...(upFront.has(name) ? { _meta: { 'anthropic/alwaysLoad': true } } : {}) }));
 }
 
+/** Forms that moved to another tool, by tool.op, with the remediation that names where each went. */
+const MOVED: Readonly<Record<string, string>> = {
+  'deep_kinds.fetch': 'Call deep_job with op fetch and the same library and id, or pack and asset: deep_kinds only looks things up, and bringing an asset in is deep_job\'s fetch.',
+};
+
 /**
  * A call's arguments held to its tool's schema, as strictly as the hub holds any request: a field it doesn't list, a
  * missing required one or a wrong type is refused at its path. A nullable field left out reads as null. A required
@@ -307,6 +312,9 @@ export function checkArguments(tool: string, args: unknown): Obj {
     const near = nearest(tool, Object.keys(SCHEMAS));
     throw refuse('not_found', '/params/tool', near ? `Call ${near} in place of ${tool}.` : `Call one of the deep_* tools: ${Object.keys(SCHEMAS).join(', ')}.`, tool);
   }
+  // A form that moved to another tool (#3525) is refused at its selector, before any field it took is, naming its new place.
+  const moved = isObj(args) ? MOVED[`${tool}.${String(args.op)}`] : undefined;
+  if (moved) throw refuse('enum', '/params/arguments/op', moved, (args as Obj).op);
   try {
     return check(schema, args ?? {}, '/params/arguments') as Obj;
   } catch (error) {
