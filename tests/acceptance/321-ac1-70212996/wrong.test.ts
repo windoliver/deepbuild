@@ -1,5 +1,3 @@
-// #321's first criterion, against the wrong program it names: a core that lets a "proceed" cover the calls of the
-// turn it starts (DEEP_HUB_PLANT=proceed-covers-turn) lets the push through, and the scenario fails naming the call.
 import { afterEach, describe, expect, test } from 'vitest';
 import { cleanup, deepHook, failureOf } from './helpers.ts';
 import { LET_THROUGH, PUSH, scenario } from './scenario.ts';

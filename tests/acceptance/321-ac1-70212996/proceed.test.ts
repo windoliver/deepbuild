@@ -1,5 +1,3 @@
-// #321's first criterion, against the core as it is: a planted sorter's "proceed" never covers the push in the turn
-// it starts, and still covers `npm test` there (README: the contract).
 import { afterEach, describe, test } from 'vitest';
 import { cleanup, deepHook } from './helpers.ts';
 import { scenario } from './scenario.ts';
