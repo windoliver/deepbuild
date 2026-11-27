@@ -353,6 +353,8 @@ impl Sandbox {
         } else {
             rewrite::Mode::Plain
         };
+        #[cfg(not(target_arch = "wasm32"))]
+        crate::rewrote();
         let out = rewrite::rewrite_as(bytes, self.planted.rewrite, mode).map_err(Err)?;
         Ok((out, t.elapsed().as_secs_f64() * 1000.0))
     }
