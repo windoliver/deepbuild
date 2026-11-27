@@ -1,0 +1,9 @@
+
+ RUN  v5.0.5 ~/mac-runs/d2880r5/tests/acceptance/2690
+
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  20:44:30
+   Duration  388.29s (tests 100%)
+

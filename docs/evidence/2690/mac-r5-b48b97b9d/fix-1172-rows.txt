@@ -1,0 +1,52 @@
+
+ RUN  v5.0.5 ~/mac-runs/d2880r5
+
+stderr | tests/acceptance/1172/rows.test.ts
+vitest-setup: stopping 7 process(es) this file left running:
+  64062 ~/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin/cargo build --locked -q -p deep-app --bin deep-app
+  65951 ~/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin/rustc --crate-name gpui --edition=2024 vendor/gpui-pre/src/gpui.rs --error-format=json --json=diagnostic-rendered-ansi,artifacts,futu
+  66217 ~/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin/rustc --crate-name deep_canvas_marks --edition=2021 crates/deep-canvas-marks/src/lib.rs --error-format=json --json=diagnostic-rendere
+  67374 ~/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin/rustc --crate-name deep_canvas_motion --edition=2021 crates/deep-canvas-motion/src/lib.rs --error-format=json --json=diagnostic-rende
+  67561 ~/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin/rustc --crate-name gpui_base --edition=2024 ~/.cargo/git/checkouts/gpui-kit-ad7eb35d851fbd28/1676826/crates/base/src/li
+  69981 ~/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin/rustc --crate-name deep_canvas_scene3d --edition=2021 crates/deep-canvas-scene3d/src/lib.rs --error-format=json --json=diagnostic-ren
+  70286 ~/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin/rustc --crate-name gpui_component --edition=2024 ~/.cargo/git/checkouts/gpui-kit-ad7eb35d851fbd28/1676826/crates/compon
+
+ ❯ tests/acceptance/1172/rows.test.ts (2 tests | 2 failed) 1203650ms
+   ❯ #1172 Needs you shows questions and presents their cards (2)
+     × AC3 each row shows its ask's question, and a click on it presents that ask's question card in the window 720073ms
+     × AC3 wrong program: a planted row that shows the ask's handle fails, naming the ask 480038ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1172/rows.test.ts > #1172 Needs you shows questions and presents their cards > AC3 each row shows its ask's question, and a click on it presents that ask's question card in the window
+Error: Test timed out in 720000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/acceptance/1172/rows.test.ts:47:3
+     45|
+     46| describe('#1172 Needs you shows questions and presents their cards', (…
+     47|   it('AC3 each row shows its ask\'s question, and a click on it presen…
+       |   ^
+     48|     const world = await makeWorld();
+     49|     const failures: string[] = [];
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/1172/rows.test.ts > #1172 Needs you shows questions and presents their cards > AC3 wrong program: a planted row that shows the ask's handle fails, naming the ask
+Error: Test timed out in 480000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/acceptance/1172/rows.test.ts:54:3
+     52|   }, 12 * MINUTES);
+     53|
+     54|   it('AC3 wrong program: a planted row that shows the ask\'s handle fa…
+       |   ^
+     55|     const world = await makeWorld();
+     56|     const ask = world.asks[0]!;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  21:40:38
+   Duration  1205.17s (tests 100%)
+

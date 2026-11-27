@@ -37,3 +37,7 @@
 - `mac-r4-1172/` (MacBook Pro, 2026-11-25, fresh clone at the head 4c3d87aaa, screen unlocked, load 12–30): **#1172 AC3 (`rows.test.ts`) passes 2 of 2**, the real program and its wrong-program plant.
 - `guard-4c3d87aaa.txt`: the proof guard at 4c3d87aaa: PASS (14 commits).
 - The owner approved a8af93238 (the three captures): tag `deep/approved/a8af93238c37-sk`, signed on the MacBook Pro. It names all three files, and `git verify-tag` against the merge base's `.deepbuild/approvers` reads `Good "git" signature for JingW6` (SHA256:MZiEdemq6cH5Vx+5ZRdBEnHEW4G+PKJ/7PpXQwkkcho).
+- `mac-r5-b48b97b9d/` (MacBook Pro, 2026-11-26, the head after merging main 4c81c192f):
+  - Passing: #2690 3 of 3; #1172 AC3 2 of 2 (on the rerun, with no other window over the app); #1461 AC27; #1810's redraft 6 of 6.
+  - #1459 AC6 fails on one bounds difference: a folded ask's title, "Taste ask 3 in folding: go ahead?", is 152 wide in the replica and 242 in the stored trees.
+  - The same failure appears at plain main 4c81c192f (the Mac's A/B). It comes from main's #3282, which fits row titles to their room, and main didn't retake the captures. #2880 retakes them at its head (round r6), so they're signed once.
