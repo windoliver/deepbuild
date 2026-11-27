@@ -1,11 +1,3 @@
-// #1880.f9683a09 No new comparison against an agent's name: `tests/agent-name-branches.test.mjs` passes with its list
-// unchanged.
-//
-// Three tests: the named suite run as it is (`node --test`), its list (`tests/agent-name-branches.json`) equal to the
-// base commit's, and the same scan the suite makes, widened from packages/hub/src to the packages this issue's change
-// reaches (packages/reading/src and packages/runner/src beside the hub's), finding no comparison against an agent's name
-// that the base commit didn't have. The third reads the criterion's own words, "no new comparison against an agent's
-// name", over code the suite's list doesn't cover; README says why.
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -16,7 +8,6 @@ import { AC, BASE, REPO } from './helpers.ts';
 const SUITE = 'tests/agent-name-branches.test.mjs';
 const LIST = 'tests/agent-name-branches.json';
 const SCANNED = ['packages/hub/src', 'packages/reading/src', 'packages/runner/src'];
-// The suite's own pattern (tests/agent-name-branches.test.mjs), repeated here: that file runs its tests when imported.
 const AGENTS = 'claude-code|claude|codex|pi|paseo|cursor|opencode|grok';
 const BRANCH = new RegExp(`[\\w$.?!\\[\\]]+\\s*[!=]==?\\s*'(?:${AGENTS})'|'(?:${AGENTS})'\\s*[!=]==?\\s*[\\w$.?!\\[\\]]+`, 'g');
 
@@ -25,7 +16,6 @@ const sources = (dir: string): string[] => readdirSync(dir).flatMap((name) => {
   if (statSync(path).isDirectory()) return sources(path);
   return /\.(ts|mts|mjs|js)$/.test(name) && !/\.test\.[mc]?[jt]s$/.test(name) ? [path] : [];
 });
-/** Each comparison against an agent's name under `base`'s scanned folders, by file and expression, with its count. */
 function comparisons(base: string): Map<string, number> {
   const found = new Map<string, number>();
   for (const dir of SCANNED) {

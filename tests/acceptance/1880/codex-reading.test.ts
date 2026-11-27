@@ -1,6 +1,3 @@
-// #1880: a reading job given to Codex runs, or is refused before it launches, never thrown at launch. A wiki build
-// (`wiki.build` on the control socket, #356) on a real hub in a temp home, with the runner's fixture agents first on
-// the login PATH: no network, no model. README: The surface under test, Readings.
 import { afterAll, describe, expect, it } from 'vitest';
 import { join } from 'node:path';
 import {
@@ -13,12 +10,10 @@ const REFUSAL = 'a Codex job takes no sub-agents';
 const blocked = missingBuild();
 afterAll(cleanup);
 
-/** A reason string an object gives for its BLOCKED: `why`, `reason`, `invalid` or `cause`, the first non-empty one. */
 const reasonOf = (o: Obj | undefined): string => {
   for (const k of ['why', 'reason', 'invalid', 'cause']) if (typeof o?.[k] === 'string' && o[k].trim()) return o[k] as string;
   return '';
 };
-/** Every object anywhere in `v` that reads BLOCKED (`status` or `state` is 'BLOCKED'). */
 const blockedIn = (v: unknown, out: Obj[] = []): Obj[] => {
   if (Array.isArray(v)) for (const x of v) blockedIn(x, out);
   else if (typeof v === 'object' && v !== null) {
@@ -45,9 +40,7 @@ describe('AC1: with Codex the only signed-in agent, a wiki build\'s reading', ()
       const finished = all.filter((e) => e.kind === 'reading.finished').map((e) => e.data);
       const evidence = JSON.stringify({ buildError, jobs: jobs.map(({ stdout, ...j }) => ({ ...j, printed: linesOf(stdout).filter((l) => l.type === 'fake.codex') })), finished, codexCalls: codexCalls(h) }, null, 1);
 
-      // The reading was a Codex one: the picker chose the agent signed in, and nothing ran on Claude Code.
       expect(jobs.filter((j) => j.agent !== 'codex').map((j) => j.agent), evidence).toEqual([]);
-      // Never a launch its agent's parts refuse: no failed, refused or lost job, no failed reading, no build error says so.
       const failures = [
         buildError,
         ...jobs.filter((j) => j.state === 'refused' || j.state === 'lost' || j.stop?.cause === 'unknown').map((j) => `job ${j.job} ${j.state}: ${j.refused ?? ''}`),
@@ -55,14 +48,10 @@ describe('AC1: with Codex the only signed-in agent, a wiki build\'s reading', ()
       ].filter(Boolean);
       expect(failures.filter((f) => f.includes(REFUSAL)), evidence).toEqual([]);
 
-      // Outcome 1, a recorded result: the job's process (the fake Codex, launched as `codex exec`) ran to its final
-      // result, the runner recorded that result, and the reading ended on it, its answer read (no `invalid`).
       const ran = jobs.filter((j) => j.state === 'finished' && typeof j.pid === 'number' && typeof j.result === 'string'
         && linesOf(j.stdout).some((l) => l.type === 'fake.codex' && l.argv?.[0] === 'exec'));
       const result = ran.length > 0 && finished.some((f) => (f.runs as string[] | undefined)?.some((r) => ran.some((j) => j.job === r)) && f.state === 'finished' && f.invalid === undefined);
 
-      // Outcome 2, BLOCKED before any process of the job starts: something on record reads BLOCKED with a reason, no
-      // job has a process (no pid, no start, no run), and the fake was never launched as the job (`exec`).
       const launched = jobs.some((j) => j.pid !== undefined || j.start !== undefined || j.ran !== undefined || linesOf(j.stdout).some((l) => l.type === 'fake.codex'))
         || codexCalls(h).some((c) => c.argv[0] === 'exec');
       const reasons = blockedIn([jobs.map(({ stdout, ...j }) => j), all.map((e) => e.data)]).map(reasonOf).filter(Boolean);
@@ -84,7 +73,6 @@ describe('AC2: with Claude Code signed in, a wiki build\'s reading', () => {
     claudeSession(h.home, app, '18800000-0000-4000-8000-000000000002', ['remember: the api always needs a token.', 'the api always needs a token']);
     const hub = await startHub(h);
     try {
-      // The plan window as the status line forwarder reports it, so the job isn't held for a first reading.
       const now = Date.now();
       await hub.call('windows.report', { agent: 'claude-code', account: CLAUDE_ACCOUNT, rate_limits: {
         five_hour: { used_percentage: 5, resets_at: Math.floor((now + 3 * 3_600_000) / 1000) },
@@ -98,7 +86,6 @@ describe('AC2: with Claude Code signed in, a wiki build\'s reading', () => {
       expect(jobs.length, evidence).toBeGreaterThan(0);
       for (const j of jobs) {
         expect(j.agent, evidence).toBe('claude-code');
-        // What the fake reports it was launched with (#63's fake: its `start` report carries its argv).
         const start = linesOf(j.stdout).find((l) => l.type === 'system' && l.subtype === 'fake' && l.report?.cmd === 'start')?.report as Obj | undefined;
         expect(start, `the fake Claude Code never started for ${j.job}:\n${evidence}`).toBeDefined();
         const argv = start!.argv as string[];

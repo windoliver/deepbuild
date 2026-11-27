@@ -1,13 +1,3 @@
-// #1880.964d40e3 With Claude Code signed in, the reading still runs with its reader sub-agent: #63's suites pass
-// unchanged.
-//
-// Two tests. The first runs a wiki build on a real hub (`deep hub run` from the built CLI) on a temp HOME signed in to
-// Claude Code only (`~/.claude.json`, a made-up account), with one Claude Code session worth reading in its history,
-// the plan window reported clear on the hub's socket, and the fake in fixtures/fake-claude.pl as `claude` on the
-// runner's login PATH. The fake prints the argv it was launched with; the test reads it back through `job.output` and
-// checks the reader sub-agent went with it (`--agents` naming `reader`, and the Task tool it hands work to). The second
-// checks "#63's suites unchanged": no file under tests/acceptance/63 differs from the base commit. #63's suites
-// themselves run on macOS (their README); README here says how.
 import { spawnSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -20,7 +10,6 @@ const ACCOUNT = '18800000-1111-4222-8333-444444444444';
 let hub: Hub | undefined;
 afterEach(async () => { await hub?.stop(); hub = undefined; removeHomes(); }, 90_000);
 
-/** The value after `flag` in `argv`, or undefined. */
 const after = (argv: string[], flag: string): string | undefined => { const i = argv.indexOf(flag); return i >= 0 ? argv[i + 1] : undefined; };
 
 describe(`${AC.claudeReader} the reading with Claude Code signed in`, () => {
