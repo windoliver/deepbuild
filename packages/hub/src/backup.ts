@@ -5,7 +5,7 @@
 // record counts as one after a power cut, and its generation is raised above the backup's and the replaced one's.
 // The record a restore replaces is kept (#3459): its ledger, evidence and wiki move by rename into one folder in a
 // backup's layout, so `deep restore` of that folder puts it back, and the sentence you confirm says what goes.
-import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmdirSync, rmSync, statSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmdirSync, rmSync, statSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { prepareRestore, restoreLoss, resumeRestore, type PreparedRestore, type RestoreLoss } from '@deepbuild/record';
 import { writtenOf } from '@deepbuild/wiki';
@@ -74,8 +74,10 @@ export async function restoreCommand(args: readonly string[]): Promise<number> {
   const folder = resolve(args[0]);
   const from = join(folder, 'ledger.db');
   const root = rootOf(installedRoot());
-  // A restore cut off midway finishes from what it readied beside the record, whatever its folder holds now.
-  const cut = existsSync(root.restoring) ? readFileSync(root.restoring, 'utf8').trim() : undefined;
+  // A restore cut off midway finishes from what it readied beside the record, whatever its folder holds now. Its
+  // marker names its folder, then `kept` where it keeps the record it replaces; one without that line keeps nothing.
+  const marker = existsSync(root.restoring) ? readFileSync(root.restoring, 'utf8').split('\n') : undefined;
+  const cut = marker?.[0]?.trim();
   if (cut !== undefined && cut !== folder) {
     process.stderr.write(`deep restore changed nothing: a restore from ${cut} didn't finish. Run deep restore ${cut} to finish it first.\n`);
     return 1;
@@ -85,6 +87,14 @@ export async function restoreCommand(args: readonly string[]): Promise<number> {
     process.stderr.write(`deep restore changed nothing: ${folder} holds no finished backup (no ledger.db).\n`);
     return 2;
   }
+  // Without the marker nothing was moved into the folder the replaced record moves into; one that holds files was
+  // filled by hand, and stays as it is.
+  if (cut === undefined && existsSync(root.keeping) && readdirSync(root.keeping).length) {
+    process.stderr.write(`deep restore changed nothing: ${root.keeping} holds files no restore is moving. Move them out, then run deep restore again.\n`);
+    return 1;
+  }
+  // Where there is no record there is nothing to keep, and the folder an earlier restore kept stays as it is.
+  const keeps = cut === undefined ? existsSync(root.ledger) : marker?.[1]?.trim() === 'kept';
   mkdirSync(root.dir, { recursive: true, mode: 0o700 });
   const lock = takeLock(root.lock);
   if (!lock) {
@@ -93,7 +103,7 @@ export async function restoreCommand(args: readonly string[]): Promise<number> {
   }
   const staged = (name: string) => join(root.dir, `${name}.restoring`);
   // What the wiki last wrote, kept beside its folder (#356), goes with it, so no restored page reads as your edit.
-  const written = { staged: writtenOf(staged('wiki')), to: writtenOf(root.wiki) };
+  const written = { from: writtenOf(join(folder, 'wiki')), staged: writtenOf(staged('wiki')), to: writtenOf(root.wiki) };
   let prepared: PreparedRestore | undefined;
   try {
     dropTestSettings(root.dir);
@@ -101,8 +111,8 @@ export async function restoreCommand(args: readonly string[]): Promise<number> {
     const confirmer = new Confirmer({ devices: new Devices(root.devices), key: root.confirmKey, ...(process.env.DEEP_HUB_TEST_CONFIRM ? { stub: process.env.DEEP_HUB_TEST_CONFIRM } : {}), ...(process.env.DEEP_HUB_TEST_POLKIT ? { polkit: process.env.DEEP_HUB_TEST_POLKIT } : {}) });
     const self = { pid: process.pid, start: (await startOf(process.pid)) ?? '' };
     const sentence = cut === undefined
-      ? `restore DeepBuild's record from ${folder}, replacing the one in ${root.dir}${lossSaid(restoreLoss(from, root.ledger))}${keptSaid(root)}`
-      : `finish restoring DeepBuild's record from ${folder} into ${root.dir}, a restore cut off midway; the record it replaced is kept in ${root.kept}`;
+      ? `restore DeepBuild's record from ${folder}, replacing the one in ${root.dir}${lossSaid(restoreLoss(from, root.ledger))}${keeps ? keptSaid(root) : ''}`
+      : `finish restoring DeepBuild's record from ${folder} into ${root.dir}, a restore cut off midway${keeps ? `; the record it replaced is kept in ${root.kept}` : ''}`;
     const why = await withPrompt(() => confirmer.you(sentence, { handle: `restore:${folder}`, revision: root.dir, process: self }));
     if (why) {
       process.stderr.write(`deep restore changed nothing: the OS didn't confirm you (${why}). Run it again and confirm.\n`);
@@ -115,20 +125,22 @@ export async function restoreCommand(args: readonly string[]): Promise<number> {
         await copySynced(join(folder, name), staged(name));
       }
       rmSync(written.staged, { force: true });
-      if (existsSync(writtenOf(join(folder, 'wiki')))) copyFileSync(writtenOf(join(folder, 'wiki')), written.staged);
+      if (existsSync(written.from)) copyFileSync(written.from, written.staged);
       prepared = await prepareRestore(from, root.ledger);
       // The folder the replaced record moves into, made before the marker: with the marker, its being there means the
       // move aside hasn't finished; without it, nothing was moved into it.
       if (existsSync(root.keeping)) rmdirSync(root.keeping);
-      mkdirSync(root.keeping, { mode: 0o700 });
+      if (keeps) mkdirSync(root.keeping, { mode: 0o700 });
       syncPath(root.dir);
       // From here the record and its folders change one by one; the marker stops a hub starting on a mix of the two.
-      writeSynced(root.restoring, Buffer.from(`${folder}\n`));
+      writeSynced(root.restoring, Buffer.from(`${folder}\n${keeps ? 'kept\n' : ''}`));
     } else {
       prepared = resumeRestore(root.ledger);
+      // A marker written before restores kept anything (#572) staged no wiki file: the backup's, as that restore did.
+      if (!keeps && !existsSync(written.staged) && existsSync(written.from)) copyFileSync(written.from, written.staged);
     }
     // The replaced record moves aside whole, by rename: nothing of it is copied or deleted (#3459).
-    if (existsSync(root.keeping)) {
+    if (keeps && existsSync(root.keeping)) {
       const aside: [string, string][] = [[root.ledger, 'ledger.db'], [`${root.ledger}-wal`, 'ledger.db-wal'], [root.evidence, 'evidence'], [root.wiki, 'wiki'], [written.to, basename(writtenOf(join(root.keeping, 'wiki')))]];
       for (const [at, name] of aside) if (existsSync(at)) renameSync(at, join(root.keeping, name));
       rmSync(`${root.ledger}-shm`, { force: true });
@@ -146,6 +158,7 @@ export async function restoreCommand(args: readonly string[]): Promise<number> {
       renameSync(staged(name), join(root.dir, name));
     }
     if (existsSync(written.staged)) renameSync(written.staged, written.to);
+    else if (!keeps) rmSync(written.to, { force: true });
     // How far the replaced record's hub read each transcript is ahead of the restored record: a session is read from
     // where the next hub meets it, as after a power cut.
     rmSync(root.transcripts, { force: true });
@@ -153,7 +166,7 @@ export async function restoreCommand(args: readonly string[]): Promise<number> {
     rmSync(root.restoring);
     syncPath(root.dir);
     process.stdout.write(`Restored the record, its evidence and its wiki from ${folder}, at generation ${prepared.generation}. It counts as a record after a power cut: each claim open in it reads INVALID, cause events lost, once the hub starts. Start it with deep hub start.\n`);
-    process.stdout.write(`The record it replaced, with its evidence and its wiki, is kept in ${root.kept}: deep restore ${root.kept} puts it back.\n`);
+    if (keeps) process.stdout.write(`The record it replaced, with its evidence and its wiki, is kept in ${root.kept}: deep restore ${root.kept} puts it back.\n`);
     return 0;
   } catch (error) {
     process.stderr.write(`deep restore: ${error instanceof Error ? error.message : String(error)}\n`);
@@ -164,8 +177,8 @@ export async function restoreCommand(args: readonly string[]): Promise<number> {
       prepared?.discard();
       for (const name of FOLDERS) rmSync(staged(name), { recursive: true, force: true });
       rmSync(written.staged, { force: true });
-      // Empty by then: without the marker nothing was moved into it. Should it not be, it stays, and nothing is lost.
-      try { if (existsSync(root.keeping)) rmdirSync(root.keeping); } catch { /* left for the next restore to name */ }
+      // Empty by then: without the marker nothing was moved into it. Should it not be, it stays, and the next restore names it.
+      try { if (existsSync(root.keeping)) rmdirSync(root.keeping); } catch { /* named before the next restore asks */ }
     }
     lock.release();
   }

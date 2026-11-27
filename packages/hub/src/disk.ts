@@ -1,5 +1,5 @@
 // The machine's disk floor (#1017), apart from the product store, so `deep lease` reads it without loading the store's
-// YAML parser or the record.
+// YAML parser or the record, and the bytes a folder holds, which the store and `deep doctor` read.
 import { statfsSync } from 'node:fs';
 import { lstat, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
