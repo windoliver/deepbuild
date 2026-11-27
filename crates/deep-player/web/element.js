@@ -48,6 +48,12 @@
 // third A again), Esc clears both, and Tab and Enter place points at the parts' anchors. The core holds the points and
 // reads them, as the app does; the page draws the line, the points and the readout over the canvas, where nothing can
 // be clicked. All of it is the viewer's session state: no entry, value or patch reaches the piece.
+//
+// A piece's data is what its export recorded and what its declared public sources give (issue #1042). The readings
+// the export recorded come in the bundle, by hash. Each source the bundle declares is asked once the player is ready
+// and then every `every` seconds, with no cookie or credential, and never while an ask of it still waits. A value it
+// gives enters the input track as a reading at the first step not yet run, and the page shows it with its source
+// and its age. An ask that fails or answers no number gives no value, and the last one goes on ageing.
 
 const bundle = JSON.parse(document.getElementById('deep-bundle').textContent);
 const hex = (buf) => Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, '0')).join('');
@@ -194,6 +200,8 @@ class DeepPlayer extends HTMLElement {
   #waiting = null;
   // #2856: where a failure the player can't recover from stopped the play, `{step, message}`, or null.
   #stopped = null;
+  // #1042: the piece's public sources, each with where the page shows it and the value it last gave.
+  #sources = [];
   // #1217: the measure's drawing over the canvas, and where a press that may be its click went down.
   #measured = null;
   #down = null;
@@ -815,6 +823,7 @@ class DeepPlayer extends HTMLElement {
     for (const [sha, bytes] of files) player.add_file(sha, bytes);
     player.levels(JSON.stringify(bundle.images));
     player.load(bundle.document, bundle.track, JSON.stringify(bundle.logic));
+    if (bundle.readings) player.recorded_readings(bundle.readings);
     const gpu = await glue.open_gpu(this.#canvas, JSON.stringify(can.request));
     this.#backend = gpu.backend;
     this.#adapter = gpu.adapter;
@@ -834,6 +843,80 @@ class DeepPlayer extends HTMLElement {
     this.dispatchEvent(new Event('ready'));
     this.#link();
     this.#prompt();
+    this.#watch();
+  }
+
+  /** #1042: starts asking each public source the bundle declares, and keeps each one's age in words. An ended or
+   * stopped play asks nothing, and neither does a copy in a match, whose readings are its players' entries. */
+  #watch() {
+    for (const s of bundle.sources ?? []) {
+      const shows = (s.bound.length ? s.bound : [null]).map((id) => {
+        const p = document.createElement('p');
+        p.setAttribute('data-deep-reading', s.reading);
+        if (id) p.setAttribute('data-deep-bound', id);
+        p.hidden = true;
+        this.appendChild(p);
+        return p;
+      });
+      const source = { ...s, host: new URL(s.url).host, shows, given: null, refused: false };
+      this.#sources.push(source);
+      const ask = async () => {
+        const started = Date.now();
+        if (this.#t < this.#duration && !this.#stopped && !this.#socket) await this.#ask(source).catch(() => {});
+        setTimeout(ask, Math.max(0, started + s.every * 1000 - Date.now()));
+      };
+      ask();
+    }
+    if (this.#sources.length) setInterval(() => this.#ages(), 1000);
+  }
+
+  /** One ask of a public source: the number, or numbers, at its path in the JSON it answers, as a reading whose as-of
+   * time is its arrival. Any other answer gives no value. */
+  async #ask(source) {
+    const r = await fetch(source.url, { credentials: 'omit', cache: 'no-store', referrerPolicy: 'no-referrer', redirect: 'error' });
+    if (!r.ok) return;
+    let value = await r.json();
+    for (const key of source.path ? source.path.split('/') : []) value = value?.[key];
+    const numbers = Array.isArray(value) ? value : [value];
+    if (!numbers.length || !numbers.every((n) => typeof n === 'number' && Number.isFinite(n))) return;
+    const asOf = Date.now() * 1000;
+    try {
+      this.#player.reading(source.reading, JSON.stringify(value), asOf);
+    } catch (e) {
+      if (!source.refused) this.#notice(`The piece didn't take the value ${JSON.stringify(value)} from ${source.host}: ${String(e?.message ?? e).split('\n')[0]}`, 'reading');
+      source.refused = true;
+      return;
+    }
+    source.given = { value, asOf };
+    this.#ages();
+    try {
+      this.#draw();
+    } catch (e) {
+      this.#stop(e);
+    }
+  }
+
+  /** Each source's last value as the page shows it: the value, the host it came from and, in a `<time>` at its as-of
+   * time, its age in the words a stale value's age takes on the canvas. Only the words change while it ages. */
+  #ages() {
+    for (const s of this.#sources) {
+      if (!s.given) continue;
+      const age = Math.max(0, Math.floor((Date.now() - s.given.asOf / 1000) / 1000));
+      const words = age < 60 ? `${age} s old` : age < 3600 ? `${Math.floor(age / 60)} min old` : `${Math.floor(age / 3600)} h old`;
+      const at = new Date(s.given.asOf / 1000).toISOString();
+      for (const p of s.shows) {
+        const time = p.querySelector('time');
+        if (time?.dateTime === at) {
+          if (time.textContent !== words) time.textContent = words;
+          continue;
+        }
+        const now = document.createElement('time');
+        now.dateTime = at;
+        now.textContent = words;
+        p.replaceChildren(`${JSON.stringify(s.given.value)} from ${s.host}, `, now);
+        p.hidden = false;
+      }
+    }
   }
 
   /** The place the page's link names, once ready: a time, a marker or a stage; anything else opens at the start. */

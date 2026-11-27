@@ -788,6 +788,329 @@ export interface AdapterFactsV10 {
   } };
 }
 
+export type AdapterFactsV11Text = string;
+
+export type AdapterFactsV11Match = { [key: string]: unknown };
+
+export type AdapterFactsV11Texts = Array<AdapterFactsV11Text>;
+
+export type AdapterFactsV11Version = string;
+
+export type AdapterFactsV11TextMap = { [key: string]: AdapterFactsV11Text };
+
+export type AdapterFactsV11DataTemplate = { [key: string]: AdapterFactsV11Text };
+
+export type AdapterFactsV11FieldTypes = { [key: string]: string };
+
+export type AdapterFactsV11Payload = {
+  required: AdapterFactsV11FieldTypes;
+  optional: AdapterFactsV11FieldTypes;
+  tools?: { [key: string]: AdapterFactsV11FieldTypes };
+};
+
+export type AdapterFactsV11ToolKind = "shell" | "read" | "edit" | "write" | "search" | "fetch" | "mcp" | "unknown";
+
+export type AdapterFactsV11StopCause = "sign_in_required" | "token_refresh_failed" | "plan_window_spent" | "rate_limited" | "refusal" | "max_turns" | "context_overflow" | "tool_schema_rejected" | "agent_crashed" | "timed_out" | "unknown";
+
+export type AdapterFactsV11CauseMap = { [key: string]: AdapterFactsV11StopCause };
+
+export type AdapterFactsV11OriginRule = {
+  prompt?: AdapterFactsV11Text;
+  match?: { [key: string]: unknown };
+  from: AdapterFactsV11Text;
+};
+
+export type AdapterFactsV11HookRule = {
+  kind: string;
+  data?: AdapterFactsV11DataTemplate;
+  origin?: {
+    join?: {
+      payload: AdapterFactsV11Text;
+      transcript: AdapterFactsV11Text;
+    };
+    rules: Array<AdapterFactsV11OriginRule>;
+    otherwise: AdapterFactsV11Text;
+  };
+  call?: "kind" | "detail";
+  stop?: boolean;
+  cause?: {
+    field: AdapterFactsV11Text;
+    values: AdapterFactsV11CauseMap;
+    otherwise: AdapterFactsV11StopCause;
+  };
+  by?: {
+    field: AdapterFactsV11Text;
+    values: { [key: string]: AdapterFactsV11ValueRule };
+  };
+};
+
+export type AdapterFactsV11ValueRule = {
+  kind: string;
+  data?: AdapterFactsV11DataTemplate;
+  origin?: {
+    join?: {
+      payload: AdapterFactsV11Text;
+      transcript: AdapterFactsV11Text;
+    };
+    rules: Array<AdapterFactsV11OriginRule>;
+    otherwise: AdapterFactsV11Text;
+  };
+  call?: "kind" | "detail";
+  stop?: boolean;
+  cause?: {
+    field: AdapterFactsV11Text;
+    values: AdapterFactsV11CauseMap;
+    otherwise: AdapterFactsV11StopCause;
+  };
+};
+
+export type AdapterFactsV11Operation = {
+  readBy: AdapterFactsV11Text;
+  conformance: AdapterFactsV11Text;
+};
+
+export type AdapterFactsV11MarkerMap = { [key: string]: AdapterFactsV11Text };
+
+/** adapter.facts@11 */
+export interface AdapterFactsV11 {
+  schema: "adapter.facts@11";
+  versions: Array<AdapterFactsV11Version>;
+  agent: string;
+  hookTimeouts: {
+    readBy: AdapterFactsV11Text;
+    conformance: AdapterFactsV11Text;
+    defaultMs?: number | null;
+    perHook?: { [key: string]: number };
+  };
+  continuation: {
+    readBy: AdapterFactsV11Text;
+    conformance: AdapterFactsV11Text;
+    cap?: number;
+    field?: AdapterFactsV11Text;
+    hook?: AdapterFactsV11Text;
+  };
+  launch: {
+    readBy: AdapterFactsV11Text;
+    conformance: AdapterFactsV11Text;
+    session?: {
+      readBy?: AdapterFactsV11Text;
+      args: AdapterFactsV11Texts;
+    };
+    readOnlyJob?: {
+      readBy?: AdapterFactsV11Text;
+      args: AdapterFactsV11Texts;
+      prompt: AdapterFactsV11Text;
+    };
+  };
+  modelFamily: {
+    readBy: AdapterFactsV11Text;
+    conformance: AdapterFactsV11Text;
+    families: AdapterFactsV11TextMap;
+  };
+  billing: {
+    readBy: AdapterFactsV11Text;
+    conformance: AdapterFactsV11Text;
+    apiKeyVariables: AdapterFactsV11Texts;
+  };
+  usage: {
+    readBy: AdapterFactsV11Text;
+    conformance: AdapterFactsV11Text;
+    cost: "reported" | "estimated" | "unpriced";
+    costFrom: AdapterFactsV11Text;
+    tokens: AdapterFactsV11Text;
+  };
+  questionTools: {
+    readBy: AdapterFactsV11Text;
+    conformance: AdapterFactsV11Text;
+    tools: AdapterFactsV11Texts;
+  };
+  transcripts: {
+    readBy: AdapterFactsV11Text;
+    conformance: AdapterFactsV11Text;
+    home: Array<AdapterFactsV11Text>;
+    path: AdapterFactsV11Text;
+  };
+  appLinks: {
+    readBy: AdapterFactsV11Text;
+    conformance: AdapterFactsV11Text;
+    open: AdapterFactsV11Text;
+  };
+  errorTexts: {
+    readBy: AdapterFactsV11Text;
+    conformance: AdapterFactsV11Text;
+    causes: AdapterFactsV11CauseMap;
+  };
+  events: {
+    readBy: AdapterFactsV11Text;
+    conformance: AdapterFactsV11Text;
+    versions: { [key: string]: { [key: string]: AdapterFactsV11Payload } };
+  };
+  mapping: {
+    readBy: AdapterFactsV11Text;
+    conformance: AdapterFactsV11Text;
+    common: AdapterFactsV11DataTemplate;
+    SessionStart?: AdapterFactsV11HookRule;
+    UserPromptSubmit?: AdapterFactsV11HookRule;
+    PreToolUse?: AdapterFactsV11HookRule;
+    PermissionRequest?: AdapterFactsV11HookRule;
+    PostToolUse?: AdapterFactsV11HookRule;
+    PostToolUseFailure?: AdapterFactsV11HookRule;
+    Stop?: AdapterFactsV11HookRule;
+    StopFailure?: AdapterFactsV11HookRule;
+    SessionEnd?: AdapterFactsV11HookRule;
+    SubagentStart?: AdapterFactsV11HookRule;
+    SubagentStop?: AdapterFactsV11HookRule;
+    TaskCreated?: AdapterFactsV11HookRule;
+    TaskCompleted?: AdapterFactsV11HookRule;
+    TeammateIdle?: AdapterFactsV11HookRule;
+    WorktreeCreate?: AdapterFactsV11HookRule;
+    WorktreeRemove?: AdapterFactsV11HookRule;
+    PreCompact?: AdapterFactsV11HookRule;
+    PostCompact?: AdapterFactsV11HookRule;
+    Interrupt?: AdapterFactsV11HookRule;
+    sessionStart?: AdapterFactsV11HookRule;
+    sessionEnd?: AdapterFactsV11HookRule;
+    preToolUse?: AdapterFactsV11HookRule;
+    postToolUse?: AdapterFactsV11HookRule;
+    stop?: AdapterFactsV11HookRule;
+    session_start?: AdapterFactsV11HookRule;
+    session_shutdown?: AdapterFactsV11HookRule;
+    input?: AdapterFactsV11HookRule;
+    tool_call?: AdapterFactsV11HookRule;
+    tool_result?: AdapterFactsV11HookRule;
+    agent_start?: AdapterFactsV11HookRule;
+    agent_end?: AdapterFactsV11HookRule;
+    agent_before_settle?: AdapterFactsV11HookRule;
+    agent_settled?: AdapterFactsV11HookRule;
+    "agent.turn.before"?: AdapterFactsV11HookRule;
+    "agent.turn.after"?: AdapterFactsV11HookRule;
+    "agent.permission.before"?: AdapterFactsV11HookRule;
+    "agent.permission.after"?: AdapterFactsV11HookRule;
+  };
+  toolKinds: {
+    readBy: AdapterFactsV11Text;
+    conformance: AdapterFactsV11Text;
+    tools: { [key: string]: AdapterFactsV11ToolKind };
+    prefixes?: { [key: string]: AdapterFactsV11ToolKind };
+    otherwise: AdapterFactsV11ToolKind;
+  };
+  toolDetail?: {
+    readBy: AdapterFactsV11Text;
+    conformance: AdapterFactsV11Text;
+    command?: AdapterFactsV11TextMap;
+    paths?: AdapterFactsV11TextMap;
+    mcp?: {
+      tool: AdapterFactsV11Text;
+    };
+  };
+  patch?: {
+    readBy: AdapterFactsV11Text;
+    conformance: AdapterFactsV11Text;
+    tools: AdapterFactsV11Texts;
+    command: AdapterFactsV11Text;
+    shell: AdapterFactsV11Text;
+  };
+  turnWithoutPrompt?: {
+    readBy: AdapterFactsV11Text;
+    conformance: AdapterFactsV11Text;
+    payloadField: AdapterFactsV11Text;
+    startedBy: AdapterFactsV11Texts;
+    turnEntry: AdapterFactsV11Text;
+    turnField: AdapterFactsV11Text;
+    messageRole: {
+      path: AdapterFactsV11Text;
+      value: AdapterFactsV11Text;
+    };
+    messageText: AdapterFactsV11Text;
+    values: AdapterFactsV11MarkerMap;
+    otherwise: AdapterFactsV11Text;
+  };
+  signIn?: {
+    readBy: AdapterFactsV11Text;
+    conformance: AdapterFactsV11Text;
+    args: AdapterFactsV11Texts;
+    signedIn: AdapterFactsV11Text;
+  };
+  stop?: {
+    readBy: AdapterFactsV11Text;
+    conformance: AdapterFactsV11Text;
+    turn: {
+      payload: AdapterFactsV11Text;
+      transcript: AdapterFactsV11Text;
+      elsewhere?: AdapterFactsV11Text;
+    };
+    cause: {
+      readBy?: AdapterFactsV11Text;
+      payload?: {
+        field: AdapterFactsV11Text;
+        values: AdapterFactsV11CauseMap;
+      };
+      errors?: {
+        match: AdapterFactsV11Match;
+        field: AdapterFactsV11Text;
+        values: AdapterFactsV11CauseMap;
+      };
+      rateLimits?: {
+        match: AdapterFactsV11Match;
+        reached: AdapterFactsV11Text;
+        windows: AdapterFactsV11Texts;
+        used: AdapterFactsV11Text;
+        resetsAt: AdapterFactsV11Text;
+        toMs: number;
+        spent: AdapterFactsV11StopCause;
+        withoutReset: AdapterFactsV11StopCause;
+      };
+      otherwise: AdapterFactsV11StopCause;
+    };
+    usage: {
+      readBy?: AdapterFactsV11Text;
+      covers: "turn" | "session";
+      records: {
+        match: AdapterFactsV11Match;
+        has: AdapterFactsV11Text;
+        skip?: AdapterFactsV11Match;
+        once?: AdapterFactsV11Text;
+      };
+      take: "sum" | "last";
+      counts: {
+        input: AdapterFactsV11Texts;
+        cached: AdapterFactsV11Texts;
+        output: AdapterFactsV11Texts;
+      };
+      exact: boolean;
+      model: {
+        record?: AdapterFactsV11Text;
+        payload?: AdapterFactsV11Text;
+      };
+      contextFill?: {
+        used: AdapterFactsV11Texts;
+        window: AdapterFactsV11Text;
+      };
+    };
+  };
+  readUsage?: AdapterFactsV11Operation;
+  classifyStop?: AdapterFactsV11Operation;
+  skills?: AdapterFactsV11Operation;
+  install?: {
+    readBy: AdapterFactsV11Text;
+    conformance: AdapterFactsV11Text;
+    source: AdapterFactsV11Text;
+  };
+  providers?: { [key: string]: {
+    readBy: AdapterFactsV11Text;
+    conformance: AdapterFactsV11Text;
+    hooks: "own" | "plugin";
+    bridge?: string;
+    permissions?: AdapterFactsV11Text;
+    modes?: {
+      asks: AdapterFactsV11Texts;
+      approvesOwnCalls: AdapterFactsV11Texts;
+    };
+    modelCheck?: AdapterFactsV11Text;
+    timeouts?: { [key: string]: number };
+  } };
+}
+
 export type AdapterFactsV2Text = string;
 
 export type AdapterFactsV2Match = { [key: string]: unknown };
@@ -11906,6 +12229,25 @@ export interface SessionReadingV2 {
   data: {
     reading: string;
     code: "hooks_cant_run" | "hooks_run_again" | "watch_only" | "denied_ran_anyway" | "mods_watch" | "mods_gone" | "ran_unleased" | "stop_not_held" | "monitor_waiting" | "monitor_ended" | "interrupted" | "older_set" | "newer_set" | "other";
+  };
+  evidence?: Array<string>;
+}
+
+/** session.reading@3 */
+export interface SessionReadingV3 {
+  v: 3;
+  id: string;
+  kind: "session.reading";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    reading: string;
+    code: "hooks_cant_run" | "hooks_run_again" | "watch_only" | "denied_ran_anyway" | "mods_watch" | "mods_gone" | "ran_unleased" | "stop_not_held" | "monitor_waiting" | "monitor_ended" | "interrupted" | "older_set" | "newer_set" | "mode_unchecked" | "mode_unknown" | "mode_asks" | "other";
   };
   evidence?: Array<string>;
 }

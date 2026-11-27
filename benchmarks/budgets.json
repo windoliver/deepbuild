@@ -153,7 +153,8 @@
       ],
       "margin": 0.5,
       "criteria": [
-        "#3440.e9dfc29b"
+        "#3440.e9dfc29b",
+        "#3544.37bd1895"
       ],
       "limits": {},
       "initialReason": "Issue #14 first measurement: the merge base has no record package. One process appends a 100,000-event log, then drops every projection and rebuilds it by replay, so p50 includes the appends and Node's start and the replay's own limits (60 s per million events, 100 MB of working memory) stay in tests/acceptance/14/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
@@ -280,7 +281,8 @@
       },
       "initialReason": "Issue #16 first measurement: the merge base has no hub. One process starts the hub on a temp home and leaves it idle for seven seconds, reading its CPU and resident memory; the issue's 0.5% idle CPU and 150 MB with 30 days of history stay in tests/acceptance/16/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task.",
       "criteria": [
-        "#2646.0e7e5ac3"
+        "#2646.0e7e5ac3",
+        "#3548.4bf12cec"
       ]
     },
     {
@@ -1227,6 +1229,23 @@
       "initialReason": "Issue #2386 first measurement: the merge base draws every atlas row as its grid's cell and has no such task. A release deep-show's frames of 10,000 atlas rows on a 100 x 100 square grid of 4 u cells, each a 4 x 8 px tile with draw [4, 8] and anchor [0.5, 0.75], against the same set without the two fields, each sliding 15 u a second along x by a keyed channel so each of the 300 frames a side places every row again, five runs after a warm-up one, each a fresh process, the side that goes first alternating; the difference of the sides' median frame time is what draw adds. canvas.mjs judge holds the time on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
       "criteria": [
         "#2386.b3f6fe16"
+      ]
+    },
+    {
+      "id": "canvas-atlas-slice",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "atlas-slice"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "slice_rows_frame_ms": 0.2
+      },
+      "initialReason": "Issue #2039 first measurement: the merge base reads no slice, draws every free atlas row as one quad of its cell and has no such task. A release deep-show's frames of 500 free rows of one 24 x 24 px atlas cell, 25 across and 20 down, each with slice 8 on each side and its own box 32 to 48 u wide and 32 or 40 u tall, against the same rows with no slice, w and h, each set sliding 15 u a second along x by a keyed channel so each of the 300 frames a side places every row again, five runs after a warm-up one, each a fresh process, the side that goes first alternating; the difference of the sides' median frame time is what slice adds. canvas.mjs judge holds the time on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#2039.2e193c48"
       ]
     },
     {
@@ -2358,6 +2377,24 @@
       "limits": {},
       "initialReason": "Issue #1857 first measurement (#1857.df51c34e): the merge base copies the document's items for each nested instance. One process checks a board of 4,999 rects and one instance whose step repeats a nested recipe 1,024 times through `deep-show run`, so p50 includes Node's and the binary's start; the criterion's own 1 s, read on the check's clock, stays in tests/acceptance/1857/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task.",
       "criteria": ["#1857.df51c34e"]
+    },
+    {
+      "id": "canvas-gpu-draw-finish",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "draw-finish"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "draw_finish_p95_ms": 0.5
+      },
+      "initialReason": "Issue #3617 first measurement (#3617.ff2c540d, #3617.e5d2f1f1): the merge base does not report draw-and-finish time or its parts. Plays the one-pass fixture at 1936 x 1584 on the zero-copy path for 300 frames in release deep-gpu, one warm-up run and five fresh runs, judging each run's p95 draw_ms against 0.5 ms on a reference Mac at a one-minute load below its cores (at or above reads INCONCLUSIVE). Once main has this task, p50 and peak memory of the whole command get a 50% merge-base margin.",
+      "criteria": [
+        "#3617.ff2c540d",
+        "#3617.e5d2f1f1"
+      ]
     }
   ]
 }

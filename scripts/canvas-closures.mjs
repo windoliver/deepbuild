@@ -15,11 +15,14 @@
 //   node scripts/canvas-closures.mjs drift [--root <tree>] [--listing <dump> | --built]
 //     The hand-written table under "Registries and closed lists" in <tree>/docs/canvas-primitives.md says for each list
 //     the closures and the instead <tree>/packages/contracts/canvas-closures.json holds, and lists every list that file
-//     holds; the generated table after it says for each field list its words, closure, reopens_if and instead, as the
+//     holds; the generated tables after it, one under a heading for each group of field lists and read as one table,
+//     say for each field list its words, closure, reopens_if and instead, as the
 //     listing (--listing, or with --built the dump of the built deep-show) gives them, or without one the closures the
 //     fill <tree>/crates/deep-canvas/src/registry/fields.json holds (this checkout's, for a tree that holds none).
 //   node scripts/canvas-closures.mjs table [--root <tree>] [--listing <dump>]
-//     Writes the generated table into <tree>/docs/canvas-primitives.md from the listing (or the built deep-show's).
+//     Writes the generated tables into <tree>/docs/canvas-primitives.md from the listing (or the built deep-show's):
+//     a field list's group is its name before its first `.` or `@`, so a new list changes one small heading's own text
+//     and the section's own text stays its hand-written part (#3401; scripts/doc-ceilings.mjs).
 //   node scripts/canvas-closures.mjs paths [--root <tree>]
 //     The paths lane (#2776; canvas primitives: Paths: rays, finals and the web player): every holder of answers in
 //     <tree>/packages/contracts/canvas-paths.json, the sealed listing (each 3D entry the full build seals, and each
@@ -232,15 +235,24 @@ function rowOf(l) {
   const closed = 'closed' in c;
   return `| \`${l.list}\` | ${l.words.map((w) => `\`${w}\``).join(', ')} | ${closureCell(c)} | ${closed ? cell(c.reopens_if) : NONE_CELL} | ${closed ? cell(c.instead) : NONE_CELL} |`;
 }
-/** The generated block's lines. */
-const blockLines = (lists) => [
-  `${BLOCK_START} generated from the sealed listing by node scripts/canvas-closures.mjs table; do not edit -->`,
-  '',
-  GENERATED_HEADER,
-  '|---|---|---|---|---|',
-  ...[...lists].sort((a, b) => (a.list < b.list ? -1 : a.list > b.list ? 1 : 0)).map(rowOf),
-  BLOCK_END,
-];
+/** A field list's group, read from its name alone: the name before its first `.` or `@`. */
+const groupOf = (name) => name.split(/[.@]/)[0];
+/** The heading a group's table sits under. */
+const groupHeading = (group) => `#### Field lists: \`${group}\``;
+/** The generated block's lines: a table for each group under its heading, rows in name order, a group where its first row falls. */
+function blockLines(lists) {
+  const groups = new Map();
+  for (const l of [...lists].sort((a, b) => (a.list < b.list ? -1 : a.list > b.list ? 1 : 0))) {
+    const group = groupOf(l.list);
+    groups.set(group, [...(groups.get(group) ?? []), rowOf(l)]);
+  }
+  return [
+    `${BLOCK_START} generated from the sealed listing by node scripts/canvas-closures.mjs table; do not edit -->`,
+    '',
+    ...[...groups].flatMap(([group, rows]) => [groupHeading(group), '', GENERATED_HEADER, '|---|---|---|---|---|', ...rows, '']),
+    BLOCK_END,
+  ];
+}
 
 /** A closure cell of the hand-written table, as the closures it names. */
 function cellClosures(cell) {
@@ -281,7 +293,7 @@ function handDrift(lines, s, block, failed) {
   return rows.length;
 }
 
-/** The generated table against the field lists (words checked when they come from a listing). */
+/** The generated tables, read as one, against the field lists (words checked when they come from a listing). */
 function generatedDrift(lines, block, lists, from, failed) {
   if (!block) { failed.push(`the canvas reference has no generated table (${BLOCK_START} … ${BLOCK_END}) after the hand-written one`); return 0; }
   if (block.to < 0) { failed.push(`the generated table has no end line ${BLOCK_END}`); return 0; }
@@ -289,7 +301,7 @@ function generatedDrift(lines, block, lists, from, failed) {
   if (header < 0 || lines[header].trim() !== GENERATED_HEADER) { failed.push(`the generated table doesn't start with the header ${GENERATED_HEADER}`); return 0; }
   const rows = [];
   for (const l of lines.slice(header + 1, block.to)) {
-    if (!l.startsWith('| ') || /^\|\s*-/.test(l)) continue;
+    if (!l.startsWith('| ') || /^\|\s*-/.test(l) || l.trim() === GENERATED_HEADER) continue;
     const c = cellsOf(l);
     rows.push({ list: unquote(c[0] ?? ''), words: (c[1] ?? '').split(',').map(unquote).filter(Boolean), closure: c[2] ?? '', reopens: c[3] ?? '', instead: c[4] ?? '' });
   }
@@ -343,7 +355,7 @@ function drift() {
     const block = blockOf(lines, s);
     const hand = handDrift(lines, s, block, failed);
     const generated = generatedDrift(lines, block, lists, from, failed);
-    if (!failed.length) console.log(`PASS drift: the table's ${hand} lists say the closures the closure data holds, and the generated table's ${generated} field lists say what ${from} holds`);
+    if (!failed.length) console.log(`PASS drift: the table's ${hand} lists say the closures the closure data holds, and the generated tables' ${generated} field lists say what ${from} holds`);
   }
   for (const f of failed) console.log(`FAIL drift: ${f}`);
   return failed.length ? 1 : 0;
@@ -360,7 +372,8 @@ function table() {
   const lines = readFileSync(docPath, 'utf8').split('\n');
   const s = sectionOf(lines);
   if (!s) { console.log(`BLOCKED table: ${docPath} has no heading ${SECTION}`); return 3; }
-  const fresh = blockLines(fieldLists(listing.dump));
+  const lists = fieldLists(listing.dump);
+  const fresh = blockLines(lists);
   const block = blockOf(lines, s);
   if (block && block.to >= 0) lines.splice(block.from, block.to - block.from + 1, ...fresh);
   else {
@@ -370,7 +383,7 @@ function table() {
     lines.splice(last + 1, 0, '', ...fresh);
   }
   writeFileSync(docPath, lines.join('\n'));
-  console.log(`PASS table: ${fresh.length - 5} field lists written to ${docPath}`);
+  console.log(`PASS table: ${lists.length} field lists written to ${docPath}`);
   return 0;
 }
 

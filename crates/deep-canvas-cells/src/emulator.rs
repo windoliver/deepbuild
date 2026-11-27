@@ -544,6 +544,10 @@ impl Terminal {
             s.x = s.x.min(cols - 1);
             s.y = s.y.min(rows - 1);
         }
+        if let Some((x, y, _)) = &mut self.saved {
+            *x = (*x).min(cols - 1);
+            *y = (*y).min(rows - 1);
+        }
         self.dirty.resize(usize::from(rows), false);
         self.cols = cols;
         self.rows = rows;
@@ -1303,6 +1307,17 @@ mod tests {
         t.feed(b"\x1b8x");
         assert_eq!(text(&t)[9].chars().count(), 40);
         assert!(text(&t)[9].ends_with('x'));
+    }
+
+    #[test]
+    fn a_resize_clamps_the_saved_cursor_as_it_clamps_the_cursor() {
+        let mut t = Terminal::new(200, 50, 0);
+        t.feed(b"\x1b[50;200H\x1b7");
+        t.resize(80, 24);
+        t.resize(200, 50);
+        assert_eq!(t.cursor(), (79, 23));
+        t.feed(b"\x1b8");
+        assert_eq!(t.cursor(), (79, 23));
     }
 
     #[test]

@@ -90,6 +90,9 @@ export const derivedId = (ms: number, key: string): string => ulid(ms, createHas
 
 /** An event a hook request maps to, its data held to its kind's catalogue fields; the core fills the counters. */
 export interface Draft { kind: string; v: number; id: string; ts: number; seq?: string; subject?: string; data: Record<string, unknown>; fill?: 'msg' | 'turn' | 'loads'; queued?: boolean }
+/** What a provider's facts say of the mode a turn started in (#3429): the reading, and its code. */
+export interface ModeRead { code: ModeCode; reading: string }
+
 /** What the parser read of a hook request that the core needs to check and bind it. */
 export interface HookMeta {
   /** A Claude Code network stop's try of the host its API calls go to (#85), made before it queues. */
@@ -157,10 +160,10 @@ export interface HookMeta {
   watchOnly?: boolean;
   /**
    * A line from paseo's plugin (#55): the agent's provider and paseo's own agent ID, the token its DeepBuild MCP server
-   * binds by, a permission request's ID and kind, an answer's source; and, for a provider the facts don't cover, what
-   * they lack.
+   * binds by, a permission request's ID and kind, an answer's source; for a provider the facts don't cover, what
+   * they lack; and, at a turn's start of a provider the plugin gates, what its facts say of the mode it starts in (#3429).
    */
-  paseo?: { provider: string; agent: string; bind: string; request?: string; kind?: string; behavior?: string; from?: string; lacks?: string };
+  paseo?: { provider: string; agent: string; bind: string; request?: string; kind?: string; behavior?: string; from?: string; lacks?: string; mode?: ModeRead };
   /**
    * What the core joins to the transcript or reads loop facts from: the payload's prompt ID, prompt, error and
    * subagent, a stop's last message, Codex's turn, and a FileChanged hook's path.
@@ -246,7 +249,7 @@ export type Parsed =
   | { kind: 'refused'; id: string | null; error: Refusal };
 
 import type { Plant } from './plant.js';
-import type { ReadingCode } from './reading-codes.js';
+import type { ModeCode, ReadingCode } from './reading-codes.js';
 export { activePlant, plantOf, type Plant } from './plant.js';
 
 /**

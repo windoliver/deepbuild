@@ -1,0 +1,27 @@
+# Thu Nov 26 16:31:22 PST 2026 node v24.22.0 load { 25.79 34.11 30.20 } head 163c6a2c9 base 35956a44a
+$ node scripts/proof.mjs before
+PASS before: tests/acceptance/1333/conflict.test.mjs › #1333.ed47bc1a a revert that conflicts starts an attempt and raises no ask; if that attempt ends with main still red, one ask is raised and landings stay paused: failed on asks-on-conflict at its assertion
+PASS before: tests/acceptance/1333/flaky.test.mjs › #1333.aded8275 a test that fails once and passes on repeats reads INCONCLUSIVE, is filed, and pauses nothing: failed on flaky-holds at its assertion
+PASS before: tests/acceptance/1333/known-failures.test.mjs › #1333.87ce4575 a known-failures.json entry with no open issue fails the lane, naming the entry: failed on issue-named-only at its assertion
+PASS before: tests/acceptance/1333/watch.test.mjs › #1333.f14d14bc a planted landing that breaks a test is named by the job within one schedule, and landings stop; a job that reports only that main is red fails, naming the missing landing: failed on red-only at its assertion
+PASS before: tests/acceptance/1333/watch.test.mjs › #1333.747cd5ee the revert lands, the issue reopens naming the failure, and landings resume, with no ask raised: failed on unverified-revert at its assertion
+PASS before: tests/acceptance/1333/watch.test.mjs › #1333.6c0af23f the job makes no model call and starts no hosted workflow: failed on asks-a-model at its assertion
+proof: wall time 2400.7 s
+# exit 0 Thu Nov 26 17:11:28 PST 2026 load { 15.42 16.86 18.24 }
+
+# the 15 twins the lane laid, each a use of the change bay (from the run's BAY claim lines):
+tests/acceptance/1333/twins/asks-a-model
+tests/acceptance/1333/twins/asks-every-tick
+tests/acceptance/1333/twins/asks-on-conflict
+tests/acceptance/1333/twins/blames-head
+tests/acceptance/1333/twins/dispatches-ci
+tests/acceptance/1333/twins/flaky-holds
+tests/acceptance/1333/twins/issue-named-only
+tests/acceptance/1333/twins/never-pauses
+tests/acceptance/1333/twins/no-attempt
+tests/acceptance/1333/twins/no-reopen
+tests/acceptance/1333/twins/red-only
+tests/acceptance/1333/twins/stays-paused
+tests/acceptance/1333/twins/unfiled
+tests/acceptance/1333/twins/unverified-revert
+tests/acceptance/1333/twins/whole-lanes-bisect
