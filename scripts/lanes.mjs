@@ -238,6 +238,9 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/556/', 'tests/acceptance/2650/retries.test.ts', 'tests/acceptance/2650/jobs.test.ts', 'tests/acceptance/2650/replay.test.ts',
     'tests/acceptance/66-redraft-1812/', 'tests/acceptance/2402/', 'tests/acceptance/2898/', 'tests/acceptance/851/', 'tests/acceptance/3035/',
     'tests/acceptance/139-redraft-2062/',
+    // #3525's blind redrafts of suites that brought an asset in through deep_kinds: hubs with sandboxed fills and renders, as their originals.
+    ...['1731-redraft-3525', '1820-redraft-3525', '154-redraft-3525', '154-redraft-3525b', '154-oracle-redraft-3525', '154-oracle-redraft-redraft-3525',
+      '155-oracle-redraft-3525', '2123-redraft-3525', '2898-redraft-3525'].map((folder) => `tests/acceptance/${folder}/`),
   ],
   'shared: memory': ['tests/acceptance/2645/'],
   'shared: the cores': ['tests/acceptance/2227/'],
