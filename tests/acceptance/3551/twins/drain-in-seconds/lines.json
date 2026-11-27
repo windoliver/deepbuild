@@ -1,0 +1,12 @@
+{
+  "scripts/throttle.mjs": [
+    {
+      "find": [
+        "  const drained = window && JSON.stringify({ drain: Date.now() - asked, waited: plan.waited });"
+      ],
+      "wrong": [
+        "  const drained = window && JSON.stringify({ drain: Math.round((Date.now() - asked) / 1000), waited: plan.waited });"
+      ]
+    }
+  ]
+}

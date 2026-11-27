@@ -1,0 +1,17 @@
+# node scripts/twins-lint.mjs at 0682aed8d (main 35956a44a + the redraft), lines naming 1333
+# tests/acceptance/1333/twins.json is no longer listed; the 15 whole-file twins it names are #3291's
+FAIL twins: tests/acceptance/1333/twins/asks-a-model: holds a whole file, scripts/main-watch.mjs
+FAIL twins: tests/acceptance/1333/twins/asks-every-tick: holds a whole file, scripts/main-watch.mjs
+FAIL twins: tests/acceptance/1333/twins/asks-on-conflict: holds a whole file, scripts/main-watch.mjs
+FAIL twins: tests/acceptance/1333/twins/blames-head: holds a whole file, scripts/main-watch.mjs
+FAIL twins: tests/acceptance/1333/twins/dispatches-ci: holds a whole file, scripts/main-watch.mjs
+FAIL twins: tests/acceptance/1333/twins/flaky-holds: holds a whole file, scripts/main-watch.mjs
+FAIL twins: tests/acceptance/1333/twins/issue-named-only: holds a whole file, scripts/known-failures-check.mjs
+FAIL twins: tests/acceptance/1333/twins/never-pauses: holds a whole file, scripts/main-watch.mjs
+FAIL twins: tests/acceptance/1333/twins/no-attempt: holds a whole file, scripts/main-watch.mjs
+FAIL twins: tests/acceptance/1333/twins/no-reopen: holds a whole file, scripts/main-watch.mjs
+FAIL twins: tests/acceptance/1333/twins/red-only: holds a whole file, scripts/main-watch.mjs
+FAIL twins: tests/acceptance/1333/twins/stays-paused: holds a whole file, scripts/main-watch.mjs
+FAIL twins: tests/acceptance/1333/twins/unfiled: holds a whole file, scripts/main-watch.mjs
+FAIL twins: tests/acceptance/1333/twins/unverified-revert: holds a whole file, scripts/main-watch.mjs
+FAIL twins: tests/acceptance/1333/twins/whole-lanes-bisect: holds a whole file, scripts/main-watch.mjs

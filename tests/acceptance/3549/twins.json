@@ -1,0 +1,23 @@
+{
+  "#3549.b6b01435": [
+    "one-build-at-a-time"
+  ],
+  "#3549.13a91455": [
+    "whole-pool-each"
+  ],
+  "#3549.349bc6a3": [
+    "admits-at-once"
+  ],
+  "#3549.c607aa63": [
+    "turn-under-a-build"
+  ],
+  "#3549.7ba8246d": [
+    "deals-turns-in-a-drain"
+  ],
+  "#3549.98c012e3": [
+    "waited-is-the-limit"
+  ],
+  "#3549.bf86e1ad": [
+    "build-row-as-before"
+  ]
+}

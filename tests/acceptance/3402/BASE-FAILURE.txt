@@ -1,0 +1,309 @@
+# #3402 acceptance tests: the run on the base, the planted fix and the planted wrong programs
+
+Paths are shown from the checkout's root (`<checkout>`); nothing else is changed in the outputs.
+
+## 1. The base (c60215952, main, nothing that implements #3402), November 26, 2026
+
+Both new folders, laid in a clone at the base that also holds #1352's base commit `6aa228ce`, run whole:
+
+$ node --test tests/acceptance/1352-redraft-3402/*.test.mjs tests/acceptance/3402/*.test.mjs
+
+15 tests: 13 pass, 2 fail, none skips. Each failure is at its test's own assertion (`code: 'ERR_ASSERTION'`, first
+frame in the test file).
+
+- The redraft's four #1352 tests pass: the base's design already holds the section, its seven rows and the record.
+- `#3402.131135a1` (AC4) FAILS at ac4-threats.test.mjs:25: #1352's threats test, run unchanged, fails, and the rows
+  its failure names are ["Another machine's connection"].
+- `#3402.76e0cb78` the lists (AC6) FAILS at ac6-lanes.test.mjs: `redrafted` has no entry for the three first-draft
+  files and `byHand` doesn't name them.
+- The other nine #3402 tests pass on the base, so each is proven by a planted wrong program (section 3). Among them
+  AC1's first test, whose first half runs the four first-draft tests on the base commit's design in a temporary tree:
+  it passes, so there they fail with the issue's finder message three times and with
+  `the Decided table has 99 rows, and had 112 at 6aa228ce: it gained none` (the issue's table, written on an earlier
+  main, says 112 rows; the base's `### Decided` holds 99).
+
+== uptime before: 18:12  up 6 days, 22:39, 3 users, load averages: 37.65 37.56 34.55
+✔ #1352.4c4e63a7 criterion 1 (redraft): the design's section anchored cloud-hub answers each of the eight Scope decisions, with at least eight "Not taken" (11.029917ms)
+✔ #1352.4c4e63a7 criterion 1 (redraft): each of the seven rows #1352 added is in a table with the Decided columns under Decisions, and one of them links to the section or names the hub and the cloud (10.606625ms)
+✔ #1352.fbaaa304 criterion 3 (redraft): the section anchored cloud-hub gives each agent the design supports a line naming it with its route on a hosted machine (allowed, API key only, or not allowed) and a link to its provider's terms (10.300416ms)
+✔ #1352.28fd1eed criterion 5 (redraft): docs/evidence/1352/taste-call.json records one person's taste call that the section anchored cloud-hub reads right, bound to its current text, with the others told and able to overrule it (11.918625ms)
+✔ #3402.bc48ab1e the four #1352 tests that fail on the merge base's design with the messages the issue gives, three at the finder naming both headings and one at the Decided count, pass in their redrafted form on this checkout, each under its own #1352 tag (908.633292ms)
+✔ #3402.bc48ab1e the two #1352 tests that pass today still pass, in the first draft's file as it is: the search for the old wording, and the privacy section (1915.304792ms)
+✔ #3402.efa6066b a planted finder that takes the one heading holding the words hub and cloud or hosted fails on main's design, naming both headings, and the redrafted section test passes on this checkout's design planted with three more headings that hold the words hub and hosted (217.878833ms)
+✔ #3402.efa6066b the redrafted section test passes on this checkout's design, and fails on main's design planted without one of the eight decisions, naming the decision (252.051667ms)
+✔ #3402.96b79474 a planted reading that counts rows under ### Decided alone fails on main's design, missing each of the seven rows #1352 added, and the redrafted Decided test finds them on this checkout's design under any heading inside Decisions: where it holds them, under a planted heading, and in its first Decided table; and not in a table outside Decisions (268.715666ms)
+✔ #3402.96b79474 the redrafted Decided test passes on this checkout's design, and fails on it planted without one of the seven rows, naming its question (29.638625ms)
+✖ #3402.131135a1 #1352's threats test, its file and helpers byte for byte as main holds them, passes: no row of the threats table refuses browsers without naming the web client, the row for another machine's connection included (2185.509458ms)
+✔ #3402.a95fc369 criterion 5's redrafted check passes on main's design with the record byte for byte as main holds it, and criterion 5's redrafted test passes on this checkout with the record the checkout holds (397.248833ms)
+✔ #3402.a95fc369 a planted finder that returns other text for the section fails criterion 5's check on main's design with main's record, at the text's SHA-256 alone, so it would pass only with a new record; and while this checkout's section is main's text, its record is main's, byte for byte (339.250292ms)
+✖ #3402.76e0cb78 the lanes run the redraft in the originals' place: each of the three first-draft files maps to the redraft folder and runs by hand only; the redraft's files and the threats file are in none of the lists that take a file out of an ordinary run, as the first-draft files were in none; and the redraft holds every tag of the files it replaces (74.217833ms)
+✔ #3402.76e0cb78 scripts/known-failures.json has no entry for #1352: no string in it, key or value at any depth, names a test under tests/acceptance/1352 or its redraft, or a #1352 criterion (1.202709ms)
+ℹ tests 15
+ℹ suites 0
+ℹ pass 13
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2920.70475
+
+✖ failing tests:
+
+test at tests/acceptance/3402/ac4-threats.test.mjs:16:1
+✖ #3402.131135a1 #1352's threats test, its file and helpers byte for byte as main holds them, passes: no row of the threats table refuses browsers without naming the web client, the row for another machine's connection included (2185.509458ms)
+  AssertionError [ERR_ASSERTION]: the threats test fails, naming these rows of the threats table: a row of the threats table still refuses browsers without naming the web client that may reach the hub
+  + actual - expected
+  
+  + [
+  +   "| Another machine's connection | A hub with no project members listens only on its socket. Once a project has one, an invited person included, it also listens on one TLS 1.3 port (`listen` under `hub` in `config.json`), and serves nothing on it before a hello with a credential it issued. Each creden"
+  + ]
+  - []
+  
+  + actual - expected
+  
+  + [
+  +   "Another machine's connection"
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3402/ac4-threats.test.mjs:25:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ "Another machine's connection" ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3402/ac6-lanes.test.mjs:19:1
+✖ #3402.76e0cb78 the lanes run the redraft in the originals' place: each of the three first-draft files maps to the redraft folder and runs by hand only; the redraft's files and the threats file are in none of the lists that take a file out of an ordinary run, as the first-draft files were in none; and the redraft holds every tag of the files it replaces (74.217833ms)
+  AssertionError [ERR_ASSERTION]: scripts/lanes.mjs does not run the redraft in the originals' place
+  + actual - expected
+  
+    {
+      lists: {
+        'tests/acceptance/1352-redraft-3402/ac1-section.test.mjs': [],
+        'tests/acceptance/1352-redraft-3402/ac3-agent-routes.test.mjs': [],
+        'tests/acceptance/1352-redraft-3402/ac5-taste-call.test.mjs': [],
+  +     'tests/acceptance/1352/ac1-section.test.mjs': [],
+  -     'tests/acceptance/1352/ac1-section.test.mjs': [
+  -       'byHand'
+  -     ],
+        'tests/acceptance/1352/ac2-privacy-threats.test.mjs': [],
+  +     'tests/acceptance/1352/ac3-agent-routes.test.mjs': [],
+  +     'tests/acceptance/1352/ac5-taste-call.test.mjs': []
+  -     'tests/acceptance/1352/ac3-agent-routes.test.mjs': [
+  -       'byHand'
+  -     ],
+  -     'tests/acceptance/1352/ac5-taste-call.test.mjs': [
+  -       'byHand'
+  -     ]
+      },
+      redrafted: {
+  +     'tests/acceptance/1352/ac1-section.test.mjs': null,
+  +     'tests/acceptance/1352/ac3-agent-routes.test.mjs': null,
+  +     'tests/acceptance/1352/ac5-taste-call.test.mjs': null
+  -     'tests/acceptance/1352/ac1-section.test.mjs': 'tests/acceptance/1352-redraft-3402/',
+  -     'tests/acceptance/1352/ac3-agent-routes.test.mjs': 'tests/acceptance/1352-redraft-3402/',
+  -     'tests/acceptance/1352/ac5-taste-call.test.mjs': 'tests/acceptance/1352-redraft-3402/'
+      }
+    }
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3402/ac6-lanes.test.mjs:24:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: { redrafted: { 'tests/acceptance/1352/ac1-section.test.mjs': null, 'tests/acceptance/1352/ac3-agent-routes.test.mjs': null, 'tests/acceptance/1352/ac5-taste-call.test.mjs': null }, lists: { 'tests/acceptance/1352/ac1-section.test.mjs': [], 'tests/acceptance/1352/ac3-agent-routes.test.mjs': [], 'tests/acceptance/1352/ac5-taste-call.test.mjs': [], 'tests/acceptance/1352/ac2-privacy-threats.test.mjs': [], 'tests/acceptance/1352-redraft-3402/ac1-section.test.mjs': [], 'tests/acceptance/1352-redraft-3402/ac3-agent-routes.test.mjs': [], 'tests/acceptance/1352-redraft-3402/ac5-taste-call.test.mjs': [] } },
+    expected: { redrafted: { 'tests/acceptance/1352/ac1-section.test.mjs': 'tests/acceptance/1352-redraft-3402/', 'tests/acceptance/1352/ac3-agent-routes.test.mjs': 'tests/acceptance/1352-redraft-3402/', 'tests/acceptance/1352/ac5-taste-call.test.mjs': 'tests/acceptance/1352-redraft-3402/' }, lists: { 'tests/acceptance/1352/ac1-section.test.mjs': [Array], 'tests/acceptance/1352/ac3-agent-routes.test.mjs': [Array], 'tests/acceptance/1352/ac5-taste-call.test.mjs': [Array], 'tests/acceptance/1352/ac2-privacy-threats.test.mjs': [], 'tests/acceptance/1352-redraft-3402/ac1-section.test.mjs': [], 'tests/acceptance/1352-redraft-3402/ac3-agent-routes.test.mjs': [], 'tests/acceptance/1352-redraft-3402/ac5-taste-call.test.mjs': [] } },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+== exit 1
+== uptime after: 18:12  up 6 days, 22:39, 3 users, load averages: 37.12 37.45 34.53
+
+## 2. The planted fix (a scratch copy outside the clone, removed afterwards; never in the clone)
+
+A copy of the clone with the new folders, and two edits made for this check only:
+
+- `docs/technical-design.md`, the threats table's row for another machine's connection: "A browser Origin is refused
+  there as on the socket." became "A browser Origin is refused there as on the socket, unless it comes from the hub's
+  own web client." Nothing else in the design, and nothing under `docs/evidence/`.
+- `scripts/lanes-lists.mjs`, four lines appended: `redrafted` maps `tests/acceptance/1352/ac1-section.test.mjs`,
+  `ac3-agent-routes.test.mjs` and `ac5-taste-call.test.mjs` to `tests/acceptance/1352-redraft-3402/`, and `byHand`
+  names those three files.
+
+$ node --test tests/acceptance/1352-redraft-3402/*.test.mjs tests/acceptance/3402/*.test.mjs
+
+All 15 pass, none skips: the redraft's four and #3402's eleven.
+
+== uptime: 18:13  up 6 days, 22:39, 3 users, load averages: 35.28 37.01 34.46
+✔ #1352.4c4e63a7 criterion 1 (redraft): the design's section anchored cloud-hub answers each of the eight Scope decisions, with at least eight "Not taken" (13.819917ms)
+✔ #1352.4c4e63a7 criterion 1 (redraft): each of the seven rows #1352 added is in a table with the Decided columns under Decisions, and one of them links to the section or names the hub and the cloud (8.250708ms)
+✔ #1352.fbaaa304 criterion 3 (redraft): the section anchored cloud-hub gives each agent the design supports a line naming it with its route on a hosted machine (allowed, API key only, or not allowed) and a link to its provider's terms (31.069958ms)
+✔ #1352.28fd1eed criterion 5 (redraft): docs/evidence/1352/taste-call.json records one person's taste call that the section anchored cloud-hub reads right, bound to its current text, with the others told and able to overrule it (10.444917ms)
+✔ #3402.bc48ab1e the four #1352 tests that fail on the merge base's design with the messages the issue gives, three at the finder naming both headings and one at the Decided count, pass in their redrafted form on this checkout, each under its own #1352 tag (1461.855875ms)
+✔ #3402.bc48ab1e the two #1352 tests that pass today still pass, in the first draft's file as it is: the search for the old wording, and the privacy section (2277.354666ms)
+✔ #3402.efa6066b a planted finder that takes the one heading holding the words hub and cloud or hosted fails on main's design, naming both headings, and the redrafted section test passes on this checkout's design planted with three more headings that hold the words hub and hosted (379.7525ms)
+✔ #3402.efa6066b the redrafted section test passes on this checkout's design, and fails on main's design planted without one of the eight decisions, naming the decision (725.707917ms)
+✔ #3402.96b79474 a planted reading that counts rows under ### Decided alone fails on main's design, missing each of the seven rows #1352 added, and the redrafted Decided test finds them on this checkout's design under any heading inside Decisions: where it holds them, under a planted heading, and in its first Decided table; and not in a table outside Decisions (374.092625ms)
+✔ #3402.96b79474 the redrafted Decided test passes on this checkout's design, and fails on it planted without one of the seven rows, naming its question (180.147084ms)
+✔ #3402.131135a1 #1352's threats test, its file and helpers byte for byte as main holds them, passes: no row of the threats table refuses browsers without naming the web client, the row for another machine's connection included (3221.434542ms)
+✔ #3402.a95fc369 criterion 5's redrafted check passes on main's design with the record byte for byte as main holds it, and criterion 5's redrafted test passes on this checkout with the record the checkout holds (817.9935ms)
+✔ #3402.a95fc369 a planted finder that returns other text for the section fails criterion 5's check on main's design with main's record, at the text's SHA-256 alone, so it would pass only with a new record; and while this checkout's section is main's text, its record is main's, byte for byte (414.362042ms)
+✔ #3402.76e0cb78 the lanes run the redraft in the originals' place: each of the three first-draft files maps to the redraft folder and runs by hand only; the redraft's files and the threats file are in none of the lists that take a file out of an ordinary run, as the first-draft files were in none; and the redraft holds every tag of the files it replaces (88.160541ms)
+✔ #3402.76e0cb78 scripts/known-failures.json has no entry for #1352: no string in it, key or value at any depth, names a test under tests/acceptance/1352 or its redraft, or a #1352 criterion (1.331125ms)
+ℹ tests 15
+ℹ suites 0
+ℹ pass 15
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3881.004792
+== exit 0
+
+## 3. Each planted wrong program, laid over the planted fix
+
+Each twin named in twins.json was laid over that copy as scripts/proof-runs.mjs lays one (a whole file at its path; a
+lines.json's `find` lines matched at exactly one place and replaced by its `wrong` lines), its criterion's test file
+was run with the lanes' reporter (scripts/proof-reporter.mjs), and the copy was put back. Below, for each: the tests
+that fail, with the failure's code and first frame, and the start of its message. Every failure is an
+`ERR_ASSERTION` whose first frame is in the test's own file, and no test skips. Each of the nine tests that pass on
+the base fails on at least one twin of its criterion.
+
+
+== twin section-lost-moving, laid over the planted fix (docs/technical-design.md); ac1-suite.test.mjs
+  FAILS (ERR_ASSERTION, first frame tests/acceptance/3402/ac1-suite.test.mjs:41): #3402.bc48ab1e the four #1352 tests that fail on the merge base's design with the messages the issue gives, th
+      the redraft's tests did not all pass on this checkout:
+      FAILED: #1352.4c4e63a7 criterion 1 (redraft): the design's section anchored cloud-hub answers each of the eight Scope decisions, with at least eight "Not taken"
+          Expected values to be strictly deep-equal:
+      + actual - expected
+      + [
+      +   `the section "A hub of your own in the cloud, for someone with no computer" doesn't answer this decision: moving (deep backup and deep restore, the writer generation refusing a stale copy): missing /\\bdeep backup\\b/, /\\bdeep restore\\b/, /\\bgeneration\\b/i, /\\bstale\\b/i`,
+      +   'the section "A hub of your own in the cloud, for someone with no computer" says "Not taken" 7 times; each of the 8 decisions needs what was not taken'
+      + ]
+      - []
+          the section "A hub of your own in the cloud, for someone with no computer" doesn't answer this decision: moving (deep backup and deep restore, the writer generation refusing a stale copy): missing /\bdeep backup\b/, /\bdeep restore\b/, /\bgeneration\b/i, /\bstale\b/i
+          the section "A hub of your own in the cloud, for someone with no computer" says "Not taken" 7 times; each of the 8 decisions needs what was not taken
+      passed: #1352.4c4e63a7 criterion 1 (redraft): each of the seven rows #1352 added is in a table with the Decided columns under Decisions, and one of them links to the section or names the hub and the cloud
+      passed: #1352.fbaaa304 criterion 3 (redraft): the section anch
+  passes: #3402.bc48ab1e the two #1352 tests that pass today still pass, in the first draft's file as it is: the search 
+
+== twin old-wording-back, laid over the planted fix (docs/technical-design.md); ac1-suite.test.mjs
+  passes: #3402.bc48ab1e the four #1352 tests that fail on the merge base's design with the messages the issue gives, th
+  FAILS (ERR_ASSERTION, first frame tests/acceptance/3402/ac1-suite.test.mjs:50): #3402.bc48ab1e the two #1352 tests that pass today still pass, in the first draft's file as it is: the search 
+      the two tests did not both pass:
+      FAILED: #1352.7a887cd4 criterion 2: a search of docs/ and README.md for "refuses any request carrying a browser origin" finds none of the sentences that held it at 6aa228ce
+          the old wording is still there
+      + actual - expected
+      + [
+      +   'docs/technical-design.md: "there is no http server for a ui, and the hub refuses any request carrying a browser origin, so no web page can reach it."'
+      + ]
+      - []
+          docs/technical-design.md: "there is no http server for a ui, and the hub refuses any request carrying a browser origin, so no web page can reach it."
+      passed: #1352.7a887cd4 criterion 2: the threats table has a row in which a web client reaches only the person's own hub over the authenticated connection with a passkey, and no row refuses every browser without it
+      passed: #1352.7a887cd4 criterion 2: the privacy section is changed from 6aa228ce and says that a hosted hub's work lives on that cloud machine: shown on the first screen before sign-up, encrypted at rest, and who can read it
+      + actual - expected
+        [
+          [
+
+== twin section-lost-moving, laid over the planted fix (docs/technical-design.md); ac2-section.test.mjs
+  FAILS (ERR_ASSERTION, first frame tests/acceptance/3402/ac2-section.test.mjs:27): #3402.efa6066b a planted finder that takes the one heading holding the words hub and cloud or hosted fails on 
+      Expected values to be strictly deep-equal:
+      + actual - expected
+      + [
+      +   `the section "A hub of your own in the cloud, for someone with no computer" doesn't answer this decision: moving (deep backup and deep restore, the writer generation refusing a stale copy): missing /\\bdeep backup\\b/, /\\bdeep restore\\b/, /\\bgeneration\\b/i, /\\bstale\\b/i`,
+      +   'the section "A hub of your own in the cloud, for someone with no computer" says "Not taken" 7 times; each of the 8 decisions needs what was not taken'
+      + ]
+      - []
+  FAILS (ERR_ASSERTION, first frame tests/acceptance/3402/ac2-section.test.mjs:63): #3402.efa6066b the redrafted section test passes on this checkout's design, and fails on main's design planted
+      Expected values to be strictly deep-equal:
+      + actual - expected
+      + [
+      +   `the section "A hub of your own in the cloud, for someone with no computer" doesn't answer this decision: moving (deep backup and deep restore, the writer generation refusing a stale copy): missing /\\bdeep backup\\b/, /\\bdeep restore\\b/, /\\bgeneration\\b/i, /\\bstale\\b/i`,
+      +   'the section "A hub of your own in the cloud, for someone with no computer" says "Not taken" 7 times; each of the 8 decisions needs what was not taken'
+      + ]
+      - []
+
+== twin decided-row-dropped, laid over the planted fix (docs/technical-design.md); ac3-decided.test.mjs
+  FAILS (ERR_ASSERTION, first frame tests/acceptance/3402/ac3-decided.test.mjs:40): #3402.96b79474 a planted reading that counts rows under ### Decided alone fails on main's design, missing each
+      Expected values to be strictly deep-equal:
+      + actual - expected
+      + [
+      +   'no table with the Decided columns holds the row #1352 added for the question "Who pays for a hosted hub" (125 rows read)'
+      + ]
+      - []
+  FAILS (ERR_ASSERTION, first frame tests/acceptance/3402/ac3-decided.test.mjs:65): #3402.96b79474 the redrafted Decided test passes on this checkout's design, and fails on it planted without on
+      Expected values to be strictly deep-equal:
+      + actual - expected
+      + [
+      +   'no table with the Decided columns holds the row #1352 added for the question "Who pays for a hosted hub" (125 rows read)'
+      + ]
+      - []
+
+== twin record-rewritten, laid over the planted fix (docs/evidence/1352/taste-call.json); ac5-record.test.mjs
+  passes: #3402.a95fc369 criterion 5's redrafted check passes on main's design with the record byte for byte as main hol
+  FAILS (ERR_ASSERTION, first frame tests/acceptance/3402/ac5-record.test.mjs:42): #3402.a95fc369 a planted finder that returns other text for the section fails criterion 5's check on main's de
+      the section's text is main's, but docs/evidence/1352/taste-call.json is not the record main holds: a new record, or none
+      + actual - expected
+      + '7ca61ee7e13aa8d660f3279189aebaf866a00beba0e505f48227035bd74707d6'
+      - '64a443bae2f045cd18e5f0158c157f71411ca2ad94d29b6751833caf2a6d2595'
+
+== twin record-for-other-text, laid over the planted fix (docs/evidence/1352/taste-call.json); ac5-record.test.mjs
+  FAILS (ERR_ASSERTION, first frame tests/acceptance/3402/ac5-record.test.mjs:24): #3402.a95fc369 criterion 5's redrafted check passes on main's design with the record byte for byte as main hol
+      criterion 5's redrafted test did not pass on this checkout:
+      FAILED: #1352.28fd1eed criterion 5 (redraft): docs/evidence/1352/taste-call.json records one person's taste call that the section anchored cloud-hub reads right, bound to its current text, with the others told and able to overrule it
+          Expected values to be strictly deep-equal:
+      + actual - expected
+      + [
+      +   `docs/evidence/1352/taste-call.json's text.sha256 "de1ba46f0a00c1d24b4ab3c47105d6eb9232d7bacf103533fd2d64eaccd7a96a" isn't the section's text as it is now (7f96048ad84d0df53304ad3835aaf6dd2240a65b186983579a3d338b29822743): the call was made on other text`
+      + ]
+      - []
+          docs/evidence/1352/taste-call.json's text.sha256 "de1ba46f0a00c1d24b4ab3c47105d6eb9232d7bacf103533fd2d64eaccd7a96a" isn't the section's text as it is now (7f96048ad84d0df53304ad3835aaf6dd2240a65b186983579a3d338b29822743): the call was made on other text
+      + actual - expected
+        [
+      +   '#1352.28fd1eed failed'
+      -   '#1352.28fd1eed passed'
+        ]
+  FAILS (ERR_ASSERTION, first frame tests/acceptance/3402/ac5-record.test.mjs:42): #3402.a95fc369 a planted finder that returns other text for the section fails criterion 5's check on main's de
+      the section's text is main's, but docs/evidence/1352/taste-call.json is not the record main holds: a new record, or none
+      + actual - expected
+      + '183b3a105cd9eca05c49c943813ab32d3d87fc4645c2fa135b09bbe99b0cf9b9'
+      - '64a443bae2f045cd18e5f0158c157f71411ca2ad94d29b6751833caf2a6d2595'
+
+== twin known-failure-listed, laid over the planted fix (scripts/known-failures.json); ac6-lanes.test.mjs
+  passes: #3402.76e0cb78 the lanes run the redraft in the originals' place: each of the three first-draft files maps to 
+  FAILS (ERR_ASSERTION, first frame tests/acceptance/3402/ac6-lanes.test.mjs:41): #3402.76e0cb78 scripts/known-failures.json has no entry for #1352: no string in it, key or value at any depth,
+      Expected values to be strictly deep-equal:
+      + actual - expected
+      + [
+      +   'tests/acceptance/1352/ac1-section.test.mjs › #1352.4c4e63a7 criterion 1: the Decided table has more rows than at 6aa228ce, and a new row links to the new section or names the hub and the cloud'
+      + ]
+      - []
+
+== twin known-skip-listed, laid over the planted fix (scripts/known-failures.json); ac6-lanes.test.mjs
+  passes: #3402.76e0cb78 the lanes run the redraft in the originals' place: each of the three first-draft files maps to 
+  FAILS (ERR_ASSERTION, first frame tests/acceptance/3402/ac6-lanes.test.mjs:41): #3402.76e0cb78 scripts/known-failures.json has no entry for #1352: no string in it, key or value at any depth,
+      Expected values to be strictly deep-equal:
+      + actual - expected
+      + [
+      +   `tests/acceptance/1352-redraft-3402/ac1-section.test.mjs › #1352.4c4e63a7 criterion 1 (redraft): the design's section anchored cloud-hub answers each of the eight Scope decisions, with at least eight "Not taken"`
+      + ]
+      - []
+
+## 4. Wrong lists, and later approved edits (the same scratch copy, each put back)
+
+- With `tests/acceptance/1352-redraft-3402/` also pushed to `slow`, to `timed`, to `alone`, to `ownLane` or to
+  `exclusive` in the planted fix's lists, AC6's lists test FAILS each time (14 pass, 1 fail); nothing else changes.
+- With three edits a later approved change might make, all at once (`### Decided for a hosted hub` renamed
+  `### Decided for hosting`; the row `Who pays for a hosted hub` moved into the table under `### Decided`; a phrase
+  changed inside the section's Moving bullet, with the record's `text.sha256` rewritten for the new text), all 15
+  still pass: nothing judged on the checkout depends on main's headings, on where the rows sit, or on the record's
+  bytes once the section is edited.

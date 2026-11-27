@@ -1,0 +1,13 @@
+== PR 3373 (#3114) e2e  HEAD a4adcce71  last code commit 61e6002a1  2026-11-24 16:54:30
+== claim-changes reads:
+   15:  const [diff, others, tracked] = await Promise.all([paths(['diff', '-z', '--name-only', '--no-renames', base]), paths(['ls-files', '-z', '--oth
+== suites: tests/acceptance/3114 (blind) + packages/hub/test/quoted-config-3114.test.ts
+✓ packages/hub/test/quoted-config-3114.test.ts > a tracked runner config under a non-ASCII folder (#3114) > makes the setup file it names the 
+✓ tests/acceptance/3114/quoted-paths.test.ts > #3114.1c2cb3dd a claim that edits an approved check's tracked test file test/é.test.js, which its run re
+✓ tests/acceptance/3114/quoted-paths.test.ts > #3114.1c2cb3dd a claim that edits an approved check's tracked test file test/é.test.js, which its run re
+✓ tests/acceptance/3114/quoted-paths.test.ts > #3114.e80ac3c7 a new, untracked test file whose name holds a `"` or a tab, which the run read > [22
+✓ tests/acceptance/3114/quoted-paths.test.ts > #3114.e80ac3c7 a new, untracked test file whose name holds a `"` or a tab, which the run read > [22
+✓ tests/acceptance/3114/quoted-paths.test.ts > #3114.86767b02 a claim that changes no file under such a name > #3114.86767b02 edits only the c
+ Test Files  2 passed (2)
+      Tests  6 passed (6)
+== suite exit: 0

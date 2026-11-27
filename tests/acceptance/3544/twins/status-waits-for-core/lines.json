@@ -1,0 +1,21 @@
+{
+  "packages/hub/src/service.ts": [
+    {
+      "find": [
+        "    process.stdout.write(`${JSON.stringify(await control(path, token, 'hub.health', {}, 2000, STATUS_REPLY_MS))}\\n`);",
+        "    return 0;"
+      ],
+      "wrong": [
+        "    const until = Date.now() + STATUS_REPLY_MS;",
+        "    let health = await control(path, token, 'hub.health', {}, 2000, STATUS_REPLY_MS);",
+        "    while (replayingOf(health)) {",
+        "      if (Date.now() >= until) throw Error(`no answer within ${STATUS_REPLY_MS} ms`);",
+        "      await new Promise((done) => setTimeout(done, REPLAY_POLL_MS));",
+        "      health = await control(path, token, 'hub.health', {}, 2000, STATUS_REPLY_MS);",
+        "    }",
+        "    process.stdout.write(`${JSON.stringify(health)}\\n`);",
+        "    return 0;"
+      ]
+    }
+  ]
+}

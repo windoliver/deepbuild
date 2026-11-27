@@ -1,0 +1,247 @@
+Issue: #2044
+Base: ebf1e7f44bedb850047741cea366ac08df62dcbc (main; its last merge is #3411).
+Acceptance tests: blind draft from the issue, the design and the base, by a job that ran twice (README.md: The base
+      run). This file is its second run's.
+IDs: criterionId of scripts/proof-change.mjs over the issue body's seven criterion lines: 186e93e0, 039601da,
+      5bc09669, e7ef5233, 57d379a6, 19a0d966 and 78e8c53e.
+Paths: <checkout> is the worktree's root, which the logs print in full.
+
+In short: five of the eight tests fail on the base, each at an assertion of the suite's own, and three pass.
+Criteria 1, 2, 4 and 7 fail for a reason their criteria give of the merge base. Criterion 3 fails at the naming of
+the accessor and not as its criterion describes the merge base. Criterion 5 passes, as its criterion says. Criterion
+6's two tests pass, where its criterion says the merge base panics. No twin was run, so criteria 5 and 6 have not
+been seen to fail on any program (What was not run).
+
+== What was run at the base, by whom and how
+
+The job's caller built the base and ran the suite; the job did neither. Both were done in the job's own checkout, a
+worktree detached at the base that held this folder as the job's first run left it, untracked, and nothing else of the
+suite, which needs no manifest entry: `git status --short` after the run prints only "?? tests/acceptance/2044/". The
+job's second run was given the logs. It ran no test file, no cargo and no rustc.
+
+When and where: 2026-11-25, on the Mac the job's brief describes (a MacBook Pro, 18 cores, 64 GB, shared with other
+sessions), Node v24.22.0, rustc 1.99.1 (58cf8f9c3 2026-10-13), load averages 66.69 34.88 29.09 as the run's log gives
+them once.
+
+Build, 16:57:34 to 16:58:54, exit 0. These are the four libraries helpers.mjs asks cargo for, so that each file's own
+cargo call finds them built:
+
+  $ CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked -j 8 -p deep-codecs -p deep-canvas-scene3d -p deep-canvas-cells -p deep-canvas-vector
+      Finished `dev` profile [unoptimized] target(s) in 1m 20s
+
+Run, 16:58:54 to 16:59:05, from the checkout's root: each test file once, one at a time, by its command in the README.
+The caller states that this was right after the build and inside the same grant of the machine's throttle
+(scripts/throttle.mjs), with the same toolchain on PATH and CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0. The logs
+print the commands, their times and their exit statuses, and not the environment.
+
+  command                                                                    start     end       exit  duration_ms
+  node --test --test-concurrency=1 tests/acceptance/2044/mp4.test.mjs        16:58:54  16:58:56  1     1912.874708
+  node --test --test-concurrency=1 tests/acceptance/2044/gltf.test.mjs       16:58:56  16:59:03  1     6227.839458
+  node --test --test-concurrency=1 tests/acceptance/2044/terminal.test.mjs   16:59:03  16:59:04  0     1044.334666
+  node --test --test-concurrency=1 tests/acceptance/2044/svg.test.mjs        16:59:04  16:59:05  1     1031.370125
+
+How long each file took: 2 s, 7 s, 1 s and 1 s by the run's clock, 11 s in all. A file's first test builds the reader
+(cargo's check that the four libraries are fresh, then rustc on reader.rs), so its time holds that build. In three of
+the files that first test took 969 to 974 ms, one short reader run included. In mp4.test.mjs, where that reader run
+is the probe of stsz.mp4, it took 1841 ms. In gltf.test.mjs criterion 4's test took 5188 ms of the file's 6228.
+
+What the job's second run checked of that run, from the files it left:
+- The files run are the first run's. Every file the run found in the folder was last written on 2026-11-24, the day
+  before it, and had the SHA-256 the caller took of it after the run when the second run began. The second run
+  changed README.md and added this file, and nothing else.
+- reader.rs built, in each of the four files. Every test reached a reader's answer: a probe's reply, an import, a
+  fault, a grid, a panic's own words. No log holds BLOCKED or INCONCLUSIVE.
+- Nothing shows a file's cargo call building a library again. The newest of the four libraries' files under
+  target/debug/deps is dated 16:58:54, the second the build ended, and a first test's 969 ms holds its cargo call
+  and its rustc.
+- Every fixture said what its criterion says of it: each test holds its fixture to that before it reads an answer
+  and would have read BLOCKED otherwise.
+
+== Each test at the base
+
+A failure is node's AssertionError [ERR_ASSERTION]; its innermost frame is the line of helpers.mjs named here, and the
+frame after it the line of the test file. scripts/proof-runs.mjs (atAssertion) reads such a failure as one at its
+assertion: the framework's own, thrown under the test paths. That is read from the script; no lane was run.
+
+AC1 #2044.186e93e0  FAILS at helpers.mjs:219, called from mp4.test.mjs:26: "is not refused: the probe's reply has no
+    refusal". The criterion says of the merge base: "sizes its table from the count, returns no refusal and fails
+    this test". The reply is an asset of one video stream with four presentation times; its sha256 is the fixture's
+    own. The run shows no refusal. That the table is sized from the count is read from the base's source (mp4.rs,
+    table: `sizes` is collected over the count and `samples` is reserved by it); the run measures no memory. The
+    reader ended on its own, under its 4 GiB heap cap.
+AC2 #2044.039601da  FAILS at helpers.mjs:219, called from mp4.test.mjs:37: "is not refused: the probe's reply has no
+    refusal". The criterion says of the merge base: "loops 8,000,000,000 times, returns no refusal and fails this
+    test". The run shows no refusal, which is the reason the test fails. The base does not loop: the whole test took
+    10 ms. Since 9b9532449 a run of `stts` ends at the track's last sample (The base against the criteria).
+AC3 #2044.5bc09669  FAILS at helpers.mjs:229, called from gltf.test.mjs:29: "is refused without naming accessor 0".
+    The criterion says of the merge base: "reads 1,000,000 rows from the 12 bytes and fails this test". The base
+    doesn't read them. Since 9b9532449 it refuses the fixture, as "params/sha256: a byte stride under its element",
+    which names no accessor. So the test fails for what the criterion's first sentence asks, "naming the accessor",
+    and not as its last sentence describes the merge base. That importer is the twin rows-by-count, which was not
+    run.
+AC4 #2044.e7ef5233  FAILS at helpers.mjs:228, called from gltf.test.mjs:38: "is not refused". The criterion says of
+    the merge base: "visits 16,777,215 nodes, returns no refusal and fails this test". The import returned no node
+    and no refusal after 5.2 s, well inside the reader's 300 s deadline. The count of nodes visited is read from the
+    base's source (gltf.rs, import: a stack with no memory of where it has been, bounded only at a depth of 64); the
+    run counts none.
+AC5 #2044.57d379a6  PASSES, as its criterion says: the fixture "imports to the same result as on the merge base".
+    The test compares the import, value for value, with what importOf in helpers.mjs works out from the file's own
+    numbers, so the value the first run derived by hand is the value the base returned:
+    {"nodes":[{"index":0,"name":"0","world":[[1,0,0,1],[0,1,0,2],[0,0,1,3]],"primitives":[{"material":null,"vertices":3,"positions":[[0,0,0],[1,0,0],[0,1,0]],"normals":[[0,0,1],[0,0,1],[0,0,1]],"indices":[0,1,2],"uv0":0,"uv1":0,"tangents":0}]},{"index":1,"name":"1","world":[[1,0,0,-4],[0,1,0,5],[0,0,1,6]],"primitives":[{"material":null,"vertices":3,"positions":[[0,0,0],[1,0,0],[0,1,0]],"normals":[[0,0,1],[0,0,1],[0,0,1]],"indices":[0,1,2],"uv0":0,"uv1":0,"tangents":0}]}],"lights":0,"materials":0,"images":0,"dropped":0}
+    That line is importOf's value, printed by the second run; the log prints the pass and not the import. The wrong
+    program this test fails on is the twin mesh-used-twice, which was not run.
+AC6 #2044.19a0d966  PASSES, both tests (save and restore; enter and leave the alternate screen). The criterion says
+    of the merge base: "panics in both runs and fails this test". The base doesn't panic: in both runs the grid is 80
+    by 24 and its one cell that isn't blank is the `x` at row 24, column 80. Since 9b9532449 `restore` clamps the
+    place it restores to the grid (The base against the criteria). The wrong program these tests fail on is the twin
+    restore-unclamped, that clamp taken out again, which was not run.
+AC7 #2044.78e8c53e  FAILS at helpers.mjs:148, called from svg.test.mjs:26: "panicked and gave no answer". The
+    criterion says of the merge base: "panics on the first and fails this test". The reader's import of
+    attribute.svg panicked in the code under test, at crates/deep-canvas-vector/src/svg.rs:340:38: "end byte index 2
+    is not a char boundary; it is inside 'é' (bytes 1..3 of string)". The test ends there, before it reads the two
+    other files (What was not run).
+
+== The base against the criteria
+
+The issue was filed on 2026-11-10 at 00:35 UTC (the job's brief). 9b953244999b35a6bcdd8937e0449ab89a72987a
+("Whole-project audit: fix about 80 bugs test first, make clippy, tsc and repo rules green", 2026-11-10 01:52:33
+-0800, which is 09:52:33 UTC, an ancestor of the base) came after it and changed three of the four readers where a
+criterion reads them. So where a test's result differs from its criterion's sentence about the merge base, it is the
+base and not the test:
+
+- Criterion 2, crates/deep-codecs/src/mp4.rs, table: the loop over a `stts` run went from
+  `if let Some(s) = samples.get_mut(i) { s.dts = t; }` to `let Some(s) = samples.get_mut(i) else { break };`. The
+  base no longer loops 8,000,000,000 times. It still gives no refusal, and the test fails for that.
+- Criterion 3, crates/deep-canvas-scene3d/src/gltf.rs, accessor_rows: `if stride < size * width { return
+  Err(bad("a byte stride under its element")); }` was added. The base no longer reads 1,000,000 rows. Its refusal
+  names no accessor, and the test fails for that.
+- Criterion 6, crates/deep-canvas-cells/src/emulator.rs, restore: `s.x = x; s.y = y;` became
+  `s.x = x.min(cols - 1); s.y = y.min(rows - 1);`. The base no longer panics, and both tests pass on it.
+
+Criteria 1, 4 and 7 fail on the base as the issue says they do, and criterion 5 names no failure of the merge base.
+
+== The logs, trimmed to each failure
+
+Unchanged but for <checkout> in place of the worktree's root. Left out: the "failing tests:" heading and its repeat
+of each failing test's line, and, marked in square brackets, node's own frames and the error's properties (the same
+six lines under each failure).
+
+----- mp4.log -----
+✖ AC1 #2044.186e93e0 an MP4 under 1 KiB whose stsz box states a fixed sample size of 1 and 50,000,000 samples is refused, naming stsz and the count (1840.851125ms)
+✖ AC2 #2044.039601da an MP4 under 1 KiB whose stts box holds 2 runs of 4,000,000,000 samples each is refused, naming stts (10.451542ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1912.874708
+
+test at tests/acceptance/2044/mp4.test.mjs:18:1
+  AssertionError [ERR_ASSERTION]: tests/acceptance/2044/fixtures/stsz.mp4 is not refused: the probe's reply has no refusal, though its stsz box states 50,000,000 samples of 1 byte and the file is 611 bytes. The reply: {"asset":{"sha256":"8ac56a3a57e1c8b11ae5b3c2ae3be15a39634af4e518e70e7e26bd44e7393db5","kind":"video","probe":{"streams":[{"index":0,"codec":"h264","time_base":[1,25],"duration":[4,25],"type":"video","frame_rate":[25,1],"size":[16,16],"color":{"primaries":"bt601","transfer":"bt601","matrix":"bt601","range":"limited","assumed":["primaries","transfer","matrix","range"]},"pts":[[0,25],[1,25],[2,25],[3,25]]}]},"decoder":{"name":"VideoToolbox and AudioToolbox","version":"27.2"}}}
+      at refusedNamingBox (file://<checkout>/tests/acceptance/2044/helpers.mjs:219:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2044/mp4.test.mjs:26:3)
+      [node's frames and the error's properties left out]
+
+test at tests/acceptance/2044/mp4.test.mjs:29:1
+  AssertionError [ERR_ASSERTION]: tests/acceptance/2044/fixtures/stts.mp4 is not refused: the probe's reply has no refusal, though its stts box holds 2 runs of 4,000,000,000 samples each and the file is 619 bytes. The reply: {"asset":{"sha256":"537e2b80369f5c6dc01c48c4074e50c9351c289d9864f07dc700fef7d3842567","kind":"video","probe":{"streams":[{"index":0,"codec":"h264","time_base":[1,25],"duration":[4,25],"type":"video","frame_rate":[25,1],"size":[16,16],"color":{"primaries":"bt601","transfer":"bt601","matrix":"bt601","range":"limited","assumed":["primaries","transfer","matrix","range"]},"pts":[[0,25],[1,25],[2,25],[3,25]]}]},"decoder":{"name":"VideoToolbox and AudioToolbox","version":"27.2"}}}
+      at refusedNamingBox (file://<checkout>/tests/acceptance/2044/helpers.mjs:219:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2044/mp4.test.mjs:37:3)
+      [node's frames and the error's properties left out]
+
+----- gltf.log -----
+✖ AC3 #2044.5bc09669 a glTF under 1 KiB with one accessor of count 1,000,000 over a 12-byte buffer view with byteStride 0 is refused, naming the accessor (969.1685ms)
+✖ AC4 #2044.e7ef5233 a glTF of 24 nodes, each listing the next node twice as its children, is refused, naming node 1 as reached twice (5188.432584ms)
+✔ AC5 #2044.57d379a6 a glTF with two accessors interleaved in one buffer view at byteStride 24, and two nodes that use one mesh, imports to the same result as on the merge base (13.5765ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 1
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6227.839458
+
+test at tests/acceptance/2044/gltf.test.mjs:21:1
+  AssertionError [ERR_ASSERTION]: tests/acceptance/2044/fixtures/accessor.gltf is refused without naming accessor 0, though its one accessor, accessor 0, states 1,000,000 rows over a 12-byte buffer view with byteStride 0. The refusal: "params/sha256: a byte stride under its element"
+      at refusedNaming (file://<checkout>/tests/acceptance/2044/helpers.mjs:229:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2044/gltf.test.mjs:29:3)
+      [node's frames and the error's properties left out]
+
+test at tests/acceptance/2044/gltf.test.mjs:32:1
+  AssertionError [ERR_ASSERTION]: tests/acceptance/2044/fixtures/nodes.gltf is not refused, though node 0 lists node 1 twice, so node 1 is the first node reached twice (a walk with no memory of where it has been visits 16,777,215 nodes). The import returned {"nodes":[],"lights":0,"materials":0,"images":0,"dropped":0}
+      at refusedNaming (file://<checkout>/tests/acceptance/2044/helpers.mjs:228:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2044/gltf.test.mjs:38:3)
+      [node's frames and the error's properties left out]
+
+----- terminal.log -----
+✔ AC6 #2044.19a0d966 a cursor moved to row 50, column 200 of a 200 by 50 grid and saved, then restored after the grid is resized to 80 by 24, prints x at row 24, column 80 (972.079959ms)
+✔ AC6 #2044.19a0d966 the same holds when the program enters the alternate screen instead of saving and leaves it instead of restoring (8.97675ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1044.334666
+
+----- svg.log -----
+✖ AC7 #2044.78e8c53e an SVG whose root has an attribute named aé imports as the same file without that attribute does, and an attribute named ONCLICK is still refused as script (973.849292ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1031.370125
+
+test at tests/acceptance/2044/svg.test.mjs:18:1
+  AssertionError [ERR_ASSERTION]: the import of tests/acceptance/2044/fixtures/attribute.svg, whose root has an attribute named aé, panicked and gave no answer: thread 'main' (3173423) panicked at crates/deep-canvas-vector/src/svg.rs:340:38: | end byte index 2 is not a char boundary; it is inside 'é' (bytes 1..3 of string)
+      at answer (file://<checkout>/tests/acceptance/2044/helpers.mjs:148:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2044/svg.test.mjs:26:29)
+      [node's frames and the error's properties left out]
+
+== What was not run, and what that leaves unshown
+
+1. The twins. None was laid, built or run, by the caller or by the job: laying one writes outside this folder and
+   builds a workspace crate again. Unshown, each read from the twin's source and from the judges' probe only:
+   - rows-by-count (#2044.5bc09669): that AC3's test fails on the importer its criterion describes, one that reads
+     1,000,000 rows from the 12 bytes and refuses nothing. AC3's failure on the base is at the naming instead. Also
+     unshown: that accessor.gltf is otherwise a file the base imports, since the base stops at its stride.
+   - mesh-used-twice (#2044.57d379a6): that AC5's test fails on the planted check, naming mesh 0. AC5's test has
+     only been seen to pass.
+   - restore-unclamped (#2044.19a0d966): that either of AC6's tests fails on an emulator that doesn't clamp the
+     saved cursor. Both of AC6's tests have only been seen to pass.
+   - That any twin builds. The two line twins' `find` lines match the base's gltf.rs at exactly one place each (lines
+     196 and 1109; checked again by the second run without a build), and restore-unclamped's file differs from the
+     base's emulator.rs only inside `restore`.
+   So no run yet shows a wrong program failing criterion 5's test or criterion 6's two. That is unrun, not passed:
+   it is shown when each twin is laid over the program being judged and its test file run (README.md: Twins).
+2. Two of criterion 7's three readings. AC7's test ends at its first reader, so the base run doesn't show that
+   attribute-none.svg imports or that attribute-onclick.svg is refused with the code svg_script. Both are read from
+   the base's source instead (svg.rs, import and scan: no refusal of that file's bytes is reached, and a name that
+   starts with `on` in any case is `Refusal::Script`), and the panic itself shows the shared document parsed and
+   reached the scan of the root's attributes. No test file's run on the base can show more: a run of the reader on
+   those two files would.
+3. A second run of any file. Each ran once. No test reads a time or a random value.
+4. Memory, and counts inside a reader. No criterion states either and no test reads them.
+5. The lanes and the lints (scripts/affected.mjs, the proof lanes, scripts/repo-rules.mjs, scripts/twins-lint.mjs).
+   node_modules is not installed in this checkout and affected.mjs and proof-change.mjs import a package from it;
+   repo-rules starts cargo. The folder's files were searched for a home folder's path instead (/Users/<name>/ and
+   /home/<name>/); none holds one.
+6. The change. The job saw no implementation in either run; the Proof line's run on the branch is the implementing
+   change's.
+
+== Each tagged test, failing at its assertion
+
+#2044.186e93e0  AC1                         base: fails, helpers.mjs:219
+#2044.039601da  AC2                         base: fails, helpers.mjs:219
+#2044.5bc09669  AC3                         base: fails, helpers.mjs:229.   rows-by-count: not run
+#2044.e7ef5233  AC4                         base: fails, helpers.mjs:228
+#2044.57d379a6  AC5                         base: passes.                   mesh-used-twice: not run
+#2044.19a0d966  AC6 save and restore        base: passes.                   restore-unclamped: not run
+#2044.19a0d966  AC6 the alternate screen    base: passes.                   restore-unclamped: not run
+#2044.78e8c53e  AC7                         base: fails, helpers.mjs:148

@@ -1,0 +1,1 @@
+{ "alone": true, "why": "timing: rebuild.test.ts holds a replay on the real clock (1 s a page, a 2 s wait) and judges deep hub start's exit and three commands' reports against it; each test starts a hub of its own, which runs deep-hook from this checkout's target/, on a 47,500-event record, and budget.test.ts runs record-replay-100k" }

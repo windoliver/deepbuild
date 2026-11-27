@@ -78,7 +78,8 @@ const TEST = { 'test/price.test.js': 'one\n' };
 describe('the read of what a claim changed (#1869)', () => {
   it('takes a git diff listing past 64 MB: the edited test file makes its approved check the agent\'s own', async () => {
     // The diff of names lists 75 MB of other paths after the real ones, with or without -z: a very large repo's diff.
-    const stub = 'case " $* " in *" diff "*"--name-only "*) "$GIT" "$@"; yes other/path.txt | head -n 5000000; exit 0 ;; esac';
+    // Under -z, as git does, each path ends in NUL.
+    const stub = 'case " $* " in *" diff "*"--name-only "*) "$GIT" "$@"; case " $* " in *" -z "*) yes other/path.txt | head -n 5000000 | tr \'\\n\' \'\\0\' ;; *) yes other/path.txt | head -n 5000000 ;; esac; exit 0 ;; esac';
     const { v } = await claimed({ base: TEST, head: { 'test/price.test.js': 'two\n' }, read: ['test/price.test.js'], stub });
     expect(v?.outcome, `the claim edited price-approved's test file, yet reads ${JSON.stringify(v)}`).not.toBe('PASS');
     expect(v?.reasons, 'price-approved counts as the agent\'s own for the file it edited, read whole').toContainEqual(expect.stringMatching(/price-approved counts as the agent's own: the claim changed test\/price\.test\.js/));
@@ -87,7 +88,8 @@ describe('the read of what a claim changed (#1869)', () => {
   it('takes an untracked listing past 512 MB, more than one string holds, as the snapshot\'s own untracked read does (1 GB): a claim no check reads passes', async () => {
     // `ls-files --others` lists 600 MB of untracked paths after the real ones; the snapshot lists them with -o, unstubbed.
     const name = `other/${'u'.repeat(244)}.txt`;
-    const stub = `case " $* " in *" ls-files "*"--others "*) "$GIT" "$@"; yes '${name}' | head -n 2400000; exit 0 ;; esac`;
+    // Under -z, as git does, each path ends in NUL.
+    const stub = `case " $* " in *" ls-files "*"--others "*) "$GIT" "$@"; case " $* " in *" -z "*) yes '${name}' | head -n 2400000 | tr '\\n' '\\0' ;; *) yes '${name}' | head -n 2400000 ;; esac; exit 0 ;; esac`;
     const { v } = await claimed({ base: TEST, head: { 'src/a.js': 'x\n' }, read: ['test/price.test.js'], stub });
     expect(v?.outcome, `the claim changed no file a check reads, yet reads ${JSON.stringify(v?.reasons)}`).toBe('PASS');
   }, 120_000);

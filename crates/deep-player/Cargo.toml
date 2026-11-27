@@ -42,6 +42,7 @@ deep-images = { path = "../deep-images" }
 deep-codecs = { path = "../deep-codecs", optional = true }
 deep-gpu = { path = "../deep-gpu", optional = true }
 deep-scene3d-render = { path = "../deep-scene3d-render", optional = true }
+deep-effects-render = { path = "../deep-effects-render", optional = true }
 deep-text = { path = "../deep-text" }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
 sha2 = "0.10"
@@ -55,7 +56,7 @@ sha2 = "0.10"
 default = ["full"]
 figure = []
 game2d = ["figure", "dep:deep-canvas-physics", "dep:deep-physics-rapier", "dep:deep-canvas-sandbox", "dep:deep-logic", "deep-play/logic"]
-full = ["game2d", "dep:deep-gpu", "dep:deep-codecs", "dep:deep-canvas-graph", "dep:deep-canvas-record", "dep:deep-canvas-sheet", "dep:deep-canvas-cells", "dep:deep-canvas-vector", "dep:deep-canvas-scene3d", "dep:deep-canvas-effects", "dep:deep-canvas-loop", "dep:deep-scene3d-render", "deep-play/scene3d", "deep-play/cells", "deep-play/vector", "dep:deep-net", "dep:deep-relay", "deep-play/net"]
+full = ["game2d", "dep:deep-gpu", "dep:deep-codecs", "dep:deep-canvas-graph", "dep:deep-canvas-record", "dep:deep-canvas-sheet", "dep:deep-canvas-cells", "dep:deep-canvas-vector", "dep:deep-canvas-scene3d", "dep:deep-canvas-effects", "dep:deep-canvas-loop", "dep:deep-scene3d-render", "dep:deep-effects-render", "deep-play/scene3d", "deep-play/cells", "deep-play/vector", "dep:deep-net", "dep:deep-relay", "deep-play/net"]
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "=0.3.106"

@@ -484,6 +484,9 @@ pub enum Planted {
     DeviationOneWay,
     /// #427: normals draws each vertex's line along a face normal of a face using it.
     NormalsFromFaces,
+    /// #3507: the overdraw mode's count of what the geometry pass shades leaves the depth test
+    /// out.
+    ShadedCountSkipsDepthTest,
     /// #854, on #1551's shown window: the frame clock arms a frame each vsync once settled.
     ArmsEachVsync,
     /// #1551: the window's display link keeps running while it is still.
@@ -1185,6 +1188,7 @@ impl<'a> Hub<'a> {
                 crate::scene3d::Gpu3::open(
                     &self.startup.sealed,
                     self.scenario.module_planted.clone(),
+                    self.scenario.planted == Some(Planted::ShadedCountSkipsDepthTest),
                 )
             })
             .as_mut()
@@ -1550,6 +1554,7 @@ impl<'a> Hub<'a> {
                 "checks": self.sandbox.checks, "links": self.sandbox.links,
                 "rewrites": self.sandbox.rewrites, "runs": self.sandbox.runs,
             }),
+            Call::PieceChecks => json!({"piece_checks": deep_logic::piece::piece_checks()}),
             Call::Validate { layout, path } => {
                 self.sandbox.validate(&self.startup.sealed, layout, path)
             }

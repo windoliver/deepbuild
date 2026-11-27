@@ -16,26 +16,31 @@ export async function changesOf(cwd: string, base: string, ms: number): Promise<
   // In C's locale: a missing base file is known by git's English words.
   const env = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_'))), LC_ALL: 'C' };
   const unread: string[] = [];
-  // A read that fails is recorded unless `missing` allows it (a file the base never had); either way it lists nothing.
-  const git = (args: string[], missing = false): Promise<string[]> => new Promise((done) => {
+  // A read that fails is recorded unless `missing` allows it (a file the base never had); either way it gives nothing.
+  const git = (args: string[], missing = false): Promise<Buffer> => new Promise((done) => {
     const left = Math.max(1, Math.ceil(deadline - Date.now()));
-    // Kept as bytes, split by line: up to 1 GB is more than one string holds.
     execFile('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', ...args], { cwd, env, encoding: 'buffer', maxBuffer: 1 << 30, timeout: left, killSignal: 'SIGKILL' }, (error, out, err) => {
       if (error && !(missing && !error.killed && /does not exist in|exists on disk, but not in/.test(String(err)))) {
         const why = (error as { code?: unknown }).code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' ? 'gave more than 1 GB' : error.killed ? `timed out, past the read's ${Math.ceil(ms)} ms deadline` : `failed: ${String(err).trim().split('\n')[0] || error.message}`;
         unread.push(`git ${args.join(' ')} ${why}`);
       }
-      const lines: string[] = [];
-      for (let at = 0; !error && at < out.length;) {
-        const end = out.indexOf(10, at);
-        const line = out.toString('utf8', at, end < 0 ? out.length : end);
-        if (line) lines.push(line);
-        at = end < 0 ? out.length : end + 1;
-      }
-      done(lines);
+      done(error ? Buffer.alloc(0) : out);
     });
   });
-  const [diff, others, tracked] = await Promise.all([git(['diff', '--name-only', '--no-renames', base]), git(['ls-files', '--others', '--exclude-standard']), git(['ls-files'])]);
+  // Paths as git stores them (#3114): with -z, never quoted and escaped by core.quotePath, so they match a run's reads.
+  // Kept as bytes and cut at each NUL (#1869): up to 1 GB is more than one string holds.
+  const paths = async (args: string[]): Promise<string[]> => {
+    const out = await git(args);
+    const listed: string[] = [];
+    for (let at = 0; at < out.length;) {
+      const end = out.indexOf(0, at);
+      const path = out.toString('utf8', at, end < 0 ? out.length : end);
+      if (path) listed.push(path);
+      at = end < 0 ? out.length : end + 1;
+    }
+    return listed;
+  };
+  const [diff, others, tracked] = await Promise.all([paths(['diff', '-z', '--name-only', '--no-renames', base]), paths(['ls-files', '-z', '--others', '--exclude-standard']), paths(['ls-files', '-z'])]);
   const configs = new Map<string, string>();
   for (const path of new Set([...tracked, ...others].filter(runnerConfig))) {
     const text = await readFile(join(cwd, path), 'utf8').catch(() => undefined);
@@ -43,6 +48,6 @@ export async function changesOf(cwd: string, base: string, ms: number): Promise<
   }
   // Whether package.json's scripts changed: the script a check runs is its own.
   const scriptsOf = (text: string | undefined): string => { try { return JSON.stringify((JSON.parse(text ?? '{}') as { scripts?: unknown }).scripts ?? null); } catch { return 'unreadable'; } };
-  const scripts = diff.includes('package.json') && scriptsOf((await git(['show', `${base}:package.json`], true)).join('\n')) !== scriptsOf(await readFile(join(cwd, 'package.json'), 'utf8').catch(() => undefined));
+  const scripts = diff.includes('package.json') && scriptsOf((await git(['show', `${base}:package.json`], true)).toString('utf8')) !== scriptsOf(await readFile(join(cwd, 'package.json'), 'utf8').catch(() => undefined));
   return { changed: [...new Set([...diff, ...others])].sort(), configs, scripts, ...(unread.length ? { unread: unread.join('; ') } : {}) };
 }

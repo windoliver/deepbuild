@@ -7,6 +7,7 @@
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::{Duration, Instant};
 
 /// The order a test pool hands finished encodes back in.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -102,7 +103,49 @@ impl Pool {
         queue: &crate::counted::Queue,
         jobs: Vec<Job>,
     ) -> Vec<Encode> {
+        self.run_timed(device, queue, jobs).0
+    }
+
+    /// Encodes every job and submits the buffers, returning each layer's order and the wall times
+    /// spent encoding on the pool vs submitting to the queue.
+    pub fn run_timed(
+        &self,
+        device: &crate::counted::Wgpu,
+        queue: &crate::counted::Queue,
+        mut jobs: Vec<Job>,
+    ) -> (Vec<Encode>, Duration, Duration) {
+        let start = Instant::now();
         let n = jobs.len();
+        if n == 0 {
+            let encoded = Instant::now();
+            return (
+                Vec::new(),
+                encoded.saturating_duration_since(start),
+                Duration::ZERO,
+            );
+        }
+        // One layer has nothing to parallelize across workers: encode directly on the render
+        // thread to avoid channel allocation and worker wake-up latency (#3617).
+        if n == 1 {
+            let job = jobs.pop().expect("one job");
+            let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("deep-gpu layer"),
+            });
+            job(&mut encoder);
+            let buffer = encoder.finish();
+            let encoded = Instant::now();
+            queue.submit([buffer]);
+            let submitted = Instant::now();
+            return (
+                vec![Encode {
+                    layer: 0,
+                    completed: 0,
+                    submitted: 0,
+                }],
+                encoded.saturating_duration_since(start),
+                submitted.saturating_duration_since(encoded),
+            );
+        }
         let (done, arrived) = mpsc::channel();
         let tasks = self.tasks.as_ref().expect("pool is open");
         for (index, job) in jobs.into_iter().enumerate() {
@@ -132,19 +175,31 @@ impl Pool {
             report[*i].completed = rank;
         }
         if self.submits_on_completion {
+            let encoded = Instant::now();
             for (rank, (i, buffer)) in finished.into_iter().enumerate() {
                 report[i].submitted = rank;
                 queue.submit([buffer]);
             }
-            return report;
+            let submitted = Instant::now();
+            return (
+                report,
+                encoded.saturating_duration_since(start),
+                submitted.saturating_duration_since(encoded),
+            );
         }
         let mut slots: Vec<Option<wgpu::CommandBuffer>> = (0..n).map(|_| None).collect();
         for (i, buffer) in finished {
             report[i].submitted = i;
             slots[i] = Some(buffer);
         }
+        let encoded = Instant::now();
         queue.submit(slots.into_iter().map(|b| b.expect("every job finished")));
-        report
+        let submitted = Instant::now();
+        (
+            report,
+            encoded.saturating_duration_since(start),
+            submitted.saturating_duration_since(encoded),
+        )
     }
 }
 
