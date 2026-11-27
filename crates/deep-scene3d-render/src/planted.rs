@@ -159,4 +159,7 @@ pub struct Planted {
     pub frees_by_last_turn: bool,
     /// #3016: the estimate counts the scene's maps once for each view that draws them.
     pub estimate_maps_per_view: bool,
+    /// #3507: the overdraw view's count of what the geometry pass shades leaves the depth test
+    /// out.
+    pub shaded_count_skips_depth_test: bool,
 }

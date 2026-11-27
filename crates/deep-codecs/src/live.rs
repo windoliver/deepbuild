@@ -5,7 +5,7 @@ use std::io::{Read, Write};
 
 #[cfg(target_os = "macos")]
 use crate::apple;
-use crate::{mp4, track_color, turn, Planted};
+use crate::{backed, mp4, track_color, turn, Planted};
 
 /// The live decode worker's header magic (#499).
 pub const LIVE_MAGIC: &[u8; 4] = b"DVL1";
@@ -51,7 +51,14 @@ pub fn serve_live(args: &[String]) -> i32 {
     let Ok(data) = std::fs::read(&path) else {
         return 1;
     };
-    let Some(m) = mp4::parse(&data) else { return 1 };
+    let m = match mp4::parse(&data).map(backed) {
+        Some(Ok(m)) => m,
+        Some(Err(refusal)) => {
+            eprintln!("decode worker: {refusal}");
+            return 1;
+        }
+        None => return 1,
+    };
     let Some(t) = m.tracks.iter().find(|t| t.kind == mp4::Kind::Video) else {
         return 1;
     };

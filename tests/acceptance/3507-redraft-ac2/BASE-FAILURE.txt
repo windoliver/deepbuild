@@ -1,0 +1,119 @@
+# #3507's second criterion as reworded (#3507.056af128): the redraft's test at the base
+
+Base: 5a81b58de3991a17df22dc966914c8f1e7eb9ffd (origin/main when the first suite was written; its last merge is
+#3353), with what #3031 lands laid over it, uncommitted, and the first suite, tests/acceptance/3507/, beside this
+folder, untracked, as that job left it.
+Host: this job's Mac (Mac17,10, Apple M5 Max, macOS), shared with many other sessions.
+Binary: target/debug/deep-show, sha256 54427d898928fce0da20ba24a27d25744468c44193bcdcfd6a411cbb649571a7, built
+November 26 at 18:12 EST, before this job began (debug; this job's brief gives CARGO_INCREMENTAL=0
+CARGO_PROFILE_DEV_DEBUG=0 for it; cargo 1.99.1, Node 24.22.0). This job built nothing: the file's own `cargo build
+--locked --bin deep-show` found it fresh, and the run's process tree was watched for a rustc of a `deep_*` crate,
+which never started.
+Run November 26, 2026, through the machine's throttle, with no DEEP_BIN_DIR:
+
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node scripts/throttle.mjs test --wait 90 -- node --test tests/acceptance/3507-redraft-ac2/ac2-classes.test.mjs
+
+## Summary
+
+| Test | Criterion | At the base |
+|---|---|---|
+| ac2-classes.test.mjs | #3507.056af128 | FAIL at its assertion, at frame 0 of core_view: the overdraw view gives no count of what the geometry pass shades |
+
+It fails for the reason the criterion names, at its own assertion, not at load. The other 1,800 frames and the report
+aren't reached: the first class's first frame is read before the rest.
+
+## The run
+
+It was asked for twice. The first request (asked 19:51:31 EST, granted 20:05:09, 2 s) took no lease: another
+session's live process held ~/.cache/deepbuild-gpu/lease, so the test ended BLOCKED by a plain error and drew
+nothing, which is the first suite's driver's answer to a held lease, never a pass:
+
+  ✖ AC2 #3507.056af128 on each class's fixture, where no bar hides another, the count is from 1 to 2 a covered pixel
+    in every one of the 300 frames, and the report gives each fixture's count (2226 ms)
+    Error: BLOCKED: the count draws under the machine's GPU lease (~/.cache/deepbuild-gpu/lease), and process 45178
+      holds it; nothing was drawn
+        at gpuLease (tests/acceptance/3507/drive.mjs:149:24)
+        at underLease (tests/acceptance/3507/drive.mjs:155:17)
+        at TestContext.<anonymous> (tests/acceptance/3507-redraft-ac2/ac2-classes.test.mjs:32:35)
+
+So it was run once more a few minutes later, the same command, the same files (asked 20:08:50 EST, granted at once;
+5 s; one-minute load 10.6 at the start, 10.5 at the end; exit 1). That is the run at the base:
+
+  ✖ AC2 #3507.056af128 on each class's fixture, where no bar hides another, the count is from 1 to 2 a covered pixel
+    in every one of the 300 frames, and the report gives each fixture's count (5107 ms)
+  ℹ tests 1
+  ℹ pass 0
+  ℹ fail 1
+    AssertionError [ERR_ASSERTION]: AC2 #3507.056af128: 1 finding:
+      FAIL: core_view, frame 0: the overdraw view gives no count of what the geometry pass shades: its frame row is
+        {"id":"frame","what":"overdraw","max":2}, with no whole numbers "shaded" (fragments) and "covered" (pixels)
+        beside "max"
+        at settle (tests/acceptance/3507/drive.mjs:42:10)
+        at tests/acceptance/3507-redraft-ac2/ac2-classes.test.mjs:34:5
+        at async underLease (tests/acceptance/3507/drive.mjs:157:20)
+        at async TestContext.<anonymous> (tests/acceptance/3507-redraft-ac2/ac2-classes.test.mjs:32:29)
+
+The fixture was presented and drawn in the overdraw mode, whose own count is 2 on it; the row has no count beside it.
+The run took the lease file and let it go: read after the probe below, the file was gone.
+
+## What was checked before the run, with nothing drawn
+
+Scratch scripts, not kept here; the test file and its judges did not change after them.
+
+- `node --check` on both modules.
+- The two judges on good and wrong inputs, each reply read through the first suite's `readingOf` (58 checks).
+  `rangeProblems` passes 1 a covered pixel in every frame, 2 in every frame, about 1.31, and the two ends with one
+  fragment inside each. It fails: the base's row, on no count, in every frame; one frame one fragment over 2, and one
+  frame one fragment under 1, each naming the class and the frame; fragments at 4 samples over pixels at one; the
+  two fields the wrong way round; 3 a covered pixel; a frame that covers nothing. A frame not counted, 299 frames, no
+  GPU and a frame the mode didn't draw are BLOCKED; a frame where a bar hides another, or where none is whole in
+  view, is INCONCLUSIVE whatever its count. `reportProblems` passes six lines with this run's counts to three and to
+  five decimals, with a bullet, a table's bars or words around them, with `before` lines and other fixtures' lines
+  beside them. It fails: no report; the first suite's two lines alone; one class left out; a count a covered pixel,
+  or a pixel, one in the third decimal off; numbers cut short instead of rounded; a report that says 1.000 of a view
+  that counts 1.31; two classes' counts under each other's names; a count over 299 frames. Two lines for one class,
+  two decimals and a range in place of the count are INVALID; a line for a fixture the run has no whole count of is
+  BLOCKED. `settle` ends a FAIL among the findings at an assertion and any other state with a plain error.
+- The test file run whole, with `node --test`, against a stand-in for `deep-show run` that answers a scenario with
+  made-up rows (30 checks). The file reads the report at a fixed path in its own checkout, which this job may not
+  write, so the run was in a copy of the few files it reads (the two suites' modules, the six fixtures, the look, a
+  link to scripts/, a made-up report), with DEEP_BIN_DIR naming the stand-in, the home folder moved so the machine's
+  lease file was never touched, and no cargo. It shows the file's own plumbing and nothing of the program:
+  - on a count between the ends and a report that gives it, the test passes, having asked for 1 + 1,800 frames in
+    thirteen runs: each class's 300, each once, at its own size, under a look named by asset;
+  - 1.000 in every frame passes, and so does 2.000 in every frame (README: a count with no depth test is inside
+    the criterion's words here);
+  - on the base's row it fails at once at its assertion, after one frame;
+  - one frame a fragment over 2, or under 1, fails naming the class and the frame; fragments at 4 samples fail every
+    frame, four lines a class, with the report's six mismatches after them; a frame where a bar hides another is
+    INCONCLUSIVE by a plain error;
+  - with no report, every frame is counted and the test then fails on the report not being there; a report with the
+    first suite's two lines alone, with one class left out, with another view's counts or with one number one in the
+    third decimal off fails naming the class; two decimals are INVALID by a plain error;
+  - every run let its lease go and left no temporary folder.
+
+## What a probe showed at the base
+
+One scratch script, not kept here, that drives the base's `deep-show` by its path through the first suite's driver, as the
+test does, under the GPU lease's file: every one of the 300 frames of each of the six class fixtures, two runs side
+by side a class. It asked for the lease for up to four minutes, which the test never does.
+
+- The base's row is `{"id":"frame","what":"overdraw","max":2}` in all 1,800 frames: `max` is 2 in every frame of
+  every class, so the test's reading of "where no bar hides another" holds in every frame at the base, and no frame
+  would read INCONCLUSIVE there for it. Every frame reads as the first suite's "no count" finding.
+- The 1,800 frames took 33 s at a one-minute load of 9 (core_view 2.3 s, data_view 3.1, figure 3.3, work_product 5.2,
+  showpiece 9.9, export 8.8), and 75 s at a load of 33 to 38.
+
+The probe was run twice and read the same both times. The second time, after the runs above, it drove the binary
+they drove, by its hash. The first time, at 19:49 EST, it will have driven another build of the base's `deep-show`:
+when this job began, target/debug/deep-show was a second build from the same sources that another process had made
+in this checkout at 19:23 EST (its fingerprint names the feature `full` without `default`; sha256
+409f9616a7bce4d26cfae6604b9a2aecfc9fdbfc4d95312fa9a763c2624ecced, read at 19:40, not at the probe). By 20:08 the
+18:12 build was back at that path with nothing compiled: the first run's own `cargo build --locked --bin deep-show`
+will have put it there.
+
+## Not shown at the base, where nothing can show it
+
+Any count, so nothing here says what the count reads on a class's fixture, or that it lies from 1 to 2; the test
+past its first frame against the program; and the report, which the base doesn't have. `scripts/repo-rules.mjs`'s
+word on this folder is in the job's report.

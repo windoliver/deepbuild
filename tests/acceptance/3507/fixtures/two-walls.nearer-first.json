@@ -1,0 +1,100 @@
+{
+  "format": 1,
+  "profile": "scene",
+  "title": "Walls, the nearer drawn before the farther",
+  "description": "Walls that face the camera, the farther wholly behind the nearer, of the same material. The nearer wall comes earlier in the order of the layer, so the geometry pass draws it before the other.",
+  "size": [
+    320,
+    240
+  ],
+  "camera": "cam",
+  "requires": {
+    "modules": {
+      "scene3d": "^1"
+    }
+  },
+  "budget": {
+    "class": "work_product"
+  },
+  "items": {
+    "cam": {
+      "id": "cam",
+      "kind": "camera@1",
+      "name": "Camera",
+      "order": "a0",
+      "params": {
+        "projection": "orthographic",
+        "position": [
+          0,
+          0,
+          20
+        ],
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "view_width": 8,
+        "near": 0.1,
+        "far": 100
+      }
+    },
+    "wall_mat": {
+      "id": "wall_mat",
+      "kind": "material@1",
+      "name": "Wall material",
+      "order": "a1",
+      "params": {
+        "base_color": [
+          0.6,
+          0.6,
+          0.6,
+          1
+        ],
+        "unlit": true
+      }
+    },
+    "near": {
+      "id": "near",
+      "kind": "mark.box@1",
+      "name": "Nearer wall",
+      "order": "b0",
+      "params": {
+        "size": [
+          4,
+          3,
+          0.2
+        ]
+      },
+      "at": {
+        "pos": [
+          0,
+          0,
+          1
+        ]
+      },
+      "material": "wall_mat"
+    },
+    "far": {
+      "id": "far",
+      "kind": "mark.box@1",
+      "name": "Farther wall",
+      "order": "b1",
+      "params": {
+        "size": [
+          4,
+          3,
+          0.2
+        ]
+      },
+      "at": {
+        "pos": [
+          0,
+          0,
+          -1
+        ]
+      },
+      "material": "wall_mat"
+    }
+  }
+}

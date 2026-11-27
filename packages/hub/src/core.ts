@@ -14,7 +14,7 @@ import { openLedger, type Ledger } from '@deepbuild/budget';
 import { canonicalize, contextBoundFor, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { openEvidenceStore, scrubText, type EvidenceStore } from '@deepbuild/evidence';
 import { openExtensionHost, openTrust, type ExtensionHost, type ProjectTrust, type ReleaseEntry } from '@deepbuild/extension-host';
-import { openRecord, RecordError, type Connection, type EventInput, type Message, type RecordStore } from '@deepbuild/record';
+import { openRecord, RecordError, type Connection, type EventInput, type Message, type RecordStore, type Replaying } from '@deepbuild/record';
 import type { CoreProviders } from './core-providers.js';
 import type { EnvironmentProvider, ComposeResource } from './environment-port.js';
 import { memFree, openCheckouts, type Checkouts, type TaskListFacts } from '@deepbuild/gate';
@@ -370,7 +370,7 @@ export class Core {
    * only where an answer may come back through it (#19: right after install no stop is held for anything else);
    * `acking` hears a session with a message typed mid-turn to acknowledge, so its next tool call's hook is held (#340); `forgot` one the core forgot (#1866).
    */
-  constructor(options: CoreOptions, private readonly emit: (sub: string, event: string, caught?: boolean) => void, private readonly providers: CoreProviders, private readonly asking: (sessions: string[], judged: string[], resend: string[], cantRun: string[]) => void = () => undefined, private readonly acking: (session: string) => void = () => undefined, private readonly scrubbing: (values: string[]) => void = () => undefined, private readonly forgot: (session: string) => void = () => undefined) {
+  constructor(options: CoreOptions, private readonly emit: (sub: string, event: string, caught?: boolean) => void, private readonly providers: CoreProviders, private readonly asking: (sessions: string[], judged: string[], resend: string[], cantRun: string[]) => void = () => undefined, private readonly acking: (session: string) => void = () => undefined, private readonly scrubbing: (values: string[]) => void = () => undefined, private readonly forgot: (session: string) => void = () => undefined, private readonly replayTold?: (at?: Replaying) => void) {
     this.options = { ...options, forge: options.forge ?? 'https://api.github.com' };
     this.wireHookServices();
     this.wireWorkServices();
@@ -555,7 +555,7 @@ export class Core {
       older: (sync) => this.olderSet(sync),
     });
     this.box = new Box({
-      root: this.root.dir, plant: options.plant, now: this.now,
+      root: this.root.dir, plant: options.plant, now: this.now, approved: async (folder, change, ask) => { await this.ready; await this.judging.approveSpec(folder, change, ask); },
       raise: async (source, ask, plan) => { await this.ready; return this.asks.raise(this.connection('core'), source, ask, plan as never); },
       folders: async () => { await this.ready; return [...new Set([...[...this.state.sessions.values()].map((s) => s.cwd), ...(await repoFolders(this.record, this.store, this.providers.knowledge.cwdOf)).values()])]; },
       lessons: async () => { await this.ready; return (await this.memory.lessons()).map((l) => ({ id: l.id, text: l.text })); },
@@ -653,7 +653,7 @@ export class Core {
     // Each event its own commit, but the core's own made in one turn, an answer and the decision it saves, share one
     // (#22): the durable write points a run makes depend only on the events it appends, so a cut at any one can be replayed.
     // Each read counted against the call it runs for, where one counts its queries (#1576).
-    this.record = counted(receipting(await openRecord({ path: this.root.ledger, now: this.now, evidence: this.store, commitEach: true, ...(storage ? { storage } : {}), ...(this.options.plant === 'turn-closes-at-child-stop' ? { plant: this.options.plant } : {}) })));
+    this.record = counted(receipting(await openRecord({ path: this.root.ledger, now: this.now, evidence: this.store, commitEach: true, ...(storage ? { storage } : {}), ...(this.options.plant === 'turn-closes-at-child-stop' ? { plant: this.options.plant } : {}), ...(this.replayTold ? { replaying: this.replayTold } : {}) })));
     if (process.env.DEEP_HUB_TEST_CRASH) this.record = crashing(this.record, process.env.DEEP_HUB_TEST_CRASH);
     if (process.env.DEEP_HUB_TEST_READS) this.record = readsLogged(this.record, process.env.DEEP_HUB_TEST_READS);
     // Every append reaches the stream, whoever appends it: the hub, the asks core, the supervisor or the leases.
@@ -1240,7 +1240,7 @@ export class Core {
   }
   /** A session.reading for the session, appended as the core. */
   private appendReading(session: string, agent: string, reading: string, hook?: string, code: ReadingCode = 'other'): Promise<void> {
-    return this.appendCore('session.reading', { reading, code }, { v: 2, ...(hook && /^[0-9A-HJKMNP-TV-Z]{26}$/.test(hook) ? { id: hook } : {}) }, { session, agent });
+    return this.appendCore('session.reading', { reading, code }, { v: 3, ...(hook && /^[0-9A-HJKMNP-TV-Z]{26}$/.test(hook) ? { id: hook } : {}) }, { session, agent });
   }
 
   // ---- Hooks.
