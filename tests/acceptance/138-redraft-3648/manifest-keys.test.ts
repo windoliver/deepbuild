@@ -1,11 +1,3 @@
-// #138.230a6b92, blind redraft (issue #3648) of manifest.test.ts's "each fixture holds a document and a sidecar of
-// known keys, ..." test. Same surfaces: the `manifest` and `kit` calls and the `test-kit-formula` build
-// (../138/README.md). What changed: a check's keys are no longer closed at the nine common Check input fields.
-// The design gives every check kind fields of its own beside them (canvas-primitives.md, "Check input" and every
-// "Check input: ..." section), so a key belongs to a check when it is a common field or a field of the check's
-// own kind: the core's kinds are held to the fields the design lists for them, and any other kind's own field
-// must run, in the kit, as that kind's input without failing (an unknown field is refused, technical-design.md,
-// "Generated edges and exact issues"). See DISPUTE.md.
 import { describe, expect, it } from 'vitest';
 import {
   MANIFEST, arr, isObject, kit, obj, run, scenario, show, str, strs, useBuilds, useEvidence,
@@ -17,30 +9,22 @@ const FORMULA: Build = { set: 'full', with: ['test-kit-formula'] };
 const builds = useBuilds([FULL, FORMULA]);
 const evidence = useEvidence();
 
-/** The sidecar's keys, and no others (README: Calls added, Sidecar). */
 const SIDECAR_KEYS = ['checks', 'oracles', 'covers', 'codes', 'twin', 'expected_from', 'criteria', 'inputs', 'at_times'];
-/** The one input shape every document check shares (canvas-primitives.md, Check input: Fields). */
 const COMMON = ['kind', 'probe', 'at_times', 'expect', 'tolerance', 'except', 'render', 'sweeps', 'declared_cuts'];
-/** The core's own kinds and the fields the design adds to them (Check input; Check input: loop kinds, Extended kinds). */
 const CORE_KINDS: Record<string, string[]> = {
   'document.validate': ['assets'], 'document.budget': ['lod'], 'document.frame_time': [], 'document.layout': [],
   'document.determinism': [], 'geometry.audit': [], 'film.audit': [], 'film.flicker': [], 'film.layout': [],
   honest_numbers: [], kind_rules: [],
 };
-/** Sidecar-level keys that decide a verdict there; inside a check they'd be a second source no scan reads. */
 const SIDECAR_ONLY = ['oracle', 'oracles', 'covers', 'codes', 'twin', 'expected_from', 'criteria'];
 const RENDER_KEYS = ['seconds', 'pixels', 'theme', 'reduced_motion', 'widths'];
 const TOLERANCE_KEYS = ['within', 'on', 'ceiling', 'window', 'reason'];
 const EXPECTED_FROM = ['analytic', 'upstream', 'issue', 'second_implementation'];
-/** A may-fail mark, as a key or a value: no fixture may be marked may-fail, and only your decision waives one. */
 const MAY_FAIL_KEY = /^(may_?fail|xfail|expected_?failure|allow_?fail(ure)?|known_?failure|skip(ped)?|flaky|waive[dr]?|must_pass)$/i;
 const MAY_FAIL_TEXT = /\bmay[-_ ]?fail\b|\bxfail\b/i;
-/** What a formula or code looks like in a string: operators, calls, blocks, assignments, keywords. */
 const FORMULA_TEXT = /[(){};=^*+]|=>|\b(fn|function|return|let|const|var|lambda)\b/;
-/** Prose fields a reader writes for people; the formula scan skips them. */
 const PROSE = new Set(['reason', 'what', 'description', 'title', 'name']);
 
-/** Every key and every non-prose string in a value, with its path. */
 function walk(value: JsonValue, path: string, keys: [string, string][], texts: [string, string][]): void {
   if (typeof value === 'string') texts.push([path, value]);
   else if (Array.isArray(value)) value.forEach((v, i) => walk(v, `${path}/${i}`, keys, texts));
@@ -57,7 +41,6 @@ function manifestOf(build: Build): JsonObject {
 
 interface Scan { problems: string[]; ownKeys: Map<string, string[]>; modules: Set<string> }
 
-/** Holds every manifest fixture's sidecar to the criterion; `ownKeys` lists, per fixture, keys its checks' own kinds hold. */
 function scan(m: JsonObject): Scan {
   const kinds = new Set(strs(m['check_kinds'], 'manifest.check_kinds'));
   const oracles = new Set(strs(m['oracles'], 'manifest.oracles'));
@@ -112,7 +95,6 @@ describe('#138.230a6b92 every fixture is a document with a sidecar of existing c
     const s = scan(manifestOf(FULL));
     expect(s.problems, show(s.problems, 4000)).toEqual([]);
     if (s.ownKeys.size === 0) return;
-    // A kind's own field belongs only if the kit, running the check as that kind's input, takes it.
     const r = kit(builds.bin(FULL), evidence(), { modules: [...s.modules], parts: ['fixtures'] });
     const cases = r.modules.flatMap((m) => m.parts.filter((p) => p.part === 'fixtures').flatMap((p) => p.cases));
     for (const [name, keys] of s.ownKeys) {

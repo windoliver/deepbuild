@@ -1,28 +1,3 @@
-// #2485.7e5188e4: "An effect over its peak count, one leaving its declared box, one over overdraw 8 and one over its
-// declared GPU time each fail `effects.audit` with its code, the item's ID and a fix as patch ops, and each clean twin
-// passes"
-// #2485.dac550b5: "The counts and bounds give the same results on every machine; overdraw and GPU time hold on one
-// machine and report INCONCLUSIVE on another"
-//
-// Fixtures (helpers.ts, README: Fixtures): four pairs, each a 2 s scene with one particles@1 effect at the origin, the
-// deliverable of its own claim of alpha's whose one requirement is effects.audit with every limit stated (count_peak,
-// bounds, overdraw {max: 8}, gpu_ms), generous but for the one the pair plants a fault against.
-//
-// asserts:
-//   criterion 1, one test per reading: the planted effect's row is FAIL with an error or warning by effects.audit with a
-//   code, naming the effect's ID, its fix patch ops on the document that name the effect; the twin's row is PASS with
-//   nothing raised.
-//   criterion 2, machines are #138's `environment` (A and B) and another machine's verdict is read with #1938's
-//   `against`:
-//   - the peak count and bounds pairs judged on A, then on B against A's verdict: each planted row FAIL on both, its
-//     errors on B exactly A's; each twin raises no error on either and is never FAIL;
-//   - the overdraw and GPU time faults judged on A (FAIL, each with a fingerprint), on A again in a new process against
-//     A's verdict (FAIL, A's codes and items, A's fingerprint), and on B against A's verdict: INCONCLUSIVE, never PASS
-//     or FAIL, under its own fingerprint, which isn't A's, naming A's as well.
-// Wrong programs: the base (effects.audit BLOCKED not_run, reading nothing); an audit that reads one reading's fault
-// as another's or names no item; a fix given as text or ops on another item; a twin flagged (a limit read wrong, the
-// default overdraw not 8, GPU time read against the wrong declaration); counts or bounds read from pixels, or left
-// INCONCLUSIVE on another machine; overdraw or GPU time that hold on any machine, or decide nothing on their own.
 import { describe, it } from 'vitest';
 import {
   MACHINE_A, MACHINE_B, TIMEOUT, brief, claimId, claimOf, countPair, boundsPair, docId, errorsOf, faultsOf, gpuGate, gpuPair, holds,
@@ -35,12 +10,10 @@ const MACHINES = '#2485.dac550b5';
 const bin = useBuild();
 const folder = useFolders();
 
-/** One case: a document and its check input, judged as the deliverable of its own claim. */
 interface Case { name: string; item: string; doc: JsonObject; check: JsonObject }
 const planted = (p: Pair): Case => ({ name: `${p.name} (planted)`, item: p.item, doc: p.planted, check: p.plantedCheck });
 const twin = (p: Pair): Case => ({ name: `${p.name}: its clean twin`, item: p.item, doc: p.twin, check: p.twinCheck });
 
-/** Each case judged in one `deep-show run` on `machine` (against `against[i]` when given): its rows, in order. */
 function judged(cases: readonly Case[], evidence: string, on: string, machine?: { os: string; driver: string }, against?: readonly JsonObject[]): { rows: Row[]; replies: JsonObject[] } {
   const docs = Object.fromEntries(cases.map((c, i) => [docId(i + 1), c.doc]));
   const claims = Object.fromEntries(cases.map((c, i) => [claimId(i + 1), claimOf(docId(i + 1), reqId(i + 1), c.check)]));
@@ -49,7 +22,6 @@ function judged(cases: readonly Case[], evidence: string, on: string, machine?: 
   return { rows: cases.map((c, i) => rowOf(replies[i]!, reqId(i + 1), `${c.name} on ${on}`)), replies };
 }
 
-/** Criterion 1 for one pair: the planted effect caught, the twin passing. */
 function faultAndTwin(p: Pair): void {
   requireMetal(p.name);
   const { rows: [fault, clean] } = judged([planted(p), twin(p)], folder(), 'this machine');

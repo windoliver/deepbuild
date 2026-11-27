@@ -1,7 +1,3 @@
-// Carried over unchanged from the first draft, tests/acceptance/138/manifest.test.ts: its other three
-// #138.230a6b92 tests, with their names, bodies and timeouts as written. The lanes swap tests by file, so they
-// move here beside the redraft (manifest-keys.test.ts). Only the imports the three use are kept
-// (noUnusedLocals), along with the file's build list and its manifest helper.
 import { describe, expect, it } from 'vitest';
 import {
   FIXTURES, MANIFEST, REGISTRY, arr, expectFailure, failuresIn, kit, moduleOf, obj, partIn, run, scenario, str, strs,
