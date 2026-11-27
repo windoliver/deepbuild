@@ -25,7 +25,7 @@ import { mergedWithMain, releaseSpec, switchesOff } from './release.js';
 import { approvedChecks } from './spec-checks.js';
 import { plantedKeeps } from './plant.js';
 import { checksIn, docChecksIn, outsideOf } from './spec-entries.js';
-import { approvedSpec, SPEC, specOnDisk } from './approved-spec.js';
+import { approveChange, approvedSpec, SPEC, specDrift } from './approved-spec.js';
 import { repoOf } from './shared-runs.js';
 import { GateRecord, type GateAsk } from './gate-record.js';
 import { headOf } from './session-facts.js';
@@ -244,7 +244,7 @@ export class StopJudging {
     const question = `${d.task_ref}'s definition locked with ${n} paid check${n === 1 ? '' : 's'}: ${listed}, ${total} in all. Approve a budget of ${total} for ${n === 1 ? 'its run' : `their ${n} runs`} until ${until}?`;
     const key = sha256Hex(canonicalize({ kind: 'budget.issue', task_ref: d.task_ref, budget } as unknown as JsonValue));
     await this.options.services.asks.raise(this.options.events.connection('core', { session: d.session, agent: d.agent }), 'budget.issue', {
-      action: { kind: 'budget.issue', ...budget }, kind: 'authority', question, options: [{ id: 'approve', label: `Approve ${total}`, decision: 'allow' }, { id: 'decline', label: "Don't fund them", decision: 'deny' }],
+      action: { kind: 'budget.issue', ...budget }, kind: 'authority', may_answer: 'trusted_path', question, options: [{ id: 'approve', label: `Approve ${total}`, decision: 'allow' }, { id: 'decline', label: "Don't fund them", decision: 'deny' }],
       recommended: null, deadline: this.options.services.now() + DAY, fallback: 'you', default: 'decline', provisional: false, owner: 'you', key, pinned_to: { kind: 'evidence', ref: key },
     }, { steps: [{ does: `Approve a budget of ${total} for ${d.task_ref}: ${listed}, until ${until}`, changes: [d.task_ref], undo: null, public: false, cost: pricing.total_usd }], diff: key });
   }
@@ -326,8 +326,8 @@ export class StopJudging {
     if (!cwd) return undefined;
     const [row] = (await this.options.services.record.raw(`SELECT base_commit FROM definitions WHERE task_ref = ? LIMIT 1`, [task])) as { base_commit: string | null }[];
     const base = row?.base_commit ?? (await headOf(cwd).catch(() => undefined))?.sha;
-    // The release checks and switches of the revision you approved (#1864): the task's base commit's spec, never the worktree's.
-    const approved = (await approvedSpec(cwd, base ?? '')).spec;
+    // The release checks and switches of the revision you approved (#1864, #3466): the one kept for the repo, or until it has one the task's base commit's spec, never the worktree's.
+    const approved = (await approvedSpec(cwd, base ?? '', this.options.services.record)).spec;
     const spec = releaseSpec(approved);
     const instead = `Say Part of #${issue} instead`;
     if (spec.checks.length) {
@@ -391,7 +391,7 @@ export class StopJudging {
     const agent = this.options.state().live.get(session)?.agent ?? 'claude-code';
     const question = `The change for #${issue} ships behind ${w.name}, which is ${w.state === 'off' ? 'off' : 'unset'} where it's deployed (${deployed}). Does it stay off for now? Then the pull request may say Closes, with a follow-up to turn ${w.name} on.`;
     return this.options.services.asks.raise(this.options.events.connection('core', { session, agent }), 'switch.off', {
-      action: { kind: 'switch.off', repo, name: w.name, deployed, task, issue }, kind: 'exception', question,
+      action: { kind: 'switch.off', repo, name: w.name, deployed, task, issue }, kind: 'exception', may_answer: 'trusted_path', question,
       options: [{ id: 'stay-off', label: `${w.name} stays off: close it with a follow-up to turn it on`, decision: 'none' }, { id: 'not-yet', label: "Keep the pull request at Part of until it's on", decision: 'none' }],
       recommended: 'stay-off', deadline: this.options.services.now() + 2 * DAY, fallback: 'you', default: 'not-yet', provisional: false, owner: 'you',
       key: sha256Hex(canonicalize({ kind: 'switch.off', repo, name: w.name })), pinned_to: await this.options.mcp().pinOf(cwd, question),
@@ -632,7 +632,7 @@ export class StopJudging {
     const named = left.length ? left.map((r) => `${r.id} ("${r.text}")`).join(', ') : 'its open items';
     const question = `The claim on ${task} stalled: ${rule} and no new passing evidence, with ${named} still open, so DeepBuild stopped sending the agent back. Split the issue (what's proven closes now, and the rest moves to a new issue with what each item needs), fund the live runs it needs, or accept what's proven?`;
     const ask = await this.options.services.asks.raise(core, 'claim.stalled', {
-      action: { kind: 'claim.stalled', task }, kind: 'exception', question,
+      action: { kind: 'claim.stalled', task }, kind: 'exception', may_answer: 'trusted_path', question,
       options: [{ id: 'split', label: "Split the issue: what's proven closes now", decision: 'none' }, { id: 'fund', label: 'Fund the live runs it needs', decision: 'none' }, { id: 'accept', label: "Accept what's proven", decision: 'none' }],
       recommended: 'split', deadline: this.options.services.now() + 2 * DAY, fallback: 'you', default: 'split', provisional: false, owner: 'you',
       key: sha256Hex(canonicalize({ kind: 'claim.stalled', task, claim })), pinned_to: await this.options.mcp().pinOf(meta.cwd, question),
@@ -716,7 +716,7 @@ export class StopJudging {
       // A claim the agent stopped on again is told once, and said once.
       if (slowClaims.includes(claim)) return;
       slowClaims.push(claim);
-      await this.options.events.appendReading(meta.session, meta.agent, `This stop isn't held: ${why}. Its verdict comes with your next message.`).catch(() => undefined);
+      await this.options.events.appendReading(meta.session, meta.agent, `This stop isn't held: ${why}. Its verdict comes with your next message.`, undefined, 'stop_not_held').catch(() => undefined);
     };
     // Something already sends the agent on: the turn isn't ending, so no slow check starts.
     const waiting = () => this.options.schedule.queue(() => this.options.delivery().answers.waitingFor(meta.session));
@@ -818,9 +818,9 @@ export class StopJudging {
     live.workedSinceClaim = false;
   }
 
-  /** A claim's state from the record (verdict-chat), with the runs' expected times. */
+  /** A claim's state from the record (verdict-chat), with the runs' expected times and the slow checks whose run is about to start. */
   stateOf(claim: string): Promise<ClaimState | undefined> {
-    return claimState(this.options.services.raw, claim.replace(/^claim:/, ''), this.expected);
+    return claimState(this.options.services.raw, claim.replace(/^claim:/, ''), this.expected, this.options.services.gate.slowStarting(claim));
   }
 
   /**
@@ -890,9 +890,9 @@ export class StopJudging {
     if (!live || !b?.watch) return;
     live.background.delete(id);
     if (live.state === 'working') return;
-    await this.options.schedule.queue(() => this.options.events.appendReading(session, live.agent, `Its monitor ${backgrounded([b.what])} ended: ${why}.`)).catch(() => undefined);
+    await this.options.schedule.queue(() => this.options.events.appendReading(session, live.agent, `Its monitor ${backgrounded([b.what])} ended: ${why}.`, undefined, 'monitor_ended')).catch(() => undefined);
     // Another watch still running keeps the row waiting on it; a wake that began a turn meanwhile is judged at its stop.
-    if (watching(live).length) return void await this.options.schedule.queue(() => this.options.events.appendReading(session, live.agent, waitingOn(watching(live)))).catch(() => undefined);
+    if (watching(live).length) return void await this.options.schedule.queue(() => this.options.events.appendReading(session, live.agent, waitingOn(watching(live)), undefined, 'monitor_waiting')).catch(() => undefined);
     await this.judgeEnded(session);
   }
 
@@ -1045,10 +1045,10 @@ export class StopJudging {
       const message = this.lastMessage.get(r.session) ?? '';
       // What the claim leaves open becomes open items before any verdict is made on it (#323). Read beside the session's
       // log for the validity gate and the project's trust for its spec checks, none of which waits on another (#82).
-      // The spec as you approved it (#1864): the claim's base commit's, never the worktree's; a difference is a proposal.
+      // The spec as you approved it (#1864, #3466): the revision kept for the repo, or until it has one the claim's base commit's, never the worktree's; a difference is a proposal.
       // A session on a host (#999): its spec is read from the commit there, its trust is its agent's there, what the validity gate reads of its folder is brought here, and its checks run there.
-      const host = this.options.state().sessionHosts.get(r.session), remote = host && this.options.services.hosts.sessions, approved = r.joins ? undefined : remote ? await remote.spec(host!, r.cwd, r.base) : await approvedSpec(r.cwd, r.base);
-      if (approved && !host) void this.proposeSpecDrift(r, approved.oid).catch((error: unknown) => process.stderr.write(`deep hub: ${r.claim}'s spec drift was not proposed: ${error instanceof Error ? error.message : String(error)}\n`));
+      const host = this.options.state().sessionHosts.get(r.session), remote = host && this.options.services.hosts.sessions, approved = r.joins ? undefined : remote ? await remote.spec(host!, r.cwd, r.base) : await approvedSpec(r.cwd, r.base, this.options.services.record);
+      if (approved && !host) void this.proposeSpecDrift(r, approved).catch((error: unknown) => process.stderr.write(`deep hub: ${r.claim}'s spec drift was not proposed: ${error instanceof Error ? error.message : String(error)}\n`));
       const spec = approved ? approvedChecks(approved) : [];
       const pr = r.joins ? undefined : await this.prOf(r.session);
       const releaseNames = approved && pr ? releaseSpec(approved.spec).checks : [], hasSpec = spec.length > 0 || releaseNames.length > 0;
@@ -1098,7 +1098,7 @@ export class StopJudging {
         this.watchOnlyClaims.add(r.claim);
         if (!this.toldUntrusted.has(r.session)) {
           this.toldUntrusted.add(r.session);
-          await this.options.events.appendReading(r.session, this.options.state().live.get(r.session)?.agent ?? 'claude-code', `This repo isn't trusted (neither by your answer in the app nor by Claude Code's or Codex's own trust), so its spec checks (${[...new Set([...spec.map((c) => c.check), ...releaseNames])].join(', ')}) never run here and its claims are watch-only: none passes until you trust it.`).catch(() => undefined);
+          await this.options.events.appendReading(r.session, this.options.state().live.get(r.session)?.agent ?? 'claude-code', `This repo isn't trusted (neither by your answer in the app nor by Claude Code's or Codex's own trust), so its spec checks (${[...new Set([...spec.map((c) => c.check), ...releaseNames])].join(', ')}) never run here and its claims are watch-only: none passes until you trust it.`, undefined, 'watch_only').catch(() => undefined);
           await this.options.flags().watchOnly(r.session, this.options.state().live.get(r.session)?.agent ?? 'claude-code', 'checks', true);
         }
       }
@@ -1180,16 +1180,19 @@ export class StopJudging {
     return base ? { cwd, base } : undefined;
   }
 
+  /** A change you approved to a repo's spec, made to the revision you approved and kept by digest (#3466). */
+  approveSpec(folder: string, change: (text: string) => string | undefined, ask: string): Promise<void> {
+    return approveChange(this.options.services.record, this.options.events.connection('core'), () => this.options.services.now(), folder, change, ask);
+  }
+
   /**
    * A spec in the claim's folder that differs from the approved revision, a deleted one included, changes no check:
    * the difference is a proposal naming the file (#1864), as a drafted check's is, once per difference.
    */
-  private async proposeSpecDrift(r: { claim: string; session: string; cwd: string }, was: string | undefined): Promise<void> {
-    // Blob ids of the bytes as they are: no repo filter runs, since a clean filter is a program the repo names, so a
-    // checkout that converts line endings shows as a difference.
-    const is = await specOnDisk(r.cwd);
-    if (was === is) return;
-    const diff = `${SPEC} in ${r.cwd}: approved blob ${was ?? 'none'}, now ${is ?? 'deleted'}`;
+  private async proposeSpecDrift(r: { claim: string; session: string; cwd: string }, approved: Parameters<typeof specDrift>[1]): Promise<void> {
+    const drift = await specDrift(r.cwd, approved);
+    if (!drift) return;
+    const diff = `${SPEC} in ${r.cwd}: approved blob ${drift.was ?? 'none'}, now ${drift.is ?? 'deleted'}`;
     if ((await this.options.services.raw(`SELECT 1 FROM events WHERE kind = 'learn.proposed' AND json_extract(data, '$.diff') = ? LIMIT 1`, [diff])).length) return;
     const at = this.options.services.now();
     const agent = this.options.state().live.get(r.session)?.agent ?? 'claude-code';
@@ -1386,7 +1389,7 @@ export class StopJudging {
     // Only the approved run goes outside: a drafted check's approved bytes, or the command the approved spec gives the
     // check, never a deep_run of the worktree's line or a told command under a name the block lists (#1864).
     const scope = await this.claimScope(r.claim);
-    const approved = scope && !r.host && (await approvedSpec(scope.cwd, scope.base)).spec;
+    const approved = scope && !r.host && (await approvedSpec(scope.cwd, scope.base, this.options.services.record)).spec;
     const outside = approved && (r.approved !== null || checksIn(approved).get(r.check)?.run === r.command) ? outsideOf(approved, r.check) : undefined;
     const build = outside && (() => this.builtOutside(r.cwd, outside.build));
     if (heldOut && build) heldOut.build = build;

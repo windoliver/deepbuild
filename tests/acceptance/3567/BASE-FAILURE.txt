@@ -1,0 +1,248 @@
+# #3567 acceptance tests: the run on the base
+
+## The base (f063c8098, no work on #3567), in its own worktree, on the Mac (Darwin arm64, 18 cores, node v24.22.2)
+
+$ node --test tests/acceptance/3567/*.test.mjs
+(1-minute load 23.04 at its start and 23.23 at its end; stack-trace lines and node's dump of each error object
+dropped; the checkout reads <checkout>, each test's temporary folder <sandbox>, home paths ~)
+
+Seven tests fail, each at an assertion of its own and for the expected reason. With no bound, the six runs of criteria
+1 to 4 were still going 65 s after their starts, waiting for the file that never ends or for a grant that doesn't
+come, and each test stopped its run by the run's own process group. Criterion 6's run ended as today, both files
+passed, and no line names the file that ran 15 minutes by the run's clocks. Criterion 5's four tests pass: the base
+prints the lines they hold. Afterwards no process of a sandbox ran and no sandbox folder was left (ps and ls).
+
+✖ #3567.3092e5a6 on a scratch tree whose one selected file never ends, with the bound at 30 s, the run ends within the bound and 15 s more, reads INCONCLUSIVE naming the file, and leaves no process it started (65474.932292ms)
+✖ #3567.3092e5a6 the bound counts from the run's start, its wait for a grant included: a run that waited 10 s for its test grant before its one file, which never ends, could start still ends within the bound and 15 s more of its start (65467.606292ms)
+✖ #3567.02b8eb33 a FAIL read before the bound is in the summary as FAIL, and the run exits as it does for a FAIL, with 1 (65478.823584ms)
+✖ #3567.f4411929 a run still waiting for its test grant at the bound ends INCONCLUSIVE naming the test class, and holds no request in the throttle's table afterwards (65629.590709ms)
+✖ #3567.f4411929 a run still waiting for the build grant of its binaries at the bound ends INCONCLUSIVE naming the build class, and holds no request in the throttle's table afterwards (65446.715ms)
+✖ #3567.58cd929d a file that ran over 10 minutes by the run's clocks is named on one line with its minutes, and the file beside it that ran under 10 is not (49992.135ms)
+✔ #3567.4cd7e4a4 a one-line change to a hub source file: the run ends inside the bound and prints the lines it prints today, but for times (9121.570667ms)
+✔ #3567.4cd7e4a4 a one-line change to a canvas crate: the run ends inside the bound and prints the lines it prints today, but for times (5014.883334ms)
+✔ #3567.4cd7e4a4 a one-line change to a design doc: the run ends inside the bound and prints the lines it prints today, but for times (4272.507875ms)
+✔ #3567.4cd7e4a4 the hub change again with DEEP_AFFECTED_MIN at 10 minutes: the run ends inside that bound and prints the same lines (4624.323459ms)
+✖ #3567.415647ec a file not yet started at the bound is named as not started, never starts, and no test of it reads PASS (65477.792958ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 4
+ℹ fail 7
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 132076.201667
+
+✖ failing tests:
+
+test at tests/acceptance/3567/bound.test.mjs:30:1
+✖ #3567.3092e5a6 on a scratch tree whose one selected file never ends, with the bound at 30 s, the run ends within the bound and 15 s more, reads INCONCLUSIVE naming the file, and leaves no process it started (65474.932292ms)
+  AssertionError [ERR_ASSERTION]: affected.mjs did not end: with DEEP_AFFECTED_MIN=0.5 (30 s) it was still running 65 s after its start, waiting for tests/fixture-3567-stuck.test.mjs, which never ends
+  affected.mjs: still running 65 s after its start, so the test stopped its process group
+  stdout:
+  parallel node: tests/fixture-3567-stuck.test.mjs
+  SETTLED no list: <sandbox>/user/.deepbuild/main-watch/settled.json is missing, so every suite the change reaches runs
+  
+  stderr:
+  
+  noted processes:
+  {"role":"stuck","pid":40400,"at":1795664891837,"start":"Thu Nov 26 03:48:11 2026"}
+  {"role":"stuck-child","pid":40468,"at":1795664891841,"start":"Thu Nov 26 03:48:11 2026"}
+  throttle table:
+  {"grants":[{"id":"3239084552459b19","class":"test","pid":30079,"start":"Thu Nov 26 03:48:05 2026","nested":false,"window":false,"index":1,"at":1795664885995,"run":true,"used":19769},{"id":"c6b30239a91d9f95","class":"turn","run":"3239084552459b19","pid":30612,"start":"Thu Nov 26 03:48:06 2026","nested":true,"at":1795664891226,"lent":16}],"requests":[],"seq":23}
+  throttle log, turns apart:
+  {"at":"2026-11-26T03:48:05.995Z","event":"granted","class":"test","grant":"top-level","id":"3239084552459b19","pid":30079,"index":1,"load":23.04052734375,"cores":18,"wait":30,"run":true,"readings":null}
+
+test at tests/acceptance/3567/bound.test.mjs:37:1
+✖ #3567.3092e5a6 the bound counts from the run's start, its wait for a grant included: a run that waited 10 s for its test grant before its one file, which never ends, could start still ends within the bound and 15 s more of its start (65467.606292ms)
+  AssertionError [ERR_ASSERTION]: affected.mjs did not end: with DEEP_AFFECTED_MIN=0.5 (30 s) it was still running 65 s after its start, counting the 10 s it waited for its test grant before tests/fixture-3567-stuck.test.mjs, which never ends, could start
+  affected.mjs: still running 65 s after its start, so the test stopped its process group
+  stdout:
+  parallel node: tests/fixture-3567-stuck.test.mjs
+  SETTLED no list: <sandbox>/user/.deepbuild/main-watch/settled.json is missing, so every suite the change reaches runs
+  
+  stderr:
+  
+  noted processes:
+  {"role":"holder","pid":57232,"at":1795664950828}
+  {"role":"stuck","pid":60734,"at":1795664965197,"start":"Thu Nov 26 03:49:25 2026"}
+  {"role":"stuck-child","pid":60736,"at":1795664965202,"start":"Thu Nov 26 03:49:25 2026"}
+  throttle table:
+  {"grants":[{"id":"ecbeb5192c65e332","class":"test","pid":57878,"start":"Thu Nov 26 03:49:14 2026","nested":false,"window":false,"index":1,"at":1795664963062,"run":true,"used":2924},{"id":"a18caee3049cc408","class":"turn","run":"ecbeb5192c65e332","pid":59497,"start":"Thu Nov 26 03:49:23 2026","nested":true,"at":1795664965021,"lent":14}],"requests":[],"seq":24}
+  throttle log, turns apart:
+  {"at":"2026-11-26T03:49:10.800Z","event":"granted","class":"test","grant":"top-level","id":"3d80556dd4f6f20d","pid":57176,"index":1,"load":19.05419921875,"cores":18,"wait":30,"readings":{"memory":0,"load":0,"cores":16}}
+  {"at":"2026-11-26T03:49:23.061Z","event":"released","class":"test","id":"3d80556dd4f6f20d","pid":57176,"reason":"holder gone"}
+  {"at":"2026-11-26T03:49:23.062Z","event":"granted","class":"test","grant":"top-level","id":"ecbeb5192c65e332","pid":57878,"index":1,"load":16.5791015625,"cores":18,"wait":30,"run":true,"readings":{"memory":0,"load":0,"cores":16}}
+
+test at tests/acceptance/3567/fail.test.mjs:13:1
+✖ #3567.02b8eb33 a FAIL read before the bound is in the summary as FAIL, and the run exits as it does for a FAIL, with 1 (65478.823584ms)
+  AssertionError [ERR_ASSERTION]: affected.mjs did not end: with DEEP_AFFECTED_MIN=0.5 (30 s) it was still running 65 s after its start, though the test tests/fixture-3567-fail.test.mjs › it fails before the bound failed 5.0 s after the run's start, before its bound
+  affected.mjs: still running 65 s after its start, so the test stopped its process group
+  stdout:
+  parallel node: tests/fixture-3567-fail.test.mjs
+  alone node: tests/acceptance/900003567/stuck.test.mjs
+  SETTLED no list: <sandbox>/user/.deepbuild/main-watch/settled.json is missing, so every suite the change reaches runs
+  
+  stderr:
+  
+  noted processes:
+  {"role":"failing","pid":37656,"at":1795664890409,"start":"Thu Nov 26 03:48:10 2026"}
+  {"role":"stuck","pid":40660,"at":1795664892090,"start":"Thu Nov 26 03:48:12 2026"}
+  {"role":"stuck-child","pid":40672,"at":1795664892093,"start":"Thu Nov 26 03:48:12 2026"}
+  throttle table:
+  {"grants":[{"id":"378ee6e95a534977","class":"test","pid":30076,"start":"Thu Nov 26 03:48:05 2026","nested":false,"window":false,"index":1,"at":1795664885988,"run":true,"used":18312},{"id":"8061f4e0ad6363dd","class":"turn","run":"378ee6e95a534977","pid":40488,"start":"Thu Nov 26 03:48:11 2026","nested":true,"at":1795664891926,"lent":16}],"requests":[],"seq":24}
+  throttle log, turns apart:
+  {"at":"2026-11-26T03:48:05.988Z","event":"granted","class":"test","grant":"top-level","id":"378ee6e95a534977","pid":30076,"index":1,"load":23.04052734375,"cores":18,"wait":30,"run":true,"readings":null}
+
+test at tests/acceptance/3567/grant.test.mjs:42:1
+✖ #3567.f4411929 a run still waiting for its test grant at the bound ends INCONCLUSIVE naming the test class, and holds no request in the throttle's table afterwards (65629.590709ms)
+  AssertionError [ERR_ASSERTION]: affected.mjs did not end: with DEEP_AFFECTED_MIN=0.5 (30 s) it was still running 65 s after its start, waiting for its test grant, the first it asks for
+  affected.mjs: still running 65 s after its start, so the test stopped its process group
+  stdout:
+  parallel node: tests/fixture-3567-waits.test.mjs
+  SETTLED no list: <sandbox>/user/.deepbuild/main-watch/settled.json is missing, so every suite the change reaches runs
+  
+  stderr:
+  
+  noted processes:
+  {"role":"holder","pid":29945,"at":1795664885535}
+  throttle table:
+  {"grants":[{"id":"d254172c3c621838","class":"test","pid":29905,"start":"Thu Nov 26 03:48:05 2026","nested":false,"window":false,"index":1,"at":1795664885503}],"requests":[{"id":"5d48e11468ba8916","class":"test","pid":30247,"start":"Thu Nov 26 03:48:06 2026","nested":false,"window":false,"limit":2,"seq":2,"run":true,"disk":0}],"seq":2}
+  throttle log, turns apart:
+  {"at":"2026-11-26T03:48:05.503Z","event":"granted","class":"test","grant":"top-level","id":"d254172c3c621838","pid":29905,"index":1,"load":23.04052734375,"cores":18,"wait":30,"readings":{"memory":0,"load":0,"cores":4}}
+
+test at tests/acceptance/3567/grant.test.mjs:54:1
+✖ #3567.f4411929 a run still waiting for the build grant of its binaries at the bound ends INCONCLUSIVE naming the build class, and holds no request in the throttle's table afterwards (65446.715ms)
+  AssertionError [ERR_ASSERTION]: affected.mjs did not end: with DEEP_AFFECTED_MIN=0.5 (30 s) it was still running 65 s after its start, waiting for its build grant, the first it asks for
+  affected.mjs: still running 65 s after its start, so the test stopped its process group
+  stdout:
+  parallel node: tests/fixture-3567-waits.test.mjs
+  SETTLED no list: <sandbox>/user/.deepbuild/main-watch/settled.json is missing, so every suite the change reaches runs
+  
+  stderr:
+  
+  noted processes:
+  {"role":"holder","pid":57299,"at":1795664950985}
+  throttle table:
+  {"grants":[{"id":"e37c4b46e3da6db1","class":"build","pid":57254,"start":"Thu Nov 26 03:49:10 2026","nested":false,"window":false,"index":1,"at":1795664950956}],"requests":[{"id":"73f9bac932e6ed18","class":"build","pid":57255,"start":"Thu Nov 26 03:49:10 2026","nested":false,"window":false,"limit":1,"seq":2},{"id":"bbb07f0074ee3f02","class":"build","pid":57313,"start":"Thu Nov 26 03:49:11 2026","nested":false,"window":false,"limit":1,"seq":3}],"seq":3}
+  throttle log, turns apart:
+  {"at":"2026-11-26T03:49:10.956Z","event":"granted","class":"build","grant":"top-level","id":"e37c4b46e3da6db1","pid":57254,"index":1,"load":19.05419921875,"cores":18,"wait":30}
+
+test at tests/acceptance/3567/slow.test.mjs:16:1
+✖ #3567.58cd929d a file that ran over 10 minutes by the run's clocks is named on one line with its minutes, and the file beside it that ran under 10 is not (49992.135ms)
+  AssertionError [ERR_ASSERTION]: tests/fixture-3567-over.test.mjs ran 15 min by the run's clocks, and 0 lines name it with its minutes (a number over 10 and at most 18), not one
+  
+  affected.mjs: exit 0 49.6 s after its start
+  stdout:
+  parallel node: tests/fixture-3567-over.test.mjs tests/fixture-3567-under.test.mjs
+  SETTLED no list: <sandbox>/user/.deepbuild/main-watch/settled.json is missing, so every suite the change reaches runs
+  TIMED the timed list, from scripts/lanes.mjs (345): …
+  PASS affected: 0 new, 0 already failing on main, 0 inconclusive or blocked, 0 listed skips, 2 passed, in 976 s at load 22; logs in <sandbox>/tmp/deep-affected-i9vZHL
+  
+  stderr:
+  
+  noted processes:
+  
+  throttle table:
+  {"grants":[],"requests":[],"seq":23}
+  throttle log, turns apart:
+  {"at":"2026-11-26T03:48:16.765Z","event":"granted","class":"test","grant":"top-level","id":"91c1fdbdb1305aa3","pid":30078,"index":1,"load":23.04052734375,"cores":18,"wait":30,"run":true,"readings":null}
+  {"at":"2026-11-26T04:04:36.065Z","event":"released","class":"test","id":"91c1fdbdb1305aa3","pid":30205,"run":true}
+  
+  0 !== 1
+  
+
+test at tests/acceptance/3567/unstarted.test.mjs:15:1
+✖ #3567.415647ec a file not yet started at the bound is named as not started, never starts, and no test of it reads PASS (65477.792958ms)
+  AssertionError [ERR_ASSERTION]: affected.mjs did not end: with DEEP_AFFECTED_MIN=0.5 (30 s) it was still running 65 s after its start, with tests/fixture-3567-stuck.test.mjs never ending and tests/acceptance/900003567/unstarted.test.mjs not yet started
+  affected.mjs: still running 65 s after its start, so the test stopped its process group
+  stdout:
+  parallel node: tests/fixture-3567-stuck.test.mjs
+  alone node: tests/acceptance/900003567/unstarted.test.mjs
+  SETTLED no list: <sandbox>/user/.deepbuild/main-watch/settled.json is missing, so every suite the change reaches runs
+  
+  stderr:
+  
+  noted processes:
+  {"role":"stuck","pid":36214,"at":1795664889838,"start":"Thu Nov 26 03:48:09 2026"}
+  {"role":"stuck-child","pid":36383,"at":1795664889843,"start":"Thu Nov 26 03:48:09 2026"}
+  throttle table:
+  {"grants":[{"id":"b71d2d68806985f3","class":"test","pid":30077,"start":"Thu Nov 26 03:48:05 2026","nested":false,"window":false,"index":1,"at":1795664885988,"run":true,"used":20336},{"id":"aa9f52a9d1934e2c","class":"turn","run":"b71d2d68806985f3","pid":30515,"start":"Thu Nov 26 03:48:06 2026","nested":true,"at":1795664889031,"lent":16}],"requests":[],"seq":23}
+  throttle log, turns apart:
+  {"at":"2026-11-26T03:48:05.988Z","event":"granted","class":"test","grant":"top-level","id":"b71d2d68806985f3","pid":30077,"index":1,"load":23.04052734375,"cores":18,"wait":30,"run":true,"readings":null}
+
+## For the record: this folder's copy against a throwaway guess at the change, kept outside the checkout and since deleted
+
+The guess: the base's scripts/ with a bound in affected.mjs (DEEP_AFFECTED_MIN, counted from the first process's
+start; each grant's wait ends at it; at it, jobs not started read INCONCLUSIVE as not started, and each job still
+running is sent SIGTERM and its tree SIGKILLed 8 s later) and each test's duration in the node reporter's rows, a file
+whose tests took over 10 minutes named on one SLOW line. It proves nothing about the real change.
+
+$ node --test <guess>/tests/acceptance/3567/*.test.mjs
+(1-minute, 5-minute and 15-minute load 85.83 43.04 32.64 at its start)
+✔ #3567.3092e5a6 on a scratch tree whose one selected file never ends, with the bound at 30 s, the run ends within the bound and 15 s more, reads INCONCLUSIVE naming the file, and leaves no process it started (39917.356792ms)
+✔ #3567.3092e5a6 the bound counts from the run's start, its wait for a grant included: a run that waited 10 s for its test grant before its one file, which never ends, could start still ends within the bound and 15 s more of its start (40094.81575ms)
+✔ #3567.02b8eb33 a FAIL read before the bound is in the summary as FAIL, and the run exits as it does for a FAIL, with 1 (39690.8165ms)
+✔ #3567.f4411929 a run still waiting for its test grant at the bound ends INCONCLUSIVE naming the test class, and holds no request in the throttle's table afterwards (31472.776083ms)
+✔ #3567.f4411929 a run still waiting for the build grant of its binaries at the bound ends INCONCLUSIVE naming the build class, and holds no request in the throttle's table afterwards (31445.31975ms)
+✔ #3567.58cd929d a file that ran over 10 minutes by the run's clocks is named on one line with its minutes, and the file beside it that ran under 10 is not (55147.337834ms)
+✔ #3567.4cd7e4a4 a one-line change to a hub source file: the run ends inside the bound and prints the lines it prints today, but for times (16530.426417ms)
+✔ #3567.4cd7e4a4 a one-line change to a canvas crate: the run ends inside the bound and prints the lines it prints today, but for times (7626.799208ms)
+✔ #3567.4cd7e4a4 a one-line change to a design doc: the run ends inside the bound and prints the lines it prints today, but for times (6677.899959ms)
+✔ #3567.4cd7e4a4 the hub change again with DEEP_AFFECTED_MIN at 10 minutes: the run ends inside that bound and prints the same lines (8776.409667ms)
+✔ #3567.415647ec a file not yet started at the bound is named as not started, never starts, and no test of it reads PASS (39678.608167ms)
+ℹ tests 11
+ℹ pass 11
+ℹ fail 0
+ℹ duration_ms 80731.548583
+
+The guess with one fault planted, each run of the file named:
+
+waits-for-the-file: at the bound the run stops no job (bound.test.mjs)
+✖ #3567.3092e5a6 on a scratch tree whose one selected file never ends, with the bound at 30 s, the run ends within the bound and 15 s more, reads INCONCLUSIVE naming the file, and leaves no process it started (65677.385042ms)
+    affected.mjs did not end: with DEEP_AFFECTED_MIN=0.5 (30 s) it was still running 65 s after its start, waiting for tests/fixture-3567-stuck.test.mjs, which never ends
+✖ #3567.3092e5a6 the bound counts from the run's start, its wait for a grant included: a run that waited 10 s for its test grant before its one file, which never ends, could start still ends within the bound and 15 s more of its start (65344.460167ms)
+    affected.mjs did not end: with DEEP_AFFECTED_MIN=0.5 (30 s) it was still running 65 s after its start, counting the 10 s it waited for its test grant before tests/fixture-3567-stuck.test.mjs, which never ends, could start
+
+counts-from-its-grant: the bound counts from the test grant (bound.test.mjs)
+✔ #3567.3092e5a6 on a scratch tree whose one selected file never ends, with the bound at 30 s, the run ends within the bound and 15 s more, reads INCONCLUSIVE naming the file, and leaves no process it started (42609.006625ms)
+✖ #3567.3092e5a6 the bound counts from the run's start, its wait for a grant included: a run that waited 10 s for its test grant before its one file, which never ends, could start still ends within the bound and 15 s more of its start (50750.611625ms)
+    affected.mjs ended 50.3 s after its start, not within its 30 s bound and 15 s more (45 s), counting the 10 s it waited for its test grant before tests/fixture-3567-stuck.test.mjs, which never ends, could start
+
+a run that sends its job SIGTERM and never stops the job's tree (bound.test.mjs)
+✖ #3567.3092e5a6 on a scratch tree whose one selected file never ends, with the bound at 30 s, the run ends within the bound and 15 s more, reads INCONCLUSIVE naming the file, and leaves no process it started (37017.933791ms)
+    tests/fixture-3567-stuck.test.mjs's own processes still run after the run ended: the run left processes it started
+✖ #3567.3092e5a6 the bound counts from the run's start, its wait for a grant included: a run that waited 10 s for its test grant before its one file, which never ends, could start still ends within the bound and 15 s more of its start (37230.704416ms)
+    tests/fixture-3567-stuck.test.mjs's own processes still run after the run ended: the run left processes it started
+
+counts-unstarted-as-passed: each file of a job not yet started counts as one passed test (unstarted.test.mjs)
+✖ #3567.415647ec a file not yet started at the bound is named as not started, never starts, and no test of it reads PASS (39435.608875ms)
+    the summary counts 1 passed, though the only tests that could pass are those of tests/acceptance/900003567/unstarted.test.mjs, which never started: the run counts it as passed
+
+inconclusive-alone: a run that reached its bound ends INCONCLUSIVE, whatever failed (fail.test.mjs)
+✖ #3567.02b8eb33 a FAIL read before the bound is in the summary as FAIL, and the run exits as it does for a FAIL, with 1 (39405.109542ms)
+    the run's summary doesn't read FAIL, though the test tests/fixture-3567-fail.test.mjs › it fails before the bound failed 5.8 s after the run's start, before its bound
+
+leaves-its-request: at the bound the run SIGKILLs the throttle that waits for its test grant (grant.test.mjs)
+✖ #3567.f4411929 a run still waiting for its test grant at the bound ends INCONCLUSIVE naming the test class, and holds no request in the throttle's table afterwards (36116.458084ms)
+    the run left its request in the throttle's table after it ended: a test request of pid 54936
+✔ #3567.f4411929 a run still waiting for the build grant of its binaries at the bound ends INCONCLUSIVE naming the build class, and holds no request in the throttle's table afterwards (30856.896708ms)
+
+gives-up-early: the run waits 3 s for its first grant, whatever its bound (grant.test.mjs)
+✖ #3567.f4411929 a run still waiting for its test grant at the bound ends INCONCLUSIVE naming the test class, and holds no request in the throttle's table afterwards (6910.143166ms)
+    the run ended 6.5 s after its start, long before its 30 s bound: it was not still waiting for its test grant at the bound
+✖ #3567.f4411929 a run still waiting for the build grant of its binaries at the bound ends INCONCLUSIVE naming the build class, and holds no request in the throttle's table afterwards (3890.702667ms)
+    the run ended 3.5 s after its start, long before its 30 s bound: it was not still waiting for its build grant at the bound
+
+says-its-bound: every run prints a line naming its bound (today.test.mjs)
+✖ #3567.4cd7e4a4 a one-line change to a hub source file: the run ends inside the bound and prints the lines it prints today, but for times (10527.421833ms)
+    the run on the one-line change to packages/hub/src/core.mjs ended inside its bound, but doesn't print the lines it prints today
+✖ #3567.4cd7e4a4 a one-line change to a canvas crate: the run ends inside the bound and prints the lines it prints today, but for times (4773.909ms)
+    the run on the one-line change to crates/deep-canvas-3567/src/lib.rs ended inside its bound, but doesn't print the lines it prints today
+✖ #3567.4cd7e4a4 a one-line change to a design doc: the run ends inside the bound and prints the lines it prints today, but for times (3980.596875ms)
+    the run on the one-line change to docs/technical-design.md ended inside its bound, but doesn't print the lines it prints today
+✖ #3567.4cd7e4a4 the hub change again with DEEP_AFFECTED_MIN at 10 minutes: the run ends inside that bound and prints the same lines (4370.549292ms)
+    the run on the one-line change to packages/hub/src/core.mjs ended inside its bound, but doesn't print the lines it prints today
+
+names-the-whole-job: every file of a job that took over 10 minutes is named with the job's minutes (slow.test.mjs)
+✖ #3567.58cd929d a file that ran over 10 minutes by the run's clocks is named on one line with its minutes, and the file beside it that ran under 10 is not (51872.277625ms)
+    tests/fixture-3567-under.test.mjs ran under 10 minutes, yet a line names it with minutes

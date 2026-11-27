@@ -6,10 +6,9 @@ import { readFileSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { codeWords } from '@deepbuild/contracts';
 import { billingMode } from '@deepbuild/readings';
+import { MODE_CODES, NOTED, readingCode, type ReadingCode } from './reading-codes.js';
 import { shadowedBy, topLevel } from './claude-settings.js';
 import { call, notAnswered } from './client.js';
-import { CAN_RUN, CANT_RUN } from './hook-programs.js';
-import { MODS_GONE, MODS_WATCH } from './mods.js';
 import { rowReadings } from './codex-loops.js';
 import { numbersLines } from './numbers.js';
 import { hubControl } from './paths.js';
@@ -33,11 +32,10 @@ const QUIET_MS = 24 * 3_600_000;
  * each 30 s while it watches the session. A hub started since reads the same from the record.
  */
 export const WAITING_QUIET_MS = 300_000;
-/** What a session's row says of the MCP servers and skills it loaded (#148): the older set after a sync, until its own evidence shows the current one. */
-export const OLDER_SET = 'Runs the older set:';
 /** A Claude Code session's five-hour window where the repo's own status line shadows the forwarder (#1296). */
 export const UNREAD_WINDOW = '5 h · unknown:';
-export const NEWER_SET = 'Runs the current set:';
+/** What a session's row says of the MCP servers and skills it loaded (#148): the older set after a sync, until its own evidence shows the current one. */
+export { NEWER_SET, OLDER_SET } from './reading-codes.js';
 /** A stop's cause in words, from the one list every view reads (#2029); a cause the list doesn't know reads as unknown's. */
 const causeWords = (cause: string): string => codeWords('stop.cause', cause) ?? codeWords('stop.cause', 'unknown')!;
 /** The most tool calls a finished turn lists; the rest are counted on one line. */
@@ -156,7 +154,7 @@ const TABLE: readonly Rule[] = [
     match: (f) => (f.words ? { why: `your words didn't reach it: their delivery ${f.words.outcome === 'timed_out' ? 'timed out' : 'stalled'}`, since: f.words.at?.ts ?? f.last_seen, waits_on: 'you', facts: [f.words.at] } : undefined) },
   // A session whose hooks can't run sends no hook to say so (#993): stuck, never folded away as quiet.
   { rule: 'hooks', state: 'stuck', cause: 'stuck', lacks: 'its hooks can run',
-    match: (f) => (f.note?.startsWith(CANT_RUN) ? { why: 'BLOCKED: its hooks can\'t run, so its gates are watch-only; run `deep setup`', since: f.last_seen, waits_on: 'you', facts: [f.cantRun] } : undefined) },
+    match: (f) => (f.cantRun ? { why: 'BLOCKED: its hooks can\'t run, so its gates are watch-only; run `deep setup`', since: f.last_seen, waits_on: 'you', facts: [f.cantRun] } : undefined) },
   { rule: 'stuck', state: 'stuck', cause: 'stuck', lacks: 'no stop blocked on you or a service',
     match: (f) => (f.status === 'stuck' ? { why: `blocked on something only you or a service can clear${causeOf(f)}`, since: f.last_seen, waits_on: 'you', facts: [f.statusBy] } : undefined) },
   { rule: 'gone', state: 'flagged', cause: 'gone', lacks: 'no process gone mid-turn',
@@ -361,27 +359,29 @@ export async function sessionFacts(read: Query, only?: ReadonlySet<string>): Pro
   // or a call DeepBuild denied that ran anyway (#1033).
   // Read with the two below in one statement (#2646), each reading with which of the three it is: one walk of the
   // sessions' events, where three statements walked them three times.
-  const said = (await query(`SELECT * FROM (SELECT r.session_id, json_extract(r.data, '$.reading') AS text, r.ts, r.log_pos,
-    (json_extract(r.data, '$.reading') LIKE '%watch-only%' OR json_extract(r.data, '$.reading') LIKE 'DeepBuild denied % and it ran anyway%' OR json_extract(r.data, '$.reading') LIKE 'Its Claude Code home loads no mod%' OR json_extract(r.data, '$.reading') LIKE 'Hooks can run again%' OR json_extract(r.data, '$.reading') LIKE '% ran unleased: %' OR (json_extract(r.data, '$.reading') LIKE 'This stop isn''t held%' AND NOT EXISTS (SELECT 1 FROM events later WHERE later.session_id = r.session_id AND later.log_pos > r.log_pos AND later.kind = 'user.ask' AND json_extract(later.data, '$.from') <> 'subagent'))) AS noted,
-    (json_extract(r.data, '$.reading') LIKE 'Waiting on its monitor%' AND NOT EXISTS (SELECT 1 FROM events later WHERE later.session_id = r.session_id AND later.log_pos > r.log_pos AND (later.kind = 'session.end' OR (later.kind = 'agent.stop' AND json_extract(later.data, '$.child') IS NULL) OR (later.kind = 'session.reading' AND json_extract(later.data, '$.reading') LIKE 'Its monitor%')))) AS watching,
-    (instr(json_extract(r.data, '$.reading'), ': you interrupted this turn') > 0 AND instr(json_extract(r.data, '$.reading'), ': you interrupted this turn') = instr(json_extract(r.data, '$.reading'), ': ') AND NOT EXISTS (SELECT 1 FROM events a WHERE a.session_id = r.session_id AND (a.kind = 'user.ask' OR (a.kind = 'session.activity' AND json_extract(a.data, '$.activity') = 'turn_start')) AND a.log_pos > r.log_pos)) AS interrupted
-    FROM ${events('r')} WHERE r.kind = 'session.reading' AND r.session_id IS NOT NULL${of('r.session_id')}) WHERE noted OR watching OR interrupted ORDER BY log_pos`)) as { session_id: string; text: string; ts: number; log_pos: number; noted: number | null; watching: number | null; interrupted: number | null }[];
-  const noted = said.filter((r) => r.noted);
+  // Each reading is read by its code (#1456), and a reading recorded with none by the one table of earlier words.
+  // Each code is worked out once per reading (MATERIALIZED), not once for each place below that reads it.
+  const said = (await query(`WITH coded AS MATERIALIZED (SELECT r.session_id, json_extract(r.data, '$.reading') AS text, ${readingCode('r')} AS code, r.ts, r.log_pos FROM ${events('r')} WHERE r.kind = 'session.reading' AND r.session_id IS NOT NULL${of('r.session_id')}) SELECT * FROM coded r WHERE
+    (r.code IN (${NOTED.map((c) => `'${c}'`).join(', ')}) AND (r.code <> 'stop_not_held' OR NOT EXISTS (SELECT 1 FROM events later WHERE later.session_id = r.session_id AND later.log_pos > r.log_pos AND later.kind = 'user.ask' AND json_extract(later.data, '$.from') <> 'subagent')))
+    OR (r.code = 'monitor_waiting' AND NOT EXISTS (SELECT 1 FROM events later WHERE later.session_id = r.session_id AND later.log_pos > r.log_pos AND (later.kind = 'session.end' OR (later.kind = 'agent.stop' AND json_extract(later.data, '$.child') IS NULL) OR (later.kind = 'session.reading' AND ${readingCode('later')} = 'monitor_ended'))))
+    OR (r.code = 'interrupted' AND NOT EXISTS (SELECT 1 FROM events a WHERE a.session_id = r.session_id AND (a.kind = 'user.ask' OR (a.kind = 'session.activity' AND json_extract(a.data, '$.activity') = 'turn_start')) AND a.log_pos > r.log_pos))
+    ORDER BY r.log_pos`)) as { session_id: string; text: string; code: ReadingCode; ts: number; log_pos: number }[];
+  const noted = said.filter((r) => NOTED.includes(r.code));
   // Hooks that can run again (#993) take back each "hooks can't run" before them, and show nothing of their own.
-  const notes = new Map<string, { text: string; at: Fact }>();
-  const shown = new Map<string, { text: string; at: Fact }[]>();
+  const notes = new Map<string, { text: string; code: ReadingCode; at: Fact }>();
+  const shown = new Map<string, { text: string; code: ReadingCode; at: Fact }[]>();
   for (const r of noted) {
     const kept = shown.get(r.session_id) ?? [];
     // A home that no longer loads an overriding mod takes back its watch-only line the same way (#1033).
-    shown.set(r.session_id, r.text.startsWith(CAN_RUN) ? kept.filter((t) => !t.text.startsWith(CANT_RUN)) : r.text.startsWith(MODS_GONE) ? kept.filter((t) => !t.text.startsWith(MODS_WATCH)) : [...kept, { text: r.text, at: { kind: 'session.reading', ts: r.ts, log_pos: r.log_pos } }]);
+    shown.set(r.session_id, r.code === 'hooks_run_again' ? kept.filter((t) => t.code !== 'hooks_cant_run') : r.code === 'mods_gone' ? kept.filter((t) => t.code !== 'mods_watch') : [...kept, { text: r.text, code: r.code, at: { kind: 'session.reading', ts: r.ts, log_pos: r.log_pos } }]);
     const last = shown.get(r.session_id)!.at(-1);
     if (last) notes.set(r.session_id, last);
     else notes.delete(r.session_id);
   }
   // A session waiting on its monitor (#997): the newest of its monitor readings says so, with no stop of its own or end since.
-  const watching = new Map(said.filter((r) => r.watching).map((r) => [r.session_id, { text: r.text, at: { kind: 'session.reading', ts: r.ts, log_pos: r.log_pos } }]));
-  // A turn you interrupted, by the reading that follows the hook's name, with no prompt or turn start since (#39, #3430).
-  const interrupted = new Map(said.filter((r) => r.interrupted).map((r) => [r.session_id, { kind: 'session.reading', ts: r.ts, log_pos: r.log_pos }]));
+  const watching = new Map(said.filter((r) => r.code === 'monitor_waiting').map((r) => [r.session_id, { text: r.text, at: { kind: 'session.reading', ts: r.ts, log_pos: r.log_pos } }]));
+  // A turn you interrupted, with no prompt or turn start since (#39, #3430).
+  const interrupted = new Map(said.filter((r) => r.code === 'interrupted').map((r) => [r.session_id, { kind: 'session.reading', ts: r.ts, log_pos: r.log_pos }]));
   // Each session's newest stop of its own: a hook after it, such as Claude Code's idle-prompt notification, is no later
   // stop, and nor is a subagent's.
   // With when the limit that stopped it resets, where the stop names that (#2019).
@@ -416,7 +416,7 @@ export async function sessionFacts(read: Query, only?: ReadonlySet<string>): Pro
       id: s.id, project_id: s.project_id, agent: s.agent, worktree: s.worktree, status: s.status, stopCause: s.cause, last_seen: s.last_seen,
       ...(s.host ? { host: s.host, ...(down.has(s.host) && !['finished', 'failed', 'stuck'].includes(s.status) ? { linkDown: down.get(s.host)! } : {}), ...(skew.has(s.host) ? { skew: skew.get(s.host)! } : {}) } : {}),
       ...(statusBy ? { statusBy } : {}), ...(seenBy ? { seenBy } : {}), ...(asks.has(s.id) ? { asks: asks.get(s.id)! } : {}), ...(gone.has(s.id) ? { gone: gone.get(s.id)! } : {}),
-      ...(words.has(s.id) ? { words: words.get(s.id)! } : {}), ...(note ? { note: note.text, ...(note.text.startsWith(CANT_RUN) ? { cantRun: note.at } : {}) } : {}),
+      ...(words.has(s.id) ? { words: words.get(s.id)! } : {}), ...(note ? { note: note.text, ...(note.code === 'hooks_cant_run' ? { cantRun: note.at } : {}) } : {}),
       ...(due.has(s.id) ? { promised: due.get(s.id)! } : {}), ...(watching.has(s.id) ? { watching: watching.get(s.id)! } : {}), ...(interrupted.has(s.id) ? { interrupted: interrupted.get(s.id)! } : {}),
       ...(stops.has(s.id) ? { stopped: stops.get(s.id)! } : {}), ...(resets.has(s.id) ? { resets: resets.get(s.id)! } : {}), ...(claims.has(s.id) ? { claim: claims.get(s.id)! } : {}), ...(queued.has(s.id) ? { queued: queued.get(s.id)! } : {}),
       ...(flags.doing.has(s.id) ? { doing: flags.doing.get(s.id)! } : {}), ...(flags.retries.has(s.id) ? { retries: flags.retries.get(s.id)! } : {}), ...(flags.calls.has(s.id) ? { calls: flags.calls.get(s.id)! } : {}),
@@ -553,12 +553,16 @@ export async function statusRows(query: (sql: string) => Promise<unknown[]>, now
   const codex = rows.filter((r) => r.agent === 'codex');
   const readings = await rowReadings(query, codex.map((r) => r.id), now, elapsed);
   for (const row of codex) if (readings.has(row.id)) row.readings = readings.get(row.id)!;
-  // The newest older-or-current set reading of each session: an older one stays on its row (#148).
-  const sets = (await query(`SELECT session_id, json_extract(data, '$.reading') AS text FROM events WHERE kind = 'session.reading' AND (json_extract(data, '$.reading') LIKE '${OLDER_SET}%' OR json_extract(data, '$.reading') LIKE '${NEWER_SET}%') ORDER BY log_pos`)) as { session_id: string; text: string }[];
-  const newest = new Map(sets.map((r) => [r.session_id, r.text]));
+  // The newest older-or-current set reading of each session: an older one stays on its row (#148). So does the newest
+  // reading of the mode its turn started in (#3429), until a turn of its starts in a mode that asks.
+  const standing = (await query(`WITH coded AS MATERIALIZED (SELECT r.session_id, json_extract(r.data, '$.reading') AS text, ${readingCode('r')} AS code, r.log_pos FROM events r WHERE r.kind = 'session.reading') SELECT * FROM coded WHERE code IN ('older_set', 'newer_set', ${MODE_CODES.map((c) => `'${c}'`).join(', ')}) ORDER BY log_pos`)) as { session_id: string; text: string; code: ReadingCode }[];
+  const newest = new Map(standing.filter((r) => !MODE_CODES.includes(r.code)).map((r) => [r.session_id, r]));
+  const modes = new Map(standing.filter((r) => MODE_CODES.includes(r.code)).map((r) => [r.session_id, r]));
   for (const row of rows) {
-    const text = newest.get(row.id);
-    if (text?.startsWith(OLDER_SET)) row.readings = [...(row.readings ?? []), text];
+    const set = newest.get(row.id);
+    if (set?.code === 'older_set') row.readings = [...(row.readings ?? []), set.text];
+    const mode = modes.get(row.id);
+    if (mode && mode.code !== 'mode_asks') row.readings = [...(row.readings ?? []), mode.text];
   }
   return rows;
 }

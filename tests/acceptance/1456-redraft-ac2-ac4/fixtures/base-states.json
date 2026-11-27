@@ -1,0 +1,110 @@
+{
+  "base": "118ec119f1a769c2125a8a815a72031e3be29248",
+  "readAt": 1795563248281,
+  "sessions": [
+    {
+      "key": "hooks-cant-run",
+      "id": "dc97f4b3-345e-4a17-9680-dc5f90593312",
+      "why": "a reading that its hooks can't run",
+      "row": {
+        "word": "stuck",
+        "entry": "blocked",
+        "waits_on": "you",
+        "unread": true,
+        "flag": "interrupted",
+        "rule": "hooks"
+      }
+    },
+    {
+      "key": "hooks-run-again",
+      "id": "d1f56de9-6f7f-4f10-8342-e1257004848d",
+      "why": "a reading that its hooks can't run, then one that they run again",
+      "row": {
+        "word": "flagged",
+        "entry": "fail",
+        "waits_on": "you",
+        "unread": true,
+        "flag": "interrupted",
+        "rule": "gone"
+      }
+    },
+    {
+      "key": "monitor",
+      "id": "2b93ffb1-ee04-40bd-b81e-e3b634f6991e",
+      "why": "its turn ended, then a reading that it waits on its monitor",
+      "row": {
+        "word": "working",
+        "entry": "running",
+        "waits_on": "agent",
+        "unread": true,
+        "flag": null,
+        "rule": "monitor"
+      }
+    },
+    {
+      "key": "monitor-ended",
+      "id": "caeb207f-a982-41e7-97df-9120030ddae2",
+      "why": "its turn ended, a monitor reading, then one that its monitor ended",
+      "row": {
+        "word": "finished",
+        "entry": "idle",
+        "waits_on": "you",
+        "unread": true,
+        "flag": null,
+        "rule": "finished"
+      }
+    },
+    {
+      "key": "interrupted",
+      "id": "36a1fa7c-0557-41de-a43f-d54d3f1c91be",
+      "why": "its turn ended, then an interrupt reading",
+      "row": {
+        "word": "finished",
+        "entry": "idle",
+        "waits_on": "you",
+        "unread": true,
+        "flag": null,
+        "rule": "interrupted"
+      }
+    },
+    {
+      "key": "denied-ran-anyway",
+      "id": "3befc375-9e94-4db7-9cf4-0ef788ae424d",
+      "why": "a reading that a denied call ran anyway",
+      "row": {
+        "word": "flagged",
+        "entry": "fail",
+        "waits_on": "you",
+        "unread": true,
+        "flag": "interrupted",
+        "rule": "gone"
+      }
+    },
+    {
+      "key": "plain-working",
+      "id": "fc7cf04c-9254-4c3f-b2ca-61b6c91a05ef",
+      "why": "no reading",
+      "row": {
+        "word": "flagged",
+        "entry": "fail",
+        "waits_on": "you",
+        "unread": true,
+        "flag": "interrupted",
+        "rule": "gone"
+      }
+    },
+    {
+      "key": "plain-ended",
+      "id": "002f6cf9-1d65-4043-94e1-38b0c7792749",
+      "why": "its turn ended, and no reading",
+      "row": {
+        "word": "finished",
+        "entry": "idle",
+        "waits_on": "you",
+        "unread": true,
+        "flag": null,
+        "rule": "finished"
+      }
+    }
+  ]
+}

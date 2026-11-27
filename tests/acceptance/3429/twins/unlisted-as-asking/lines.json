@@ -1,0 +1,12 @@
+{
+  "packages/hub/src/hookmap.ts": [
+    {
+      "find": [
+        "  return { code: 'mode_unknown', reading: `This session runs ${provider} through paseo in ${mode ? `the mode ${shown}` : 'a mode its snapshot does not name'}: mode not known. Its facts don't list it, so it isn't read as one that asks, and a call may run with no check before it. Its turn's end is still checked.` };"
+      ],
+      "wrong": [
+        "  return { code: 'mode_asks', reading: `This session runs ${provider} through paseo in its mode ${shown}, which asks before each call: its calls are checked before they run.` };"
+      ]
+    }
+  ]
+}

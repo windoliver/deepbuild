@@ -1,0 +1,7 @@
+{
+  "#3544.93bc058e": ["start-waits-once"],
+  "#3544.efcb2f1f": ["start-waits-while-socket-answers"],
+  "#3544.916857a5": ["status-waits-for-core", "deep-prints-zero-asks"],
+  "#3544.7b62fddb": ["drops-acknowledged-hooks"],
+  "#3544.99834caf": ["rebuilds-on-every-open"]
+}

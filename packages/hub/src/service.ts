@@ -8,6 +8,7 @@ import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { controlToken, hubAddress, installedPrograms, installedRoot, lastingNode, onPath, type Root, rootOf, rootToken, underTemp } from './paths.js';
 import { notAnswered, Unanswered } from './client.js';
+import { counted, rebuilding, replayingOf, type Replaying } from './replay.js';
 import { COLLECTOR } from './settle.js';
 import { line } from './wire.js';
 
@@ -23,6 +24,8 @@ const CORE_WAIT_MS = 120_000;
  * store's) that a busy machine can hold past the 2 s a missing hub gets (#2801).
  */
 const STATUS_REPLY_MS = 25_000;
+/** How often `deep hub start` reads how far a record's replay is (#3544). */
+const REPLAY_POLL_MS = 200;
 const STEP_MS = 10;
 const ASK_MS = 1000;
 /** The file limit the login service raises the hub's to: a connection per hook in flight, the record, evidence and runs. */
@@ -352,9 +355,11 @@ export const serviceFile = (): string => definition([], '').file;
 
 /**
  * Waits for the hub that answers at the root's socket to answer `hub.health`, which it does once its core has started
- * (#2801): 0 then, so `deep hub status` reads it from then on. One call, waited on: any answer ends the wait, a refusal
- * too, as does a token this CLI can't read, since start never read the hub further. 3 when the hub closed the
- * connection first or the wait ran out.
+ * (#2801): 0 then, so `deep hub status` reads it from then on. Any answer ends the wait, a refusal too, as does a token
+ * this CLI can't read, since start never read the hub further. But a hub whose record replays its log answers at once
+ * with how far the replay is (#3544): that is said in one sentence, again each time the count has moved, and the health
+ * is asked again until the core answers. 3 when the hub closed the connection first, when the wait ran out with no
+ * answer, or when a replay's count has not moved for the wait, naming where it stands.
  */
 async function coreAnswers(root: Root): Promise<number> {
   let token: string;
@@ -363,18 +368,33 @@ async function coreAnswers(root: Root): Promise<number> {
   } catch {
     return 0;
   }
+  // The start's wait: only a test sets another (#3544).
+  const set = Number(process.env.DEEP_HUB_TEST_START_WAIT_MS);
+  const wait = set > 0 ? set : CORE_WAIT_MS;
   let c: Connection | undefined;
   try {
-    c = await connect(root.socket, CORE_WAIT_MS);
+    c = await connect(root.socket, wait);
     c.send({ hello: 'cli', token });
-    if (!(await c.next()).error) {
+    if ((await c.next()).error) return 0;
+    let at: Replaying | undefined;
+    let moved = Date.now();
+    for (;;) {
       c.send({ id: 'hub.health', method: 'hub.health', params: {} });
-      await c.next();
+      const now = replayingOf((await c.next()).result);
+      if (!now) return 0;
+      if (now.replayed !== at?.replayed) {
+        process.stderr.write(`${rebuilding(now)}\n`);
+        moved = Date.now();
+      } else if (Date.now() - moved >= wait) {
+        process.stderr.write(`deep hub start: the hub at unix:${root.socket} is rebuilding its tables from the log, and its replay has stood at ${counted(now.replayed)} of ${counted(now.events)} events for ${wait / 1000} s; see ${join(root.logs, 'hub.log')}\n`);
+        return 3;
+      }
+      at = now;
+      await new Promise((done) => setTimeout(done, REPLAY_POLL_MS));
     }
-    return 0;
   } catch (error) {
     const why = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`deep hub start: the hub at unix:${root.socket} ${why.startsWith('no answer within') ? `answers, but its core didn't start within ${CORE_WAIT_MS / 1000} s` : `closed the connection before it answered hub.health (${why})`}; see ${join(root.logs, 'hub.log')}\n`);
+    process.stderr.write(`deep hub start: the hub at unix:${root.socket} ${why.startsWith('no answer within') ? `answers, but its core didn't start within ${wait / 1000} s` : `closed the connection before it answered hub.health (${why})`}; see ${join(root.logs, 'hub.log')}\n`);
     return 3;
   } finally {
     c?.close();

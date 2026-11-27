@@ -11,6 +11,8 @@ import { writtenOf } from '@deepbuild/wiki';
 import { renamedSince } from '@deepbuild/workspaces';
 import { Core } from './core.js';
 import type { CoreProviders } from './core-providers.js';
+import type { Replaying } from './replay.js';
+import { selectEnvironment } from './environment-select.js';
 import { openKinds } from './kinds.js';
 import { pageClaims, type IndexFill } from './search.js';
 import { MEMORY_TRANSCRIPTS, projectOf } from './memory.js';
@@ -27,6 +29,7 @@ export function createCore(
   acking?: (session: string) => void,
   scrubbing?: (values: string[]) => void,
   forgot?: (session: string) => void,
+  replayTold?: (at?: Replaying) => void,
 ): Core {
   const providers: CoreProviders = {
     checks: {
@@ -45,11 +48,12 @@ export function createCore(
         return { compose, port };
       },
       leaseKinds, sessionKinds: SESSION_KINDS, newRun,
-      stacks: (o) => ({
+      // env-local is the shipped provider; an installed environment@1 package replaces it through the host (#2315).
+      stacks: (o) => selectEnvironment({
         newRun, up: (spec) => upStack(o.host(), { ...spec, compose: o.compose() }),
         down: (run) => downStack(o.host(), run), healthy: answers, wanted: environmentOf, keys: keysOf,
         warm: (w) => new WarmStack({ ...w, host: o.host(), compose: o.compose()!, plant: o.plant, products: o.products }),
-      }),
+      }, { extensions: o.extensions, ports: portKind().keys }),
       host: async (local, module) => ((await import(pathToFileURL(module).href)) as { default: (host: Host) => Host }).default(local),
     },
     decisions: { resolver: resolverDecisions, evidence, judge },
@@ -79,5 +83,5 @@ export function createCore(
     forge: { open: openGitHub, gateTokens, repoOf, revoke, sessionToken },
     workspaces: { create: (o) => new Workspaces(o), renamedSince, intake: (o) => new Intake(o) },
   };
-  return new Core(options, emit, providers, asking, acking, scrubbing, forgot);
+  return new Core(options, emit, providers, asking, acking, scrubbing, forgot, replayTold);
 }

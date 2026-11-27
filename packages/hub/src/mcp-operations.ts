@@ -532,7 +532,7 @@ export class McpOperations {
         if (!slackConfig(this.options.services.root.dir)) throw refuse('required', '/params/arguments/thread', 'No Slack connector: put your Slack user ID in the hub\'s slack.json as {"you": "U…"}, mode 0600, and enter your bot token with deep secret add slack token, to read this thread.', null);
       } else {
         need('check', 'Name the check in the repo\'s spec that will prove the task done; a task without one is refused, since nobody could tell it was done.');
-        const approved = checksIn((await approvedSpec(s.cwd, (await headOf(s.cwd).catch(() => undefined))?.sha ?? '')).spec);
+        const approved = checksIn((await approvedSpec(s.cwd, (await headOf(s.cwd).catch(() => undefined))?.sha ?? '', this.options.services.record)).spec);
         if (!approved.has(String(args.check))) throw this.unknownCheck([...approved.keys()], args.check);
       }
       need('steps', 'List the task\'s steps, in order.');
@@ -572,7 +572,8 @@ export class McpOperations {
     // A taste call or a choice with a recommendation goes on at once with it, marked as undoable (#84); in a session a
     // work run started, the issue waits on you instead and gives up its slot (#1332).
     const provisional = kind !== 'unblock' && raised.recommended !== null && raised.recommended !== undefined && !(await this.options.services.sessionStarts.inWorkRun(session));
-    const ask = { ...raised, fallback: 'you', provisional, owner: 'you', key: sha256Hex(canonicalize({ kind, question, session } as JsonValue)), pinned_to: pinned, ...(subject ? { subject } : {}) };
+    // An agent's own question, a task, a taste call or a choice, is one a channel you verified may answer (#1581); the hub declares it, never the agent.
+    const ask = { ...raised, may_answer: 'verified_channel', fallback: 'you', provisional, owner: 'you', key: sha256Hex(canonicalize({ kind, question, session } as JsonValue)), pinned_to: pinned, ...(subject ? { subject } : {}) };
     const handle = await this.options.services.asks.raise(this.agentConnection(session), `deep_ask.${kind}`, ask);
     if (provisional) {
       // A saved decision that answered it as it was raised is the answer the agent hears, not the recommendation (#3178).
@@ -691,7 +692,7 @@ export class McpOperations {
     const question = `Apply this change an agent proposed to ${target}? ${change}`;
     const pinned = await this.pinOf(this.options.state().sessions.get(session)!.cwd, question);
     const options = [{ id: 'apply', label: 'Apply it', decision: 'none' }, { id: 'keep', label: 'Keep it as it is', decision: 'none' }];
-    const raised = { kind: 'choice', question, options, recommended: 'keep', fallback: 'you', provisional: false, owner: 'you', key: sha256Hex(canonicalize({ kind: 'propose', target, change, session } as JsonValue)), pinned_to: pinned };
+    const raised = { kind: 'choice', may_answer: 'trusted_path', question, options, recommended: 'keep', fallback: 'you', provisional: false, owner: 'you', key: sha256Hex(canonicalize({ kind: 'propose', target, change, session } as JsonValue)), pinned_to: pinned };
     const ask = await this.options.services.asks.raise(this.agentConnection(session), 'deep_propose.choice', raised);
     const ts = this.options.services.now();
     const id = ulid(ts);

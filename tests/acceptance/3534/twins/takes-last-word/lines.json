@@ -1,0 +1,12 @@
+{
+  "scripts/issue-time.mjs": [
+    {
+      "find": [
+        "    const issue = Number(pr.body?.match(ISSUE)?.[1]);"
+      ],
+      "wrong": [
+        "    const issue = Number([...(pr.body ?? '').matchAll(new RegExp(ISSUE, 'gi'))].at(-1)?.[1]);"
+      ]
+    }
+  ]
+}

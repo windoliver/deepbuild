@@ -121,7 +121,7 @@ export class SizeScope {
     const asking = `The plan for ${r.task_ref} is marked large, and its scope names ${files} files${plan.scope.parts.length ? ` and ${plan.scope.parts.length} parts (${parts})` : ''} against a usual ${usual.files} files for a ${kind} change in this repo, the median of the last ${usual.n} you accepted: ${shown}. Approve the plan, shrink it, or split the issue?`;
     const question = asking.length > QUESTION_MAX ? `${asking.slice(0, QUESTION_MAX - 1)}…` : asking;
     await this.o.asks().raise(this.o.connection(r.session, r.agent), 'done.plan', {
-      kind: 'choice', question, recommended: 'approve', fallback: 'you', provisional: false, owner: 'you', key, pinned_to: await this.o.pin(r.cwd, question),
+      kind: 'choice', may_answer: 'verified_channel', question, recommended: 'approve', fallback: 'you', provisional: false, owner: 'you', key, pinned_to: await this.o.pin(r.cwd, question),
       options: [{ id: 'approve', label: 'Approve the plan as it is', decision: 'none' }, { id: 'shrink', label: 'Shrink it to what the issue needs', decision: 'none' }, { id: 'split', label: 'Split the issue', decision: 'none' }],
     });
   }
@@ -214,7 +214,7 @@ export class SizeScope {
     if ((await this.o.raw('SELECT 1 FROM asks WHERE key = ? LIMIT 1', [key])).length) return;
     const pinned = diff ? { kind: 'evidence', ref: await this.o.keep(new TextEncoder().encode(diff), `${s.claim} diff`) } : await this.o.pin(s.cwd, question);
     await this.o.asks().raise(this.o.connection(s.session, s.agent), 'done.size', {
-      kind: 'taste', question, recommended: 'keep', fallback: 'you', provisional: false, owner: 'you', pinned_to: pinned, key,
+      kind: 'taste', may_answer: 'verified_channel', question, recommended: 'keep', fallback: 'you', provisional: false, owner: 'you', pinned_to: pinned, key,
       options: [{ id: 'keep', label: 'Keep it as it is', decision: 'none' }, { id: 'cut', label: 'Cut it to what the issue needs', decision: 'none' }],
     });
   }

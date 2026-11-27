@@ -122,7 +122,9 @@ export class HubReadings {
     // reads a watch-only session's unverified events too, or its own SessionEnd would leave it open here for good.
     const sessions = ((await this.options.services.record.raw(`SELECT s.id, COALESCE((SELECT e.kind <> 'session.start' FROM events e WHERE e.session_id = s.id AND e.kind IN ('session.start', 'session.end', 'session.archived') ORDER BY e.log_pos DESC LIMIT 1), 0) AS closed
       FROM sessions s WHERE s.last_seen IS NOT NULL${seen ? ` AND EXISTS (SELECT 1 FROM events WHERE session_id = s.id${seen})` : ''} ORDER BY s.last_seen DESC LIMIT 100`)) as { id: string; closed: number }[]).map((s) => ({ id: s.id, closed: s.closed === 1 }));
-    return { gates: { watch_only: this.options.kernel.blocked !== undefined, reason: this.options.kernel.blocked ?? null }, notifications: this.notifications, secrets: await this.secretStore(), network, claude, codex, sessions, jobs: Object.fromEntries([...this.options.kernel.jobs].map(([name, failing]) => [name, { failing }])), packs: await this.options.services.libraries?.packs.shipped() ?? [], hooks: { aside: this.options.services.extensions?.setAside() ?? [] } };
+    // Each rebuild this record has had (#3544), oldest first, as the record keeps them: the table whose columns differed, the events replayed and the ms taken.
+    const [rebuilds] = (await this.options.services.record.raw("SELECT value FROM meta WHERE key = 'rebuilds'")) as { value: string }[];
+    return { gates: { watch_only: this.options.kernel.blocked !== undefined, reason: this.options.kernel.blocked ?? null }, notifications: this.notifications, secrets: await this.secretStore(), network, claude, codex, sessions, rebuilds: rebuilds ? JSON.parse(rebuilds.value) as unknown[] : [], jobs: Object.fromEntries([...this.options.kernel.jobs].map(([name, failing]) => [name, { failing }])), packs: await this.options.services.libraries?.packs.shipped() ?? [], hooks: { aside: this.options.services.extensions?.setAside() ?? [] } };
   }
 
   /** Whether this process can reach the OS secret store, read at most every ten seconds. */

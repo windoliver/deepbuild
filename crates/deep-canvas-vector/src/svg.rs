@@ -337,7 +337,7 @@ fn scan<'a, 'i>(
         }
         for a in node.attributes() {
             let attr = a.name();
-            if attr.len() > 2 && attr[..2].eq_ignore_ascii_case("on") {
+            if attr.len() > 2 && attr.to_ascii_lowercase().starts_with("on") {
                 return Err(Refusal::Script(format!("{name} {attr}")));
             }
             let value = a.value().trim();

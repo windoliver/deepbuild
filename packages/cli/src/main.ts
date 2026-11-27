@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, closeSync, existsSync, fstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -124,10 +124,38 @@ async function telemetryItems() {
   return telemetryDoctor(process.env);
 }
 
-// `deep debug bundle`: the hub's logs, the versions and the doctor's items in one gzipped JSON file under
-// ~/.deepbuild/debug, readable only by you, its path printed last. Every text in it is scrubbed as evidence is,
+/** What the bundle reads of a log at most, in bytes, from its end (#3548). */
+const LOG_END = 8_000_000;
+/**
+ * A log's end: its last `LOG_END` bytes from the first start of a line among them, and how many bytes before that were
+ * left out. The log is never read whole. The planted wrong program cuts by bytes alone.
+ */
+function logEnd(path: string, byBytes: boolean): { text: string; left_out: number } {
+  const fd = openSync(path, 'r');
+  try {
+    for (;;) {
+      const size = fstatSync(fd).size;
+      const cut = Math.max(0, size - LOG_END);
+      // The byte before the cut is read too: a line starts after the first newline from there.
+      const from = Math.max(0, cut - 1);
+      const end = Buffer.allocUnsafe(size - from);
+      let got = 0;
+      for (let n = 1; n > 0 && got < end.length; got += n) n = readSync(fd, end, got, end.length - got, from + got);
+      // A log the hub cut while it was read comes short, and is read again: its last line is whole too.
+      if (got < end.length) continue;
+      const start = cut === 0 ? 0 : byBytes ? 1 : end.indexOf(10) + 1 || got;
+      return { text: end.toString('utf8', start), left_out: from + start };
+    }
+  } finally {
+    closeSync(fd);
+  }
+}
+
+// `deep debug bundle`: the end of each of the hub's logs, the versions and the doctor's items in one gzipped JSON file
+// under ~/.deepbuild/debug, readable only by you, its path printed last. Every text in it is scrubbed as evidence is,
 // with the control token among the values held, so no form of the token or of a secret-shaped string goes in
-// (#34's slice of #19's bundle).
+// (#34's slice of #19's bundle). A log is cut before it is scrubbed, at the start of a line, so the cut never splits
+// a line a value is on, and the bundle says how many bytes of each log it left out (#3548).
 async function debugBundle(): Promise<number> {
   const { scrubText } = await import('@deepbuild/evidence');
   const { activePlant, rootOf, rootToken } = await import('@deepbuild/hub');
@@ -143,11 +171,16 @@ async function debugBundle(): Promise<number> {
     const path = join(dir, name);
     return statSync(path).isDirectory() ? files(path) : [path];
   }) : []);
-  const logs = Object.fromEntries(files(join(root, 'logs')).map((path) => [relative(root, path), scrubLogs(readFileSync(path, 'utf8'))]));
+  // Each log's end is scrubbed as it is read, so no log's raw text waits for the others.
+  const ends = files(join(root, 'logs')).map((path) => {
+    const end = logEnd(path, process.env.DEEP_CLI_PLANT === 'bundle-cuts-by-bytes');
+    return { name: relative(root, path), text: scrubLogs(end.text), left_out: end.left_out };
+  });
   const bundle = {
     versions: { deepbuild: version(), node: process.version, platform: `${process.platform}-${process.arch}` },
     doctor: (await doctorItems(false)).map((item) => JSON.parse(scrub(JSON.stringify(item))) as unknown),
-    logs,
+    logs: Object.fromEntries(ends.map((end) => [end.name, end.text])),
+    logs_left_out: Object.fromEntries(ends.map((end) => [end.name, end.left_out])),
   };
   const dir = join(root, 'debug');
   mkdirSync(dir, { recursive: true, mode: 0o700 });
@@ -196,7 +229,7 @@ const usage = [
   'deep land [judge] --repo <checkout> [--json]   judge each open PR on its merge with main, or land the PASSes one at a time in the order they came',
   'deep work "<scope>" [--repo <checkout>] [--json]   one approval for a run over the issues your words name, or a standing run over a rule on labels, milestone or epic that new issues join; show prints each one\'s state word and what it waits for, pause stops new starts',
   'deep work --repo <checkout> --issues <n,...> --once [--json]   one pass of a run over a fixed set: an earlier PR joins as its issue\'s attempt',
-  'deep workspace new <topic> [--folder <path>] | task <id> <title> --criterion <text> [--blocked-by <n>] | move <id> <folder | repo checkout> | revert <id> [<commit>] | diff <id> | drift <id> [--json]   a home for work outside a repo, its tasks in the record',
+  'deep workspace new <topic> [--folder <path>] | task <id> <title> --criterion <text> ... [--blocked-by <n> ...] | move <id> <folder | repo checkout> | revert <id> [<commit>] | diff <id> | drift <id> [--json]   a home for work outside a repo, its tasks in the record',
   'deep setup [--undo]  install DeepBuild for Claude Code beside your settings, or remove it all once the OS confirms you',
   'deep mcp [actions]   the MCP server an agent starts, on stdio; actions serves deep-actions, the plug-ins\' actions',
   'deep env up | down [--root <folder>] [--json]   this worktree\'s stack, through the hub',
@@ -256,6 +289,58 @@ const groups: [string, string[]][] = [
 const groupOf = (line: string): number => {
   const at = groups.findIndex(([, names]) => names.includes(commandsOf(line)[0]!));
   return at < 0 ? groups.length - 1 : at;
+};
+// A flag that takes a value, given twice where no form of its command shows it repeating, fits none of the command's
+// forms (#3461): one reading for every command, so none takes the first or the last value. Each flag of a form is read
+// from its usage line, up to the description: a flag followed by a value, then `...` where it repeats. A flag with no
+// value, such as --json, is read by its command as before. The forms read are those whose leading words fit the
+// arguments' (`deep start approve` or `deep start`), else all of the command's. Returned: each value flag and whether it
+// repeats, and the flags whose value may be left out (`--slice [<cursor>]`).
+const valueFlags = (args: readonly string[]): [Map<string, boolean>, Set<string>] => {
+  const repeats = new Map<string, boolean>();
+  const optional = new Set<string>();
+  const lines = usage.filter((one) => commandsOf(one).includes(args[0] ?? ''));
+  const formOf = (line: string) => line.split(/\s{2,}/)[0]!.split(' ').slice(2);
+  const fits = (line: string) => {
+    const words = formOf(line);
+    const open = words.findIndex((word) => /^[-[<"|]/.test(word));
+    const lead = open < 0 ? words : words.slice(0, open);
+    return lead.every((word, at) => args[at + 1] === word);
+  };
+  const fitting = lines.filter(fits);
+  for (const line of fitting.length ? fitting : lines) {
+    const words = formOf(line);
+    words.forEach((token, at) => {
+      const flag = token.replace(/^\[/, '');
+      if (!/^--[a-z][a-z-]*$/.test(flag) || words[at + 1] === undefined || /^(-|\||\.\.\.|\[-)/.test(words[at + 1]!)) return;
+      // The value runs to the word that closes its last <, as in <doc ID>.
+      let end = at + 1;
+      const value = (upTo: number) => words.slice(at + 1, upTo + 1).join(' ');
+      while (end + 1 < words.length && (value(end).match(/</g) ?? []).length > (value(end).match(/>/g) ?? []).length) end++;
+      repeats.set(flag, (repeats.get(flag) ?? false) || /^\.\.\.\]*$/.test(words[end + 1] ?? ''));
+      if (words[at + 1]!.startsWith('[')) optional.add(flag);
+    });
+  }
+  return [repeats, optional];
+};
+/**
+ * The first flag `args` gives twice that its command's usage shows once, if any. A flag's value is the next word, as
+ * each command reads it, even one that looks like a flag; an optional value only when it doesn't start with -. After
+ * --, the next word is a handle, a query or an option, never a flag; flags may follow it, as deep find reads them.
+ */
+const givenTwice = (args: readonly string[]): string | undefined => {
+  const [flags, optional] = valueFlags(args);
+  const seen = new Set<string>();
+  const own = args.slice(1);
+  for (let at = 0; at < own.length; at++) {
+    const flag = own[at]!;
+    if (flag === '--') at++;
+    if (!flags.has(flag)) continue;
+    if (seen.has(flag) && !flags.get(flag)) return flag;
+    seen.add(flag);
+    if (!optional.has(flag) || !(own[at + 1] ?? '-').startsWith('-')) at++;
+  }
+  return undefined;
 };
 // The one exit table every command keeps (#1812, exit.code@1), at the foot of `deep --help`.
 const EXITS = 'Exit codes, the same for every command but deep lease and deep mcp-exec, which end with their program\'s own:\n  0 done\n  1 failed or refused\n  2 not understood, nothing ran\n  3 not decided or not checked';
@@ -324,6 +409,9 @@ const hubCommands = {
 
 if (help) {
   printHelp();
+} else if (givenTwice(args) !== undefined) {
+  console.error(usageOf(args[0]!));
+  process.exitCode = 2;
 } else if (args.length === 0) {
   // `deep` alone is the list (#1463): the rows and the one count the app shows, and nothing after them.
   const { listCommand } = await import('@deepbuild/hub');

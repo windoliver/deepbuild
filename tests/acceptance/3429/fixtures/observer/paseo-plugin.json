@@ -1,0 +1,5 @@
+{
+  "id": "dh3429-observer",
+  "description": "#3429's acceptance suite: writes down each agent hook paseo fires, and how the agent's snapshot reads its mode at a turn's start",
+  "requirements": { "paseo": ">=0.15.0" }
+}

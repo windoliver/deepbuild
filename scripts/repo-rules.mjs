@@ -446,6 +446,14 @@ function checkPhysicsBuild() {
   else for (const l of lines.length ? lines : [`it didn't run: ${run.error?.message ?? run.stderr}`]) report('FAIL', 'physics-build', l.replace(/^FAIL /, ''), 'Remove the feature or flag the line names from the physics build: rapier3d stays at 0.36.1 with enhanced-determinism, without simd8 or parallel, built for the target\'s baseline features.');
 }
 
+/** The display-text guard (#1456): a session's state never decided by words a person reads. */
+function checkDisplayText() {
+  const run = spawnSync(process.execPath, [join(root, 'scripts', 'display-text-guard.mjs')], { cwd: root, encoding: 'utf8' });
+  const lines = `${run.stdout ?? ''}`.split('\n').filter(Boolean);
+  if (run.status === 0) report('PASS', 'display-text', 'no state in status.ts or states.rs is decided by display text');
+  else for (const l of lines.length ? lines : [`it didn't run: ${run.error?.message ?? run.stderr}`]) report('FAIL', 'display-text', l.replace(/^FAIL display text: /, ''), 'Read the reading\'s code (readingCode in packages/hub/src/reading-codes.ts) or the code the hub sends, never the words shown.');
+}
+
 // #3347: every fixture for a class whose entries are a body's motion, listed with its statement (scripts/body-fixtures.mjs).
 function checkBodyFixtures() {
   const run = spawnSync(process.execPath, [join(root, 'scripts', 'body-fixtures.mjs')], { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
@@ -497,6 +505,7 @@ if (files) {
   noteSize();
 }
 checkPhysicsBuild();
+checkDisplayText();
 checkBodyFixtures();
 const order = ['FAIL', 'INVALID', 'BLOCKED', 'PASS', 'NOTE'];
 for (const { line, fix } of results.sort((a, b) => order.indexOf(a.state) - order.indexOf(b.state))) console.log(fix ? `${line}\n  Fix: ${fix}` : line);

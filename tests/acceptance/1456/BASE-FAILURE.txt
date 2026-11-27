@@ -1,0 +1,168 @@
+#1456's acceptance suite on its base commit 118ec119f (origin/main), with no implementation, run on 2026-11-23 on macOS
+under Node 24 (load averages 129.62 109.20 69.71 at the start), the workspaces built and target/debug/deep-hook built:
+
+  npx vitest run --root tests/acceptance/1456 --no-file-parallelism reworded.test.ts legacy.test.ts guard.test.ts
+
+Expected on the base, and what it shows:
+- AC1 (reworded.test.ts) fails at its assertion, naming each session whose state moved when its readings were reworded:
+  hooks-cant-run (stuck/stuck read finished/finished), monitor-waiting (working/working read finished/finished) and
+  interrupted (finished/interrupted read finished/finished). The base's own words with codes read every expected state
+  (each coded reading was refused as session.reading@2 and written as @1 with its words alone; README, The fixture).
+- AC2 (legacy.test.ts) passes: the record of the base's own readings with no codes reads every session's expected state,
+  which are pinned from this run. It is a regression guard; its wrong program is the twin legacy-readings-unread.
+- AC3 (guard.test.ts, three) fails: scripts/display-text-guard.mjs doesn't exist, so the guard neither passes the real
+  files nor names a planted line.
+- AC4 (agree.test.ts) was not run here: it is #992's agree.test.ts as it is (minutes, and the replica's cargo build),
+  a regression guard expected to pass at the base; its wrong program is the twin waiting-as-working.
+
+Home paths are written as ~.
+
+---- vitest output
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/issue-1456-reading-logic-439ef7/tests/acceptance/1456
+
+stdout | reworded.test.ts > AC1 #1456.aa4dd611 > AC1 #1456.aa4dd611: every reading reworded, every session's state unchanged
+the base's words, with codes:
+  hooks-cant-run     expected stuck/stuck            read stuck/stuck
+  hooks-run-again    expected finished/finished      read finished/finished
+  monitor-waiting    expected working/working        read working/working
+  monitor-ended      expected finished/finished      read finished/finished
+  interrupted        expected finished/interrupted   read finished/interrupted
+  watch-only         expected finished/finished      read finished/finished
+  denied-ran-anyway  expected working/working        read working/working
+  mods-gone          expected finished/finished      read finished/finished
+  ran-unleased       expected working/working        read working/working
+  stop-not-held      expected finished/finished      read finished/finished
+reworded, with the same codes:
+  hooks-cant-run     expected stuck/stuck            read finished/finished
+  hooks-run-again    expected finished/finished      read finished/finished
+  monitor-waiting    expected working/working        read finished/finished
+  monitor-ended      expected finished/finished      read finished/finished
+  interrupted        expected finished/interrupted   read finished/finished
+  watch-only         expected finished/finished      read finished/finished
+  denied-ran-anyway  expected working/working        read working/working
+  mods-gone          expected finished/finished      read finished/finished
+  ran-unleased       expected working/working        read working/working
+  stop-not-held      expected finished/finished      read finished/finished
+
+ ❯ reworded.test.ts (1 test | 1 failed) 11707ms
+   ❯ AC1 #1456.aa4dd611 (1)
+     × AC1 #1456.aa4dd611: every reading reworded, every session's state unchanged 10926ms
+ ❯ guard.test.ts (3 tests | 3 failed) 549ms
+   ❯ AC3 #1456.86f6be87 (3)
+     × AC3 #1456.86f6be87: the guard passes this checkout's status.ts and states.rs 329ms
+     × AC3 #1456.86f6be87: a planted LIKE on a reading in status.ts fails the guard, naming its line 116ms
+     × AC3 #1456.86f6be87: a planted comparison against shown words in states.rs fails the guard, naming its line 98ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  guard.test.ts > AC3 #1456.86f6be87 > AC3 #1456.86f6be87: the guard passes this checkout's status.ts and states.rs
+AssertionError: the guard over status.ts and states.rs as they are: exit 1, stdout "", stderr "node:internal/modules/cjs/loader:1568\n  throw err;\n  ^\n\nError: Cannot find module '~/private/deepbuild-core/.claude/worktrees/issue-1456-reading-logic-439ef7/scripts/display-text-guard.mjs'\n    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)\n    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)\n    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)\n    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)\n    at Module._load (node:internal/modules/cjs/loader:1341:5)\n    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)\n    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)\n    at node:internal/main/run_main_module:33:47 {\n  code: 'MODULE_NOT_FOUND',\n  requireStack: []\n}\n\nNode.js v24.22.0\n": expected { code: 1, findings: [], pass: false } to deeply equal { code: +0, findings: [], pass: true }
+
+- Expected
++ Received
+
+  {
+-   "code": 0,
++   "code": 1,
+    "findings": [],
+-   "pass": true,
++   "pass": false,
+  }
+
+ ❯ guard.test.ts:17:185
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  guard.test.ts > AC3 #1456.86f6be87 > AC3 #1456.86f6be87: a planted LIKE on a reading in status.ts fails the guard, naming its line
+AssertionError: the guard fails, with a finding naming packages/hub/src/status.ts:669, the planted LIKE: exit 1, stdout "", stderr "node:internal/modules/cjs/loader:1568\n  throw err;\n  ^\n\nError: Cannot find module '~/private/deepbuild-core/.claude/worktrees/issue-1456-reading-logic-439ef7/scripts/display-text-guard.mjs'\n    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)\n    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)\n    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)\n    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)\n    at Module._load (node:internal/modules/cjs/loader:1341:5)\n    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)\n    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)\n    at node:internal/main/run_main_module:33:47 {\n  code: 'MODULE_NOT_FOUND',\n  requireStack: []\n}\n\nNode.js v24.22.0\n": expected { code: 1, named: +0 } to deeply equal { code: 1, named: 1 }
+
+- Expected
++ Received
+
+  {
+    "code": 1,
+-   "named": 1,
++   "named": 0,
+  }
+
+ ❯ guard.test.ts:24:145
+     22|     const r = await guard(root);
+     23|     const named = findings(r.stdout).filter((l) => l.startsWith(`FAIL …
+     24|     expect({ code: r.code, named: named.length }, `the guard fails, wi…
+       |                                                                                                                                                 ^
+     25|   }, 120_000);
+     26|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  guard.test.ts > AC3 #1456.86f6be87 > AC3 #1456.86f6be87: a planted comparison against shown words in states.rs fails the guard, naming its line
+AssertionError: the guard fails, with a finding naming crates/deep-app/src/states.rs:1364, the planted comparison: exit 1, stdout "", stderr "node:internal/modules/cjs/loader:1568\n  throw err;\n  ^\n\nError: Cannot find module '~/private/deepbuild-core/.claude/worktrees/issue-1456-reading-logic-439ef7/scripts/display-text-guard.mjs'\n    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)\n    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)\n    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)\n    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)\n    at Module._load (node:internal/modules/cjs/loader:1341:5)\n    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)\n    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)\n    at node:internal/main/run_main_module:33:47 {\n  code: 'MODULE_NOT_FOUND',\n  requireStack: []\n}\n\nNode.js v24.22.0\n": expected { code: 1, named: +0 } to deeply equal { code: 1, named: 1 }
+
+- Expected
++ Received
+
+  {
+    "code": 1,
+-   "named": 1,
++   "named": 0,
+  }
+
+ ❯ guard.test.ts:31:151
+     29|     const r = await guard(root);
+     30|     const named = findings(r.stdout).filter((l) => l.startsWith(`FAIL …
+     31|     expect({ code: r.code, named: named.length }, `the guard fails, wi…
+       |                                                                                                                                                       ^
+     32|   }, 120_000);
+     33| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  reworded.test.ts > AC1 #1456.aa4dd611 > AC1 #1456.aa4dd611: every reading reworded, every session's state unchanged
+AssertionError: the sessions whose state moved when their readings were reworded:
+the base's words, with codes:
+  hooks-cant-run     expected stuck/stuck            read stuck/stuck
+  hooks-run-again    expected finished/finished      read finished/finished
+  monitor-waiting    expected working/working        read working/working
+  monitor-ended      expected finished/finished      read finished/finished
+  interrupted        expected finished/interrupted   read finished/interrupted
+  watch-only         expected finished/finished      read finished/finished
+  denied-ran-anyway  expected working/working        read working/working
+  mods-gone          expected finished/finished      read finished/finished
+  ran-unleased       expected working/working        read working/working
+  stop-not-held      expected finished/finished      read finished/finished
+reworded, with the same codes:
+  hooks-cant-run     expected stuck/stuck            read finished/finished
+  hooks-run-again    expected finished/finished      read finished/finished
+  monitor-waiting    expected working/working        read finished/finished
+  monitor-ended      expected finished/finished      read finished/finished
+  interrupted        expected finished/interrupted   read finished/finished
+  watch-only         expected finished/finished      read finished/finished
+  denied-ran-anyway  expected working/working        read working/working
+  mods-gone          expected finished/finished      read finished/finished
+  ran-unleased       expected working/working        read working/working
+  stop-not-held      expected finished/finished      read finished/finished: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "hooks-cant-run (1456a001-0000-4000-8000-000000000001): expected stuck/stuck, read finished/finished",
++   "monitor-waiting (1456a003-0000-4000-8000-000000000003): expected working/working, read finished/finished",
++   "interrupted (1456a005-0000-4000-8000-000000000005): expected finished/interrupted, read finished/finished",
++ ]
+
+ ❯ reworded.test.ts:18:115
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  2 failed | 1 passed (3)
+      Tests  4 failed | 1 passed (5)
+   Start at  19:58:10
+   Duration  18.65s (tests 95%, import 4%, transform 1%)
+
+vitest exit 1
