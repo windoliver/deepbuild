@@ -1,0 +1,1 @@
+{ "alone": true, "why": "binary: each file starts cargo for the libraries of four crates, reads them from target/, and builds the reader against them with rustc; a sibling's cargo build rewrites those libraries under it" }

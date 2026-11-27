@@ -121,15 +121,15 @@ export class Projector {
 
   /**
    * Creates each table that is missing. A table an older version made with other columns is left as it is, and
-   * it returns true: the record then rebuilds, which drops and remakes every table and replays the log in one
-   * commit, so a stop before that commit finds the old table again.
+   * the first such is returned by name: the record then rebuilds, which drops and remakes every table and replays
+   * the log in one commit, so a stop before that commit finds the old table again.
    */
-  ensure(): boolean {
-    let stale = false;
+  ensure(): string | undefined {
+    let stale: string | undefined;
     for (const t of TABLES) {
       const have = (this.db.prepare('SELECT name FROM pragma_table_info(?)').all(t.name) as { name: string }[]).map((c) => c.name).join(',');
       if (have && have !== t.columns.split(',').map((c) => c.trim().split(' ')[0]).join(',')) {
-        stale = true;
+        stale ??= t.name;
         continue;
       }
       if (t.fts) this.db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS ${t.name} USING fts5(${t.columns}, tokenize = 'unicode61')`);

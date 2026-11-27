@@ -1,0 +1,14 @@
+{
+  "scripts/throttle.mjs": [
+    {
+      "find": [
+        "          const lend = Math.max(0, Math.min(share - me.lent, pool() - turns.reduce((sum, grant) => sum + 1 + grant.lent, 0)));",
+        "          me.lent += lend;"
+      ],
+      "wrong": [
+        "          const lend = free + (me.whole ? 0 : pool());",
+        "          me.whole = true;"
+      ]
+    }
+  ]
+}

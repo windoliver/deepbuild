@@ -19,7 +19,7 @@ import { draftAskSettings } from '@deepbuild/asks';
 import { keepOriginal, noteWritten, putBack, saveRecord, setupRecord, strictObject, target, writeThrough } from './agent-files.js';
 import { stopAsYou } from './authority.js';
 import { Confirmer } from './confirm.js';
-import { claudeCommand, claudeSettings, installedRecord, longestDeadline, ourGroups, relations, withHooks, withoutOurs, writeJson } from './claude-settings.js';
+import { claudeCommand, claudeJson, claudeSettings, installedRecord, longestDeadline, ourGroups, relations, withHooks, withoutOurs, writeJson } from './claude-settings.js';
 import { codexConfig, codexHooks, codexRelations, fixedHook, forgetEntries, recordedHome, recordedServer, recordEntries, withEntries, withoutEntries, withoutServer, withServer } from './codex-settings.js';
 import { call } from './client.js';
 import { installShipped } from './installer.js';
@@ -35,8 +35,6 @@ import type { DoctorItem } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
 const REPO = fileURLToPath(new URL('../../../', import.meta.url));
-/** Claude Code's user-scope state, where its user MCP servers live. */
-const claudeJson = (): string => join(homedir(), '.claude.json');
 const skillDir = (): string => join(dirname(claudeSettings()), 'skills', 'deepbuild');
 // #1002: setup's first step writes the second, and keeps in it why it stopped and the fix; its last step writes the
 // first, with its version, and takes the second away. The app and the first `deep` command offer Set up while setup
@@ -130,17 +128,17 @@ async function install(cli: string, quiet = false): Promise<Said> {
     // Each row's step. Codex's or paseo's failing leaves that agent out, and Claude Code's goes on.
     const steps: Record<string, () => Promise<void> | void> = {
       'hooks:claude-code': () => {
+        // deep-actions is the second server entry (#363): the plug-ins' actions, apart from the deep_* tools. deep-hook
+        // serves it, so a session runs one Node server, not two (#824's memory per session).
+        const servers = { deepbuild: { type: 'stdio', ...mcpServer(root, cli) }, 'deep-actions': { type: 'stdio', command: hook, args: ['mcp', 'actions'] } };
         // Each file is read again just before its write, so what a running session wrote since the read above stays.
-        const settings = withStatusLine(root, withHooks(root, current(settingsFile), groups), `${q(hook)} statusline`);
+        const settings = withStatusLine(root, withHooks(root, current(settingsFile), groups, servers), `${q(hook)} statusline`);
         writeJson(settingsFile, settings);
         noteWritten(record, settingsFile);
         // The planted wrong program writes its entries into the repo it runs in too.
-        if (plant() === 'setup-writes-project-settings') writeJson(join(process.cwd(), '.claude', 'settings.json'), withHooks(root, {}, groups));
+        if (plant() === 'setup-writes-project-settings') writeJson(join(process.cwd(), '.claude', 'settings.json'), withHooks(root, {}, groups, servers));
         const user = current(userFile);
-        const servers = isObj(user.mcpServers) ? user.mcpServers : {};
-        // deep-actions is the second server entry (#363): the plug-ins' actions, apart from the deep_* tools. deep-hook
-        // serves it, so a session runs one Node server, not two (#824's memory per session).
-        writeJson(userFile, { ...user, mcpServers: { ...servers, deepbuild: { type: 'stdio', ...mcpServer(root, cli) }, 'deep-actions': { type: 'stdio', command: hook, args: ['mcp', 'actions'] } } });
+        writeJson(userFile, { ...user, mcpServers: { ...(isObj(user.mcpServers) ? user.mcpServers : {}), ...servers } });
         noteWritten(record, userFile);
         const skill = skillDir();
         if (!existsSync(skill) || record.created.includes(skill)) {

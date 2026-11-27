@@ -1,0 +1,23 @@
+{
+  "packages/hub/src/hookmap.ts": [
+    {
+      "find": [
+        "    } else if (request.event === 'agent.turn.before' && entry.hooks === 'plugin') {"
+      ],
+      "wrong": [
+        "    } else if (request.event === 'agent.turn.before') {"
+      ]
+    }
+  ],
+  "packages/hub/src/answer-delivery.ts": [
+    {
+      "find": [
+        "      if (owner) this.inPaseo.add(meta.session);"
+      ],
+      "wrong": [
+        "      if (owner) this.inPaseo.add(meta.session);",
+        "      if (owner && meta.paseo?.mode) await this.options.events.appendReading(meta.session, owner, meta.paseo.mode.reading, undefined, meta.paseo.mode.code).catch(() => undefined);"
+      ]
+    }
+  ]
+}

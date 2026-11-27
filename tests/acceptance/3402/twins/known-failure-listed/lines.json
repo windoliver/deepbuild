@@ -1,0 +1,13 @@
+{
+ "scripts/known-failures.json": [
+  {
+   "find": [
+    "  \"failures\": {"
+   ],
+   "wrong": [
+    "  \"failures\": {",
+    "    \"tests/acceptance/1352/ac1-section.test.mjs › #1352.4c4e63a7 criterion 1: the Decided table has more rows than at 6aa228ce, and a new row links to the new section or names the hub and the cloud\": \"fails on main: planted by tests/acceptance/3402/twins/known-failure-listed\","
+   ]
+  }
+ ]
+}

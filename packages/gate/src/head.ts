@@ -1,10 +1,3 @@
-// Head trust (#29; design: Threats, Untrusted PR heads). Checks run on a PR's head only when every commit since its
-// base was recorded from a DeepBuild session or has a `push.record@1` reading whose pusher is an account you named
-// as yours. The pusher is the provider's own record of the push; a commit's author and committer fields never count,
-// and an empty pusher, or no reading at all, counts as a push by an account you didn't name. A reader is read for
-// head trust only once it passes the reading's kit: recorded pushes replayed through it must give each commit the
-// pusher the provider recorded. Any other head runs only in the platform sandbox, with no network and no
-// credentials, or stays BLOCKED (cause: untrusted head, owner: you).
 import { execFileSync } from 'node:child_process';
 import { gitEnv } from './env.js';
 
@@ -77,7 +70,6 @@ export function headTrust(input: HeadInput, options: { sandbox?: boolean; plant?
     if (recorded.has(commit)) return { commit, trusted: true, via: 'session' as const, pusher: null };
     const found = readings.filter((r) => r.commit === commit);
     const pusher = found.length === 1 ? found[0]!.pusher || null : null;
-    // The planted wrong programs: the author or committer field, or an empty pusher, counts as yours.
     const planted = (plant === 'author-counts' && yours.has(field(commit, 'an'))) || (plant === 'committer-counts' && yours.has(field(commit, 'cn')))
       || (plant === 'empty-pusher-counts' && found.length === 1 && !found[0]!.pusher);
     const trusted = (pusher !== null && yours.has(pusher)) || planted;
