@@ -1,9 +1,3 @@
-// #3419 criterion 5 (#3419.9ce8f264): a change that adds a suite and lists it in lanes-lists.mjs as alone fails the
-// lint lane, naming the entry and the suite's lane.json; the same entry for a folder that held a file at the merge
-// base passes. The lint lane is reached as affected.mjs reaches it: each command of the scene's own lanes.mjs `checks`
-// lint lane whose script is under scripts/, run in the scene (README, "What I chose"). Many of them can't read a
-// scratch repository (no crates, docs or builds) and fail there whatever the change; so "passes" is read against the
-// same scene with no entry: every command exits as it does there, and no finding names the entry that didn't there.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -14,9 +8,7 @@ const lists = readFileSync(join(CHECKOUT, 'scripts/lanes-lists.mjs'), 'utf8');
 const lanes = readFileSync(join(CHECKOUT, 'scripts/lanes.mjs'), 'utf8');
 const OPEN = 'export const alone = [';
 
-/** lanes-lists.mjs with `entry` first in its alone list, as a hand would add it. */
 const withEntry = (entry) => lists.replace(OPEN, `${OPEN}${JSON.stringify(entry).replace(/"/g, "'")}, `);
-/** lanes.mjs with the entry's reason named, so the alone lint's reason check has nothing to say of it. */
 const withReason = (entry) => `${lanes}\naloneReasons[${JSON.stringify(entry).replace(/"/g, "'")}] = 'shared: the planted port';\n`;
 const findings = (run, entry) => run.flatMap(({ output }) => output.split('\n').filter((line) => /^(?:FAIL|BLOCKED|INVALID|INCONCLUSIVE)\b/.test(line) && line.includes(entry)));
 const shown = (run) => run.map(({ label, status, output }) => `--- ${label}: exit ${status}\n${output.split('\n').filter((line) => line.includes('tests/acceptance/94')).join('\n')}`).join('\n');

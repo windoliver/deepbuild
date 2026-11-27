@@ -1,9 +1,3 @@
-// #3419 criterion 6 (#3419.10f9c195): on a tree with no lane file changed, the alone, timed and slow lists lanes.mjs
-// exports are equal before and after, entry for entry. Before: the merge base's scripts/. After: this checkout's
-// scripts/. Each reads the same tree, the merge base's suite folders that hold a lane file (git archive), so no lane
-// file differs between them; each side's own lanes.mjs is imported in a process of its own and its three lists
-// printed. They must hold the same entries, each as many times; the failure names every entry one side lacks. On the
-// base, before and after are the same scripts, so this passes there by nature (README).
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { cpSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync } from 'node:fs';
@@ -23,7 +17,6 @@ function exported(cwd) {
   return { lists, all: `exit ${read.status}\n${read.stdout.slice(-2000)}\n${read.stderr.slice(-4000)}` };
 }
 
-/** Each entry `a` holds more times than `b`, with the count. */
 function lacking(a, b) {
   const count = (list) => list.reduce((map, entry) => map.set(entry, (map.get(entry) ?? 0) + 1), new Map());
   const left = count(a), right = count(b);
@@ -34,7 +27,6 @@ test("#3419.10f9c195 on a tree with no lane file changed, the alone, timed and s
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'deep-3419-lists-')));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const base = git('merge-base', 'HEAD', 'origin/main').trim();
-  // The merge base's suite folders that hold a lane file, whole, as the one tree both sides read.
   const folders = [...new Set(git('ls-tree', '-r', '-z', '--name-only', base, '--', 'tests/acceptance').split('\0').filter((path) => path.endsWith('/lane.json')).map((path) => path.slice(0, -'lane.json'.length)))];
   const tree = (side, scripts) => {
     const cwd = join(dir, side);

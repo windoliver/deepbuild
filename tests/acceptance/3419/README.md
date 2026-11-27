@@ -50,6 +50,17 @@ The issue's own example, with names of files of the lane file's own folder:
 
 Nothing under test is mocked. Test fixtures are `node:test` files that pass.
 
+The suite's `.mjs` files carry no comments (docs/adr/0001-code-carries-no-comments.md); what they said is here. In
+`helpers.mjs`: `scene` builds the scratch repository above (`commits` entries are `{ files, remove, approved }`);
+`guard`, `affected` and `lintLane` run the scene's own guard, `affected.mjs` and lint-lane commands; `listBlocks`
+reads `--list`'s `<block> <runner>: <files>` lines (and `SKIP` lines) into `{ '<block> <runner>': [files] }`, and
+`blocksOf` names the blocks listing a file; `failLines` keeps the guard's `FAIL guard:` lines; `testFile` and
+`importingTestFile` are passing `node:test` fixtures, the latter importing the folder's `fixture.mjs`. The scene's
+`RUSTUP_HOME` and `CARGO_HOME` stay the machine's, so `cargo metadata` finds its toolchain under the scene's own HOME.
+In `authenticator.mjs`: `hardwareKey` makes the in-memory security key and its allowed-signers line, and `approve` signs
+the tag in OpenSSH's SSHSIG format (FIDO flags with the touch set), checks it with `ssh-keygen` and writes it with
+`git mktag`.
+
 ## Criteria and tests
 
 | Criterion | Tag | Test |

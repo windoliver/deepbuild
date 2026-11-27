@@ -1,17 +1,10 @@
-// #3419 criterion 1 (#3419.b70aa6a5): end to end on a scratch repository, a new redraft folder with a lane file runs
-// alone, and the guard passes with no approval tag on its commit; the same lane file in a redraft folder that held a
-// file at the merge base is refused, naming the folder. Reached through the scene's own `node scripts/proof.mjs guard`
-// and `node scripts/affected.mjs --list` (README).
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { OWN, affected, blocksOf, failLines, guard, laneJson, listBlocks, scene, testFile } from './helpers.mjs';
 
-// #9419's suite landed on main; the change, Part of #9419, adds a redraft of it.
 const LANDED = { [`tests/acceptance/${OWN}/suite.test.mjs`]: testFile() };
 const NEW = `tests/acceptance/${OWN}-redraft-ac1/`;
-// A redraft folder the change also adds, with no lane file: it runs in the parallel block, so alone comes from the file.
 const PLAIN = `tests/acceptance/${OWN}-redraft-ac3/`;
-// A redraft folder whose file landed before the change adds its lane file.
 const OLD = `tests/acceptance/${OWN}-redraft-ac2/`;
 
 test('#3419.b70aa6a5 a new redraft folder with a lane file runs alone and passes the guard with no approval tag; the same lane file in a redraft folder that held a file at the merge base is refused, naming the folder', (t) => {

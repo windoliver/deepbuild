@@ -1,10 +1,3 @@
-// #3419 criterion 2 (#3419.e45cd630): a new suite whose lane file names one file as timed and one as slow:
-// `node scripts/affected.mjs --list` lists each in its block, and a run without --timed or --slow reads INCONCLUSIVE
-// naming both files, never PASS. Reached through the scene's own `node scripts/affected.mjs` (README).
-//
-// Both runs name the suite's fixture.mjs as the change (affected.mjs's `[path ...]`), which all three test files import:
-// affected.mjs runs a slow file that the change itself adds or edits, so with the whole change as its paths the slow
-// file would run in its folder's block whatever the lists say (README, "What I chose").
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';

@@ -1,10 +1,3 @@
-// #3419 criterion 3 (#3419.79d243d9): the guard refuses each of these planted lane files, even with an approval: one
-// that names a file an earlier commit added, one that names a file outside its folder, one that names a file the tree
-// doesn't hold, and one with a byHand or a skip key. Reached through the scene's own `node scripts/proof.mjs guard`.
-//
-// Each plant's commit carries a person's signed approval naming every file it touches. So that a refusal is the plant's
-// and not of any timed list, each test first shows the guard passing the well-made lane file the plant departs from:
-// the same suite and approval, its lane file naming a file of its own folder that its own commit adds (README).
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { OTHER, OWN, failLines, guard, laneJson, scene, testFile } from './helpers.mjs';
