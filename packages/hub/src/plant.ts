@@ -108,6 +108,8 @@ export type Plant =
   // counting every accepted taste call as seen, or giving a run's whole median for both its halves.
   | 'unseen-reads-as-card' | 'folds-seen-unseen' | 'one-median-per-run'
   | 'bundle-raw-logs' | 'doctor-hides-token' | 'doctor-not-checked-first' | 'doctor-takes-any-flag' | 'stop-hold-wide-margin'
+  // #3548's: a hub that starts a new log file at each start and keeps the old ones.
+  | 'log-new-file-each-start'
   | 'answer-skips-held-stop' | 'stop-hold-releases-without-answer' | 'both-routes' | 'stop-hold-polls' | 'no-stop-count' | 'stop-count-never-resets'
   | 'waiter-never-wakes' | 'waiter-outlives-session' | 'waiter-gives-up-at-600s' | 'waiter-per-stop' | 'waiter-under-stop-only' | 'waiter-polls' | 'waiter-checks-every-5s'
   | 'delivered-on-waiter-exit' | 'wake-assumed' | 'delivered-to-dead-waiter' | 'routes-from-settings' | 'routes-kept-across-sessions'
@@ -390,6 +392,7 @@ const PLANTS: readonly string[] = [
   'hooks-order-ours-first', 'log-raw-command',
   'matches-text', 'fail-closed-only-rules', 'installs-unchecked', 'trusts-hints', 'warn-as-block', 'unknown-as-block',
   'bundle-raw-logs', 'doctor-hides-token', 'doctor-not-checked-first', 'doctor-takes-any-flag', 'stop-hold-wide-margin',
+  'log-new-file-each-start',
   'answer-skips-held-stop', 'stop-hold-releases-without-answer', 'both-routes', 'stop-hold-polls', 'no-stop-count', 'stop-count-never-resets',
   'waiter-never-wakes', 'waiter-outlives-session', 'waiter-gives-up-at-600s', 'waiter-per-stop', 'waiter-under-stop-only', 'waiter-polls', 'waiter-checks-every-5s',
   'delivered-on-waiter-exit', 'wake-assumed', 'delivered-to-dead-waiter', 'routes-from-settings', 'routes-kept-across-sessions',

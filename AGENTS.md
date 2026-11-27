@@ -1,6 +1,6 @@
 # Rules for agents working in this repo
 
-Read the design sections your issue links before edits. `node scripts/design-section.mjs --issue <n>` prints them. Keep this file under one page. Delegates follow these rules. Before delivery, review requirement → change → proof mappings; disclose deviations and unrun checks.
+Read the design sections your issue links before edits. `node scripts/design-section.mjs --issue <n>` prints them. `--issue` counts their tokens on its last line, and past 25,000 it prints each section's outline in place of its text, where `--all` prints the text. Keep this file under one page. Delegates follow these rules. Before delivery, review requirement → change → proof mappings; disclose deviations and unrun checks.
 
 ## The four invariants
 
@@ -22,6 +22,14 @@ These hold in the core and every extension:
 - Run relevant checks once per meaningful change, and only affected ones after corrections: name the corrected paths, `node scripts/affected.mjs <path ...>`, and cite the earlier full run for the rest. Full preflight needs a task or release reason. Docs-only edits need diff review, not code tests.
 - Verify with `node scripts/affected.mjs`, not whole neighbouring suites: it runs only the tests that can see the change and sets main's known failures (`scripts/known-failures.json`) apart; report its WIDE and INCONCLUSIVE lines.
 - A PR says `Closes #n` only when every acceptance criterion in the issue is proven. Otherwise it says `Part of #n` and lists what's open.
+
+## Delivery
+
+- An issue is one task: work until its PR is open, mergeable on main's head, and the issue is closed or names what's still open. Committing, pushing, opening the PR and merging main once are part of it; don't wait to be asked.
+- Before reporting, close every gap you can: run what's unrun, fix what fails. Report once, listing only what needs a person.
+- Testing a change takes at most an hour, waits for a grant and any run on the merge base included. Stop what still runs then, by PID, and report it `INCONCLUSIVE` by name; don't wait longer or run it again to finish. A lint finding that names no file you changed is main's: list it, don't prove it.
+- A budget or timing criterion is best effort under load: take one reading without waiting for a timed grant or a quiet machine, and record it with the load. If it reads `INCONCLUSIVE`, leave its box unticked, say `Part of #n`, and close the issue on its other criteria.
+- A taste criterion ("Shown to you") is delegated: judge the run's pictures, record the call as the owner's delegation and attach them to the PR. The owner overrules by reopening.
 
 ## Machine and safety
 

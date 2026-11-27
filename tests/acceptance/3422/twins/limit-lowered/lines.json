@@ -1,0 +1,12 @@
+{
+  "scripts/size-ratchet.mjs": [
+    {
+      "find": [
+        "const LIMIT = 1500;"
+      ],
+      "wrong": [
+        "const LIMIT = 1400;"
+      ]
+    }
+  ]
+}

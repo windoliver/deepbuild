@@ -1,0 +1,201 @@
+# #3547 acceptance tests: the run on the base
+
+## The base (2edb19ff4, no work on #3547), in its own worktree, on the Mac (Darwin arm64, 18 cores, node v24.22.2)
+
+$ node --test tests/acceptance/3547/*.test.mjs
+(1-minute load 43.83 at its start and 45.38 at its end; stack-trace lines, node's dump of each error object and
+its diff of two lists dropped; the checkout reads <checkout>, each test's temporary folder <sandbox>, and a home
+folder, a test's own HOME too, ~)
+
+Nine tests fail, each at an assertion of its own and for the expected reason: the base removes no shard. Criterion
+1's first test names the count, 6 shards where 3 should be left; its other two find shard 3 still there at 74 hours
+and no entry leaving shards 3, 4 and 5. Criterion 2's test finds shard 3 and its lock in place, and fails at its last
+assertion: the unheld shard 4 beside it was not removed, so nothing shows that shard 3 stayed for its lock. Criterion
+3's finds shard 3 still there, its holder gone. Criterion 4's two say that "while one process removes shard 4" never
+happened. Criterion 5's first finds no line beyond the base's, and its second passes: the base prints the lines it
+holds. Criterion 6's finds no words that section 7a and the script's comments share about when a shard leaves.
+Afterwards no process of a sandbox ran and no sandbox folder was left (ps and ls).
+
+✖ #3547.4edd3480 section 7a says when a shard leaves, in the words the script's own comment uses: the two share a run of at least eight words that names the days (18.852875ms)
+✖ #3547.12729b73 the run's line gives the count and the bytes of what it removed: one line more than the merge base prints, with 4 for the four shards it removed and the bytes du gave for them (6071.311458ms)
+✔ #3547.12729b73 a run that removes nothing prints the lines the merge base prints: one line for each shard it is given, made or reused, and no other, with no shard yet, with shards an hour old, and with a shard four days old that a live process holds (4402.937125ms)
+✖ #3547.da876765 a shard last made a tree four days before whose lock names a live process stays, and so does its lock, while the run removes the shard as old beside it that no process holds (3181.981334ms)
+✖ #3547.0ebc9715 a shard last made a tree four days before whose lock names a process that is gone is removed with its lock folder, and the shard an hour old beside it, its lock as dead, stays (3067.897125ms)
+✖ #3547.e7ae7186 while one process removes shard 4, a second that claims shards is never given shard 4's folder half removed: it is given another, or shard 4 made new (7149.072458ms)
+✖ #3547.e7ae7186 while one process removes shard 4, a second run that is given a lower shard does not remove shard 4 too: two runs never remove one shard (7451.728042ms)
+✖ #3547.beafe89b six shards, none held, the first five last made a tree four days before and the sixth an hour before: a run that claims two is given shards 1 and 2, and afterwards the folder holds 1, 2 and 6 (4232.701875ms)
+✖ #3547.beafe89b the run removes a shard last made a tree more than three days before, and no younger one: a shard 74 hours old is removed, and a shard 70 hours old stays (3117.628208ms)
+✖ #3547.beafe89b the run removes its shards highest number first: with shards 3, 4 and 5 each last made a tree four days before, none of them has lost an entry while a higher one still stands (9235.030792ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 1
+ℹ fail 9
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 16662.6005
+
+✖ failing tests:
+
+test at tests/acceptance/3547/design.test.mjs:59:1
+✖ #3547.4edd3480 section 7a says when a shard leaves, in the words the script's own comment uses: the two share a run of at least eight words that names the days (18.852875ms)
+  AssertionError [ERR_ASSERTION]: section 7a of docs/parallel-proof.md does not say when a shard leaves in the words of a comment of scripts/shards.mjs: the two share no run of 8 words in a row that names days or hours. The script's comments name days or hours 0 times and section 7a 3 times; the longest run they share that does: none
+
+test at tests/acceptance/3547/line.test.mjs:10:1
+✖ #3547.12729b73 the run's line gives the count and the bytes of what it removed: one line more than the merge base prints, with 4 for the four shards it removed and the bytes du gave for them (6071.311458ms)
+  AssertionError [ERR_ASSERTION]: the run printed 0 lines beyond the ones the merge base prints for the shards it was given, not the one line that gives the count and the bytes of what it removed; it removed nothing, and ~/deepbuild-shards holds 1, 2, 3, 4, 5, 6, 7, 8
+  the run printed:
+  SHARD 1 ~/deepbuild-shards/1: reused, at tree 67c26f8d958dc46194c0ab57ecc127ecee63698c
+  SHARD 2 ~/deepbuild-shards/2: reused, at tree 67c26f8d958dc46194c0ab57ecc127ecee63698c
+
+  and on stderr:
+  (nothing)
+
+  0 !== 1
+
+test at tests/acceptance/3547/locks.test.mjs:8:1
+✖ #3547.da876765 a shard last made a tree four days before whose lock names a live process stays, and so does its lock, while the run removes the shard as old beside it that no process holds (3181.981334ms)
+  AssertionError [ERR_ASSERTION]: the run removed nothing: shard 4, last made a tree four days before and held by no process, is still there, so nothing shows that shard 3 stayed for its lock and not for the run removing no shard at all; afterwards ~/deepbuild-shards holds 1, 2, 3, 3.lock, 4
+  the run printed:
+  SHARD 1 ~/deepbuild-shards/1: reused, at tree 67c26f8d958dc46194c0ab57ecc127ecee63698c
+
+  and on stderr:
+  (nothing)
+
+test at tests/acceptance/3547/locks.test.mjs:29:1
+✖ #3547.0ebc9715 a shard last made a tree four days before whose lock names a process that is gone is removed with its lock folder, and the shard an hour old beside it, its lock as dead, stays (3067.897125ms)
+  AssertionError [ERR_ASSERTION]: shard 3, last made a tree four days before, is still there though its lock names a process that is gone (pid 96842, killed); afterwards ~/deepbuild-shards holds 1, 2, 2.lock, 3, 3.lock
+  the run printed:
+  SHARD 1 ~/deepbuild-shards/1: reused, at tree 67c26f8d958dc46194c0ab57ecc127ecee63698c
+
+  and on stderr:
+  (nothing)
+
+test at tests/acceptance/3547/race.test.mjs:14:1
+✖ #3547.e7ae7186 while one process removes shard 4, a second that claims shards is never given shard 4's folder half removed: it is given another, or shard 4 made new (7149.072458ms)
+  AssertionError [ERR_ASSERTION]: the first run removed nothing: no entry left shard 4, last made a tree four days before and held by no process, and ~/deepbuild-shards still holds 1, 2, 2.lock, 3, 3.lock, 4, 5; "while one process removes shard 4" never happened, so nothing shows what a second run is given then
+  the first run printed:
+  SHARD 1 ~/deepbuild-shards/1: reused, at tree 67c26f8d958dc46194c0ab57ecc127ecee63698c
+
+  and on stderr:
+  (nothing)
+
+test at tests/acceptance/3547/race.test.mjs:50:1
+✖ #3547.e7ae7186 while one process removes shard 4, a second run that is given a lower shard does not remove shard 4 too: two runs never remove one shard (7451.728042ms)
+  AssertionError [ERR_ASSERTION]: the first run removed nothing: no entry left shard 4, last made a tree four days before and held by no process, and ~/deepbuild-shards still holds 1, 2, 3, 4; "while one process removes shard 4" never happened, so nothing shows what a second run is given then
+  the first run printed:
+  SHARD 1 ~/deepbuild-shards/1: reused, at tree 67c26f8d958dc46194c0ab57ecc127ecee63698c
+
+  and on stderr:
+  (nothing)
+
+test at tests/acceptance/3547/sweep.test.mjs:8:1
+✖ #3547.beafe89b six shards, none held, the first five last made a tree four days before and the sixth an hour before: a run that claims two is given shards 1 and 2, and afterwards the folder holds 1, 2 and 6 (4232.701875ms)
+  AssertionError [ERR_ASSERTION]: afterwards ~/deepbuild-shards holds 6 shards (1, 2, 3, 4, 5, 6), not the 3 it should, shards 1, 2 and 6: of shards 3, 4 and 5, each last made a tree four days before and held by no process, the run removed none
+  the run printed:
+  SHARD 1 ~/deepbuild-shards/1: reused, at tree 67c26f8d958dc46194c0ab57ecc127ecee63698c
+  SHARD 2 ~/deepbuild-shards/2: reused, at tree 67c26f8d958dc46194c0ab57ecc127ecee63698c
+
+  and on stderr:
+  (nothing)
+
+test at tests/acceptance/3547/sweep.test.mjs:27:1
+✖ #3547.beafe89b the run removes a shard last made a tree more than three days before, and no younger one: a shard 74 hours old is removed, and a shard 70 hours old stays (3117.628208ms)
+  AssertionError [ERR_ASSERTION]: shard 3, last made a tree 74 hours before and held by no process, is still there: more than three days is more than 72 hours; afterwards ~/deepbuild-shards holds 1, 2, 3
+  the run printed:
+  SHARD 1 ~/deepbuild-shards/1: reused, at tree 67c26f8d958dc46194c0ab57ecc127ecee63698c
+
+  and on stderr:
+  (nothing)
+
+test at tests/acceptance/3547/sweep.test.mjs:39:1
+✖ #3547.beafe89b the run removes its shards highest number first: with shards 3, 4 and 5 each last made a tree four days before, none of them has lost an entry while a higher one still stands (9235.030792ms)
+  AssertionError [ERR_ASSERTION]: the run removed nothing: no entry left shard 3, 4 or 5 while it ran, and ~/deepbuild-shards still holds 6 shards (1, 2, 3, 4, 5, 6)
+  the run printed:
+  SHARD 2 ~/deepbuild-shards/2: reused, at tree 67c26f8d958dc46194c0ab57ecc127ecee63698c
+  SHARD 1 ~/deepbuild-shards/1: reused, at tree 67c26f8d958dc46194c0ab57ecc127ecee63698c
+
+  and on stderr:
+  (nothing)
+
+## The throwaway guess, and each wrong program planted in it (README, On the base)
+
+The same command on a copy of scripts/ and docs/parallel-proof.md in a temporary folder, the guess laid over
+scripts/shards.mjs, this folder's copy beside it. Result lines only, with the first line of each failure. The guess
+is deleted.
+
+right: the guess, nothing planted (10 pass, 0 fail, 17 s at a 1-minute load of 45)
+
+one-day: the run removes each shard last made a tree more than one day before (9 pass, 1 fail, 17 s at a 1-minute load of 42)
+✖ #3547.beafe89b the run removes a shard last made a tree more than three days before, and no younger one: a shard 74 hours old is removed, and a shard 70 hours old stays (3651.717709ms)
+    shard 2, last made a tree 70 hours before, did not stay as it was, though that is not more than three days: it was removed; afterwards ~/deepbuild-shards holds 1
+
+any-age: the run removes every shard no live process holds, whatever its age (3 pass, 7 fail, 15 s at a 1-minute load of 39)
+✖ #3547.12729b73 the run's line gives the count and the bytes of what it removed: one line more than the merge base prints, with 4 for the four shards it removed and the bytes du gave for them (6155.540292ms)
+    the run removed shards 3, 4, 5, 6, 7, 8, not shards 5, 6, 7 and 8, the four last made a tree four days before that no process holds
+✖ #3547.da876765 a shard last made a tree four days before whose lock names a live process stays, and so does its lock, while the run removes the shard as old beside it that no process holds (3332.633ms)
+    afterwards ~/deepbuild-shards holds shards 1, 3, not 1, 2 and 3; afterwards ~/deepbuild-shards holds 1, 3, 3.lock
+✖ #3547.0ebc9715 a shard last made a tree four days before whose lock names a process that is gone is removed with its lock folder, and the shard an hour old beside it, its lock as dead, stays (2808.284667ms)
+    shard 2, last made a tree an hour before, did not stay as it was, though only its lock's holder is gone: it was removed; afterwards ~/deepbuild-shards holds 1
+✖ #3547.e7ae7186 while one process removes shard 4, a second run that is given a lower shard does not remove shard 4 too: two runs never remove one shard (5909.194333ms)
+    while the first run was removing shard 4 (shard 4 partly removed (5039 of its 5043 entries left), its lock held), the second run asked for one shard and was given shard 2, and printed a line the merge base does not print: it removed shard 4, or says it did, while the first run was removing it
+✖ #3547.beafe89b six shards, none held, the first five last made a tree four days before and the sixth an hour before: a run that claims two is given shards 1 and 2, and afterwards the folder holds 1, 2 and 6 (4691.424583ms)
+    afterwards ~/deepbuild-shards holds 2 shards (1, 2), not the 3 it should, shards 1, 2 and 6: of shards 3, 4 and 5, each last made a tree four days before and held by no process, the run removed 3, 4, 5
+✖ #3547.beafe89b the run removes a shard last made a tree more than three days before, and no younger one: a shard 74 hours old is removed, and a shard 70 hours old stays (2551.064125ms)
+    shard 2, last made a tree 70 hours before, did not stay as it was, though that is not more than three days: it was removed; afterwards ~/deepbuild-shards holds 1
+✖ #3547.beafe89b the run removes its shards highest number first: with shards 3, 4 and 5 each last made a tree four days before, none of them has lost an entry while a higher one still stands (7205.465125ms)
+    afterwards ~/deepbuild-shards holds 2 shards (1, 2), not shards 1, 2 and 6; when the first entry left shard 5: shard 3 whole, shard 4 whole, shard 5 partly removed (2042 of its 2043 entries left)
+
+lowest-first: the run removes its shards lowest number first (9 pass, 1 fail, 14 s at a 1-minute load of 36)
+✖ #3547.beafe89b the run removes its shards highest number first: with shards 3, 4 and 5 each last made a tree four days before, none of them has lost an entry while a higher one still stands (7007.527208ms)
+    shard 3 was being removed while shard 4, a higher number, was whole: the run does not remove highest number first; when the first entry left shard 3: shard 3 partly removed (2029 of its 2043 entries left), shard 4 whole, shard 5 whole
+
+date-alone: the run takes no lock and looks at none: it goes by the date alone (5 pass, 5 fail, 16 s at a 1-minute load of 34)
+✖ #3547.12729b73 a run that removes nothing prints the lines the merge base prints: one line for each shard it is given, made or reused, and no other, with no shard yet, with shards an hour old, and with a shard four days old that a live process holds (3856.5125ms)
+    the run was to remove nothing: shards 1 and 2 are an hour old, and a live process (pid 85438) holds shard 3; afterwards ~/deepbuild-shards holds 1, 2, 3.lock
+✖ #3547.da876765 a shard last made a tree four days before whose lock names a live process stays, and so does its lock, while the run removes the shard as old beside it that no process holds (2950.262625ms)
+    shard 3, last made a tree four days before, was removed though its lock names a live process (pid 77010); afterwards ~/deepbuild-shards holds 1, 2, 3.lock
+✖ #3547.0ebc9715 a shard last made a tree four days before whose lock names a process that is gone is removed with its lock folder, and the shard an hour old beside it, its lock as dead, stays (2463.450583ms)
+    shard 3 was removed and its lock folder was left: ~/deepbuild-shards still holds ~/deepbuild-shards/3.lock; afterwards ~/deepbuild-shards holds 1, 2, 2.lock, 3.lock
+✖ #3547.e7ae7186 while one process removes shard 4, a second that claims shards is never given shard 4's folder half removed: it is given another, or shard 4 made new (6273.20275ms)
+    while the first run was removing shard 4 (shard 4 partly removed (5022 of its 5043 entries left), with no lock), the second run asked for two shards and was given shard 4 and 5: shard 4's folder as the first run was removing it, not shard 4 made new
+✖ #3547.e7ae7186 while one process removes shard 4, a second run that is given a lower shard does not remove shard 4 too: two runs never remove one shard (6394.747125ms)
+    while the first run was removing shard 4 (shard 4 partly removed (5026 of its 5043 entries left), with no lock), the second run asked for one shard and was given shard 2, and printed a line the merge base does not print: it removed shard 4, or says it did, while the first run was removing it
+
+leaves-lock: the run removes the shard and not the lock it took for it (5 pass, 5 fail, 22 s at a 1-minute load of 33)
+✖ #3547.0ebc9715 a shard last made a tree four days before whose lock names a process that is gone is removed with its lock folder, and the shard an hour old beside it, its lock as dead, stays (4061.388834ms)
+    shard 3 was removed and its lock folder was left: ~/deepbuild-shards still holds ~/deepbuild-shards/3.lock; afterwards ~/deepbuild-shards holds 1, 2, 3.lock
+✖ #3547.e7ae7186 while one process removes shard 4, a second that claims shards is never given shard 4's folder half removed: it is given another, or shard 4 made new (12959.610334ms)
+    while the first run was removing shard 4 (shard 4 partly removed (5042 of its 5043 entries left), its lock held), the second run asked for two shards and was given shard 5 and 6; once the first run had ended, ~/deepbuild-shards held 4.lock of shard 4, which no run holds
+✖ #3547.e7ae7186 while one process removes shard 4, a second run that is given a lower shard does not remove shard 4 too: two runs never remove one shard (8429.912625ms)
+    once both runs had ended, ~/deepbuild-shards still held 4.lock of shard 4
+✖ #3547.beafe89b six shards, none held, the first five last made a tree four days before and the sixth an hour before: a run that claims two is given shards 1 and 2, and afterwards the folder holds 1, 2 and 6 (7437.373916ms)
+    afterwards ~/deepbuild-shards holds more of its shards than the folders 1, 2 and 6: 1, 2, 3.lock, 4.lock, 5.lock, 6
+✖ #3547.beafe89b the run removes a shard last made a tree more than three days before, and no younger one: a shard 74 hours old is removed, and a shard 70 hours old stays (4315.0735ms)
+    afterwards ~/deepbuild-shards holds more of its shards than the folders 1 and 2: 1, 2, 3.lock
+
+no-lock: the run looks whether a live process holds the lock, and removes without holding it (8 pass, 2 fail, 18 s at a 1-minute load of 50)
+✖ #3547.e7ae7186 while one process removes shard 4, a second that claims shards is never given shard 4's folder half removed: it is given another, or shard 4 made new (8993.561625ms)
+    while the first run was removing shard 4 (shard 4 partly removed (5041 of its 5043 entries left), with no lock), the second run asked for two shards and was given shard 4 and 5: shard 4's folder as the first run was removing it, not shard 4 made new
+✖ #3547.e7ae7186 while one process removes shard 4, a second run that is given a lower shard does not remove shard 4 too: two runs never remove one shard (7602.580542ms)
+    while the first run was removing shard 4 (shard 4 partly removed (5013 of its 5043 entries left), with no lock), the second run asked for one shard and was given shard 2, and printed a line the merge base does not print: it removed shard 4, or says it did, while the first run was removing it
+
+unlocks-first: the run gives the lock back before it removes (8 pass, 2 fail, 18 s at a 1-minute load of 67)
+✖ #3547.e7ae7186 while one process removes shard 4, a second that claims shards is never given shard 4's folder half removed: it is given another, or shard 4 made new (10194.650167ms)
+    while the first run was removing shard 4 (shard 4 partly removed (5024 of its 5043 entries left), with no lock), the second run asked for two shards and was given shard 4 and 5: shard 4's folder as the first run was removing it, not shard 4 made new
+✖ #3547.e7ae7186 while one process removes shard 4, a second run that is given a lower shard does not remove shard 4 too: two runs never remove one shard (7144.266625ms)
+    while the first run was removing shard 4 (shard 4 partly removed (5031 of its 5043 entries left), with no lock), the second run asked for one shard and was given shard 2, and printed a line the merge base does not print: it removed shard 4, or says it did, while the first run was removing it
+
+all-bytes: the line gives the bytes of every shard the run looked at, removed or not (9 pass, 1 fail, 16 s at a 1-minute load of 64)
+✖ #3547.12729b73 the run's line gives the count and the bytes of what it removed: one line more than the merge base prints, with 4 for the four shards it removed and the bytes du gave for them (6240.666833ms)
+    the run's line does not give the bytes du gave for the shards it removed, 1879408640 bytes (1.88 GB): shard 5 402743296, shard 6 671178752, shard 7 536961024, shard 8 268525568; the eight shards together held 5637865472 bytes (5.64 GB): SHARDS 4 removed (8, 7, 6, 5), each last made a tree more than three days before: 4.0 GB by du
+
+says-none: the run prints its line on every run, with a count of 0 when it removed nothing (8 pass, 2 fail, 15 s at a 1-minute load of 57)
+✖ #3547.12729b73 a run that removes nothing prints the lines the merge base prints: one line for each shard it is given, made or reused, and no other, with no shard yet, with shards an hour old, and with a shard four days old that a live process holds (1004.638625ms)
+    with no shard yet, a run that removes nothing does not print the lines the merge base prints, which are:
+✖ #3547.e7ae7186 while one process removes shard 4, a second run that is given a lower shard does not remove shard 4 too: two runs never remove one shard (6668.751208ms)
+    while the first run was removing shard 4 (shard 4 partly removed (5015 of its 5043 entries left), its lock held), the second run asked for one shard and was given shard 2, and printed a line the merge base does not print: it removed shard 4, or says it did, while the first run was removing it
+
+other-words: the script's comment says when a shard leaves, and section 7a says it in words of its own (9 pass, 1 fail, 18 s at a 1-minute load of 54)
+✖ #3547.4edd3480 section 7a says when a shard leaves, in the words the script's own comment uses: the two share a run of at least eight words that names the days (16.685833ms)
+    section 7a of docs/parallel-proof.md does not say when a shard leaves in the words of a comment of scripts/shards.mjs: the two share no run of 8 words in a row that names days or hours. The script's comments name days or hours 1 times and section 7a 4 times; the longest run they share that does: "three days" (2 words)
