@@ -27,6 +27,8 @@ export class Replay {
     this.begin();
   }
 }
+/** The hub's one replay, the record's at its start, when its open runs one: a hub process holds one record. */
+export const replay = new Replay();
 
 /** The planted folds DEEP_HUB_TEST_FOLD names, and how long one holds a page; only tests set it. */
 const FOLDS = ['page-1s', 'page-3-never'];

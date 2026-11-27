@@ -26,7 +26,7 @@ import { handleOf as ruleHandle, noticeText } from './rules.js';
 import { dropTestSettings, installedRoot, real, repoOf, rootOf, type Root } from './paths.js';
 import { shedStartup, YOUNG } from './settle.js';
 import { processHealth } from './process-health.js';
-import { Replay, type Replaying } from './replay.js';
+import { replay, type Replaying } from './replay.js';
 import { Waits, type HookSeen, type OpenCall, type Restored } from './waits.js';
 import { People } from './people.js';
 import { identityAt, idOf, type Identity } from './identity.js';
@@ -290,7 +290,6 @@ class Hub {
   private hooks = new Set<string>();
   /** Whether the core has started: until then a deep mcp's hello is answered at once and bound once it has (#1415). */
   private coreUp = false;
-  /** The record's replay at the start, when its open runs one (#3544). */ private readonly replay = new Replay();
   /** The sessions with an ask still to deliver, as the core last said: only their stops are held (#18, #19). */
   private asking = new Set<string>();
   /** The sessions whose cut-off turn started a send with no recorded end (#85), as the core tells it: their shell and MCP calls are checked at the gate first. */
@@ -384,7 +383,7 @@ class Hub {
     // first; read-only, so this thread never checkpoints or syncs the ledger, and one that can't be read stops the start.
     this.identity = identityAt(join(this.root.dir, 'hub.key'), 'deep-hub');
     this.helloLine = line({ hello: 'deep-hub', start: this.start, contract: contractOf(this.plant), features: FEATURES, generation: writerGeneration(this.root.ledger), hub: this.identity.id });
-    this.core = this.plant === 'commit-on-event-loop' ? await coreInline(options, frame, fatal, asking, acking, scrub, forgot) : coreWorker(options, frame, fatal, asking, acking, scrub, forgot, (at) => this.replay.heard(at));
+    this.core = this.plant === 'commit-on-event-loop' ? await coreInline(options, frame, fatal, asking, acking, scrub, forgot) : coreWorker(options, frame, fatal, asking, acking, scrub, forgot, (at) => replay.heard(at));
     this.parsers = this.plant === 'parse-on-event-loop' ? await parserInline(held, this.plant, this.root.dir) : parserPool(held, this.plant, this.root.dir);
     // Read once before any hook, so a rules.json spoiled later can be written again as it was.
     this.rules();
@@ -1291,7 +1290,7 @@ class Hub {
       case 'hub.health':
       case 'health':
         // While the record replays, health says how far it is, at once or as soon as the replay begins (#3544), which a call waits to hear of only until the core is up, so none gathers on a start that replays nothing. Else it waits for the core's start, as calls through the core's queue do (#2801): its readings aren't open before; the process readings come after the core's, whose own checks start short-lived children (the secret store's) that would count as the hub's.
-        return void reply((this.coreUp ? Promise.resolve() : Promise.race([this.core.started, this.replay.begun])).then((): Obj | Promise<Obj> => (this.replay.at ? { pid: process.pid, start: this.start, off: this.off, parsers: this.parsers.count(), restarts: this.restarts(), rebuilding: this.replay.at } : this.core.started.then(() => this.core.request({ op: 'health', role: conn.name })).then(async (health) => ({ pid: process.pid, start: this.start, off: this.off, parsers: this.parsers.count(), ...(health as Obj), restarts: this.restarts(), process: await processHealth() })))));
+        return void reply((this.coreUp ? Promise.resolve() : Promise.race([this.core.started, replay.begun])).then((): Obj | Promise<Obj> => (replay.at ? { pid: process.pid, start: this.start, off: this.off, parsers: this.parsers.count(), restarts: this.restarts(), rebuilding: replay.at } : this.core.started.then(() => this.core.request({ op: 'health', role: conn.name })).then(async (health) => ({ pid: process.pid, start: this.start, off: this.off, parsers: this.parsers.count(), ...(health as Obj), restarts: this.restarts(), process: await processHealth() })))));
       case 'stream.subscribe': {
         const sub = `${conn.id}:${JSON.stringify(id)}`;
         const after = Number.isSafeInteger(params.after) && (params.after as number) >= 0 ? (params.after as number) : 0;

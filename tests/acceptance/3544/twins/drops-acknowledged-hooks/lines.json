@@ -5,7 +5,7 @@
         "    this.core.post({ op: 'hook', drafts: parsed.drafts, meta, writer });"
       ],
       "wrong": [
-        "    if (!this.replay.at) this.core.post({ op: 'hook', drafts: parsed.drafts, meta, writer });"
+        "    if (!replay.at) this.core.post({ op: 'hook', drafts: parsed.drafts, meta, writer });"
       ]
     }
   ]
