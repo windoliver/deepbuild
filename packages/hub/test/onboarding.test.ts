@@ -9,6 +9,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { lastingNode } from '../src/paths.js';
 import { buildFailure } from '../src/setup.js';
 import { listText } from '../src/list.js';
+import { removeHome } from './hub.js';
 
 const CLI = fileURLToPath(new URL('../../cli/dist/main.js', import.meta.url));
 const made: string[] = [];
@@ -17,7 +18,7 @@ const started: number[] = [];
 afterAll(() => {
   // Only the hubs this file's launcher started, by PID.
   for (const pid of started) try { process.kill(pid); } catch { /* gone */ }
-  for (const dir of made) rmSync(dir, { recursive: true, force: true });
+  for (const dir of made) removeHome(dir);
 });
 /** A home with nothing of DeepBuild, and an environment that reaches no agent, no service manager and no real home. */
 function fresh(): { home: string; env: NodeJS.ProcessEnv; tmp: string } {
