@@ -1,5 +1,3 @@
-// #2956: a soak's step limit counts on each of the design's reference Macs (design: The reference Macs), as
-// scripts/benchmark.mjs's list names them, and on no other Mac. The machine is planted through sysctl, the boundary.
 import { afterEach, expect, it, vi } from 'vitest';
 import { references } from '../../../scripts/benchmark.mjs';
 
@@ -27,7 +25,6 @@ for (const mac of references) {
   });
 }
 
-// One machine per test: onReferenceMac() keeps its first answer until the module is loaded again.
 it("doesn't count it on another Mac", async () => {
   expect(await onMac('Mac14,2', 16 * 2 ** 30, 8)).toBe(false);
 });

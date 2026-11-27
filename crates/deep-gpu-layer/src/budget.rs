@@ -781,7 +781,6 @@ mod tests {
                 "lowPowerMode": false, "thermalState": "nominal", "macosBuild": "26B7131" })
     }
 
-    // #2956: a GPU budget counts on each of the design's reference Macs (scripts/benchmark.mjs's list), and on no other.
     #[test]
     fn counts_on_each_reference_mac_and_no_other() {
         for (model, chip, gib) in [
