@@ -1,4 +1,4 @@
-# 0008: The panel import check
+# 0009: The panel import check
 
 Status: accepted. Moved from comments in `crates/deep-app/src/panel_module.rs` by #1847 ([0001](0001-code-carries-no-comments.md)). #1425 states the rule these serve: a panel imports `@deepbuild/panel` and its own scripts only, refused at pack check and at load. The decisions below are the ones written nowhere else. Each refusal comes from one rule: what the check can't read for certain is refused, since a name it can't read could be the toolkit's.
 

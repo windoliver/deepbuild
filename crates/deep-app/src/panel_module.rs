@@ -6,7 +6,7 @@
 //! writes there before each load, re-exporting each name from the toolkit module the catalog says serves it.
 //!
 //! [`check`] runs at pack check (`panel@1`) and again at load. It refuses a panel that imports a toolkit module, naming
-//! the file and line, or names any module some way the check can't read (`docs/adr/0008`); one that uses a name off the
+//! the file and line, or names any module some way the check can't read (`docs/adr/0009`); one that uses a name off the
 //! catalog, naming the closest name on it; and one that uses a component whose script runs per frame, naming it.
 
 use std::collections::BTreeMap;
