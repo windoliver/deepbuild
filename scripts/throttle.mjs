@@ -686,6 +686,27 @@ function threadsByProcess() {
   return counts;
 }
 
+const compileKey = (args) => {
+  const metadata = args.match(/(?:^|\s)-C\s*metadata=(\S+)/)?.[1], out = args.match(/(?:^|\s)--out-dir[=\s]+(\S+)/)?.[1];
+  return metadata && out ? `${metadata}\n${out}` : null;
+};
+function compilesAsked(procs, byTree) {
+  const servers = [...procs].filter(([pid, proc]) => proc.command === 'sccache' && !byTree(pid)).map(([pid]) => pid);
+  if (!servers.length) return new Map();
+  const listing = spawnSync('ps', ['-A', '-ww', '-o', 'pid=,args='], { encoding: 'utf8', maxBuffer: 1 << 26, env: { ...process.env, LC_ALL: 'C' } });
+  if (listing.status !== 0) return new Map();
+  const clients = new Map(), compiles = [];
+  for (const line of listing.stdout.split('\n')) {
+    const [, number, args] = line.match(/^\s*(\d+)\s+(.*)$/) ?? [];
+    const pid = Number(number), proc = procs.get(pid), key = proc && compileKey(args);
+    if (!key) continue;
+    const owner = byTree(pid);
+    if (owner && proc.command === 'sccache') clients.set(key, owner);
+    else if (!owner && servers.includes(chain(procs, pid).slice(1).find((at) => procs.get(at)?.command === 'sccache'))) compiles.push([pid, key]);
+  }
+  return new Map(compiles.filter(([, key]) => clients.has(key)).map(([pid, key]) => [pid, clients.get(key)]));
+}
+
 /** Each CPU's ticks, busy and in all, as os.cpus() counts them. */
 const ticks = () => cpus().map(({ times }) => ({ busy: times.user + times.nice + times.sys + times.irq, all: times.user + times.nice + times.sys + times.irq + times.idle }));
 
@@ -754,7 +775,9 @@ function sample() {
   // A holder of two grants counts under the one it took first; the other still has its entry.
   const entries = held.filter((grant) => procs.get(grant.pid)?.start === grant.start).map((grant) => ({ id: grant.id, class: grant.class, pid: grant.pid, tally: tally() }));
   const grants = new Map([...entries].reverse().map((entry) => [entry.pid, entry]));
-  const ownerOf = (pid) => grants.get(chain(procs, pid).findLast((at) => grants.has(at)));
+  const byTree = (pid) => grants.get(chain(procs, pid).findLast((at) => grants.has(at)));
+  const asked = compilesAsked(procs, byTree);
+  const ownerOf = (pid) => byTree(pid) ?? chain(procs, pid).map((at) => asked.get(at)).find(Boolean);
   const outside = tally();
   const used = [];
   for (const [pid, proc] of procs) {
@@ -923,6 +946,32 @@ function apportion(sums, total) {
   return new Map(exact.map((part) => [part.name, part]));
 }
 
+function claimSampler() {
+  const mark = join(folder(), 'load.pid'), mine = `${process.pid} ${processes({ fresh: true }).get(process.pid).start}`;
+  for (let look = 0; ; look++) {
+    try {
+      writeFileSync(mark, mine, { flag: 'wx', mode: 0o600 });
+      return null;
+    } catch (error) {
+      if (error.code !== 'EEXIST') throw error;
+    }
+    let held = '';
+    try {
+      held = readFileSync(mark, 'utf8');
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+      continue;
+    }
+    const [pid, ...start] = held.split(' ');
+    if (!(Number(pid) > 0) && look < 10) {
+      sleep(50);
+      continue;
+    }
+    if (Number(pid) > 0 && Number(pid) !== process.pid && alive(processes({ fresh: true }), { pid: Number(pid), start: start.join(' ') })) return Number(pid);
+    rmSync(mark, { force: true });
+  }
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] === 'load') {
   const options = process.argv.slice(3);
   const write = () => appendFileSync(join(folder(), 'load.log'), `${JSON.stringify(sample())}\n`);
@@ -943,6 +992,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] === 'l
       process.exit(0);
     }
     mkdirSync(folder(), { recursive: true, mode: 0o700 });
+    const other = claimSampler();
+    if (other) {
+      console.log(`INCONCLUSIVE load: another sampler, pid ${other}, writes this log`);
+      process.exit(3);
+    }
     write();
   } catch (error) {
     console.log(`BLOCKED throttle: ${error.message}`);
