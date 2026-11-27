@@ -1,0 +1,8 @@
+{
+  "crates/deep-logic/src/checks.rs": [
+    {
+      "find": ["    let hashes_only = planted.check_step_hashes_only;"],
+      "wrong": ["    let hashes_only = true;"]
+    }
+  ]
+}

@@ -1646,3 +1646,11 @@ alone.push('tests/acceptance/3507-redraft-ac2/');
 // #3617's folder (blind) runs alone by its lane.json: each file builds deep-gpu and runs GPU surface frames at 1936 x 1584.
 // ac2-onepass.test.ts judges the five-run draw-and-finish p95 on a reference Mac.
 timed.push('tests/acceptance/3617/ac2-onepass.test.ts');
+
+// #3402: #1352's section, routes and taste-call files find the section as the one heading holding its words and read
+// Decided rows under ### Decided alone, so they fail since #3138. Kept as written, by hand only; their blind redraft,
+// which finds the section by its anchor and reads every Decided table under Decisions, runs in their place.
+for (const name of ['ac1-section', 'ac3-agent-routes', 'ac5-taste-call']) {
+  redrafted[`tests/acceptance/1352/${name}.test.mjs`] = 'tests/acceptance/1352-redraft-3402/';
+  byHand.push(`tests/acceptance/1352/${name}.test.mjs`);
+}
