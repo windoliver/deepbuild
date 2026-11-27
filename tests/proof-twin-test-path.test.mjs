@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
@@ -24,12 +24,13 @@ const write = (root, files) => {
   }
 };
 
-function lane(t, { base, change, twin }) {
+function lane(t, { base, links = {}, change, twin }) {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'deep-twin-test-path-')));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const repo = join(dir, 'repo');
   const git = (...args) => execFileSync('git', [...GIT, ...args], { cwd: repo, stdio: 'ignore' });
   write(repo, base);
+  for (const [path, target] of Object.entries(links)) symlinkSync(target, join(repo, path));
   git('init', '-q', '-b', 'main');
   git('add', '-A');
   git('commit', '-qm', 'base');
@@ -97,4 +98,20 @@ test('a spawned twin that crashes proves the test even when the assertion messag
 
 test('a twin of a script in a data folder named in another case is refused as test data', { timeout: 600_000 }, (t) => {
   refused(t, { base: { 'tests/Fixtures/sum.mjs': WRONG }, change: { 'tests/Fixtures/sum.mjs': RIGHT, [TEST]: SPAWNS('tests/Fixtures/sum.mjs') }, twin: { 'tests/Fixtures/sum.mjs': WRONG } }, 'tests/Fixtures/sum.mjs');
+});
+
+test('a twin of a link into a data folder is refused as test data', { timeout: 600_000 }, (t) => {
+  refused(t, { base: { 'tests/fixtures/sum.mjs': WRONG }, links: { 'tests/sum.mjs': 'fixtures/sum.mjs' }, change: { 'tests/fixtures/sum.mjs': RIGHT, [TEST]: SPAWNS('tests/sum.mjs') }, twin: { 'tests/sum.mjs': WRONG } }, 'tests/sum.mjs');
+});
+
+test('a twin of a link to a test file is refused', { timeout: 600_000 }, (t) => {
+  refused(t, { base: { 'tests/tools/sum.test.mjs': WRONG }, links: { 'tests/tools/sum.mjs': 'sum.test.mjs' }, change: { 'tests/tools/sum.test.mjs': RIGHT, [TEST]: SPAWNS('tests/tools/sum.mjs') }, twin: { 'tests/tools/sum.mjs': WRONG } }, 'tests/tools/sum.mjs');
+});
+
+test('a twin whose own frames are on the stack of the error a test caught proves nothing', { timeout: 600_000 }, (t) => {
+  const lib = "export const parse = (text) => {\n  if (text !== 'ok') throw new Error(`can't parse ${text}`);\n  return text;\n};\n";
+  const plug = (text) => `import { parse } from '../../src/lib.mjs';\nexport const run = () => parse('${text}');\n`;
+  const catches = `import assert from 'node:assert/strict';\nimport test from 'node:test';\n\ntest(${JSON.stringify(`${TAG} two and three sum to five`)}, async () => {\n  const url = new URL('../../tools/plug.mjs', import.meta.url);\n  const plug = await import(url.href);\n  assert.doesNotThrow(() => plug.run());\n});\n`;
+  const { lines, said } = before(t, { base: { 'src/lib.mjs': lib, 'tests/tools/plug.mjs': plug('x') }, change: { 'tests/tools/plug.mjs': plug('ok'), [TEST]: catches }, twin: { 'tests/tools/plug.mjs': plug('x') } });
+  assert.ok(lines.some((line) => line.startsWith('FAIL before: ') && line.endsWith(`${TAG}: fails on neither the merge base nor its planted wrong program`)), said);
 });
