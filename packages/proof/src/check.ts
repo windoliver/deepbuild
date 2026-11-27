@@ -15,7 +15,7 @@ const RUNNERS: Record<ProofRunner, Runner> = {
   lean4: { check: lean, mutants: leanMutants },
   kani: { check: kani, mutants: kaniMutants },
 };
-const runnerOf = (spec: ProofSpec): Runner | undefined => (Object.hasOwn(RUNNERS, spec.runner) ? RUNNERS[spec.runner] : undefined);
+const runnerOf = (spec: ProofSpec): Runner | undefined => (typeof spec.runner === 'string' && Object.hasOwn(RUNNERS, spec.runner) ? RUNNERS[spec.runner] : undefined);
 const unheld = (spec: ProofSpec): string => `a proof runner named ${String(spec.runner)}, which this plug-in doesn't have`;
 
 export function check(spec: ProofSpec, ctx: CheckContext, fault: Fault = 'none'): Checked {

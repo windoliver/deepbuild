@@ -20,7 +20,7 @@ const BUDGETS: Record<WorkKind, KindBudget> = {
   message: { time_ms: 5_000, cost_usd: 0 },
 };
 
-/** The kinds this package holds, in order: the hub offers each, so a new kind is one entry in BUDGETS (#1896). */
+/** The kinds this package holds, in order, read from BUDGETS: the hub offers each, with no edit of its own (#1896). */
 export const workKinds = (): WorkKind[] => Object.keys(BUDGETS) as WorkKind[];
 
 /** The kind's runner, as the check.kind@1 fill deep.registerCheck registers. */
