@@ -15,7 +15,6 @@ function entry(t, { checks, perf = '', limit = 300_000 }) {
   const cwd = realpathSync(mkdtempSync(join(tmpdir(), 'deep-preflight-entry-')));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
   for (const directory of ['scripts', 'benchmarks']) mkdirSync(join(cwd, directory));
-  // Only the files: a folder of scripts/, as agents-page-shots, is no part of the entry.
   for (const file of readdirSync(scripts, { withFileTypes: true })) if (file.isFile()) copyFileSync(new URL(file.name, scripts), join(cwd, 'scripts', file.name));
   writeFileSync(join(cwd, 'scripts/checks.mjs'), checks);
   writeFileSync(join(cwd, 'scripts/perf.mjs'), perf);
@@ -134,8 +133,6 @@ test('the check budget comes from budgets.json and excludes the perf comparison'
   assert.equal(slowPerf.status, 0, slowPerf.stdout);
 });
 
-// A check that hangs, as one did for hours on the Spark holding the machine's timed grant, is stopped with its
-// children once the checks pass the budget with its margin, perf's allowance for the same workload.
 test('hung checks are stopped at the budget with its margin, their children too', async (t) => {
   const cwd = entry(t, { limit: 4000, checks: `
     import { spawn } from 'node:child_process';
@@ -152,7 +149,6 @@ test('hung checks are stopped at the budget with its margin, their children too'
     }
   };
   const file = join(cwd, 'pids');
-  // A hung run under the merge base's preflight is stopped here, by the PIDs it wrote, read before the folder goes.
   let pids = [];
   t.after(() => { for (const pid of pids) if (alive(pid)) process.kill(pid, 'SIGKILL'); });
   const result = spawnSync(process.execPath, [join(cwd, 'scripts/preflight.mjs')], { encoding: 'utf8', timeout: 30_000, killSignal: 'SIGKILL' });
@@ -168,8 +164,6 @@ test('hung checks are stopped at the budget with its margin, their children too'
   assert.deepEqual(pids.filter(alive), [], 'the checks and their child were stopped');
 });
 
-// Ctrl-C at a terminal signals preflight's whole process group. The measured checks lead a group of their own, so
-// only preflight's stop reaches them, and it must find them, children too, before the timed grant goes back.
 test('a Ctrl-C to preflight stops the measured checks and their children', async (t) => {
   const cwd = entry(t, { checks: `
     import { spawn } from 'node:child_process';
@@ -188,11 +182,9 @@ test('a Ctrl-C to preflight stops the measured checks and their children', async
   };
   let pids = [];
   t.after(() => { for (const pid of pids) if (alive(pid)) process.kill(pid, 'SIGKILL'); });
-  // Its own group, as a terminal's foreground job is, so the Ctrl-C reaches preflight's group and nothing else here.
   const child = spawn(process.execPath, [join(cwd, 'scripts/preflight.mjs')], { detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
   t.after(() => { try { process.kill(-child.pid, 'SIGKILL'); } catch {} });
   let stdout = '';
-  // exit, not close: a check left running holds preflight's output open.
   const exited = once(child, 'exit');
   const hung = new Promise((started) => child.stdout.setEncoding('utf8').on('data', (chunk) => {
     stdout += chunk;

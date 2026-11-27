@@ -67,8 +67,6 @@ async function supervise() {
   let stop;
   const onStop = (signal) => { stop ??= { signal, gone: stopTree() }; };
   const listen = (on) => { for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP']) process[on ? 'on' : 'off'](signal, onStop); };
-  // The child leads a group of its own, so a terminal's Ctrl-C or hang-up reaches this process alone and the stop
-  // finds the whole tree through the child; the measured checks lead their own group too, out of the signal's reach.
   const child = async (mode, env = {}) => {
     const started = spawn(process.execPath, [fileURLToPath(import.meta.url), mode, ...keptArgs(kept)], { cwd: root, stdio: 'inherit', env: { ...process.env, ...env }, detached: true });
     const code = await new Promise((done) => started.on('close', (status) => done(status ?? 1)));
@@ -124,11 +122,7 @@ function work(args) {
   // The checks and their builds share one budget; perf's merge-base run is extra.
   const budgets = JSON.parse(readFileSync(new URL('../benchmarks/budgets.json', import.meta.url), 'utf8'));
   const budgetMs = budgets.preflight.limits.elapsedMs;
-  // Checks that outrun the budget with its margin, perf's allowance for the same workload, are stopped with their
-  // children: a hung check would hold the machine's timed grant, and so every build and test on it, for ever.
-  // Whole milliseconds, as spawnSync's timeout takes them, so any margin the budget file allows can be used.
   const allowanceMs = Math.ceil(budgetMs * (1 + budgets.preflight.margin));
-  // Work whose supervising preflight is gone stops before its next step: no one holds its grant or watches it.
   const parent = process.ppid;
   const orphaned = () => {
     if (process.ppid === parent) return;
@@ -179,7 +173,6 @@ function work(args) {
     const { jobs, ms, runs } = keptTime(kept);
     console.log(`Kept: ${jobs} jobs, ${(ms / 1000).toFixed(0)} s of machine time, from ${runs} runs`);
   }
-  // A stop at the allowance has said so above.
   if (checksMs >= budgetMs && !stopped) {
     console.log(`FAIL preflight budget: checks took ${(checksMs / 1000).toFixed(2)} s\n  Fix: Reduce local check time below the budget in benchmarks/budgets.json.`);
     process.exitCode = 1;
