@@ -8,9 +8,9 @@ pixel, after a cull that brought the classes to 1 moved one pixel of another sui
 Shaded on `every_pass`: 1.0247 a covered pixel, 0.8722 a pixel, over 300 frames
 Geometry pass: unchanged
 
-Read on main at `5a81b58de` with this change, on 2026-11-26, on a Mac17,10 (Apple M5 Max, macOS 26B8119), on Metal,
-headless, under the GPU lease's file, on mains power, at a one-minute load of 32 to 37 on 18 cores, and twice more
-at higher loads with the same bytes. The readings are counts, which don't move with load. They are from one machine
+Read on main at `b364fee2b` with this change, on 2026-11-26, on a Mac17,10 (Apple M5 Max, macOS 26B8119), on Metal,
+headless, under the GPU lease's file, on mains power, at a one-minute load of 59 on 18 cores when its grant came, and three
+times before at `5a81b58de` with the same bytes. The readings are counts, which don't move with load. They are from one machine
 and set no budget.
 
 ## The count
@@ -129,7 +129,7 @@ depth is equal) is not in this change.
 
 ## The hashes
 
-On Metal, each of the five suites ran whole in this checkout, and the merge base's build (`5a81b58de`) drew each
+On Metal, each of the five suites ran whole in this checkout, and the merge base's build (`b364fee2b`) drew each
 frame again from the same input (`tests/acceptance/3507/ac4-hashes-<n>.test.mjs`). Every hash is the same.
 
 | Suite | Frames | Children drawn by both builds | Left out |
@@ -140,31 +140,37 @@ frame again from the same input (`tests/acceptance/3507/ac4-hashes-<n>.test.mjs`
 | `tests/acceptance/465/` | 7,953 | 11 | 2 planted children; `budgets.test.ts`, run by hand |
 | `tests/acceptance/1637/` | 243 | 20 | 4 planted children; `budgets.test.ts`, timed |
 
-That is 8,830 frames, on the build this change ends with. No pass changed, so the suites' frames never reach the
-changed code: the overdraw view is the only caller. With the cull above in, #418's suite differed on the one frame
-named there and the other four read the same.
+That is 8,830 frames, on the build this change ends with, after main was merged in. The same five files read the
+same before the merge, against `5a81b58de`. No pass changed, so the suites' frames never reach the changed code: the
+overdraw view is the only caller. With the cull above in, #418's suite differed on the one frame named there and the
+other four read the same.
 
 ## What was run, and what was not
 
-On the final build, each once, one at a time, under a test grant:
+On the final build, after main was merged in (merge base `b364fee2b`), each once, one at a time, under a test grant:
 
 - `ac1-two-walls`: both tests pass
 - `3507-redraft-ac2/ac2-classes`: passes: every one of the 1,800 frames counts from 1 to 2 a covered pixel, and the six
   lines above are its own counts
 - `ac3-report`, `ac3-branch` (frames 0, 75, 150 and 225 by both builds: one pass list, the same 16 timed passes, the
   same draws) and `ac3-timing` (no pass changed, so it times nothing): pass
-- the five `ac4-hashes` files: pass. `ac4-hashes-418` first read BLOCKED, the GPU lease taken from it by another
-  run, and passed when run again
-- `ac5-unedited`: passes, 0 files under `tests/acceptance/` differ from the merge base
-- `cargo fmt --all -- --check`: exit 0. `cargo clippy` on `deep-scene3d-render`: clean
+- the five `ac4-hashes` files: pass
+- `ac5-unedited`: passes, 26 files added under `tests/acceptance/` and none changed
+- `cargo fmt --all -- --check` and `node scripts/repo-rules.mjs`: exit 0
+- #427's suite, the overdraw mode's own, whole: 10 of 14 pass. The four live-window tests read INCONCLUSIVE,
+  `no_display`: the Mac's screen was off. They read the same in the same minute on a tree at `5a81b58de`
+
+Before main was merged in, on the same change:
+
+- #427's suite with a display: 14 of 14 in nine runs, six of them alternated with the merge base
+- `cargo clippy` on `deep-scene3d-render`: clean
 - `cargo test -p deep-scene3d-render`: passes but for two tests of #3016's, neither this change's (Also found)
-- #427's suite, the overdraw mode's own, whole: 14 of 14 in three rounds, and in six more alternated with the merge
-  base on the same sources
 - `node scripts/affected.mjs` for the three `deep-scene3d-render` files: 640 passed, 178 new failures, 91 known, 24
   inconclusive or blocked. None of the 178 names this change: 162 are lints of files it doesn't touch, 9 were vitest
   files that didn't start, and 7 are cargo tests that fail the same on the merge base or need a built hub. The 9
   ran once the packages were built: 6 pass, and `3016/query`, `381/depth` and `140/view/glyphs` each fail one test
   the same way on the merge base
+- `ac4-hashes-418` once read BLOCKED, the GPU lease taken from it by another run, and passed when run again
 
 One thing went wrong on the way and was put right. The first cut drew the frame before every overdraw view. With it,
 #427's live-window tests failed in 4 of 8 whole runs of that suite, against 1 of 7 on the merge base. The view now
@@ -172,6 +178,7 @@ draws the frame first only where a set draws through the GPU cull. The counts ar
 
 Not run:
 
+- The proof lanes, `node scripts/proof.mjs`
 - `node scripts/affected.mjs` for the whole change. The four `deep-show` files select 1,711 files that run alone,
   hours on this machine
 - `tests/acceptance/3256/ac7-budget.test.mjs`, a timed file
