@@ -1,6 +1,3 @@
-// A claim's verdict from command runs (#30): each recorded run becomes the engine's run record and the core's
-// masked-exit rule makes a masked command one that can't fail. These are the mapping's own regressions on recorded
-// runs; the acceptance suite (tests/acceptance/30/claims.test.ts) makes every run for real.
 import { describe, expect, it } from 'vitest';
 import type { NumericContract } from '@deepbuild/verdicts';
 import { claimVerdict, type ClaimedCheck, type ClaimedRuns, type RecordedRun } from '../src/index.ts';
@@ -107,7 +104,6 @@ describe('claimVerdict (#30)', () => {
     expect(v.outcome).toBe('BLOCKED');
     expect(said(v)).toMatch(/pnpm isn't on the run's PATH/);
   });
-  // A stated speed's timing report (#1863) rides on its run: one that can't count reaches the verdict with its reasons.
   it('a speed run whose timing is INVALID makes the claim INVALID naming why; one that is a reading, INCONCLUSIVE', () => {
     const invalid = claimVerdict(claimOf({ check: 'speed: 1.8× faster', runs: [recorded('uncounted', { speed: { outcome: 'INVALID', reasons: ['the timing check names no baseline'], warm: false } })] }));
     expect(invalid.outcome).toBe('INVALID');
@@ -116,7 +112,6 @@ describe('claimVerdict (#30)', () => {
     expect(reading.outcome).toBe('INCONCLUSIVE');
     expect(said(reading)).toMatch(/a reading, not a timing: the change side ran on mac-2/);
   });
-  // A receipt line never shows a weaker proof as a stronger one (#1861): a clean exit no test tool counted is a static check.
   it('a check whose runs counted no test tool\'s tests reads static_check; one a test tool\'s report counted, test_run', () => {
     const R2 = 'req:30#R2';
     const v = claimVerdict({

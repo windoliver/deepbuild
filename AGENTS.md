@@ -13,7 +13,7 @@ These hold in the core and every extension:
 
 ## Proof
 
-- Acceptance tests come first, in `tests/acceptance/<issue>/`: a job that sees only the issue, the design and the base commit writes them with the issue's expected values, through surfaces those name. Never edit one; a dispute goes to that job's blind redraft (design: Dogfooding).
+- Acceptance tests come first, in `tests/acceptance/<issue>/`: a job that sees only the issue, the design and the base commit writes them with the issue's expected values, through surfaces those name, with no comments: a test's title says what it is for, a helper's name what it does. Never edit one; a dispute goes to that job's blind redraft (design: Dogfooding). A new suite or redraft folder says how it runs in its own `lane.json` (alone, why, and its timed and slow files), never in `scripts/lanes-lists.mjs`.
 - Every behavior fix starts with a test failing for the expected reason. Commit it first only when authorized; otherwise save failing output and leave changes uncommitted. Make it pass unchanged.
 - Reuse sufficient tests; add one only for required behavior or a regression existing coverage misses. It must fail on a wrong program as its criterion names (the merge base or a reverted fix for a fix; a planted twin or a mutant for new code), or it proves nothing.
 - Test behavior, not implementation. A test that would still pass if every function it calls returned nothing is not a test; rewrite or delete it.
@@ -41,10 +41,12 @@ These hold in the core and every extension:
 
 ## Scope and simplicity
 
+- Name things by their real names in [GLOSSARY.md](GLOSSARY.md), never by a word it lists to avoid.
 - Keep the core to the record, gates, asks and adapters. Explain why an extension cannot meet any proposed addition.
 - One PR per issue, under about 400 handwritten lines or explain why it cannot split. Note unrelated findings separately.
 - Map changes, tests and tools to requirements or regression protection this change needs. Never drop or move criteria without user approval.
 - Delete your additions whose removal changes neither required behavior nor proof, and code your change leaves without a caller; revert unrelated edits. Preserve others' code and work and required failing checks.
 - No option, flag, fallback, config key, dependency, export or duplicate test the task doesn't need.
 - Add a shared abstraction only when two callers need it now.
+- Write no comments: names say what code does, and a decision goes in `docs/adr/` ([0001](docs/adr/0001-code-carries-no-comments.md)). The comment ratchet only goes down.
 - Reach a module only through its public entry. No import cycles, and the core never imports an extension.
