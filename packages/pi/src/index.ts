@@ -237,10 +237,7 @@ export default function deepbuild(pi: Pi): void {
   const held: { asks: string[]; text: string }[] = [];
   const delivered = new Set<string>();
   let matcher: Matcher | undefined;
-  /**
-   * A call read against your rules: 'no setup' in a home with no rules to read it against, 'unread' when there are and
-   * nothing could. Rules missing once setup finished were removed (#1856), as deep-hook reads them (#3477).
-   */
+  /** A call read against your rules: 'no setup' in a home with no rules to read it against, 'unread' when there are and nothing could. */
   async function read(call: Obj): Promise<Ruling | 'unread' | 'unparsed' | 'no setup'> {
     const binary = hookBinary();
     const root = join(process.env.HOME ?? homedir(), '.deepbuild');
