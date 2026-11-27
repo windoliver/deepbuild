@@ -1,6 +1,6 @@
 {
   "docs/canvas-primitives.md#export": 18962,
-  "docs/canvas-primitives.md#one-word-per-idea": 40707,
+  "docs/canvas-primitives.md#one-word-per-idea": 40705,
   "docs/canvas-primitives.md#registries-and-closed-lists": 19174,
   "docs/canvas-primitives.md#the-event-catalogue": 16644,
   "docs/canvas-primitives.md#whats-decided-and-what-would-reopen-it": 25420,
@@ -14,7 +14,7 @@
   "docs/technical-design.md#how-runs-become-one-of-five-verdicts": 35923,
   "docs/technical-design.md#how-we-know-version-0-works": 48619,
   "docs/technical-design.md#scenes-physics-and-the-canvas-core": 20222,
-  "docs/technical-design.md#socket-roles-and-contract-versions": 19807,
-  "docs/technical-design.md#the-canvas-core": 20529,
+  "docs/technical-design.md#socket-roles-and-contract-versions": 19805,
+  "docs/technical-design.md#the-canvas-core": 20527,
   "docs/technical-design.md#threats-and-what-stops-each-one": 22643
 }
