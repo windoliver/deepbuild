@@ -1,0 +1,12 @@
+{
+  "scripts/size-ratchet.mjs": [
+    {
+      "find": [
+        "  console.log(`INVALID size: ${CEILINGS} can't be read: ${error.message}\\n  Fix: Restore ${CEILINGS}: a JSON object mapping each hand-written source file over ${LIMIT} lines to its size in lines.`);"
+      ],
+      "wrong": [
+        "  console.log(`INVALID size: ${CEILINGS} cannot be read: ${error.message}\\n  Fix: Restore ${CEILINGS}: a JSON object mapping each hand-written source file over ${LIMIT} lines to its size in lines.`);"
+      ]
+    }
+  ]
+}

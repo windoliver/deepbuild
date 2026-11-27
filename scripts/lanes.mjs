@@ -220,6 +220,7 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/2738/', 'tests/acceptance/265/', 'tests/acceptance/3016/', 'tests/acceptance/552/', 'tests/acceptance/298/',
     'tests/acceptance/1488/', 'tests/acceptance/161/', 'tests/acceptance/2034/', 'tests/acceptance/2054/', 'tests/acceptance/3171/', 'tests/acceptance/290/',
     'tests/acceptance/2215/', 'tests/acceptance/2215-redraft-ac5/', 'tests/acceptance/3034/',
+    'tests/acceptance/3507-redraft-ac2/',
   ],
   'shared: the Lima VMs': [
     'tests/acceptance/1942/', 'tests/acceptance/1945/', 'tests/acceptance/1946/', 'tests/acceptance/1943/', 'tests/acceptance/1942-redraft-2073/',

@@ -43,6 +43,10 @@ pub trait Handoff: Send {
     fn size(&self) -> [u32; 2];
     /// The view a frame renders into.
     fn target(&self) -> &wgpu::TextureView;
+    /// Whether `after_render` encodes GPU work (the copy path's read-back); zero copy needs none.
+    fn needs_after_render(&self) -> bool {
+        true
+    }
     /// Encoded after the frame's passes: the copy path's read back.
     fn after_render(&self, encoder: &mut wgpu::CommandEncoder);
     /// Once the GPU signalled the frame done, before the slot is ready: the copy path maps its
@@ -492,6 +496,10 @@ pub(crate) mod macos {
 
         fn target(&self) -> &wgpu::TextureView {
             &self.view
+        }
+
+        fn needs_after_render(&self) -> bool {
+            false
         }
 
         fn after_render(&self, _: &mut wgpu::CommandEncoder) {}
