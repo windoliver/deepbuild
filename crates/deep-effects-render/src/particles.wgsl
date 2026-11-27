@@ -210,7 +210,6 @@ fn fs(in: Out) -> @location(0) vec4<f32> {
     return shaded(in);
 }
 
-// #2485: one for each fragment the particle shades, added into the overdraw target.
 @fragment
 fn count_fs(in: Out) -> @location(0) vec4<f32> {
     let c = shaded(in);

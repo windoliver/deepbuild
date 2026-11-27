@@ -895,9 +895,6 @@ fn register_with(r: &mut Registrar, rule: deep_canvas::registry::Rule) {
     r.fixture("shadowed-box", shadowed_box(), None)
         .sidecar(json!({"codes": [], "covers": {"kinds": ["light.sun@1"], "fields": ["light.sun@1/params/shadow"]}}));
     // #1940: effects.audit is the effects module's, so the loop module depends only on scene3d
-    // and look. #2485: its peak count and bounds read the closed form on any machine, its
-    // overdraw and GPU time the passes the host drew; where no host drew, those are unread, and
-    // its report still reads the counts and bounds beside why.
     let codes = [
         audit::UNREAD,
         audit::COUNT,
@@ -941,10 +938,6 @@ fn register_with(r: &mut Registrar, rule: deep_canvas::registry::Rule) {
     audit_fixtures(r);
 }
 
-/// #2485: effects.audit's planted fixtures, one a code: a particles@1 item before the figure's
-/// box, over the limit its check input states, each other limit roomy; and one whose check
-/// input states none. Each also names particles@1's `unknown_kind` notice, since no registry
-/// entry lists the kind.
 fn audit_fixtures(r: &mut Registrar) {
     let roomy = json!({"kind": audit::KIND, "count_peak": 4096, "bounds": [[-4, -4, -2], [4, 4, 7]],
         "overdraw": {"max": 1000}, "gpu_ms": 1000});
@@ -955,7 +948,6 @@ fn audit_fixtures(r: &mut Registrar) {
         }
         c
     };
-    // One burst at 0 s of `count` particles living 1 s, from a point or a ball of `radius` m.
     let effect = |id: &str, count: u32, radius: f64, draw: &str, size: u32, motion: Value| {
         let shape = if radius > 0.0 {
             json!({"shape": "sphere", "radius": radius})

@@ -117,9 +117,6 @@ impl Hub<'_> {
         out
     }
 
-    /// The frames check `kind` reads of `document` at `times`. #2485: effects.audit reads each
-    /// effect's own pass beside the frame, also at the time the closed form has most of its
-    /// particles live.
     pub(crate) fn frames_for(
         &mut self,
         kind: &str,
@@ -145,8 +142,6 @@ impl Hub<'_> {
         self.frames_measured(document, times, draws, false)
     }
 
-    /// [`Hub::frames_of`], with each particles item's own pass measured on each 3D frame when
-    /// `passes` asks (#2485).
     fn frames_measured(
         &mut self,
         document: &Value,
@@ -362,8 +357,6 @@ impl Hub<'_> {
 
     /// #1938: a verdict read as `against`, another run's verdict on the claim, reads it here: a
     /// pixel row holds where that verdict's row names this run's fingerprint, and is INCONCLUSIVE
-    /// where it names another, naming both. Rows of checks that hold on any machine are as judged,
-    /// and so is a FAIL on an error that holds on any machine (#2485).
     pub(crate) fn read_against(&self, rows: &mut [Value], against: &Value) {
         let theirs: BTreeMap<&str, &Value> = against["requirements"]
             .as_array()
@@ -388,7 +381,6 @@ impl Hub<'_> {
                 Some(list) => list.push(elsewhere),
                 None => row["inconclusive"] = json!([elsewhere]),
             }
-            // #2485: an error read from evaluated data holds on any machine, so its row stays FAIL.
             let anywhere = row["issues"]
                 .as_array()
                 .into_iter()

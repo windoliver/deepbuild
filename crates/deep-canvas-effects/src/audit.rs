@@ -1,13 +1,6 @@
 //! `effects.audit` (canvas primitives: Check input: loop kinds), the effects module's, beside
 //! its shipped effects, so the loop module depends only on scene3d and look (#1940).
 //!
-//! #2485: it reads four things of each particles@1 item. Its peak count and its bounds come from
-//! the particles' closed form on evaluated data (the bake, [`crate::particles::item`]), at each
-//! frame of the document's span, so they hold on any machine. Its overdraw and its GPU time come
-//! from the host that drew the item's own pass and timed it ([`Frame::passes`]), so they hold
-//! on the machine that drew it. Each failing reading names its item, its numbers and a fix as
-//! patch ops; each issue's `actual` says which machines it holds on, so a verdict read on
-//! another machine keeps a count's or a box's failure and makes only the pixels' INCONCLUSIVE.
 
 use deep_canvas::registry::{Frame, Raised, Report};
 use serde_json::{json, Value};
@@ -21,25 +14,17 @@ pub const BOUNDS: &str = "effects.bounds";
 pub const OVERDRAW: &str = "effects.overdraw";
 pub const GPU_MS: &str = "effects.gpu_ms";
 
-/// The overdraw a check input names by default (Check input: loop kinds).
 const OVERDRAW_MAX: f64 = 8.0;
-/// Flicks a second (Units and axes: time).
 const FLICKS: f64 = 705_600_000.0;
-/// The most frames the closed form is read at (4.5 min at 60 fps), and the most particle states
-/// it evaluates for one item: past either, the item's readings are blocked, never cut short.
 const MAX_FRAMES: usize = 1 << 14;
 const MAX_STATES: usize = 1 << 26;
 
-/// The analytic readings only, for a host that drew no frames for the check: its own entry says
-/// why the pixels went unread, so the items' unread passes aren't blocked twice.
 pub fn report(lowered: &Value, input: &Value) -> Report {
     let mut r = frames(lowered, input, &[]);
     r.blocked.retain(|b| b["reason"] != "not_run");
     r
 }
 
-/// What each item's closed form read over the span: its peak, when, its reach, and the bake
-/// it read, kept while its emitter stays put; or why it couldn't be read.
 #[derive(Default)]
 struct Read {
     peak: usize,
@@ -50,12 +35,9 @@ struct Read {
     refused: Option<Value>,
 }
 
-/// The report on the frames a host drew for the check, each with its items' own passes.
 pub fn frames(lowered: &Value, input: &Value, drawn: &[Frame]) -> Report {
     let mut out = Report::default();
     let items = rule::items(lowered);
-    // Nothing it reads is nothing proven: a deliverable without a particles@1 item, the one kind
-    // it reads, is blocked, naming any other effect it holds.
     if items.is_empty() {
         let others: Vec<&str> = lowered["items"]
             .as_object()
@@ -93,9 +75,6 @@ pub fn frames(lowered: &Value, input: &Value, drawn: &[Frame]) -> Report {
     out
 }
 
-/// When each item of `lowered` has the most particles live, by the closed form: the times a host
-/// draws and measures its own pass at, beside the check's, so its overdraw and GPU time are read
-/// where it is fullest (flicks, each once).
 pub fn peak_times(lowered: &Value) -> Vec<i64> {
     let items = rule::items(lowered);
     let mut at: Vec<i64> = readings(lowered, &items)
@@ -109,7 +88,6 @@ pub fn peak_times(lowered: &Value) -> Vec<i64> {
     at
 }
 
-/// Each of `items`' closed form read at each frame of the span; none where the span can't be read.
 fn readings(lowered: &Value, items: &[(&String, &Value)]) -> Option<Vec<Read>> {
     let times = times(lowered, items)?;
     let flicks: Vec<i64> = times.iter().map(|t| (t * FLICKS).round() as i64).collect();
@@ -120,8 +98,6 @@ fn readings(lowered: &Value, items: &[(&String, &Value)]) -> Option<Vec<Read>> {
         let mut labels = deep_canvas_scene3d::scene::Labels::new();
         deep_canvas_scene3d::scene::evaluate(lowered, t, look, &mut labels).ok()
     };
-    // An emitter that moves over the span is baked where it stands at each frame, as its host
-    // draws it; one that stays put is baked once.
     let moving = moves(lowered, items, &flicks);
     let first = scene_at(0);
     let doc_seed = lowered["seed"].as_u64().unwrap_or(0);
@@ -143,7 +119,6 @@ fn readings(lowered: &Value, items: &[(&String, &Value)]) -> Option<Vec<Read>> {
                 );
                 continue;
             };
-            // Only a moving document's bakes are keyed by where they stand; else one bake serves.
             let key = if moving {
                 placed(lowered, scene, id)
             } else {
@@ -225,9 +200,6 @@ pub fn issues(lowered: &Value, input: &Value) -> Vec<(String, Raised)> {
         .collect()
 }
 
-/// The times the closed form is read at: each frame of the document's span, else of its items'
-/// emission and one life after it (10 s at most); none where that isn't finite or is past
-/// [`MAX_FRAMES`].
 fn times(doc: &Value, items: &[(&String, &Value)]) -> Option<Vec<f64>> {
     let (p, q) = doc
         .get("transport")
@@ -241,8 +213,6 @@ fn times(doc: &Value, items: &[(&String, &Value)]) -> Option<Vec<f64>> {
             .map(|s| s.span + s.life[1])
             .fold(0.0, f64::max)
     };
-    // Without a span, its emission and one life after it, as far as 10 s, as its anchors read; a
-    // span it can't read bounds nothing.
     let end = match doc.pointer("/transport/span") {
         None => emits().min(10.0),
         Some(v) => deep_canvas::document::duration(doc, v).ok()? as f64 / FLICKS,
@@ -254,10 +224,6 @@ fn times(doc: &Value, items: &[(&String, &Value)]) -> Option<Vec<f64>> {
     Some((0..n as usize).map(|k| k as f64 * step).collect())
 }
 
-/// Whether any item's bake, or one up the chain it bursts at, stands anywhere else at one of
-/// `flicks` than at the first: a local emitter's place moves, or it reads a curve, which the scene
-/// lays out at each time; true where its places can't be read without the scene. A world-space
-/// emitter's bake reads its anchor at every birth bucket itself, so its anchor never moves it.
 fn moves(doc: &Value, items: &[(&String, &Value)], flicks: &[i64]) -> bool {
     let Some(map) = doc.as_object() else {
         return true;
@@ -290,7 +256,6 @@ fn moves(doc: &Value, items: &[(&String, &Value)], flicks: &[i64]) -> bool {
     })
 }
 
-/// Where item `id`'s bake stands in `scene`: its origin and curve, and its parents'.
 fn placed(doc: &Value, scene: &deep_canvas_scene3d::scene::Scene, id: &str) -> String {
     let mut key = String::new();
     let mut at = Some(id);
@@ -298,7 +263,6 @@ fn placed(doc: &Value, scene: &deep_canvas_scene3d::scene::Scene, id: &str) -> S
         let Some(i) = at else { break };
         match item::prepare(doc, scene, i) {
             Ok(p) => {
-                // A world-space bake reads its anchor itself, so its origin doesn't key it.
                 let origin = p.world.is_none().then_some(p.origin);
                 key.push_str(&format!("{origin:?}{:?};", p.curve.0));
                 at = p.parent;
@@ -309,8 +273,6 @@ fn placed(doc: &Value, scene: &deep_canvas_scene3d::scene::Scene, id: &str) -> S
     key
 }
 
-/// The limits a check input states: a field it doesn't state, or states as no limit, is a
-/// reading the check can't judge, so BLOCKED, never PASS. Overdraw's max is 8 unless stated.
 struct Limits {
     count_peak: Option<u64>,
     bounds: Option<[V3; 2]>,
@@ -334,7 +296,6 @@ impl Limits {
         }
     }
 
-    /// The fields it couldn't read a limit from.
     fn unread(&self) -> Vec<&'static str> {
         [
             ("count_peak", self.count_peak.is_none()),
@@ -348,7 +309,6 @@ impl Limits {
     }
 }
 
-/// A box of two corners, as a check input or `kill.box` writes it, its low corner first.
 fn corners(v: &Value) -> Option<[V3; 2]> {
     let c = |k: usize| -> Option<V3> {
         let a = v.get(k)?.as_array()?;
@@ -362,8 +322,6 @@ fn corners(v: &Value) -> Option<[V3; 2]> {
     ])
 }
 
-/// Patch ops that scale `it`'s particles by `k`: its count, each stated burst's and its rate,
-/// so a burst never asks for more than the count holds.
 fn scaled(id: &str, it: &Value, k: f64) -> Vec<Value> {
     let p = &it["params"];
     let down = |n: f64| (n * k).floor().max(1.0);
@@ -416,8 +374,6 @@ fn raise(
     out.raised.push((id.to_string(), r, actual));
 }
 
-/// Item `id`'s four readings judged against the check's `limits`: its peak and reach `r` read
-/// from the closed form, and the passes `drawn` measured.
 fn judge(limits: &Limits, id: &str, it: &Value, r: &Read, drawn: &[Frame], out: &mut Report) {
     let undeclared = limits.unread();
     if !undeclared.is_empty() {
@@ -426,7 +382,6 @@ fn judge(limits: &Limits, id: &str, it: &Value, r: &Read, drawn: &[Frame], out: 
             "why": "the check input states no limit these readings can be judged against"}),
         );
     }
-    // Peak count and bounds: the closed form at each frame of the span, on any machine.
     let peak = r.peak;
     if let Some(limit) = limits.count_peak.filter(|l| peak as u64 > *l) {
         raise(
@@ -456,8 +411,6 @@ fn judge(limits: &Limits, id: &str, it: &Value, r: &Read, drawn: &[Frame], out: 
             );
         }
     }
-    // Overdraw and GPU time: the passes a host drew and timed, on the machine that drew them, at
-    // times the closed form has particles live; a pass drawn with none live reads nothing.
     let live = |t: i64| {
         r.bake.as_ref().is_some_and(|b| {
             (0..b.spec.count).any(|e| eval::state(b, e, t as f64 / FLICKS).is_some())
@@ -470,7 +423,6 @@ fn judge(limits: &Limits, id: &str, it: &Value, r: &Read, drawn: &[Frame], out: 
             .filter_map(|fr| fr.passes.get(id).and_then(f))
             .reduce(f64::max)
     };
-    // A pass timed at zero, from timestamps that read nothing, is no time read.
     let (overdraw, gpu_ms) = (
         most(|p| p.overdraw),
         most(|p| p.gpu_ms.filter(|ms| *ms > 0.0)),
@@ -529,8 +481,6 @@ mod tests {
     use super::*;
     use deep_canvas::registry::ItemPass;
 
-    /// A scene with one particles@1 item `id`: one burst of `count` at 0 s from a ball of
-    /// `radius` m, life 1 s, thrown at `v0` m/s up a cone (still when none).
     fn doc(id: &str, count: u32, radius: f64, v0: Option<[f64; 2]>) -> Value {
         let motion = match v0 {
             Some(v) => json!({"v0": v, "gravity": [0, 0, 0], "drag": 0}),
@@ -548,7 +498,6 @@ mod tests {
                     "opacity": 1, "color": [{"at": 0, "role": "accent"}], "seed": 7}}}})
     }
 
-    /// A check input stating every limit roomily, with `over` laid over it.
     fn input(over: Value) -> Value {
         let mut i = json!({"kind": KIND, "count_peak": 4096, "bounds": [[-3, -3, -3], [3, 3, 3]],
             "overdraw": {"max": 8}, "gpu_ms": 100});
@@ -639,7 +588,6 @@ mod tests {
         assert!(frames(&d, &input, &drawn("smoke", 4.0, 0.4))
             .raised
             .is_empty());
-        // With no overdraw given, it is 8.
         let mut at_eight = input.clone();
         at_eight
             .as_object_mut()
@@ -662,7 +610,6 @@ mod tests {
         assert_eq!(r.blocked.len(), 1);
         assert_eq!(r.blocked[0]["reason"], "not_run");
         assert_eq!(r.blocked[0]["unread"], json!(["overdraw", "gpu_ms"]));
-        // A host that drew nothing says why itself; the analytic readings still stand.
         assert!(report(&d, &input(json!({}))).blocked.is_empty());
         let raised = issues(&d, &input(json!({})));
         assert_eq!(raised.len(), 1);
@@ -686,7 +633,6 @@ mod tests {
 
     #[test]
     fn passes_drawn_with_no_particle_live_read_nothing_and_peaks_are_where_they_are_fullest() {
-        // One burst at 0 s that lives 1 s: a pass drawn at 1.5 s has nothing live.
         let d = doc("smoke", 64, 0.0, None);
         let mut late = drawn("smoke", 1.0, 0.1);
         late[0].t = (1.5 * FLICKS) as i64;
@@ -707,7 +653,6 @@ mod tests {
 
     #[test]
     fn an_emitter_that_moves_is_read_where_it_stands_at_each_frame() {
-        // Still particles in a ball of 0.2 m, their emitter carried 3 m along x over the span.
         let mut d = doc("drift", 16, 0.2, None);
         d["items"]["drift"]["params"]["life"] = json!([2, 2]);
         d["channels"] = json!({"carry": {"target": "items/drift/at/pos/0", "type": "f32", "keys": {

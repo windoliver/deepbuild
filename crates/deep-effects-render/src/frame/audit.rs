@@ -1,5 +1,3 @@
-//! #2485: what effects.audit's host reads of a frame's particles: the overdraw target their
-//! counted fragments add into, read back as the most any px took, and their passes' GPU times.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -12,8 +10,6 @@ use super::{timings, Effects};
 use crate::reference::target;
 
 impl Effects {
-    /// #2485: the overdraw target, made at `size` and cleared, which the frame's counted
-    /// particles add their fragments into.
     pub(super) fn counts_job(&mut self, device: &Device, size: [u32; 2]) -> Job {
         if self.counts.as_ref().is_none_or(|c| c.0 != size) {
             let tex = target(device, "particles overdraw", size);
@@ -38,8 +34,6 @@ impl Effects {
         })
     }
 
-    /// #2485: the most fragments any px took from the last frame's counted particles, taken so
-    /// no later read reports them again; `None` when no frame counted them since.
     pub fn read_overdraw(&mut self, device: &Device) -> Option<u32> {
         let (_, tex, _) = self.counts.take()?;
         let bytes = crate::reference::read(device, &tex, wgpu::TextureAspect::All, 8);
@@ -53,14 +47,11 @@ impl Effects {
     }
 }
 
-/// #2485: a profiler a host sets on its effects to time one frame's passes.
 pub fn profiler(device: &Device) -> Option<Profiler> {
     let p = wgpu_profiler::GpuProfiler::new(&device.device, Default::default()).ok()?;
     Some(Arc::new(std::sync::Mutex::new(p)))
 }
 
-/// #2485: each pass's GPU time (ms) by label, of the frame `p` timed since it was set, once its
-/// queries have resolved; empty where the device takes no timestamps.
 pub fn pass_ms(device: &Device, p: &Profiler) -> BTreeMap<String, f64> {
     let mut p = p.lock().unwrap_or_else(|e| e.into_inner());
     let mut enc = device.device.create_command_encoder(&Default::default());
@@ -78,7 +69,6 @@ pub fn pass_ms(device: &Device, p: &Profiler) -> BTreeMap<String, f64> {
     out
 }
 
-/// An IEEE half's value.
 fn half(bits: u16) -> f32 {
     let (sign, exp, frac) = (bits >> 15, (bits >> 10) & 0x1f, f32::from(bits & 0x3ff));
     let v = match exp {

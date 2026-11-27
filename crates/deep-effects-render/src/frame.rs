@@ -99,8 +99,6 @@ pub struct Settings {
     pub emits: Vec<Emit>,
     pub hazes: Vec<Haze>,
     pub checks: bool,
-    /// #2485: each particle's fragments counted, one a fragment, into the overdraw target in
-    /// place of their shade, for effects.audit's host path, which reads the most any px took.
     pub overdraw: bool,
 }
 
@@ -204,7 +202,6 @@ pub struct Effects {
     /// #508: the color a check reads back this frame, copied where the document's operators
     /// read the chain (before any display-only pass), when the settings ask for it.
     checks: Option<([u32; 2], wgpu::Texture, wgpu::TextureView)>,
-    /// #2485: the fragments each px took from the particles, when the settings count them.
     counts: Option<([u32; 2], wgpu::Texture, wgpu::TextureView)>,
     /// The device everything above was made on (#1993): its epoch.
     built_on: Option<u64>,
@@ -215,7 +212,6 @@ struct SparkDraw {
     layout: wgpu::BindGroupLayout,
     /// #853: grains, each drawn over what is behind it in place of adding to it.
     grains: wgpu::RenderPipeline,
-    /// #2485: each fragment a particle shades adds one to the overdraw target.
     count: wgpu::RenderPipeline,
     /// The half-resolution puffs' draw into their half-size target, and the filtered upsample
     /// adding that to the linear target, with its sampler (#1173).
@@ -565,7 +561,6 @@ impl Effects {
         let d = &device.device;
         let compute = self.runner(device, "particles.sparks@1");
         self.spark_draw(device);
-        // #2485: counted, its fragments go to the overdraw target, at full size and never halved.
         let counting = self
             .settings
             .overdraw

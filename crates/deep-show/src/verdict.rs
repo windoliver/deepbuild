@@ -43,8 +43,6 @@ const KIND_RULES: &str = "kind_rules";
 /// The verdicts a claim can get, worst first: the claim's is the worst of its requirements'.
 const WORST_FIRST: [&str; 5] = ["INVALID", "BLOCKED", "FAIL", "INCONCLUSIVE", "PASS"];
 
-/// #2485: a pixel check's report where its frames went undrawn (`why`): an error read from
-/// evaluated data fails it as on any machine, the unread pixels noted beside; else it is blocked.
 fn unread(
     out: deep_canvas::registry::Report,
     why: Value,
@@ -60,13 +58,9 @@ fn unread(
 }
 
 /// The items of a kind this build doesn't know among `notices`, by kind: the check's
-/// `unknown_kind` notices, less the kinds the build draws without a registry entry (`knows`),
-/// and particles@1 where the check reads those items itself (`particles`).
 fn unknown_by_kind(notices: &[Notice], particles: bool, into: &mut BTreeMap<String, Vec<String>>) {
     for n in notices.iter().filter(|n| n.code == "unknown_kind") {
         let kind = n.actual.as_str().unwrap_or_default();
-        // #2485: effects.audit reads particles@1 in a 3D frame, drawn through the effects' post
-        // stage (#1719); every other check, and a 2D frame, still skip it, so it still blocks.
         if knows(kind) || (particles && kind == "particles@1") {
             continue;
         }
@@ -910,7 +904,6 @@ impl<'a> Hub<'a> {
             // it, as its show did (#200).
             let checked = check_packed(cur.doc, sealed, &self.packs);
             if !self.planted(Planted::ChecksSkipUnknownKind) {
-                // #2485: effects.audit reads particles@1 items itself, where a 3D frame draws them.
                 let reads_particles =
                     kind == deep_canvas_effects::audit::KIND && crate::probe::draws_3d(cur.doc);
                 unknown_by_kind(&checked.notices, reads_particles, &mut by_kind);
@@ -1028,8 +1021,6 @@ impl<'a> Hub<'a> {
                     };
                     // #457: the check's own time on the requirement, and its parts' times.
                     let started = std::time::Instant::now();
-                    // #2485: where its frames weren't drawn here, a pixel check that also reads
-                    // evaluated data still reads that, beside why its pixels went unread.
                     let undrawn = || {
                         check
                             .report

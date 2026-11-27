@@ -331,7 +331,6 @@ impl Gpu3 {
         self.draw_edited(frame, |_| {})
     }
 
-    /// [`Gpu3::draw`] with the frame's effects edited once staged.
     fn draw_edited(&mut self, frame: &Frame3d, edit: impl FnOnce(&mut Effects)) -> Option<Vec<u8>> {
         let Staged { scene, look, .. } = &frame.staged;
         {
@@ -361,11 +360,6 @@ impl Gpu3 {
         Some(bytes)
     }
 
-    /// #2485: item `id`'s own particles drawn over `frame`'s scene with no other particles, as
-    /// effects.audit reads them: the most fragments any px took from them, in a draw that counts
-    /// each fragment in place of its shade, and their pass's GPU time (ms) by its timestamps, in
-    /// a draw of its own; neither where the frame draws none of its particles, nor the time where
-    /// the device takes no timestamps.
     pub fn effect_pass(&mut self, frame: &Frame3d, id: &str) -> ItemPass {
         let Some(sp) = frame.staged.settings.sparks.iter().find(|s| s.item == id) else {
             return ItemPass::default();

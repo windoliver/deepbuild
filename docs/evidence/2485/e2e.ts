@@ -1,8 +1,3 @@
-// #2485's e2e hand run: the four readings' planted effects and clean twins from the blind suite's fixtures
-// (tests/acceptance/2485/helpers.ts), judged by a built deep-show through `deep-show run` as an agent's verdict is,
-// on machine A, then on machine B against A's verdict. Prints each requirement row: its result, what it raised (code,
-// items, severity, the fix's op count), what stayed unread, and the fingerprint the row was judged under.
-// Usage: node --experimental-transform-types e2e.ts <deep-show> <evidence folder>
 import { spawnSync } from 'node:child_process';
 import {
   MACHINE_A, MACHINE_B, boundsPair, claimId, claimOf, countPair, docId, gpuPair, overdrawPair, reqId, scenarioOf, verdict,
