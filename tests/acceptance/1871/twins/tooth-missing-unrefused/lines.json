@@ -1,0 +1,29 @@
+{
+  "crates/deep-groups-render/src/drawn.rs": [
+    {
+      "find": [
+        "                Some(sha) => {",
+        "                    let path = assets.get(sha).and_then(Value::as_str).ok_or_else(|| {",
+        "                        refused(",
+        "                            \"asset_unreadable\",",
+        "                            format!(\"ground/params/tooth/from: {sha}\"),",
+        "                        )",
+        "                    })?;",
+        "                    let (w, h, rows) = gray(path)?;",
+        "                    Some((sha.clone(), w, h, Arc::new(rows)))",
+        "                }"
+      ],
+      "wrong": [
+        "                // Planted for #1871 AC3: a tooth image missing from the assets is dropped, not refused,",
+        "                // and the paper draws its kind's own tooth.",
+        "                Some(sha) => match assets.get(sha).and_then(Value::as_str) {",
+        "                    None => None,",
+        "                    Some(path) => {",
+        "                        let (w, h, rows) = gray(path)?;",
+        "                        Some((sha.clone(), w, h, Arc::new(rows)))",
+        "                    }",
+        "                },"
+      ]
+    }
+  ]
+}

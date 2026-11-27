@@ -226,8 +226,8 @@ export const backgrounded = (what: string[]): string => what.map((w) => `\`${w.l
 /** The tool kinds that only read: a turn of them alone, begun by your question, is an answer. */
 export const READS = new Set(['read', 'search', 'fetch']);
 
-/** What Claude Code queues for another session's message, a subagent's report or a task's notice: never typed. */
-export const AUTOMATIC_QUEUED = /<task-notification>|^\s*<(?:cross-session-message|agent-message)\b/;
+/** What Claude Code queues for another session's message, a subagent's report, a task's notice or a channel's event (#3405): never typed. */
+export const AUTOMATIC_QUEUED = /<task-notification>|^\s*<(?:cross-session-message|agent-message|channel)\b/;
 
 /**
  * What `<dir>/rules.json` says calls do: the effect classes each `effect:` guard entry stands for, by the entry's

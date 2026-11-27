@@ -1,0 +1,91 @@
+# node --test tests/acceptance/3515/*.test.mjs at base b134dd38f, Node v24.22.0, macOS. <checkout> = the base checkout, $TMPDIR = the test's temp folder.
+✖ #3515.c4b78856 a shard another repository made is claimed from a fresh clone whose HEAD and tree live only in its own objects (4274.880042ms)
+✖ #3515.e9ecd1ad the same claim holds once the repository that made the shard is deleted (2964.709958ms)
+✖ #3515.d46e20be the alternates keep every line they had, name the clone's objects once, and a second claim adds none (3257.7275ms)
+✖ #3515.0d44293c claimShards asked for shards that claims none says so on stderr, naming the count and that the alone block runs unsharded in the worktree (776.921834ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 0
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 10598.7415
+
+✖ failing tests:
+
+test at tests/acceptance/3515/alternates.test.mjs:34:1
+✖ #3515.c4b78856 a shard another repository made is claimed from a fresh clone whose HEAD and tree live only in its own objects (4274.880042ms)
+  AssertionError [ERR_ASSERTION]: say got "SHARD 1 $TMPDIR/deep-3515-9bRdNc/home/deepbuild-shards/1: reused, at tree 09c7bed7394f826f86ecf43ccc878e76f30a321b", got ["SHARD 1 not used: fatal: f7245db8ed4217f4564330978232931f6065a30b is not a valid object"]
+      at claimedByB (file://<checkout>/tests/acceptance/3515/alternates.test.mjs:28:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3515/alternates.test.mjs:39:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3515/alternates.test.mjs:42:1
+✖ #3515.e9ecd1ad the same claim holds once the repository that made the shard is deleted (2964.709958ms)
+  AssertionError [ERR_ASSERTION]: say got "SHARD 1 $TMPDIR/deep-3515-hr2ZPf/home/deepbuild-shards/1: reused, at tree 3a158c101a648576c240a611c52845bc6028d5b2", got ["SHARD 1 not used: fatal: 99861fb9f3c37c8f8d42564496d9beb6801fbf95 is not a valid object"]
+      at claimedByB (file://<checkout>/tests/acceptance/3515/alternates.test.mjs:28:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3515/alternates.test.mjs:49:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3515/alternates.test.mjs:52:1
+✖ #3515.d46e20be the alternates keep every line they had, name the clone's objects once, and a second claim adds none (3257.7275ms)
+  AssertionError [ERR_ASSERTION]: alternates name B's objects ($TMPDIR/deep-3515-g7fxL1/b/.git/objects) once: ["$TMPDIR/deep-3515-g7fxL1/a/.git/objects"]
+  
+  0 !== 1
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3515/alternates.test.mjs:63:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3515/none.test.mjs:10:1
+✖ #3515.0d44293c claimShards asked for shards that claims none says so on stderr, naming the count and that the alone block runs unsharded in the worktree (776.921834ms)
+  AssertionError [ERR_ASSERTION]: one stderr line says the alone block runs unsharded in the worktree; stderr was ""
+  
+  0 !== 1
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3515/none.test.mjs:19:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

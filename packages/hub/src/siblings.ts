@@ -19,6 +19,7 @@ import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { ulid, type EventInput } from '@deepbuild/record';
 import { run } from './children.js';
 import { gitDirs, headOf } from './session-facts.js';
+import type { Plant } from './plant.js';
 import type { Draft, HookMeta, Hunk } from './wire.js';
 
 // A repeat is a turn's last calls failing alike (#2019), told to that session alone.
@@ -96,6 +97,8 @@ export interface SiblingOptions {
   now(): number;
   /** Whether a session DeepBuild started has ended: its agent is gone, though it may have sent no SessionEnd. */
   over(session: string): boolean;
+  /** The planted wrong program, for #3405's twins. */
+  plant?: Plant;
 }
 /** A merged pull request's first line, as GitHub writes it: the number and the branch, nothing of its title. */
 const MERGED = /^Merge pull request #(\d+) from [^/\s]+\/(\S+)$/;
@@ -132,10 +135,13 @@ export class Siblings {
   /** The sessions on one issue already read as one lead's, or raced, by repo, issue and their IDs. */
   private readonly exempt = new Set<string>();
   private timer: NodeJS.Timeout | undefined;
-  /** Each session's turns since your last prompt to it: when each began, and whether another session's message began it. */
-  private readonly turns = new Map<string, { id: string; at: number; peer: boolean }[]>();
+  /**
+   * Each session's turns since your last prompt to it: when each began, whether another session's message began it,
+   * and the server of the channel whose event began it (#3405), which counts on its own.
+   */
+  private readonly turns = new Map<string, { id: string; at: number; peer: boolean; channel?: string }[]>();
   /** The loop asks that hold sessions, by each session they hold, until you answer one to go on or prompt the session. */
-  private readonly loops = new Map<string, { ask: string; pair: string[]; at: number }>();
+  private readonly loops = new Map<string, { ask: string; pair: string[]; at: number; channel?: string }>();
   constructor(private readonly o: SiblingOptions) {}
 
   /** The session's process went with no SessionEnd (#992): it works beside no other until a hook of its own says so. */
@@ -147,6 +153,7 @@ export class Siblings {
   /** The core forgot the session (#1866): its place on the map, what it was handed and what waits for it go. */
   forget(session: string): void {
     for (const of of [this.map, this.pending, this.turns, this.loops]) of.delete(session);
+    for (const key of this.loops.keys()) if (key.startsWith(`${session}\0`)) this.loops.delete(key);
     for (const of of [this.delivered, this.exempt]) for (const key of of) if (key.split('\0').includes(session)) of.delete(key);
     for (const [hook, r] of this.inReply) if (r.session === session) this.inReply.delete(hook);
     for (const key of this.dry.keys()) if (![...this.map.values()].some((m) => m.head !== null && key.split('\0').includes(m.head))) this.dry.delete(key);
@@ -178,8 +185,8 @@ export class Siblings {
   }
   /** The turns of the last 10 minutes and the loop asks still open, read back at the start. */
   private async restoreLoops(): Promise<void> {
-    const rows = (await this.o.raw(`SELECT id, session_id, ts, json_extract(data, '$.from') AS origin FROM events WHERE kind = 'user.ask' AND ts >= ? AND session_id IS NOT NULL ORDER BY log_pos`, [this.o.now() - LOOP_MS])) as { id: string; session_id: string; ts: number; origin: string }[];
-    for (const r of rows) this.turn(r.session_id, r.id, r.origin, r.ts);
+    const rows = (await this.o.raw(`SELECT id, session_id, ts, json_extract(data, '$.from') AS origin, json_extract(data, '$.server') AS server FROM events WHERE kind = 'user.ask' AND ts >= ? AND session_id IS NOT NULL ORDER BY log_pos`, [this.o.now() - LOOP_MS])) as { id: string; session_id: string; ts: number; origin: string; server: string | null }[];
+    for (const r of rows) this.turn(r.session_id, r.id, r.origin, r.ts, r.server ?? undefined);
     // A loop ask still open, answered to hold them or closed with no answer holds its sessions' next such prompts again,
     // each unless you prompted it since.
     const open = (await this.o.raw(`SELECT id, session_id, created, question FROM asks WHERE session_id IS NOT NULL AND (status IN ('open', 'later') OR answer IS NULL OR answer NOT LIKE '%go-on%') AND (question LIKE '% Let them go on?' OR question LIKE '% Let it go on?')`)) as { id: string; session_id: string; created: number; question: string }[];
@@ -187,39 +194,49 @@ export class Siblings {
       // The record holds its key hashed: its question names the pair.
       const named = /^Sessions (\S+) \(.+?\) and (\S+) \(/.exec(a.question);
       const pair = named ? [named[1]!, named[2]!] : [a.session_id];
-      const held = { ask: `ask:${a.id}`, pair, at: a.created };
+      // A channel's ask (#3405) names its server, and holds that channel's events alone.
+      const channel = /turns started by events from the channel (\S+) in the last 10 minutes/.exec(a.question)?.[1];
+      const held = { ask: `ask:${a.id}`, pair, at: a.created, ...(channel === undefined ? {} : { channel }) };
       for (const id of pair) {
         const yours = await this.o.raw(`SELECT 1 FROM events WHERE kind = 'user.ask' AND session_id = ? AND ts > ? AND json_extract(data, '$.from') IN ('person', 'app') LIMIT 1`, [id, a.created]);
-        if (!yours.length) this.loops.set(id, held);
+        if (!yours.length) this.loops.set(channel === undefined ? id : `${id}\0channel:${channel}`, held);
       }
     }
   }
   /** A prompt's origin, by its event: yours starts the count again; another session's adds one, once, however often its hook is read. */
-  turn(session: string, id: string, origin: string, at: number): void {
+  turn(session: string, id: string, origin: string, at: number, server?: string): void {
     if (origin === 'person' || origin === 'app') {
       this.turns.delete(session);
-      this.loops.delete(session);
+      for (const key of this.loops.keys()) if (key === session || key.startsWith(`${session}\0`)) this.loops.delete(key);
       return;
     }
     const list = (this.turns.get(session) ?? []).filter((t) => at - t.at < LOOP_MS);
     if (list.some((t) => t.id === id)) return;
-    list.push({ id, at, peer: origin === 'session' });
+    list.push({ id, at, peer: origin === 'session', ...(origin === 'channel' && server ? { channel: server } : {}) });
     this.turns.set(session, list);
   }
   /** Whether a session is past the loop rule's count: more than 20 turns another session's messages started in 10 minutes. */
-  looping(session: string): boolean {
-    const now = this.o.now();
-    return (this.turns.get(session) ?? []).filter((t) => t.peer && now - t.at < LOOP_MS).length > LOOP_TURNS;
+  looping(session: string, server?: string): boolean {
+    return this.counted(session, this.o.now(), server) > LOOP_TURNS;
+  }
+  /** A session's turns in the window before `at` that another session's messages started, or one channel's events. */
+  private counted(session: string, at: number, server?: string): number {
+    return (this.turns.get(session) ?? []).filter((t) => (server === undefined ? t.peer : t.channel === server) && at - t.at < LOOP_MS).length;
   }
   /**
    * Whether a session's prompt another session's message started is held at its submit, and why: its 21st such turn in
    * 10 minutes with no prompt from you raises one ask naming it and the sender, when the facts name one, and holds the
    * pair's next such prompts until you answer; your "go on" starts their count again.
    */
-  async held(meta: HookMeta, origin: string, sender: () => Promise<string | undefined>): Promise<string | undefined> {
-    if (origin !== 'session') return undefined;
+  async held(meta: HookMeta, origin: string, sender: () => Promise<string | undefined>, server?: string): Promise<string | undefined> {
+    if (origin !== 'session' && (origin !== 'channel' || !server)) return undefined;
+    // The planted wrong program keeps no count of a channel's events, as the merge base did.
+    if (origin === 'channel' && this.o.plant === 'channel-without-count') return undefined;
+    const channel = origin === 'channel' ? server : undefined;
     const now = this.o.now();
-    let open = this.loops.get(meta.session);
+    // A channel's events count on their own (#3405), under a key of their own.
+    const key = channel === undefined ? meta.session : `${meta.session}\0channel:${channel}`;
+    let open = this.loops.get(key);
     if (open?.ask) {
       // Read each time: an undone default can be answered again.
       const [row] = (await this.o.raw(`SELECT status, answer FROM asks WHERE id = ?`, [open.ask.slice(4)])) as { status: string; answer: string | null }[];
@@ -229,40 +246,54 @@ export class Siblings {
         if (!row.answer.includes('go-on')) return HOLDING;
         // Your "go on" lets go the sessions this ask still holds; one another ask holds since stays with that one.
         for (const id of open.pair) {
-          if (this.loops.get(id) !== open) continue;
-          this.loops.delete(id);
-          this.turns.set(id, (this.turns.get(id) ?? []).filter((t) => t.at > now));
+          const held = channel === undefined ? id : key;
+          if (this.loops.get(held) !== open) continue;
+          this.loops.delete(held);
+          this.turns.set(id, (this.turns.get(id) ?? []).filter((t) => t.at > now || (channel === undefined ? t.channel !== undefined : t.channel !== channel)));
         }
         return undefined;
       }
     }
-    if (!open && !this.looping(meta.session)) return undefined;
+    if (!open && !this.looping(meta.session, channel)) return undefined;
     if (!open) {
       // Held now; the ask is raised beside the reply, so the hold never waits on it.
-      const raised: { ask: string; pair: string[]; at: number } = { ask: '', pair: [meta.session], at: now };
+      const raised: { ask: string; pair: string[]; at: number; channel?: string } = { ask: '', pair: [meta.session], at: now, ...(channel === undefined ? {} : { channel }) };
       open = raised;
-      this.loops.set(meta.session, raised);
+      this.loops.set(key, raised);
+      // The sender is held from now too, before its own next prompt can come; the planted wrong program holds the
+      // receiver alone. A sender another loop ask holds stays held by that one.
+      const from = channel === undefined ? await sender().catch(() => undefined) : undefined;
+      if (from && from !== meta.session && this.o.plant !== 'loop-holds-receiver-alone') {
+        raised.pair.push(from);
+        if (!this.loops.has(from)) this.loops.set(from, raised);
+      }
       // One whose ask can't be raised holds nothing more: no prompt waits on an ask you can't see.
-      this.o.queue(() => this.askLoop(meta, raised, sender).catch((error: unknown) => {
-        for (const id of raised.pair) if (this.loops.get(id) === raised) this.loops.delete(id);
+      this.o.queue(() => this.askLoop(meta, raised, from).catch((error: unknown) => {
+        for (const id of raised.pair) if (this.loops.get(channel === undefined ? id : key) === raised) this.loops.delete(channel === undefined ? id : key);
         throw error;
       }));
     }
+    if (channel !== undefined) return `DeepBuild held this prompt: events from the channel ${channel} started more than ${LOOP_TURNS} of this session's turns in 10 minutes with no prompt from you, so you're asked in your inbox whether to let them go on. It goes on once you answer, or with your next prompt to it.`;
     return `DeepBuild held this prompt: another session's messages started more than ${LOOP_TURNS} of this session's turns in 10 minutes with no prompt from you, so you're asked in your inbox whether to let them go on. It goes on once you answer, or with your next prompt to it.`;
   }
   /** The loop's one ask, naming the session and the sender when the facts name one, which it holds too. */
-  private async askLoop(meta: HookMeta, held: { ask: string; pair: string[]; at: number }, sender: () => Promise<string | undefined>): Promise<void> {
-    const from = await sender().catch(() => undefined);
-    if (from && from !== meta.session) {
-      held.pair.push(from);
-      // A sender another loop ask holds stays held by that one.
-      if (!this.loops.has(from)) this.loops.set(from, held);
+  private async askLoop(meta: HookMeta, held: { ask: string; pair: string[]; at: number; channel?: string }, from: string | undefined): Promise<void> {
+    if (held.channel !== undefined) {
+      // A channel's events (#3405): its server is named, and no session but this one is held.
+      const count = this.counted(meta.session, held.at, held.channel);
+      held.ask = await this.o.ask(meta.session, meta.agent, meta.cwd, 'session.loop', {
+        kind: 'exception', may_answer: 'trusted_path',
+        question: `Session ${meta.session} (${this.map.get(meta.session)?.agent ?? meta.agent}) had ${count} turns started by events from the channel ${held.channel} in the last 10 minutes, with no prompt from you. Let it go on?`,
+        options: [{ id: 'go-on', label: 'Let it go on', decision: 'none' }, { id: 'hold', label: 'Hold it until I prompt it', decision: 'none' }],
+        recommended: 'hold', default: 'hold', fallback: 'you', provisional: false, owner: 'you', key: `loop:${meta.session}:channel:${held.channel}:${held.at}`,
+      });
+      return;
     }
     const count = (this.turns.get(meta.session) ?? []).filter((t) => t.peer && held.at - t.at < LOOP_MS).length;
     const names = held.pair.map((id) => `${id} (${this.map.get(id)?.agent ?? meta.agent})`).join(' and ');
     const question = held.pair.length > 1
       ? `Sessions ${names} started ${count} of ${short(meta.session)}'s turns with each other's messages in the last 10 minutes, with no prompt from you. Let them go on?`
-      : `Session ${names} had ${count} turns started by another session's messages in the last 10 minutes, with no prompt from you. Let it go on?`;
+      : `Session ${names} had ${count} turns started by another session's messages in the last 10 minutes, with no prompt from you. ${from && from !== meta.session ? `They came from ${from}.` : 'Their sender is no session DeepBuild knows.'} Let it go on?`;
     held.ask = await this.o.ask(meta.session, meta.agent, meta.cwd, 'session.loop', {
       kind: 'exception', may_answer: 'trusted_path', question,
       options: [{ id: 'go-on', label: 'Let them go on', decision: 'none' }, { id: 'hold', label: 'Hold them until I prompt them', decision: 'none' }],
