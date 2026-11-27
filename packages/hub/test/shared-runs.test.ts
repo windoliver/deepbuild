@@ -47,7 +47,6 @@ function world(o: {
     dirs.push(checkout);
     mkdirSync(join(checkout, 'src'));
     writeFileSync(join(checkout, 'src/a.ts'), 'a\n');
-    // A claim's folder is a git worktree whose base is `b`, so the gate can read what it changed (#1869): nothing.
     const git = (...args: string[]) => execFileSync('git', ['-c', 'user.name=T', '-c', 'user.email=t@example.test', '-c', 'commit.gpgsign=false', ...args], { cwd: checkout, stdio: 'ignore' });
     git('init', '-q');
     git('add', '-A');

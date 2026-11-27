@@ -1,0 +1,12 @@
+{
+  "crates/deep-canvas/src/document/check.rs": [
+    {
+      "find": [
+        "            \"core\" => match value.as_str().and_then(Semver::parse) {"
+      ],
+      "wrong": [
+        "            \"core\" => match value.as_str().map(|t| Semver::parse(t).map_or_else(registry::core_semver, |_| registry::core_semver())) {"
+      ]
+    }
+  ]
+}

@@ -366,6 +366,8 @@ pub struct Picture {
 struct Decoded {
     pictures: Vec<Picture>,
     error: Option<String>,
+    /// #3467: a live decode's picture nobody will show, released as it came and never copied.
+    unkept: bool,
 }
 
 extern "C" fn on_picture(
@@ -381,6 +383,9 @@ extern "C" fn on_picture(
     if status != 0 || image.is_null() {
         out.error
             .get_or_insert(format!("the decoder answered {status}"));
+        return;
+    }
+    if out.unkept {
         return;
     }
     unsafe {
@@ -482,6 +487,7 @@ pub fn decode_video(
         let mut out = Box::new(Decoded {
             pictures: Vec::new(),
             error: None,
+            unkept: false,
         });
         let cb = DecodeCallback {
             callback: on_picture,
@@ -583,6 +589,7 @@ impl LiveDecoder {
             let mut out = Box::new(Decoded {
                 pictures: Vec::new(),
                 error: None,
+                unkept: false,
             });
             let cb = DecodeCallback {
                 callback: on_picture,
@@ -601,8 +608,15 @@ impl LiveDecoder {
         }
     }
 
-    /// Decodes one sample (index, bytes), in decode order; the pictures it gave.
-    pub fn decode(&mut self, index: usize, bytes: &[u8]) -> Result<Vec<Picture>, String> {
+    /// Decodes one sample (index, bytes), in decode order; the pictures it gave, or none when
+    /// `keep` is false (#3467): a picture nobody will show is released without being copied.
+    pub fn decode(
+        &mut self,
+        index: usize,
+        bytes: &[u8],
+        keep: bool,
+    ) -> Result<Vec<Picture>, String> {
+        self.out.unkept = !keep;
         unsafe {
             let b = block(bytes)?;
             let mut sample: CFTypeRef = null();

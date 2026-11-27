@@ -33,6 +33,8 @@ pub(crate) mod test_tools;
 pub(crate) mod tools;
 // #2892: `ship.bytes` and the ship checks' test server.
 pub(crate) mod ship;
+mod sources;
+mod subset;
 mod web;
 mod work;
 pub(crate) use web::full_player;
@@ -552,6 +554,8 @@ pub struct Job {
     pub pins: Vec<String>,
     /// #1250: `gif: {scale}` (or `video.gif`), an indexed look's GIF's options.
     pub gif: Value,
+    /// #1042: `web: {sources}` (or `video.web`), the web player's public sources.
+    pub web: Value,
     /// #231: `purpose: draft`: an export that runs film.blank and frames.finite but not the
     /// delivery decode, stays in the app's store and is never shared, attached or sent.
     pub draft: bool,
@@ -594,6 +598,7 @@ impl Default for Job {
             tool: None,
             pins: Vec::new(),
             gif: Value::Null,
+            web: Value::Null,
             draft: false,
             readings: Vec::new(),
         }
@@ -780,6 +785,11 @@ pub fn parse(c: &Map<String, Value>) -> Option<Job> {
         gif: c
             .get("gif")
             .or_else(|| video.and_then(|v| v.get("gif")))
+            .cloned()
+            .unwrap_or(Value::Null),
+        web: c
+            .get("web")
+            .or_else(|| video.and_then(|v| v.get("web")))
             .cloned()
             .unwrap_or(Value::Null),
         draft: match c.get("purpose") {

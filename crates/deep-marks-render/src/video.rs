@@ -5,6 +5,7 @@
 //! tagged with the probe's matrix and range so the live shader converts them by those. The frame
 //! shown at t is a pure function of t, so an item that comes back into view seeks to it.
 
+use std::collections::BTreeMap;
 use std::io::{Read, Write};
 use std::path::Path;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
@@ -20,6 +21,7 @@ use objc2_core_video::{
     CVPixelBufferGetBytesPerRowOfPlane, CVPixelBufferLockBaseAddress, CVPixelBufferLockFlags,
     CVPixelBufferUnlockBaseAddress,
 };
+use serde_json::{json, Map, Value};
 
 /// What a new frame shown was: its run time, document time, source frame and planes' hash.
 #[derive(Clone)]
@@ -33,7 +35,8 @@ pub struct Shown {
 /// The logs a run reports, sized up front so a frame that logs allocates nothing.
 pub struct Log {
     pub shown: Vec<Shown>,
-    pub decodes: Vec<(f64, usize)>,
+    /// #3467: each request's run time, source frame and, once answered, the samples decoded for it.
+    pub decodes: Vec<(f64, usize, Option<u32>)>,
 }
 
 pub struct Player {
@@ -51,6 +54,8 @@ pub struct Player {
     pub showing: Option<usize>,
     /// The frame asked of the worker and not yet read.
     pending: Option<usize>,
+    /// #3467: the most frame bytes the worker held at one answer.
+    worker_bytes: u64,
     pub log: Log,
     /// Whether the item meets the view, and its `frames` start, in and rate.
     pub visible: bool,
@@ -124,14 +129,20 @@ fn pixel_buffer(
 }
 
 impl Player {
-    /// A player of the video file at `path`, decoding at `size` (0 × 0: the source's).
-    pub fn start(path: &Path, size: (usize, usize)) -> Result<Player, String> {
+    /// A player of the video file at `path`, decoding at `size` (0 × 0: the source's), its
+    /// worker the planted one `planted` names (#3467), if any.
+    pub fn start(
+        path: &Path,
+        size: (usize, usize),
+        planted: Option<&str>,
+    ) -> Result<Player, String> {
         let exe = std::env::current_exe().map_err(|e| e.to_string())?;
         let mut child = Command::new(exe)
             .arg("decode-worker-live")
             .arg(path)
             .arg(size.0.to_string())
             .arg(size.1.to_string())
+            .args(planted)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
@@ -171,6 +182,7 @@ impl Player {
             scratch: vec![0; out.0 * out.1 * 3 / 2],
             showing: None,
             pending: None,
+            worker_bytes: 0,
             visible: true,
             timing: (0, 0, (1, 1)),
             log: Log {
@@ -194,20 +206,30 @@ impl Player {
             return false;
         }
         if self.log.decodes.len() < self.log.decodes.capacity() {
-            self.log.decodes.push((at_ms, k));
+            self.log.decodes.push((at_ms, k, None));
         }
         let asked = self.stdin.write_all(&(k as u32).to_le_bytes()).is_ok();
         self.pending = asked.then_some(k);
         asked
     }
 
-    /// Reads the worker's answer to the frame asked for into `scratch`.
+    /// Reads the worker's answer to the frame asked for into `scratch`, the samples it decoded
+    /// for it into the request's row, and the frame bytes it holds.
     fn answer(&mut self) -> bool {
-        self.pending = None;
-        let mut head = [0u8; 8];
-        self.stdout.read_exact(&mut head).is_ok()
-            && self.stdout.read_exact(&mut self.scratch).is_ok()
-            && u32_at(&head, 4) == 1
+        let asked = self.pending.take();
+        let mut head = [0u8; 20];
+        if self.stdout.read_exact(&mut head).is_err()
+            || self.stdout.read_exact(&mut self.scratch).is_err()
+        {
+            return false;
+        }
+        let row = self.log.decodes.last_mut();
+        if let Some(row) = row.filter(|r| Some(r.1) == asked && r.2.is_none()) {
+            row.2 = Some(u32_at(&head, 8));
+        }
+        let held = u64::from_le_bytes(head[12..20].try_into().unwrap_or([0; 8]));
+        self.worker_bytes = self.worker_bytes.max(held);
+        u32_at(&head, 4) == 1
     }
 
     /// Puts source frame `k` on screen, decoding it in the worker into the buffer on screen, and
@@ -248,6 +270,24 @@ impl Player {
         true
     }
 
+    /// What a run reports of this player: each new frame it showed and each request it made,
+    /// a frame asked ahead answered first, so its row holds its samples too, and the most frame
+    /// bytes each side held at one time (#3467): here the frame on screen and the one read
+    /// from the worker, and in the worker what its answers said.
+    fn report(&mut self) -> Value {
+        if self.pending.is_some() {
+            self.answer();
+        }
+        let shown: Vec<Value> = (self.log.shown.iter())
+            .map(|s| json!({"at_ms": s.at_ms, "t": s.t, "frame": s.frame, "planes": s.planes}))
+            .collect();
+        let decodes: Vec<Value> = (self.log.decodes.iter())
+            .map(|(at_ms, k, n)| json!({"at_ms": at_ms, "frame": k, "samples": n}))
+            .collect();
+        let bytes = json!({"app": 2 * self.scratch.len(), "worker": self.worker_bytes});
+        json!({"shown": shown, "decodes": decodes, "frame_bytes": bytes})
+    }
+
     /// The SHA-256 of the frame on screen's planes in I420 order (Y, then Cb, then Cr), as the
     /// decode worker's canonical decode names them.
     pub fn planes_hash(&self) -> String {
@@ -284,6 +324,13 @@ impl Drop for Player {
         let _ = self.stdin.write_all(&u32::MAX.to_le_bytes());
         let _ = self.child.wait();
     }
+}
+
+/// A run's `players` block: what each video item's player reports, by the item's ID.
+pub fn report(players: &mut BTreeMap<String, Player>) -> Map<String, Value> {
+    (players.iter_mut())
+        .map(|(id, p)| (id.clone(), p.report()))
+        .collect()
 }
 
 /// Whether the store's file for `sha` is a movie.

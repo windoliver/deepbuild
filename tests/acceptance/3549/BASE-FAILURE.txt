@@ -1,0 +1,352 @@
+# #3549's suite on the base, 2edb19ff4, in one run: `node --test --test-reporter=spec tests/acceptance/3549/*.test.mjs`,
+# the files side by side, as the command of `node scripts/throttle.mjs test --wait 600 -- ...` on the Mac (18 cores,
+# node v24.22.2), at a 1-minute load of 17 at its start. The same grant ran the suite beside it on a throwaway guess
+# at the change and on five wrong versions of it, in copies of the tree (README: What I ran).
+# The checkout reads <checkout>, the system's temporary folder <tmp>, a test's sandbox <sandbox>, home folders ~.
+#
+# 15 tests: 10 fail and 5 pass, each failure at an assertion of the suite's and for the expected reason (README: On the base):
+#   turn.test.mjs       #3549.b6b01435  the first: the second build had not started 60 s after asking; it waited behind the
+#                                       first, the criterion's base claim. The second: a build asked beside the one that
+#                                       holds the slot left the line when its 0.05 min was over; the base has no turn.
+#   compiles.test.mjs   #3549.13a91455  8 compiler processes at once at look 8: each cargo runs its own job count.
+#   admission.test.mjs  #3549.349bc6a3  both: only 1 of the 4, and of the 3, builds were admitted; the base's build count is 1.
+#   log.test.mjs        #3549.98c012e3  the timeout entry carries no `waited`.
+#   design.test.mjs     #3549.bf86e1ad  sections 6 and 13 state none of it.
+#   window.test.mjs     #3549.7ba8246d  the second and third fail: the base admits no build before its slot is free, so no
+#                                       admitted build waits for a turn. The first passes, as the criterion says it does.
+#   passes.test.mjs     #3549.c607aa63  both pass, and timed.test.mjs's two (#3549.7ba8246d): each reads as on the base.
+
+# base: exit 1, 96.8 s, load 17 at its start, pass 5, fail 10
+
+✖ #3549.349bc6a3 a build past the ceiling is not admitted: asked with no wait it is refused at once, and two that wait stand in line and start in the order they asked, each when a build ends (6882.145375ms)
+✖ #3549.349bc6a3 a build the memory rule leaves no room for on the readings of the test is not admitted: asked with no wait it is refused at once, and two that wait stand in line and start in the order they asked, each when a build ends (6265.203375ms)
+✖ #3549.13a91455 two real cargo builds of a fixture workspace, admitted together on a pool of 2 tokens, never run more than 2 compiler processes between them at any look, and a third build asked beside them waits for its turn (14333.695791ms)
+ℹ planted compiler processes at each look, one a second (15 looks, 0 failed): look 2 (+1.0 s): 1 (second 1), look 3 (+2.0 s): 1 (second 1), look 4 (+3.0 s): 1 (second 1), look 5 (+4.0 s): 1 (second 1), look 6 (+5.0 s): 1 (second 1), look 7 (+6.0 s): 1 (second 1), look 8 (+7.0 s): 8 (second 8), look 9 (+8.0 s): 1 (first 1), look 10 (+9.0 s): 1 (first 1), look 11 (+10.0 s): 1 (first 1), look 12 (+11.0 s): 1 (first 1), look 13 (+12.0 s): 1 (first 1), look 14 (+13.0 s): 8 (first 8)
+ℹ peak: look 8 (+7.0 s): 8 (second 8)
+✖ #3549.bf86e1ad docs/parallel-proof.md section 6 states the admission of a build, its turn, the ceiling and the trust given up, and the class table holds the ceiling of 4 and 6 for build (2.117125ms)
+✖ #3549.bf86e1ad docs/parallel-proof.md section 13 states the admission of a build, its turn, the ceiling and the trust given up, and the build row of the capacity table reads as a ceiling of 4 and 6 (0.28675ms)
+✖ #3549.98c012e3 the granted and timeout entries of the log for top-level build requests carry waited, within 1 s of this clock: one refused at once, one whose wait ran out, one granted after a wait, and one whose stall bound ran out after a grant changed hands (1009.637542ms)
+✔ #3549.c607aa63 with every build slot and every token of the pool held, a build request under a build grant of the caller and one under a test grant of the caller start at once on that grant, with no grant, turn or jobserver of their own (1408.044459ms)
+✔ #3549.c607aa63 inside an admitted run whose job holds the one token of the pool, a command scripts/lease runs starts at once with no turn, while a build request of the run waits for its turn (1465.439875ms)
+✔ #3549.7ba8246d with a timed request pending no build is admitted, with the timed grant held no build outside its chain runs while one inside it does, and the build that waited starts once the grant goes back (2165.374375ms)
+✔ #3549.7ba8246d with a timed request pending no turn is dealt: an admitted build that waits for the one token of the pool is not given it when it frees, and starts once the timed request is over (1835.630292ms)
+✖ #3549.b6b01435 on a pool of 4 tokens a second stub build of 40 s, asked 30 s after one of 400 s, ends within 60 s of asking, each under a jobserver of its own, and with four builds under way a fifth waits for one to end (90369.165292ms)
+ℹ the first build asked at +0 s and its command started at +0.8 s; it was still under way 60 s after the second asked
+the second build asked at +30.0 s; its command had not started; it had not ended
+✖ #3549.b6b01435 on a pool of 1 token a build asked beside one under way, by throttle.mjs build and through scripts/lease, is admitted, waits for its turn past its own wait limit, and then runs under a jobserver of its own (6366.106167ms)
+✔ #3549.7ba8246d a window opens only once an admitted build that is under way has ended (3943.099417ms)
+✖ #3549.7ba8246d a window opens only once every admitted build has ended: one that waited for its turn when the window asked is dealt the token, runs and ends first (3151.47825ms)
+✖ #3549.7ba8246d a window does not open while an admitted build still waits for its turn: asked under the build that holds the one token of the pool, its request runs out its wait (6409.815333ms)
+ℹ tests 15
+ℹ suites 0
+ℹ pass 5
+ℹ fail 10
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 96803.199084
+
+✖ failing tests:
+
+test at tests/acceptance/3549/admission.test.mjs:64:1
+✖ #3549.349bc6a3 a build past the ceiling is not admitted: asked with no wait it is refused at once, and two that wait stand in line and start in the order they asked, each when a build ends (6882.145375ms)
+  AssertionError [ERR_ASSERTION]: only 1 of 4 builds were admitted, though the ceiling is 4, the readings hold memory for every one, and an admission doesn't read their load: `node throttle.mjs build --wait 0.1 -- node stub.mjs held-2 hold` (throttle pid 33279) ended with 3: INCONCLUSIVE no grant: no build grant came within 0.1 min
+  notes:
+  {"name":"held-3","event":"start","at":1795729334244,"pid":34083,"throttle":"build:1e21c36ab63a9a8d","makeflags":null,"fifo":null,"window":null}
+  log:
+  {"at":"2026-11-26T21:42:14.211Z","event":"granted","class":"build","grant":"top-level","id":"1e21c36ab63a9a8d","pid":33280,"index":1,"load":17.24169921875,"cores":18,"wait":0.1}
+  {"at":"2026-11-26T21:42:20.327Z","event":"timeout","class":"build","id":"ebcb1c900df923b3","pid":33279,"wait":0.1}
+  {"at":"2026-11-26T21:42:20.338Z","event":"timeout","class":"build","id":"657f4aa9ea042203","pid":33281,"wait":0.1}
+  node throttle.mjs build --wait 0.1 -- node stub.mjs held-1 hold: still running
+  
+  node throttle.mjs build --wait 0.1 -- node stub.mjs held-2 hold: exit 3
+  INCONCLUSIVE no grant: no build grant came within 0.1 min
+    Fix: Wait for the other sessions' builds and proofs on this machine, then run again.
+  
+  node throttle.mjs build --wait 0.1 -- node stub.mjs held-3 hold: still running
+  
+  node throttle.mjs build --wait 0.1 -- node stub.mjs held-4 hold: still running
+  
+      at line (file://<checkout>/tests/acceptance/3549/admission.test.mjs:23:19)
+      at async TestContext.<anonymous> (file://<checkout>/tests/acceptance/3549/admission.test.mjs:68:3)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'fail',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3549/admission.test.mjs:74:1
+✖ #3549.349bc6a3 a build the memory rule leaves no room for on the readings of the test is not admitted: asked with no wait it is refused at once, and two that wait stand in line and start in the order they asked, each when a build ends (6265.203375ms)
+  AssertionError [ERR_ASSERTION]: only 1 of 3 builds were admitted, though the ceiling is 4 and the readings hold 3.5 builds' memory: `node throttle.mjs build --wait 0.1 -- node stub.mjs held-2 hold` (throttle pid 39157) ended with 3: INCONCLUSIVE no grant: no build grant came within 0.1 min
+  notes:
+  {"name":"held-3","event":"start","at":1795729340591,"pid":39261,"throttle":"build:ddd2adf95adbcc92","makeflags":null,"fifo":null,"window":null}
+  log:
+  {"at":"2026-11-26T21:42:20.559Z","event":"granted","class":"build","grant":"top-level","id":"ddd2adf95adbcc92","pid":39158,"index":1,"load":16.42138671875,"cores":18,"wait":0.1}
+  {"at":"2026-11-26T21:42:26.558Z","event":"timeout","class":"build","id":"eeb8cd0c1dfea297","pid":39157,"wait":0.1}
+  node throttle.mjs build --wait 0.1 -- node stub.mjs held-1 hold: still running
+  
+  node throttle.mjs build --wait 0.1 -- node stub.mjs held-2 hold: exit 3
+  INCONCLUSIVE no grant: no build grant came within 0.1 min
+    Fix: Wait for the other sessions' builds and proofs on this machine, then run again.
+  
+  node throttle.mjs build --wait 0.1 -- node stub.mjs held-3 hold: still running
+  
+      at line (file://<checkout>/tests/acceptance/3549/admission.test.mjs:23:19)
+      at async TestContext.<anonymous> (file://<checkout>/tests/acceptance/3549/admission.test.mjs:79:3)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'fail',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3549/compiles.test.mjs:105:1
+✖ #3549.13a91455 two real cargo builds of a fixture workspace, admitted together on a pool of 2 tokens, never run more than 2 compiler processes between them at any look, and a third build asked beside them waits for its turn (14333.695791ms)
+  AssertionError [ERR_ASSERTION]: at look 8 (+7.0 s): 8 (second 8), 8 compiler processes ran at once, more than the pool's 2 tokens; 2 of 15 looks were above 2: look 8 (+7.0 s): 8 (second 8), look 14 (+13.0 s): 8 (first 8)
+  planted compiler processes at each look, one a second (15 looks, 0 failed): look 2 (+1.0 s): 1 (second 1), look 3 (+2.0 s): 1 (second 1), look 4 (+3.0 s): 1 (second 1), look 5 (+4.0 s): 1 (second 1), look 6 (+5.0 s): 1 (second 1), look 7 (+6.0 s): 1 (second 1), look 8 (+7.0 s): 8 (second 8), look 9 (+8.0 s): 1 (first 1), look 10 (+9.0 s): 1 (first 1), look 11 (+10.0 s): 1 (first 1), look 12 (+11.0 s): 1 (first 1), look 13 (+12.0 s): 1 (first 1), look 14 (+13.0 s): 8 (first 8)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3549/compiles.test.mjs:147:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3549/design.test.mjs:42:1
+✖ #3549.bf86e1ad docs/parallel-proof.md section 6 states the admission of a build, its turn, the ceiling and the trust given up, and the class table holds the ceiling of 4 and 6 for build (2.117125ms)
+  AssertionError [ERR_ASSERTION]: section 6 doesn't state: this issue, #3549; the admission (a build is admitted, an admitted build); the turn (an admitted build takes or waits for a turn); the ceiling (of builds); none in what a build produces
+  + actual - expected
+  
+  + [
+  +   'this issue, #3549',
+  +   'the admission (a build is admitted, an admitted build)',
+  +   'the turn (an admitted build takes or waits for a turn)',
+  +   'the ceiling (of builds)',
+  +   'none in what a build produces'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3549/design.test.mjs:44:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'this issue, #3549', 'the admission (a build is admitted, an admitted build)', 'the turn (an admitted build takes or waits for a turn)', 'the ceiling (of builds)', 'none in what a build produces' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3549/design.test.mjs:50:1
+✖ #3549.bf86e1ad docs/parallel-proof.md section 13 states the admission of a build, its turn, the ceiling and the trust given up, and the build row of the capacity table reads as a ceiling of 4 and 6 (0.28675ms)
+  AssertionError [ERR_ASSERTION]: section 13 doesn't state: this issue, #3549; the admission (a build is admitted, an admitted build); the turn (an admitted build takes or waits for a turn); the ceiling (of builds); none in what a build produces
+  + actual - expected
+  
+  + [
+  +   'this issue, #3549',
+  +   'the admission (a build is admitted, an admitted build)',
+  +   'the turn (an admitted build takes or waits for a turn)',
+  +   'the ceiling (of builds)',
+  +   'none in what a build produces'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3549/design.test.mjs:52:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'this issue, #3549', 'the admission (a build is admitted, an admitted build)', 'the turn (an admitted build takes or waits for a turn)', 'the ceiling (of builds)', 'none in what a build produces' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3549/log.test.mjs:20:1
+✖ #3549.98c012e3 the granted and timeout entries of the log for top-level build requests carry waited, within 1 s of this clock: one refused at once, one whose wait ran out, one granted after a wait, and one whose stall bound ran out after a grant changed hands (1009.637542ms)
+  AssertionError [ERR_ASSERTION]: the log's timeout entry for the top-level request `node throttle.mjs build --wait 0 -- node stub.mjs held-2 hold` (throttle pid 34088) carries no waited, the milliseconds since it asked: {"at":"2026-11-26T21:42:14.430Z","event":"timeout","class":"build","id":"a38af4b2e471500c","pid":34088,"wait":0}
+  notes:
+  {"name":"held-1","event":"start","at":1795729334242,"pid":34082,"throttle":"build:32955e5a70413e6c","makeflags":null,"fifo":null,"window":null}
+  log:
+  {"at":"2026-11-26T21:42:14.209Z","event":"granted","class":"build","grant":"top-level","id":"32955e5a70413e6c","pid":33283,"index":1,"load":17.24169921875,"cores":18,"wait":0}
+  {"at":"2026-11-26T21:42:14.430Z","event":"timeout","class":"build","id":"a38af4b2e471500c","pid":34088,"wait":0}
+  node throttle.mjs build --wait 0 -- node stub.mjs held-1 hold: still running
+  
+  node throttle.mjs build --wait 0 -- node stub.mjs held-2 hold: exit 3
+  INCONCLUSIVE no grant: no build grant came within 0 min
+    Fix: Wait for the other sessions' builds and proofs on this machine, then run again.
+  
+      at entry (file://<checkout>/tests/acceptance/3549/log.test.mjs:39:12)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3549/log.test.mjs:49:19)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3549/turn.test.mjs:30:1
+✖ #3549.b6b01435 on a pool of 4 tokens a second stub build of 40 s, asked 30 s after one of 400 s, ends within 60 s of asking, each under a jobserver of its own, and with four builds under way a fifth waits for one to end (90369.165292ms)
+  AssertionError [ERR_ASSERTION]: the second build, `node throttle.mjs build --wait 10 -- node stub.mjs second sleep 40` (throttle pid 42522), had not ended: not within 60 s of asking. It waited behind the first, of 400 s
+  the first build asked at +0 s and its command started at +0.8 s; it was still under way 60 s after the second asked
+  the second build asked at +30.0 s; its command had not started; it had not ended
+  notes:
+  {"name":"first","event":"start","at":1795729334368,"pid":34151,"throttle":"build:f79f6653b7f4c977","makeflags":null,"fifo":null,"window":null}
+  log:
+  {"at":"2026-11-26T21:42:14.334Z","event":"granted","class":"build","grant":"top-level","id":"f79f6653b7f4c977","pid":33292,"index":1,"load":17.24169921875,"cores":18,"wait":10}
+  node throttle.mjs build --wait 10 -- node stub.mjs first sleep 400: still running
+  
+  node throttle.mjs build --wait 10 -- node stub.mjs second sleep 40: still running
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3549/turn.test.mjs:54:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3549/turn.test.mjs:86:1
+✖ #3549.b6b01435 on a pool of 1 token a build asked beside one under way, by throttle.mjs build and through scripts/lease, is admitted, waits for its turn past its own wait limit, and then runs under a jobserver of its own (6366.106167ms)
+  AssertionError [ERR_ASSERTION]: the build `direct`, `node throttle.mjs build --wait 0.05 -- node stub.mjs direct exit` (throttle pid 45852), left the line while the pool's one token was held (exit 3): it wasn't admitted, or its turn had a wait limit
+  notes:
+  {"name":"test-holder","event":"start","at":1795729424065,"pid":45850,"throttle":"test:2bc04bfa87b562fb","makeflags":null,"fifo":null,"window":null}
+  {"name":"under-way","event":"start","at":1795729424068,"pid":45851,"throttle":"build:23d525f8d44e3d35","makeflags":null,"fifo":null,"window":null}
+  log:
+  {"at":"2026-11-26T21:43:44.037Z","event":"granted","class":"test","grant":"top-level","id":"2bc04bfa87b562fb","pid":45801,"index":1,"load":20.69873046875,"cores":18,"wait":0.1,"readings":{"memory":1099511627776,"load":1000,"cores":2}}
+  {"at":"2026-11-26T21:43:44.041Z","event":"granted","class":"build","grant":"top-level","id":"23d525f8d44e3d35","pid":45800,"index":1,"load":20.69873046875,"cores":18,"wait":0.1}
+  {"at":"2026-11-26T21:43:47.347Z","event":"timeout","class":"build","id":"3d3411ccb418218d","pid":45852,"wait":0.05}
+  {"at":"2026-11-26T21:43:47.512Z","event":"timeout","class":"build","id":"7c440ed44f7c96f0","pid":45853,"wait":0.05}
+  {"at":"2026-11-26T21:43:50.203Z","event":"timeout","class":"test","id":"5856689f842e8204","pid":45854,"wait":0.1}
+  node throttle.mjs build --wait 0.1 -- node stub.mjs under-way hold: still running
+  
+  node throttle.mjs test --wait 0.1 -- node stub.mjs test-holder hold: still running
+  
+  node throttle.mjs build --wait 0.05 -- node stub.mjs direct exit: exit 3
+  INCONCLUSIVE no grant: no build grant came within 0.05 min
+    Fix: Wait for the other sessions' builds and proofs on this machine, then run again.
+  
+  scripts/lease node stub.mjs leased exit (DEEP_LEASE_WAIT=0.05): exit 3
+  scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `node <sandbox>/stub.mjs leased exit` runs under the throttle's grant with no lease
+  INCONCLUSIVE no grant: no build grant came within 0.05 min
+    Fix: Wait for the other sessions' builds and proofs on this machine, then run again.
+  
+  node throttle.mjs test --wait 0.1 -- node stub.mjs witness exit: exit 3
+  INCONCLUSIVE no grant: no test grant came within 0.1 min
+    Fix: Wait for the other sessions' builds and proofs on this machine, then run again.
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3549/turn.test.mjs:108:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3549/window.test.mjs:52:1
+✖ #3549.7ba8246d a window opens only once every admitted build has ended: one that waited for its turn when the window asked is dealt the token, runs and ends first (3151.47825ms)
+  AssertionError [ERR_ASSERTION]: the window opened before the build `node throttle.mjs build --wait 10 -- node stub.mjs waits-its-turn hold` (throttle pid 37700), admitted before the window asked, had had its turn: an admitted build had not ended
+  notes:
+  {"name":"holds-the-token","event":"start","at":1795729337676,"pid":37605,"throttle":"build:f95251233f3e23ec","makeflags":null,"fifo":null,"window":null}
+  {"name":"chain","event":"start","at":1795729337691,"pid":37617,"throttle":"test:c9f52e2a3911510b","makeflags":null,"fifo":null,"window":null}
+  {"name":"probe-1","event":"start","at":1795729337866,"pid":37825,"throttle":"bay-pair:f28acdf6020a8b75","makeflags":null,"fifo":null,"window":null}
+  {"name":"probe-1","event":"end","at":1795729337866,"pid":37825}
+  {"name":"probe-2","event":"start","at":1795729338010,"pid":37992,"throttle":"bay-pair:e09f4b3e5e3a2ecf","makeflags":null,"fifo":null,"window":null}
+  {"name":"probe-2","event":"end","at":1795729338010,"pid":37992}
+  {"name":"chain","event":"asked","at":1795729338036,"pid":37617,"step":0,"child":38053}
+  {"name":"holds-the-token","event":"end","at":1795729340364,"pid":37605}
+  log:
+  {"at":"2026-11-26T21:42:17.643Z","event":"granted","class":"build","grant":"top-level","id":"f95251233f3e23ec","pid":37485,"index":1,"load":17.24169921875,"cores":18,"wait":0.1}
+  {"at":"2026-11-26T21:42:17.657Z","event":"granted","class":"test","grant":"top-level","id":"c9f52e2a3911510b","pid":37489,"index":1,"load":17.24169921875,"cores":18,"wait":0.1,"readings":{"memory":1099511627776,"load":0,"cores":2}}
+  {"at":"2026-11-26T21:42:17.831Z","event":"granted","class":"bay-pair","grant":"top-level","id":"f28acdf6020a8b75","pid":37701,"index":1,"load":17.24169921875,"cores":18,"wait":0}
+  {"at":"2026-11-26T21:42:17.869Z","event":"released","class":"bay-pair","id":"f28acdf6020a8b75","pid":37701}
+  {"at":"2026-11-26T21:42:17.978Z","event":"granted","class":"bay-pair","grant":"top-level","id":"e09f4b3e5e3a2ecf","pid":37901,"index":1,"load":17.24169921875,"cores":18,"wait":0}
+  {"at":"2026-11-26T21:42:18.012Z","event":"released","class":"bay-pair","id":"e09f4b3e5e3a2ecf","pid":37901}
+  {"at":"2026-11-26T21:42:20.390Z","event":"released","class":"build","id":"f95251233f3e23ec","pid":37485}
+  {"at":"2026-11-26T21:42:20.476Z","event":"granted","class":"timed","grant":"nested","id":"a5ff6c557f9ac785","pid":38053,"index":1,"load":16.42138671875,"cores":18,"wait":10}
+  {"at":"2026-11-26T21:42:20.477Z","event":"window-open","id":"a5ff6c557f9ac785","pid":38053}
+  node throttle.mjs build --wait 0.1 -- node stub.mjs holds-the-token hold: exit 0
+  
+  node throttle.mjs test --wait 0.1 -- node stub.mjs chain drive <sandbox>/chain.steps.json: still running
+  
+  node throttle.mjs build --wait 10 -- node stub.mjs waits-its-turn hold: still running
+  
+  + actual - expected
+  
+  + {
+  +   at: '2026-11-26T21:42:20.477Z',
+  +   event: 'window-open',
+  +   id: 'a5ff6c557f9ac785',
+  +   pid: 38053
+  + }
+  - undefined
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3549/window.test.mjs:76:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: { at: '2026-11-26T21:42:20.477Z', event: 'window-open', id: 'a5ff6c557f9ac785', pid: 38053 },
+    expected: undefined,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3549/window.test.mjs:82:1
+✖ #3549.7ba8246d a window does not open while an admitted build still waits for its turn: asked under the build that holds the one token of the pool, its request runs out its wait (6409.815333ms)
+  AssertionError [ERR_ASSERTION]: the build `node throttle.mjs build --wait 0.05 -- node stub.mjs waits-its-turn exit` (throttle pid 39515) left the line while the pool's one token was held (exit 3): it wasn't admitted, so no admitted build waits for a turn
+  notes:
+  {"name":"test-holder","event":"start","at":1795729340813,"pid":39513,"throttle":"test:f874ef8053bee592","makeflags":null,"fifo":null,"window":null}
+  {"name":"holds-the-token","event":"start","at":1795729340820,"pid":39514,"throttle":"build:1c26b1657b163cad","makeflags":null,"fifo":null,"window":null}
+  log:
+  {"at":"2026-11-26T21:42:20.781Z","event":"granted","class":"test","grant":"top-level","id":"f874ef8053bee592","pid":39380,"index":1,"load":16.42138671875,"cores":18,"wait":0.1,"readings":{"memory":1099511627776,"load":1000,"cores":2}}
+  {"at":"2026-11-26T21:42:20.788Z","event":"granted","class":"build","grant":"top-level","id":"1c26b1657b163cad","pid":39378,"index":1,"load":16.42138671875,"cores":18,"wait":0.1}
+  {"at":"2026-11-26T21:42:24.057Z","event":"timeout","class":"build","id":"eace59b789b151a6","pid":39515,"wait":0.05}
+  {"at":"2026-11-26T21:42:26.929Z","event":"timeout","class":"test","id":"dc38e95c65712f75","pid":39516,"wait":0.1}
+  node throttle.mjs build --wait 0.1 -- node stub.mjs holds-the-token drive <sandbox>/holds-the-token.steps.json: still running
+  
+  node throttle.mjs test --wait 0.1 -- node stub.mjs test-holder hold: still running
+  
+  node throttle.mjs build --wait 0.05 -- node stub.mjs waits-its-turn exit: exit 3
+  INCONCLUSIVE no grant: no build grant came within 0.05 min
+    Fix: Wait for the other sessions' builds and proofs on this machine, then run again.
+  
+  node throttle.mjs test --wait 0.1 -- node stub.mjs witness exit: exit 3
+  INCONCLUSIVE no grant: no test grant came within 0.1 min
+    Fix: Wait for the other sessions' builds and proofs on this machine, then run again.
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3549/window.test.mjs:103:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }

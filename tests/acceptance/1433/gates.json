@@ -1,0 +1,24 @@
+{
+  "issue": 1433,
+  "what": "The gates of the spike, fixed before the first run: each is a criterion of the issue with the issue's and the design's values. The spike keeps a byte-for-byte copy as docs/spikes/1433/gates.json, and every raw reading names this file's sha256.",
+  "runs_on": { "model": "Mac17,10", "chip": "Apple M5 Max", "memoryBytes": 68719476736, "cores": 18 },
+  "conditions": { "power": "ac", "lowPowerMode": false, "thermalState": "nominal" },
+  "runs": 5,
+  "arms": {
+    "candidate": ["canvas-handoff", "idle", "list-transcript", "text-input", "accessibility", "question-card", "panel"],
+    "gpui-fast": ["list-transcript", "retention-frames", "still-ledger", "list-shapes"]
+  },
+  "gates": {
+    "canvas-handoff": { "criterion": "#1433.c0b58a25", "size_px": [1936, 1584], "frame_ms_under": 1, "frames_at_least": 300, "look": "crates/deep-canvas-marks/looks/clean.json" },
+    "idle": { "criterion": "#1433.8f63851f", "seconds": 60, "frames": 0, "wakeups_at_most": 1 },
+    "list-transcript": { "criterion": "#1433.450e5804", "rows": 1000, "update_p99_ms_at_most": 4, "coldStartMs_under": 1000, "idleCpuPercent_under": 1, "memoryBytes_under": 200000000, "appBytes_under": 60000000 },
+    "text-input": { "criterion": "#1433.9d8646d2", "methods": ["pinyin", "kotoeri", "dictation", "emoji"], "faults": ["lost_composition", "wrong_commit", "misplaced_candidate_window"] },
+    "accessibility": { "criterion": "#1433.27d27bbc", "live": "deep-live" },
+    "question-card": { "criterion": "#1433.f1fbb5d2", "built_with": "crates/deep-app/src/trusted_input.rs" },
+    "panel": { "criterion": "#1433.08e2511c", "panel": "crates/deep-app/panels/claude-code/main.js", "tree": "tests/acceptance/1425/base-trees/claude-code.txt", "update_p99_ms_at_most": 4 },
+    "retention-frames": { "criterion": "#1433.667977ab", "off_switch": "GPUI_VIEW_RETENTION=0" },
+    "still-ledger": { "criterion": "#1433.5aa9696a" },
+    "list-shapes": { "criterion": "#1433.e587284a", "shapes": ["shared", "own"], "retention": ["on", "off"], "rows": 1000, "live_rows": [1000, 3000] }
+  },
+  "gpui_fast": { "version": "0.1.10", "copies": ["gpui-fast", "gpui-fast-apple"], "carried_trees": ["vendor/gpui-pre", "vendor/gpui-pre-apple", "vendor/gpui-pre-macos"] }
+}

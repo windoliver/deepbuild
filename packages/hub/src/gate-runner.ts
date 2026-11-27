@@ -7,16 +7,18 @@
 // check's verdict is made from its recorded runs by the verdict engine (claimVerdict, #30), and every stop's held time is recorded
 // with its split. A looping session's slow checks are held in their places until the loop pauses for them, a claim or
 // your words start them (#965; design: A loop's turn end isn't a hand-back), and background work the session still runs
-// holds them until it ends, at most 30 minutes from the stop (#907); each held place is recorded as `check.held`. The
+// holds them until it ends, at most 30 minutes from the stop (#907); each held place is recorded as `check.held`, and
+// so is a queued place while no slot is free for its run (#3562). The
 // snapshot, every checkout and a fix check's run on the merge base come from the base-commit service (#31). A slow run a
 // newer claim outdates is recorded stale only when that claim's snapshot changed its check's inputs, by tree (#45). Pure
 // rules live in @deepbuild/gate; this module drives them with the hub's runs and record.
 import { mkdir, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
-import { baseProof, claimVerdict, ownChanges, ownRead, OverBudget, type Checkouts, type ClaimRequirement, type DeclaredSurface, type JudgeFault, type RecordedRun, type StandIn, type TempCheckout } from '@deepbuild/gate';
+import { baseProof, claimVerdict, ownChanges, ownRead, OverBudget, type ClaimRequirement, type DeclaredSurface, type JudgeFault, type RecordedRun, type StandIn, type TempCheckout } from '@deepbuild/gate';
 import { sha256Hex } from '@deepbuild/contracts';
-import { ulid, type Connection, type EventInput } from '@deepbuild/record';
+import { ulid } from '@deepbuild/record';
 import { moreRuns, type BaseResult, type Result, type RunOutcome, type Verdict } from '@deepbuild/verdicts';
+import { SLOT_WAIT } from '@deepbuild/readings';
 import { plantedKeeps, type Plant } from './plant.js';
 import { changesOf, type Changes } from './claim-changes.js';
 import { contents, EMPTY, installsOf, keptRecord, keyId, keyPaths, keyRows, missingRun, namesOf, plain, repoOf, SharedRuns, stemOf, withheld, type KeptRow, type KeyFacts, type Source } from './shared-runs.js';
@@ -25,9 +27,10 @@ import { stopOnHost } from './host-gate.js';
 import type { Used } from '@deepbuild/supervisor';
 import { admitOn, CLASS_MB, cleanPeak, CLEAN_RUNS, KeyHistory, type Admission } from './admission.js';
 import { digestsOf, type Spent, type Variant } from './variants.js';
+import type { GateOptions, RunKey, Surface } from './gate-options.js';
 
-/** The surface a drafted check declares it enters through (#874): #31's shape, its check the requirement's own. */
-export type Surface = { kind: string } & Record<string, unknown>;
+export type { GateOptions, RunKey, Surface } from './gate-options.js';
+
 /**
  * A check of a claim, as the definition locks it: its approved bytes, the command its run is, the requirements it
  * covers, its lane facts and the assertions it names; with them the requirement it judges and the surface it declares, for a stand-in on a base
@@ -76,64 +79,13 @@ export interface StatePin { digests: string[]; files: Record<string, string>; pi
 /** How a claim's definition stands when its checks start (#322): locked; waiting for a lock on its way, which the hold waits for; pending with none; or held by a cause outside the code. */
 export type DefinitionState = 'locked' | 'waiting' | 'pending' | { blocked: string };
 /**
- * What a run's key is made of, handed with its start (#1018): its stem, the claim's checkout its files are read in, the
- * claim and session it runs for, whether it's a base run or a held-out variant's, and the key when it's known before the
- * run (a base run's, a variant's); a head run's key holds the files it reads, known once it ends.
- */
-export interface RunKey { check: string; stem: string; dir: string; claim: string; session: string; base: boolean; withheld: boolean; id?: string; paths?: string[] }
-export interface GateOptions {
-  raw(query: string, params?: readonly (string | number | bigint | null)[]): Promise<unknown[]>;
-  now: () => number;
-  append(connection: Connection, input: EventInput): Promise<void>;
-  core: Connection;
-  /** Starts one run of a claim's check in `cwd`, in its lane with its expected time; resolves with its run handle. */
-  start(r: { claim: string; check: string; approved: string | null; command: string; commit: string; cwd: string; lane: 'fast' | 'slow'; expected_ms: number | null; deadline_ms: number | null; env?: Record<string, string>; hosts?: string[]; standIns?: string[]; references?: { path: string; sha256: string }[]; overlay?: Record<string, string>; variant?: Variant; key?: RunKey; stack?: StackWant; memory?: Admission; /** The host the run is on, in `cwd` there (#999). */ host?: string }): Promise<string>;
-  /** What a claim changed in its session's folder on a host against `base`, read there within `ms` (#3511); a failed read is its `unread`, never no change. */
-  changesOn?(host: string, cwd: string, base: string, ms: number): Promise<Changes>;
-  /** The call that spent a task's held-out variant, by its files (#3229); a runner without it knows of none. */
-  spent?(task: string, files: Record<string, string>): Spent | undefined;
-  /** The start a check's stack needs now, added to its expected time (#580). */
-  stackStart?(folder: string, worktree: string): Promise<number>;
-  /** The planted wrong program's start of a stack at a claim, whatever its lane. */
-  startsAtClaim?(folder: string, session: string, worktree: string): Promise<void>;
-  /** Whether a checkout's done.yaml has an environment, so a journey there runs on its warm stack (#580). */
-  stacked?(folder: string): boolean;
-  /** Each program a check's command names, with its reading (#2060); a runner without it reads none. */
-  programs?(command: string, checkout: string, read: Map<string, string>): Promise<[string, string][]>;
-  /** Resolves with the run's outcome once it has finished. */
-  ended(run: string): Promise<string>;
-  /** CPU slots free now. */
-  slots(): { free: number };
-  budget_ms: number;
-  hold_ms: number;
-  /** Background work held a session's slow checks for 30 minutes and they start now, the work still running (#907). */
-  capped?(session: string, checks: string[]): void;
-  /** A run of the claim ended: its verdict as it now stands is read and, once made, recorded (#30). */
-  judged?(claim: string): Promise<void>;
-  /** The base-commit service (#31): every checkout a claim's checks run in comes from it. */
-  checkouts(): Checkouts;
-  /** The runner let go of a claim (#1866): what the core keeps of it goes too. */
-  settled?(claim: string): void;
-  /** Records the INCONCLUSIVE verdict of a claim whose snapshot went over its budget (#31). */
-  invalid(claim: string, commit: string, reason: string, outcome?: 'INVALID' | 'INCONCLUSIVE'): Promise<void>;
-  /** Whether the hub is stopping: what that cuts short says nothing about the claim. */
-  stopping(): boolean;
-  /** Records the stand-in a requirement's check was proven on (#874): the surface it enters through and the stand-in's hash. */
-  stoodIn(r: { task: string; req: string; surface: Surface; hash: string }): Promise<void>;
-  /** Whether the store still keeps every piece of evidence named: a run whose evidence is pruned never carries (#1018). */
-  kept?(evidence: string[]): Promise<boolean>;
-  /** The machine's 1-minute load and the cores it is read against, for a timing check's failed run (#352); a runner without it reruns nothing. */
-  load?(): { load: number; cores: number };
-  plant?: Plant | undefined;
-}
-/**
  * A green stop's loop reading beside its background work (#965): its session, the origin of the prompt that opened its
  * turn, the soonest wake-up or cron job due, and what starts its checks whatever the loop does: a claim the agent made
  * in the turn, or your words since the last turn end. With none, the turn isn't a loop's.
  */
 interface LoopReading { session: string; origin: string | undefined; due: { at: number; what: 'wake-up' | 'cron' } | null; starter: 'claim' | 'words' | 'answer' | null }
-/** What started a held place, as the record names it (#965). */
-type StartedBy = 'loop_paused' | 'cap' | 'claim' | 'words' | 'answer';
+/** What started a held place, as the record names it (#965); `slot`: one that waited for a slot got it (#3562). */
+type StartedBy = 'loop_paused' | 'cap' | 'claim' | 'words' | 'answer' | 'slot';
 /** A held place as the record has it (`check.held`), the scheduler's HeldRecord. */
 interface HeldRecord { session: string; claim: string; check: string; snapshot: string; held_at: number; reason: string; started_at: number | null; started_by: StartedBy | null; replaced_by: string | null }
 /** The longest background work holds a stop's slow checks, from that stop (#907). */
@@ -175,8 +127,7 @@ const LOAD_WAIT_MS = 30 * 60_000;
 interface Held { entry: Entry; why: 'background' | 'due' | 'grace'; record: HeldRecord }
 /** A reply that ended the turn before its fast lane was ready to place slow checks (#2075). */
 interface TurnEnd { session: string; background: string[]; stopAt: number; repliedAt: number; reading: LoopReading | undefined }
-export interface Claim { claim: string; session: string; task: string; cwd: string; base: string; snapshot: string; tree: string | undefined; checkout: Promise<TempCheckout> | null; requirements: ClaimRequirement[]; entries: Map<string, Entry>; repo: Promise<string>; installs: Promise<string>; names: Promise<string>; programs: Map<string, string>; state?: StatePin | undefined; changes?: Changes; ready?: boolean; /** The host its session is on (#999): its runs there record no read files. */ host?: string }
-/** The least time a read of what a claim changed is given (#1869). */
+export interface Claim { claim: string; session: string; task: string; cwd: string; base: string; snapshot: string; tree: string | undefined; checkout: Promise<TempCheckout> | null; requirements: ClaimRequirement[]; entries: Map<string, Entry>; repo: Promise<string>; installs: Promise<string>; names: Promise<string>; programs: Map<string, string>; state?: StatePin | undefined; changes?: Changes; ready?: boolean; host?: string }
 const READ_FLOOR_MS = 5_000;
 /** Run outcomes a key keeps: a result. Missing, stopped and uncounted runs say nothing of the key, so they never carry. */
 const KEPT = new Set(['passed', 'failed', 'overran', 'ran_nothing']);
@@ -216,6 +167,8 @@ export class GateRunner {
   private readonly queue = new Map<string, Entry>();
   /** The held places, at most one per session and check; and the place each newest record stands for, until it starts. */
   private readonly holding = new Map<string, Held>();
+  /** The queued places recorded as waiting for a slot (#3562), each until it starts or a newer snapshot takes it. */
+  private readonly waits = new Map<Entry, HeldRecord>();
   /** Each session's timers on the hub's clock: background work's 30 minutes from the stop, and the grace window from its reply. */
   private readonly caps = new Map<string, number>();
   private readonly graces = new Map<string, number>();
@@ -627,7 +580,6 @@ export class GateRunner {
       checks: [...c.entries.values()].map((e) => {
         const { base, why } = this.baseOf(e) ?? {};
         if (why) whys.push(`${e.check.check} ${why}`);
-        // What the claim changed unread (#1869): any approved check may be its own, so every one counts as the agent's.
         const unread = e.check.source === 'own' || e.check.check === DEFINITION ? undefined : c.changes?.unread;
         const mine = e.check.source === 'own' || unread ? [] : this.ownChanged(c, e);
         const { runs, needed } = this.unspent(c, e, this.runsOf(c, e, carried), spent);
@@ -751,9 +703,7 @@ export class GateRunner {
     // readings of the programs its checks' commands name, each taken once when first asked for (#2060).
     const repo = this.repoOf(r.cwd);
     let installs: Promise<string> | undefined;
-    // Read beside the snapshot, from the same worktree: whose checks count turns on what the claim changed (#33). It
-    // ends by half the hold that is left, so the claim still gets its verdict inside the hold (#1869), and a hold all
-    // but over still leaves git READ_FLOOR_MS to answer.
+    // Read beside the snapshot, from the same worktree: whose checks count turns on what the claim changed (#33).
     const changes = changesOf(r.cwd, r.base, Math.max(READ_FLOOR_MS, (r.stopAt + this.o.hold_ms - this.o.now()) / 2));
     let snapshot = r.base;
     // Compared by tree: a snapshot of a dirty folder is a new commit even when its files are the last one's.
@@ -836,6 +786,7 @@ export class GateRunner {
       if (queued) {
         queued.stale = true;
         this.queue.delete(key);
+        this.leftQueue(queued, { replaced_by: snapshot });
         const owner = older.find((o) => o.claim === queued.claim);
         if (owner) this.cleanup(owner);
       }
@@ -1081,6 +1032,7 @@ export class GateRunner {
           if (!e.runs.length) this.cantStart(e, error);
         } finally {
           e.running = false;
+          this.pump();
         }
       }));
       await this.o.judged?.(c.claim);
@@ -1109,7 +1061,8 @@ export class GateRunner {
    * its next automatic prompt can't come before a check would end, counting its queue wait and expected time, by the
    * wake-up's or cron job's due time, or the grace window for a prompt no fact foresees. Background work holds them
    * until it ends, at most 30 minutes from this stop (#907). A stop that isn't looping, or one after a claim in its turn
-   * or your words, starts them and the session's held ones. Resolves once the held places are recorded.
+   * or your words, starts them and the session's held ones. Resolves once its places are queued or held, and those
+   * that wait recorded: it never waits for a run to start (#3562).
    */
   async turnEnded(claim: string | null, background: string[] = [], stopAt = this.o.now(), reading?: LoopReading): Promise<void> {
     const session = reading?.session ?? (claim ? this.claimOf(claim)?.session : undefined);
@@ -1162,9 +1115,8 @@ export class GateRunner {
       if (unforeseen && plant !== 'no-grace-window' && [...this.heldOf(session)].some((h) => h.why === 'grace')) this.graces.set(session, repliedAt + GRACE_MS);
     }
     if (claim) this.turnEnds.delete(claim);
-    const pumped = this.pump();
+    this.pump(writes);
     await Promise.all(writes);
-    await pumped;
     // A late fast lane does not restart the reply's grace window or the stop's background cap.
     this.tick();
   }
@@ -1177,6 +1129,11 @@ export class GateRunner {
   slowUnstarted(claim: string): string[] {
     const c = this.claimOf(claim);
     return c ? [...c.entries.values()].filter((e) => e.lane === 'slow' && !e.stale && !e.running && !e.waiting && !e.group && !e.runs.length).map((e) => e.check.check) : [];
+  }
+  /** A claim's slow checks the pump has taken whose first run is still to start (#3562): the record holds no run of them yet. */
+  slowStarting(claim: string): string[] {
+    const c = this.claimOf(claim);
+    return c ? [...c.entries.values()].filter((e) => e.lane === 'slow' && !e.stale && e.running && !e.runs.length && !e.group).map((e) => e.check.check) : [];
   }
   /** A claim's slow checks held in their places, for its session's loop or its background work (#965, #907): no stop is held for them. */
   slowHeld(claim: string): string[] {
@@ -1240,12 +1197,19 @@ export class GateRunner {
       started.push(h.entry.check.check);
     }
     if (![...this.heldOf(session)].some((h) => h.why === 'background')) this.caps.delete(session);
-    void this.pump();
+    this.pump(writes);
     return started;
   }
-  /** Appends a held place's record as it now stands: the newest for its check and snapshot stands. */
-  private record(record: HeldRecord, h: Held): Promise<void> {
-    h.record = record;
+  /** A queued place leaves the queue: one recorded as waiting for a slot is recorded again with how it ended. */
+  private leftQueue(e: Entry, ended: Pick<HeldRecord, 'replaced_by'> | Pick<HeldRecord, 'started_at' | 'started_by'>): void {
+    const waiting = this.waits.get(e);
+    if (!waiting) return;
+    this.waits.delete(e);
+    void this.record({ ...waiting, ...ended }).catch(() => undefined);
+  }
+  /** Appends a place's record as it now stands: the newest for its check and snapshot stands. */
+  private record(record: HeldRecord, h?: Held): Promise<void> {
+    if (h) h.record = record;
     const ts = this.o.now();
     return this.o.append(this.o.core, { v: 1, id: ulid(ts), kind: 'check.held', ts, subject: record.claim, data: { ...record } });
   }
@@ -1277,7 +1241,10 @@ export class GateRunner {
     for (const end of this.turnEnds.values()) if (end.session === session) end.background = [];
     return this.release(session, (h) => h.why === 'background', 'loop_paused');
   }
-  /** Fires what came due on the hub's clock: background work's 30 minutes, and each grace window with no prompt in it. */
+  /**
+   * Fires what came due on the hub's clock: background work's 30 minutes, and each grace window with no prompt in it.
+   * The queue is read again too: a run's slot can still count as taken when its end is read.
+   */
   tick(): void {
     const now = this.o.now();
     for (const [session, at] of [...this.caps]) {
@@ -1291,89 +1258,109 @@ export class GateRunner {
       this.graces.delete(session);
       this.release(session, (h) => h.why === 'grace', 'loop_paused');
     }
+    this.pump();
   }
-  /** Starts queued slow checks while CPU slots are free; a run going is never stopped for a newer snapshot. */
-  private async pump(): Promise<void> {
+  /**
+   * Starts queued slow checks, in the queue's order, while a slot is free for a slow run (#3562): fewer slow checks are
+   * at work than slow runs may hold slots, and a free slot is left once each of them still to start has its own. A place
+   * leaves the queue only then, each before anything is awaited, so a newer snapshot takes it until it does; one left
+   * there is recorded once as held for a slot, the write added to `writes`. A run going is never stopped for a newer
+   * snapshot.
+   */
+  private pump(writes: Promise<void>[] = []): void {
     for (const [key, e] of [...this.queue]) {
-      if (this.o.slots().free <= 0) return;
-      // Another pump took it, or a newer snapshot did, while this one waited on a checkout.
-      if (this.queue.get(key) !== e) continue;
+      const working = [...this.claims.values()].flat().flatMap((c) => [...c.entries.values()]).filter((x) => x.lane === 'slow' && x.running);
+      const { free, slow = Infinity } = this.o.slots();
+      if (working.length >= slow || working.filter((x) => !x.runs.length && x.base === null).length >= free) break;
       this.queue.delete(key);
-      const c = this.claimOf(e.claim)!;
+      this.leftQueue(e, { started_at: this.o.now(), started_by: 'slot' });
       e.running = true;
-      try {
-        // The slow run gets its own checkout of the snapshot: the fast lane's may be gone by now. A snapshot that can't
-        // be checked out any more leaves the check missing, never passed. A check pinned to a commit gets a checkout of that
-        // commit and runs once per commit (#325), never read from a key.
-        const token = `${e.claim} ${e.check.check} ${e.commit}`;
-        const pinned = e.check.commit ? await this.o.checkouts().checkout({ worktree: c.cwd, commit: e.check.commit, dependencies: DEPENDENCIES, runs: [token] }) : undefined;
-        const { dir: cwd } = pinned ?? await this.checkoutOf(c);
-        // A key whose result is known is read as carried (#1018); one another session's run is going on is waited for,
-        // out of the queue, and the check takes its place again once that run has ended.
-        const read = pinned ? null : await this.carry(c, e, cwd);
-        if (read !== null) {
-          e.running = false;
-          if (read === 'carried') {
-            // A fix check's base is read from its key too, or run, out of the queue's way.
-            e.running = true;
-            void this.onBase(c, e).finally(async () => {
-              e.running = false;
-              await this.o.judged?.(e.claim);
-              await e.readings;
-              this.cleanup(c);
-            });
-            continue;
-          }
-          e.waiting = true;
-          void read.wait.then(() => {
-            e.waiting = false;
-            if (!e.stale && !this.queue.has(key)) this.queue.set(key, e);
-            else this.cleanup(c);
-            void this.pump();
-          });
-          continue;
-        }
-        const expected = e.check.expected_ms ?? await this.expectedMs(e.check.check);
-        e.ends = this.o.now() + (expected ?? 0);
-        let started!: () => void;
-        const begun = new Promise<void>((done) => { started = done; });
-        const own = pinned ? (async () => {
-          try {
-            const start = async () => this.o.start({ claim: e.claim, check: e.check.check, approved: e.check.approved, command: e.check.command, commit: e.commit, cwd, lane: 'slow', expected_ms: expected, deadline_ms: e.check.deadline_ms ?? null, ...stackOf(c, e.check), memory: await this.admitted(e.check) });
-            const id = await start();
-            e.runs.push(id);
-            started();
-            const ended = await this.retried(c, e, cwd, await this.o.ended(id));
-            e.outcome = await this.alone(e, e.runs.at(-1)!, ended, start);
-          } finally {
-            await this.o.checkouts().ended(pinned, token).catch(() => undefined);
-          }
-        })() : this.runOwn(c, e, cwd, 'slow', expected, () => started());
-        // The pump goes on once the run has started, as it does for any slow run; a run that never starts goes on too.
-        await Promise.race([begun, own.catch(() => undefined)]);
-        void own.catch((error: unknown) => {
-          e.outcome = 'missing';
-          if (!e.runs.length) this.cantStart(e, error);
-        }).then(async () => {
-          await this.onBase(c, e);
-          // Cache only once inheritance is known; another session must not turn an inherited BLOCKED into FAIL.
-          if (pinned && (e.outcome === 'passed' || e.outcome === 'failed')) this.pinned.set(`${e.commit}\0${e.check.check}\0${c.base}`, { run: e.runs.at(-1)!, outcome: e.outcome, base: e.base, ...(e.baseFrom ? { baseFrom: e.baseFrom } : {}) });
-          e.running = false;
-          // Its result still reports, as that snapshot's; the readings count what outdated it (#45).
-          const run = e.runs.at(-1);
-          if (e.newer && run) await this.staleRun(c.session, run, e).catch(() => undefined);
-          await this.o.judged?.(e.claim);
-          await e.readings;
-          void this.pump();
-          this.cleanup(c);
-        });
-      } catch (error) {
-        e.outcome = 'missing';
+      void this.runPlace(key, e);
+    }
+    for (const e of this.queue.values()) {
+      if (this.waits.has(e)) continue;
+      const waiting: HeldRecord = { session: sessionOf(this.claimOf(e.claim)!.session), claim: e.claim, check: e.check.check, snapshot: e.commit, held_at: this.o.now(), reason: SLOT_WAIT, started_at: null, started_by: null, replaced_by: null };
+      this.waits.set(e, waiting);
+      const write = this.record(waiting);
+      void write.catch(() => undefined);
+      writes.push(write);
+    }
+  }
+  /** A place the pump took: its result read from its key, or its own run and its run on the merge base. The pump goes on each time it gives a slot up. */
+  private async runPlace(key: string, e: Entry): Promise<void> {
+    const c = this.claimOf(e.claim)!;
+    try {
+      // The slow run gets its own checkout of the snapshot: the fast lane's may be gone by now. A snapshot that can't
+      // be checked out any more leaves the check missing, never passed. A check pinned to a commit gets a checkout of that
+      // commit and runs once per commit (#325), never read from a key.
+      const token = `${e.claim} ${e.check.check} ${e.commit}`;
+      const pinned = e.check.commit ? await this.o.checkouts().checkout({ worktree: c.cwd, commit: e.check.commit, dependencies: DEPENDENCIES, runs: [token] }) : undefined;
+      const { dir: cwd } = pinned ?? await this.checkoutOf(c);
+      // A key whose result is known is read as carried (#1018); one another session's run is going on is waited for,
+      // out of the queue, and the check takes its place again once that run has ended.
+      const read = pinned ? null : await this.carry(c, e, cwd);
+      if (read !== null) {
         e.running = false;
-        if (!e.runs.length) this.cantStart(e, error);
-        await this.o.judged?.(e.claim);
-        this.cleanup(c);
+        if (read === 'carried') {
+          // A fix check's base is read from its key too, or run, out of the queue's way.
+          e.running = true;
+          void this.onBase(c, e).finally(async () => {
+            e.running = false;
+            this.pump();
+            await this.o.judged?.(e.claim);
+            await e.readings;
+            this.cleanup(c);
+          });
+          return;
+        }
+        e.waiting = true;
+        void read.wait.then(() => {
+          e.waiting = false;
+          if (!e.stale && !this.queue.has(key)) this.queue.set(key, e);
+          else this.cleanup(c);
+          this.pump();
+        });
+        this.pump();
+        return;
       }
+      const expected = e.check.expected_ms ?? await this.expectedMs(e.check.check);
+      e.ends = this.o.now() + (expected ?? 0);
+      // Once its run has started it holds its slot, and the pump reads the free ones again.
+      const own = pinned ? (async () => {
+        try {
+          const start = async () => this.o.start({ claim: e.claim, check: e.check.check, approved: e.check.approved, command: e.check.command, commit: e.commit, cwd, lane: 'slow', expected_ms: expected, deadline_ms: e.check.deadline_ms ?? null, ...stackOf(c, e.check), memory: await this.admitted(e.check) });
+          const id = await start();
+          e.runs.push(id);
+          this.pump();
+          const ended = await this.retried(c, e, cwd, await this.o.ended(id));
+          e.outcome = await this.alone(e, e.runs.at(-1)!, ended, start);
+        } finally {
+          await this.o.checkouts().ended(pinned, token).catch(() => undefined);
+        }
+      })() : this.runOwn(c, e, cwd, 'slow', expected, () => this.pump());
+      void own.catch((error: unknown) => {
+        e.outcome = 'missing';
+        if (!e.runs.length) this.cantStart(e, error);
+      }).then(async () => {
+        await this.onBase(c, e);
+        // Cache only once inheritance is known; another session must not turn an inherited BLOCKED into FAIL.
+        if (pinned && (e.outcome === 'passed' || e.outcome === 'failed')) this.pinned.set(`${e.commit}\0${e.check.check}\0${c.base}`, { run: e.runs.at(-1)!, outcome: e.outcome, base: e.base, ...(e.baseFrom ? { baseFrom: e.baseFrom } : {}) });
+        e.running = false;
+        // Its result still reports, as that snapshot's; the readings count what outdated it (#45).
+        const run = e.runs.at(-1);
+        if (e.newer && run) await this.staleRun(c.session, run, e).catch(() => undefined);
+        await this.o.judged?.(e.claim);
+        await e.readings;
+        this.pump();
+        this.cleanup(c);
+      });
+    } catch (error) {
+      e.outcome = 'missing';
+      e.running = false;
+      if (!e.runs.length) this.cantStart(e, error);
+      this.pump();
+      await this.o.judged?.(e.claim);
+      this.cleanup(c);
     }
   }
   /**

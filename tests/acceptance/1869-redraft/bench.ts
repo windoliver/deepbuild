@@ -1,23 +1,3 @@
-// The gate runner on a bench, for #1869's two criteria (README): the hub's own GateRunner, given what
-// packages/hub/src/core.ts gives it (its budget and its stop hold, STOP_HOLD_MS). Real: the gate runner, which works out
-// what a claim changed from its worktree itself (`changesOf`: git diff, git ls-files, git show); the base-commit service
-// (`openCheckouts`, through #31's world), so the snapshot and the claim's checkout are git's; the record; and the check's
-// program, a node script run in the checkout the gate names.
-//
-// What stands in:
-// - the hub's run service, at the two calls the gate makes of it, as #2118's bench does: `start` gets a run handle, and
-//   `ended` runs the check's program there and records and keys the run as packages/hub/src/runs.ts does (`recorded`,
-//   then `keyed`), the files it read being its own file and the code it requires;
-// - git, at the process boundary: a script named `git`, first on this process's PATH, that execs the real git with the
-//   same arguments, except in the session's worktree while a stub mode is armed: `diff-fails` makes every `git diff`
-//   there exit 128 with git's own kind of message; `ls-files-hangs` makes every listing of tracked files there
-//   (`git ls-files` with none of -o/--others, -i/--ignored, -v, and no GIT_INDEX_FILE: the snapshot never lists them so)
-//   hang. Each stubbed call is logged with its PID, and a hung one is stopped by that PID when the test ends.
-// Nothing here knows what a verdict should be.
-//
-// Safety: every folder is #31's, under /tmp/dh31-*, removed after the file; HOME is a temp folder; no network, no model;
-// the only processes started are git, the stub's /bin/sh and the hang it execs, and the check's node script. A hung
-// call left running is stopped by the PID it logged, after checking that PID still runs the stub's hang.
 import { execFile, execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { chmodSync, existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
@@ -32,7 +12,6 @@ import { git, makeRepo, openWorld, tempDir, write, type World } from '../31/help
 export { STOP_HOLD_MS, write };
 const sha256 = (text: string): string => createHash('sha256').update(text).digest('hex');
 
-// ---- The repo: one approved check, `total`, whose test file reads the code under test.
 export const CODE = 'src/price.cjs';
 export const TEST_FILE = 'test/total.check.cjs';
 const TEST_NAME = 'total adds the items';
@@ -41,20 +20,14 @@ export const FILES: Record<string, string> = {
   [CODE]: 'exports.total = (items) => items.reduce((a, b) => a + b, 0);\n',
   [TEST_FILE]: `const assert = require('node:assert/strict');\nconst { total } = require('../src/price.cjs');\nassert.equal(total([1, 2]), 3, '${TEST_NAME}');\n`,
 };
-/** The claim's edit of the check's own test file: its assertion weakened, so the check still passes. */
 export const EDITED_TEST = `const assert = require('node:assert/strict');\nconst { total } = require('../src/price.cjs');\nassert.equal(typeof total, 'function', '${TEST_NAME}');\n`;
-/** The claim's edit of the code under test alone: same behavior, so the check passes and none of its own files changed. */
 export const EDITED_CODE = 'exports.total = (items) => items.reduce((sum, n) => sum + n, 0);\n';
-/** The requirement the check covers, at unit depth. */
 export const REQUIREMENTS: ClaimRequirement[] = [{ req: 'R1', depth: 'unit', oracle: 'code', on_base: 'passes' }];
-/** The task's definition check, as the hub hands one to the gate: approved, not the agent's own. */
 export const TOTAL: ClaimCheck = { check: 'total', approved: null, command: `node ${TEST_FILE}`, covers: ['R1'], depth: 'unit', on_base: 'passes', asserts: [], expected_ms: 1, source: 'definition' };
 
-// ---- The git stub.
 export type StubMode = 'off' | 'diff-fails' | 'ls-files-hangs';
 const REAL_GIT = execFileSync('/bin/sh', ['-c', 'command -v git'], { encoding: 'utf8' }).trim();
 if (!REAL_GIT.startsWith('/')) throw Error(`BLOCKED: no git on PATH to stand behind the stub (found ${JSON.stringify(REAL_GIT)})`);
-/** The hang a stubbed ls-files execs: long, so a runner with no deadline waits on it, and stopped by PID at the end. */
 const HANG_S = 900;
 const stubScript = (mode: string, log: string, worktree: string): string => `#!/bin/sh
 # #1869's stand-in for git (bench.ts): the real git, but in one worktree while a mode is armed.
@@ -92,26 +65,16 @@ fi
 exec '${REAL_GIT}' "$@"
 `;
 
-/** One call the stub stood in for: its PID, what it did, and its arguments. */
 export interface Stubbed { pid: number; did: 'failed' | 'hung'; args: string }
 
 export interface Bench {
   gate: GateRunner;
-  /** The repo's main checkout, on a branch cut from `base`: the session's folder. */
   repo: string;
   base: string;
-  /** Each run's outcome, as the stand-in run service closed it. */
   outcomes: string[];
-  /** Arms the git stub for the session's worktree. */
   arm(mode: StubMode): void;
-  /** The calls the stub stood in for so far. */
   stubbed(): Stubbed[];
-  /**
-   * A stop's claim, as the hub hands one to the gate, with the hub's stop hold. Resolves with `replied` once the stop
-   * resolves, or `hold ended` once the hold has ended (and a second's grace for the reply to land) without it.
-   */
   stop(o: { session: string; claim: string }): Promise<{ replied: boolean; stopAt: number }>;
-  /** The claim's verdict as the gate reads it now. */
   verdict(claim: string): Verdict | undefined;
   close(): Promise<void>;
 }
@@ -123,7 +86,6 @@ const play = (cwd: string, file: string): Promise<{ code: number; stdout: string
   });
 });
 
-/** `p`, or `late` once `ms` have passed without it. */
 function within<T>(p: Promise<T>, ms: number, late: T): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
   // deadline: turns a stop that never replies, or a checkout never given back, into the test's reading, never a wait of its own
@@ -131,7 +93,6 @@ function within<T>(p: Promise<T>, ms: number, late: T): Promise<T> {
   return Promise.race([p, bound]).finally(() => clearTimeout(timer));
 }
 
-/** Whether `pid` still runs the stub's hang: only then is it this bench's to stop. */
 const isHang = (pid: number): boolean => {
   try {
     return readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0').join(' ').trim() === `sleep ${HANG_S}`;
@@ -140,7 +101,6 @@ const isHang = (pid: number): boolean => {
   }
 };
 
-/** A repo whose merge base holds FILES, with the session on a branch of it, and `edit` written to its worktree. */
 export async function openBench(edit: Record<string, string>): Promise<Bench> {
   const w: World = await openWorld();
   const service = await w.service();
@@ -162,7 +122,6 @@ export async function openBench(edit: Record<string, string>): Promise<Bench> {
     return { pid: Number(pid), did: did as Stubbed['did'], args: `git ${args.join(' ')}` };
   });
 
-  // The base-commit service, its checkouts' return watched so the bench closes only once each is given back.
   const checkedOut = new Map<string, Promise<void>>();
   const givenBack = new Map<string, () => void>();
   const checkouts: Checkouts = {
@@ -208,7 +167,6 @@ export async function openBench(edit: Record<string, string>): Promise<Bench> {
       outcomes.push(record.outcome);
       return record.outcome;
     },
-    // As packages/hub/src/core.ts gives them: a 10 s budget and the stop hold.
     slots: () => ({ free: 4 }), budget_ms: 10_000, hold_ms: STOP_HOLD_MS,
     checkouts: () => checkouts,
     invalid: async (claim, _commit, reason, outcome) => { refused.push(`${claim} ${outcome ?? 'INVALID'}: ${reason}`); },
@@ -231,7 +189,6 @@ export async function openBench(edit: Record<string, string>): Promise<Bench> {
     verdict: (claim) => bench.gate.verdictOf(claim),
     close: async () => {
       writeFileSync(modeFile, 'off');
-      // A hung read the gate left running is stopped by the PID it logged: only then can the stop go on and end.
       for (const s of stubbed()) if (s.did === 'hung' && isHang(s.pid)) process.kill(s.pid, 'SIGKILL');
       await within(Promise.all(stops), 120_000, undefined);
       await within(Promise.all(checkedOut.values()), 120_000, undefined);
@@ -242,5 +199,4 @@ export async function openBench(edit: Record<string, string>): Promise<Bench> {
   return bench;
 }
 
-/** How a verdict reads in a failure message. */
 export const shown = (v: Verdict | undefined): string => (v ? `${v.outcome}; reasons: ${JSON.stringify(v.reasons)}` : 'no verdict');

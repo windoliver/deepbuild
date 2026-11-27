@@ -1,0 +1,12 @@
+{
+  "packages/hub/src/list.ts": [
+    {
+      "find": [
+        "      process.stderr.write(`${rebuilding(reply)}\\n`);"
+      ],
+      "wrong": [
+        "      process.stderr.write(`${rebuilding(reply)}\\n${asksNeedYou(0)}\\n`);"
+      ]
+    }
+  ]
+}

@@ -389,6 +389,15 @@ sha2 = "0.10"
 # isn't pinned), with crc32fast for the trailer; both already in the lockfile.
 miniz_oxide = "0.9"
 crc32fast = "1"
+# Issue #1042: a web bundle's faces are subset to the glyphs the piece's text can show, by the
+# subsetter of the font crates the shaper reads faces with, which renumbers glyphs and closes them
+# over the layout tables; read-fonts is its own version of the reader, for the sets it takes.
+skera = "0.10"
+read-fonts = { version = "0.47", default-features = false, features = ["std"] }
+# Issue #1042: a web export asks each public source it declares once, with no key, over https,
+# trusting the platform's own authorities; both already in the lockfile, under deep-relay.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-native-certs = "0.8"
 # Issue #1897: the u8 pipeline too, so a cross-machine record drawn through it is real and refused.
 vello_cpu ={ version = "0.3", default-features = false, features = ["std", "text", "f32_pipeline", "u8_pipeline"] }
 # Issue #138: the kit's headless backend (wgpu's noop) and its GPU backend.
