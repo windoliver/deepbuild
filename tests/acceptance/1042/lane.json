@@ -1,0 +1,1 @@
+{ "alone": true, "why": "shared: the GPU; three files build deep-show with cargo and play bundles in headless Chrome with WebGPU, and ac01 holds one browser for a 10-minute play" }

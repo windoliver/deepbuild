@@ -1,0 +1,18 @@
+{
+  "crates/deep-canvas-scene3d/src/gltf.rs": [
+    {
+      "find": [
+        "    // Rows of a stride under its element overlap, and the buffer's end never stops their count.",
+        "    if stride < size * width {",
+        "        return Err(bad(\"a byte stride under its element\"));",
+        "    }"
+      ],
+      "wrong": [
+        "    // #2044's planted wrong program (twin `rows-by-count`), the importer criterion 3 names: the",
+        "    // refusal of a stride under its element, which 9b9532449 put here after the issue was",
+        "    // filed, is taken out again. Rows of a zero stride all read the same bytes, so the file's",
+        "    // `count` alone says how many are read and the buffer's end never stops them."
+      ]
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "scripts/shards.mjs": [
+    {
+      "find": [
+        "    if (!(Date.now() - statSync(join(dir, '.git/packed-refs'), { throwIfNoEntry: false })?.mtimeMs > IDLE_MS)) continue;"
+      ],
+      "wrong": []
+    }
+  ]
+}
