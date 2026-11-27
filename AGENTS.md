@@ -41,6 +41,7 @@ These hold in the core and every extension:
 
 ## Scope and simplicity
 
+- Name things by their real names in [GLOSSARY.md](GLOSSARY.md), never by a word it lists to avoid.
 - Keep the core to the record, gates, asks and adapters. Explain why an extension cannot meet any proposed addition.
 - One PR per issue, under about 400 handwritten lines or explain why it cannot split. Note unrelated findings separately.
 - Map changes, tests and tools to requirements or regression protection this change needs. Never drop or move criteria without user approval.
