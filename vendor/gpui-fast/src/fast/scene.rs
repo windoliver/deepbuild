@@ -532,6 +532,7 @@ pub(crate) fn set_draw_order(primitive: &mut crate::scene::Primitive, order: Dra
         Primitive::PolychromeSprite(p) => p.order = order,
         Primitive::Surface(p) => p.order = order,
         Primitive::NativeView(p) => p.order = order,
+        Primitive::Chrome(p) => p.order = order, // DeepBuild patch (windoliver/deepbuild#1434), gpui-fast's own match
     }
 }
 
@@ -687,6 +688,7 @@ pub(crate) fn replay_flat_layer(
                 break;
             }
             PaintOperation::StartLayer(_) | PaintOperation::FastRoundedClip(_) => return None,
+            PaintOperation::StartChrome(_) | PaintOperation::EndChrome => return None, // DeepBuild patch (windoliver/deepbuild#1434): not flat
         }
     }
     let end = end?;

@@ -14,6 +14,8 @@ use smallvec::SmallVec;
 use std::{
     collections::VecDeque, fmt::Debug, iter::Peekable, ops::Range, rc::Rc, slice, time::Duration,
 };
+mod chrome; // DeepBuild patch (windoliver/deepbuild#1434)
+pub use chrome::*;
 
 #[expect(missing_docs)]
 pub type DrawOrder = u32;
@@ -70,6 +72,8 @@ pub struct Scene {
     pub(crate) fast_rounded_clip: crate::fast::rounded_clip::SceneClips,
     pub(crate) fast_quad_pieces: Option<smallvec::SmallVec<[Quad; 5]>>,
     pub layers: crate::fast::layers::scene::SceneLayers,
+    pub chrome: Vec<ChromePrimitive>, // DeepBuild patch (windoliver/deepbuild#1434)
+    chrome_state: ChromeState,
 }
 
 #[expect(missing_docs)]
@@ -91,6 +95,7 @@ impl Scene {
         crate::fast::layers::scene::SceneLayers::clear(&mut self.layers);
         self.native_views.clear();
         self.animations.clear();
+        self.chrome.clear(); self.chrome_state = ChromeState::default(); // DeepBuild patch (windoliver/deepbuild#1434)
     }
 
     /// Inserts a sprite that [`Self::advance_animations`] keeps moving. The
@@ -140,6 +145,7 @@ impl Scene {
     }
 
     pub fn push_layer(&mut self, bounds: Bounds<ScaledPixels>) {
+        if self.chrome_paint_layer(Some(bounds)) { return; } // DeepBuild patch (windoliver/deepbuild#1434)
         self.layer_stack.push(self.pending_layers.len());
         self.pending_layers.push_back(Layer {
             primitives: SmallVec::new(),
@@ -153,6 +159,7 @@ impl Scene {
     }
 
     pub fn pop_layer(&mut self) {
+        if self.chrome_paint_layer(None) { return; } // DeepBuild patch (windoliver/deepbuild#1434)
         self.layer_stack.pop();
         if self.layer_stack.is_empty() {
             while let Some(layer) = self.pending_layers.pop_front() {
@@ -228,7 +235,8 @@ impl Scene {
     }
 
     pub fn insert_primitive(&mut self, primitive: impl Into<Primitive>) {
-        let Some(primitive) = crate::fast::scene::quad_piece(self, primitive.into()) else {
+        let Some(primitive) = self.chrome_redirect(primitive.into()) else { return }; // DeepBuild patch (windoliver/deepbuild#1434)
+        let Some(primitive) = crate::fast::scene::quad_piece(self, primitive) else {
             return;
         };
         self.try_insert_primitive(primitive);
@@ -320,6 +328,10 @@ impl Scene {
                 order,
                 ..native_view
             }),
+            Primitive::Chrome(mut chrome) => { // DeepBuild patch (windoliver/deepbuild#1434)
+                chrome.order = chrome::placed_order(&chrome, order);
+                self.chrome.push(chrome);
+            }
         }
     }
 
@@ -364,6 +376,8 @@ impl Scene {
                 PaintOperation::FastRoundedClip(fast_clip) => {
                     crate::fast::rounded_clip::record(self, *fast_clip)
                 }
+                PaintOperation::StartChrome(open) => self.push_chrome_layer(open.clone()), // DeepBuild patch (windoliver/deepbuild#1434)
+                PaintOperation::EndChrome => self.pop_chrome_layer(),
             }
         }
         quads.flush(self); // fast
@@ -372,6 +386,7 @@ impl Scene {
     pub fn finish(&mut self) {
         debug_assert!(self.layer_stack.is_empty(), "unbalanced scene layers");
         crate::fast::scene::sort_in_drawing_order(self);
+        self.chrome.sort_by_key(|chrome| chrome.order); // DeepBuild patch (windoliver/deepbuild#1434)
         self.native_views
             .sort_by_key(|native_view| native_view.order);
         self.keep_first_painted_native_views();
@@ -444,6 +459,8 @@ impl Scene {
             native_views_start: 0,
             native_views_iter: native_views.iter().peekable(),
             fast_native_indices,
+            chrome_start: 0, // DeepBuild patch (windoliver/deepbuild#1434)
+            chrome_iter: self.chrome.iter().peekable(),
         }
     }
 }
@@ -477,6 +494,7 @@ pub(crate) enum PrimitiveKind {
     SubpixelSprite,
     PolychromeSprite,
     Surface,
+    Chrome, // DeepBuild patch (windoliver/deepbuild#1434)
     NativeView,
 }
 
@@ -502,6 +520,8 @@ pub(crate) enum PaintOperation {
     StartLayer(Bounds<ScaledPixels>),
     EndLayer,
     FastRoundedClip(crate::fast::rounded_clip::ClipOperation),
+    StartChrome(OpenChrome), // DeepBuild patch (windoliver/deepbuild#1434)
+    EndChrome,
 }
 
 #[derive(Clone)]
@@ -516,6 +536,7 @@ pub enum Primitive {
     PolychromeSprite(PolychromeSprite),
     Surface(PaintSurface),
     NativeView(PaintNativeView),
+    Chrome(ChromePrimitive), // DeepBuild patch (windoliver/deepbuild#1434)
 }
 
 #[expect(missing_docs)]
@@ -531,6 +552,7 @@ impl Primitive {
             Primitive::PolychromeSprite(_) => PrimitiveKind::PolychromeSprite,
             Primitive::Surface(_) => PrimitiveKind::Surface,
             Primitive::NativeView(_) => PrimitiveKind::NativeView,
+            Primitive::Chrome(_) => PrimitiveKind::Chrome, // DeepBuild patch (windoliver/deepbuild#1434)
         }
     }
 
@@ -545,6 +567,7 @@ impl Primitive {
             Primitive::PolychromeSprite(sprite) => &sprite.bounds,
             Primitive::Surface(surface) => &surface.bounds,
             Primitive::NativeView(native_view) => &native_view.bounds,
+            Primitive::Chrome(chrome) => &chrome.bounds, // DeepBuild patch (windoliver/deepbuild#1434)
         }
     }
 
@@ -574,6 +597,7 @@ impl Primitive {
             Primitive::PolychromeSprite(sprite) => &sprite.content_mask,
             Primitive::Surface(surface) => &surface.content_mask,
             Primitive::NativeView(native_view) => &native_view.content_mask,
+            Primitive::Chrome(chrome) => &chrome.content_mask, // DeepBuild patch (windoliver/deepbuild#1434)
         }
     }
 }
@@ -605,6 +629,8 @@ struct BatchIterator<'a> {
     native_views_start: usize,
     native_views_iter: Peekable<slice::Iter<'a, PaintNativeView>>,
     fast_native_indices: Option<&'a [usize]>,
+    chrome_start: usize, // DeepBuild patch (windoliver/deepbuild#1434)
+    chrome_iter: Peekable<slice::Iter<'a, ChromePrimitive>>,
 }
 
 impl<'a> Iterator for BatchIterator<'a> {
@@ -647,6 +673,7 @@ impl<'a> Iterator for BatchIterator<'a> {
                     .map(|native_view| native_view.order),
                 PrimitiveKind::NativeView,
             ),
+            (self.chrome_iter.peek().map(|c| c.order), PrimitiveKind::Chrome), // DeepBuild patch (windoliver/deepbuild#1434)
         ];
         orders_and_kinds.sort_by_key(|(order, kind)| (order.unwrap_or(u32::MAX), *kind));
 
@@ -813,6 +840,14 @@ impl<'a> Iterator for BatchIterator<'a> {
                     native_views_start..native_views_end,
                 ))
             }
+            PrimitiveKind::Chrome => { // DeepBuild patch (windoliver/deepbuild#1434): one at a time
+                self.chrome_iter.next();
+                self.chrome_start += 1;
+                #[cfg(not(target_os = "macos"))] // DeepBuild patch (windoliver/deepbuild#2471): only Metal draws one
+                return self.next();
+                #[cfg(target_os = "macos")]
+                Some(PrimitiveBatch::Chrome(self.chrome_start - 1))
+            }
         }
     }
 }
@@ -846,6 +881,8 @@ pub enum PrimitiveBatch {
     },
     Surfaces(Range<usize>),
     NativeViews(Range<usize>),
+    #[cfg(target_os = "macos")] // DeepBuild patch (windoliver/deepbuild#2471): the registry renderers match without it
+    Chrome(usize), // DeepBuild patch (windoliver/deepbuild#1434)
 }
 
 impl PrimitiveBatch {
@@ -879,6 +916,8 @@ impl PrimitiveBatch {
             }
             Self::Surfaces(range) => format!("surfaces ({})", range.len()),
             Self::NativeViews(range) => format!("native views ({})", range.len()),
+            #[cfg(target_os = "macos")] // DeepBuild patch (windoliver/deepbuild#2471)
+            Self::Chrome(index) => format!("chrome {index}"), // DeepBuild patch (windoliver/deepbuild#1434)
         }
     }
 }

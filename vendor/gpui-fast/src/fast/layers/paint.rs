@@ -794,6 +794,8 @@ pub(crate) fn draw_into_frame<'a>(
                 scene.push_layer(bounds.intersect(&viewport));
             }
             PaintOperation::EndLayer => scene.pop_layer(),
+            PaintOperation::StartChrome(open) => scene.push_chrome_layer(crate::scene::chrome_moved(open, delta)), // DeepBuild patch (windoliver/deepbuild#1434), by hand: gpui-fast's own match
+            PaintOperation::EndChrome => scene.pop_chrome_layer(),
             PaintOperation::FastRoundedClip(clip) => {
                 crate::fast::rounded_clip::record(scene, clip.translated(delta))
             }
@@ -819,6 +821,7 @@ fn clip_primitive(primitive: &mut Primitive, viewports: Viewports) {
         Primitive::MonochromeSprite(p) => clip(&mut p.content_mask),
         Primitive::SubpixelSprite(p) => clip(&mut p.content_mask),
         Primitive::PolychromeSprite(p) => clip(&mut p.content_mask),
+        Primitive::Chrome(p) => clip(&mut p.content_mask), // DeepBuild patch (windoliver/deepbuild#1434), by hand: gpui-fast's own match
         Primitive::Surface(p) => clip(&mut p.content_mask),
         Primitive::NativeView(p) => clip(&mut p.content_mask),
     }
@@ -1046,6 +1049,8 @@ fn translated_scene(scene: &Scene, delta: Point<ScaledPixels>) -> Scene {
                 size: bounds.size,
             }),
             PaintOperation::EndLayer => translated.pop_layer(),
+            PaintOperation::StartChrome(open) => translated.push_chrome_layer(crate::scene::chrome_moved(open, delta)), // DeepBuild patch (windoliver/deepbuild#1434), by hand: gpui-fast's own match
+            PaintOperation::EndChrome => translated.pop_chrome_layer(),
             PaintOperation::FastRoundedClip(clip) => {
                 crate::fast::rounded_clip::record(&mut translated, clip.translated(delta))
             }

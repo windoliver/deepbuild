@@ -67,6 +67,8 @@ pub(crate) fn tile_hashes(
                     });
                 }
             }
+            PaintOperation::StartChrome(_) => hashers.iter_mut().for_each(|(_, hasher)| hasher.write_u8(3)), // DeepBuild patch (windoliver/deepbuild#1434), by hand: gpui-fast's own match
+            PaintOperation::EndChrome => hashers.iter_mut().for_each(|(_, hasher)| hasher.write_u8(4)),
             PaintOperation::FastRoundedClip(clip) => {
                 for (coord, hasher) in &mut hashers {
                     let delta = point(
@@ -115,6 +117,8 @@ pub(crate) fn part_tile_hashes(
             }
             PaintOperation::StartLayer(_) => hasher.write_u8(1),
             PaintOperation::EndLayer => hasher.write_u8(2),
+            PaintOperation::StartChrome(_) => hasher.write_u8(3), // DeepBuild patch (windoliver/deepbuild#1434), by hand: gpui-fast's own match
+            PaintOperation::EndChrome => hasher.write_u8(4),
             PaintOperation::FastRoundedClip(clip) => clip.hash(&mut hasher),
         }
     }
@@ -298,6 +302,11 @@ fn hash_primitive(primitive: &Primitive, tile: &Bounds<ScaledPixels>, hasher: &m
             // texture's sprite carries its content version, so a refreshed
             // texture dirties the tiles showing it.
             hasher.write_u32(sprite.pad);
+        }
+        Primitive::Chrome(chrome) => { // DeepBuild patch (windoliver/deepbuild#1434), by hand: gpui-fast's own match
+            hasher.write_u8(8);
+            hash_bounds(&chrome.bounds, hasher);
+            hash_mask(&chrome.content_mask, tile, hasher);
         }
         Primitive::Surface(surface) => {
             // A surface's pixels come from outside the scene; layers never

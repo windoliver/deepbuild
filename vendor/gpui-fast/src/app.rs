@@ -2304,6 +2304,7 @@ impl App {
 
                 if self.pending_effects.is_empty() {
                     for window in self.windows.values().filter_map(|window| window.as_deref()) {
+                        window.draw_unseen(self); // DeepBuild patch (windoliver/deepbuild#3232)
                         if window.invalidator.is_dirty()
                             || window.needs_present.get()
                             || !window.next_frame_callbacks.borrow().is_empty()
@@ -3286,6 +3287,8 @@ impl App {
     /// Tell GPUI that an entity has changed and observers of it should be notified.
     pub fn notify(&mut self, entity_id: EntityId) {
         crate::fast::dependencies::note_notify(&mut self.entities, entity_id);
+        #[cfg(feature = "test-support")]
+        crate::window::frame_counts::note_notified(entity_id); // DeepBuild patch (windoliver/deepbuild#1482)
         let window_invalidators = mem::take(
             self.window_invalidators_by_entity
                 .entry(entity_id)

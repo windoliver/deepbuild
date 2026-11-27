@@ -521,6 +521,7 @@ impl Scene {
                     );
                 }
                 PaintOperation::Primitive(_) => {}
+                PaintOperation::StartChrome(_) | PaintOperation::EndChrome => {} // DeepBuild patch (windoliver/deepbuild#1434), by hand: gpui-fast's own match
                 PaintOperation::FastRoundedClip(clip) => {
                     crate::fast::rounded_clip::track(*clip, &mut active_clips)?
                 }
@@ -551,6 +552,8 @@ impl Scene {
                     );
                     self.pop_layer();
                 }
+                PaintOperation::StartChrome(open) => self.push_chrome_layer(open.clone()), // DeepBuild patch (windoliver/deepbuild#1434), by hand: gpui-fast's own match
+                PaintOperation::EndChrome => self.pop_chrome_layer(),
                 PaintOperation::FastRoundedClip(clip) => {
                     crate::fast::rounded_clip::track(*clip, &mut active_clips)?;
                     crate::fast::rounded_clip::record(self, *clip);

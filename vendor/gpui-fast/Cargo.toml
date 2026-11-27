@@ -175,7 +175,8 @@ package = "gpui-pre-http-client"
 
 [dependencies.icu_segmenter]
 version = "2.3.0"
-features = ["compiled_data"]
+# DeepBuild patch (windoliver/deepbuild#1550): chrome's wrapper breaks lines by UAX #14 at 17.0, as deep-text does.
+features = ["compiled_data", "unstable"]
 default-features = false
 
 [dependencies.image]
@@ -543,3 +544,10 @@ optional = true
 [lints.rust.unexpected_cfgs]
 level = "allow"
 priority = 0
+
+# DeepBuild patch (windoliver/deepbuild#390): the snapshot's one deprecation is upstream's to fix.
+[lints.rust]
+deprecated = "allow"
+
+# DeepBuild patch (windoliver/deepbuild#390): its own workspace, so ours never takes it as a member.
+[workspace]

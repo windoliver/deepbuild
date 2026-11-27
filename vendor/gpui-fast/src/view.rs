@@ -185,6 +185,8 @@ mod any_view {
             .a11y
             .view_type_names
             .insert(view.entity_id(), std::any::type_name::<V>());
+        #[cfg(feature = "test-support")]
+        crate::window::frame_counts::note_rendered(window, view.entity_id(), std::any::type_name::<V>()); // DeepBuild patch (windoliver/deepbuild#1482)
         crate::fast::dependencies::render_next(&mut cx.entities, view.entity_id());
         view.update(cx, |view, cx| view.render(window, cx).into_any_element())
     }
@@ -236,6 +238,8 @@ impl<T: Render> View for Entity<T> {
 
     #[inline]
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        #[cfg(feature = "test-support")]
+        crate::window::frame_counts::note_rendered(window, Entity::entity_id(&self), type_name::<T>()); // DeepBuild patch (windoliver/deepbuild#1482)
         crate::fast::dependencies::render_next(&mut cx.entities, self.entity_id());
         self.update(cx, |this, cx| {
             Render::render(this, window, cx).into_any_element()

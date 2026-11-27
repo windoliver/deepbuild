@@ -9,6 +9,7 @@
 mod dispatcher;
 pub mod display_link;
 mod fast;
+pub mod held; // DeepBuild patch (windoliver/deepbuild#1431)
 pub mod keychain;
 mod metal_atlas;
 pub mod metal_renderer;

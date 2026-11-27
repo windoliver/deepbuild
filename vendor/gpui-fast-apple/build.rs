@@ -118,7 +118,9 @@ mod apple_build {
             let header_contents = std::fs::read_to_string(header)?;
             let shader_contents =
                 crate::fast_rounded_clip_shader::source(&std::fs::read_to_string(shader_path)?);
-            let stitched_contents = format!("{header_contents}\n{shader_contents}");
+            // DeepBuild patch (windoliver/deepbuild#377): our shaders follow upstream's.
+            let carried = std::fs::read_to_string("./src/shaders_carried.metal")?;
+            let stitched_contents = format!("{header_contents}\n{shader_contents}\n{carried}");
             let out_path =
                 PathBuf::from(env::var("OUT_DIR").unwrap()).join("stitched_shaders.metal");
             std::fs::write(&out_path, stitched_contents)?;
@@ -174,6 +176,10 @@ mod apple_build {
         // checkout (corgi rejects artifacts that embed the build path).
         let staged_shader_path = out_dir.join("shaders.metal");
         crate::fast_rounded_clip_shader::stage(shader_path, &staged_shader_path);
+        // DeepBuild patch (windoliver/deepbuild#377): our shaders follow upstream's.
+        let carried = std::fs::read_to_string("./src/shaders_carried.metal").unwrap();
+        let staged = std::fs::read_to_string(&staged_shader_path).unwrap();
+        std::fs::write(&staged_shader_path, format!("{staged}\n{carried}")).unwrap();
 
         // When targeting macOS 12+, both `metal` and `metallib` also record
         // their working directory in the metallib. Run them from OUT_DIR so

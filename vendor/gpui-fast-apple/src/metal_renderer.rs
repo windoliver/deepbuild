@@ -8,7 +8,7 @@ use gpui::{
     AtlasTextureId, Bounds, ContentMask, DevicePixels, PaintSurface, PaintedPath, PrimitiveBatch,
     ScaledPixels, Scene, Size, quad_depth, quad_depth_scale, size,
 };
-#[cfg(any(test, feature = "bench-support", feature = "test-support"))]
+// DeepBuild patch (windoliver/deepbuild#140): the color check reads a drawable back in any build.
 use image::RgbaImage;
 use objc2::{Message, rc::Retained, runtime::ProtocolObject};
 use objc2_core_foundation::{CFRetained, CGSize};
@@ -30,12 +30,17 @@ use objc2_metal::{
     MTLResourceOptions, MTLStorageMode, MTLStoreAction, MTLTexture, MTLTextureDescriptor,
     MTLTextureUsage, MTLViewport,
 };
-#[cfg(any(test, feature = "bench-support", feature = "test-support"))]
+// DeepBuild patch (windoliver/deepbuild#140): the color check reads a drawable back in any build.
 use objc2_metal::{MTLBlitCommandEncoder, MTLOrigin, MTLRegion, MTLSize};
 use objc2_quartz_core::{CAMetalDrawable, CAMetalLayer};
 use parking_lot::Mutex;
 
 use std::{cell::Cell, mem, mem::MaybeUninit, ops::Range, ptr, slice, sync::Arc};
+pub mod clear_surface; // DeepBuild patch (windoliver/deepbuild#177)
+mod completions; // DeepBuild patch (windoliver/deepbuild#499)
+mod held_counts; // DeepBuild patch (windoliver/deepbuild#1431)
+mod bgra_surface; // DeepBuild patch (windoliver/deepbuild#377)
+mod ycbcr_surface; // DeepBuild patch (windoliver/deepbuild#499)
 
 #[cfg(not(feature = "runtime_shaders"))]
 const SHADERS_METALLIB: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
@@ -44,6 +49,11 @@ const SHADERS_SOURCE_FILE: &str = include_str!(concat!(env!("OUT_DIR"), "/stitch
 /// Metal requires the offset a buffer is bound at to be 256-byte aligned.
 const INSTANCE_BUFFER_ALIGNMENT: usize = 256;
 const MAX_INSTANCE_BUFFER_SIZE: usize = 256 * 1024 * 1024;
+pub mod chrome_layers; // DeepBuild patch (windoliver/deepbuild#1434)
+pub mod gpu_ledger; // DeepBuild patch (windoliver/deepbuild#391)
+pub mod gpu_surfaces; // DeepBuild patch (windoliver/deepbuild#377)
+pub mod layer_colorspace; // DeepBuild patch (windoliver/deepbuild#140)
+pub mod presentation; // DeepBuild patch (windoliver/deepbuild#140)
 
 pub type Context = Arc<Mutex<InstanceBufferPool>>;
 pub type Renderer = MetalRenderer;
@@ -85,6 +95,7 @@ unsafe impl Send for InstanceBuffer {}
 impl InstanceBufferPool {
     pub(crate) fn reset(&mut self, buffer_size: usize) {
         self.buffer_size = buffer_size;
+        self.count_freed(); // DeepBuild patch (windoliver/deepbuild#1431)
         self.buffers.clear();
     }
 
@@ -107,6 +118,7 @@ impl InstanceBufferPool {
         let buffer = device
             .newBufferWithLength_options(self.buffer_size, options)
             .with_context(|| format!("allocating {}-byte instance buffer", self.buffer_size))?;
+        held_counts::took(&buffer); // DeepBuild patch (windoliver/deepbuild#1431)
         Ok(InstanceBuffer {
             metal_buffer: buffer,
             size: self.buffer_size,
@@ -116,6 +128,7 @@ impl InstanceBufferPool {
     pub(crate) fn release(&mut self, buffer: InstanceBuffer) {
         if buffer.size == self.buffer_size {
             self.buffers.push(buffer)
+        } else { held_counts::freed(&buffer) // DeepBuild patch (windoliver/deepbuild#1431)
         }
     }
 }
@@ -150,6 +163,8 @@ pub struct MetalRenderer {
     pub(crate) polychrome_sprites_pipeline_state:
         Retained<ProtocolObject<dyn MTLRenderPipelineState>>,
     surfaces_pipeline_state: Retained<ProtocolObject<dyn MTLRenderPipelineState>>,
+    bgra_surfaces: bgra_surface::BgraSurfaces, // DeepBuild patch (windoliver/deepbuild#377): the carried surface pipelines
+    completions: completions::Completions, // DeepBuild patch (windoliver/deepbuild#499)
     native_views_pipeline_state: Retained<ProtocolObject<dyn MTLRenderPipelineState>>,
     depth_write_state: Retained<ProtocolObject<dyn MTLDepthStencilState>>,
     depth_test_state: Retained<ProtocolObject<dyn MTLDepthStencilState>>,
@@ -218,6 +233,7 @@ impl MetalRenderer {
         layer.setFramebufferOnly(false);
         layer.setAllowsNextDrawableTimeout(false);
         layer.setNeedsDisplayOnBoundsChange(true);
+        if !use_display_p3 { layer_colorspace::tag_srgb(layer); } // DeepBuild patch (windoliver/deepbuild#140): sRGB, unless GPUI tagged it Display P3
         // UIKit sizes a view's backing layer itself; only AppKit-hosted
         // layers need to track their superlayer's bounds.
         #[cfg(target_os = "macos")]
@@ -402,6 +418,8 @@ impl MetalRenderer {
         let core_video_texture_cache = unsafe { CFRetained::from_raw(cache) };
 
         Ok(Self {
+            bgra_surfaces: bgra_surface::BgraSurfaces::new(&device, &library)?, // DeepBuild patch (windoliver/deepbuild#377)
+            completions: completions::Completions::new(&instance_buffer_pool), // DeepBuild patch (windoliver/deepbuild#499)
             device,
             layer,
             presents_with_transaction: false,
@@ -503,6 +521,7 @@ impl MetalRenderer {
     }
 
     pub fn update_drawable_size(&mut self, size: Size<DevicePixels>) {
+        self.count_resized(); // DeepBuild patch (windoliver/deepbuild#1431)
         crate::fast::layers::TileCache::clear(&mut self.fast_layers);
         if let Some(layer) = &self.layer {
             layer.setDrawableSize(CGSize::new(size.width.0 as f64, size.height.0 as f64));
@@ -530,6 +549,7 @@ impl MetalRenderer {
                 return;
             }
         };
+        let reading = layer_colorspace::reading(&layer); // DeepBuild patch (windoliver/deepbuild#140)
         // Native views sit beneath the layer, so it can only be opaque, and
         // eligible for direct-to-display presentation, while none are showing.
         let shows_native_views = !scene.native_views.is_empty();
@@ -559,6 +579,7 @@ impl MetalRenderer {
         // A display link's drawable was sized when the link handed it out,
         // which can be before a resize the layer has since taken.
         let texture = drawable.texture();
+        held_counts::drawable(&layer, &texture); // DeepBuild patch (windoliver/deepbuild#1431)
         let viewport_size: Size<DevicePixels> = size(
             (texture.width() as i32).into(),
             (texture.height() as i32).into(),
@@ -571,6 +592,9 @@ impl MetalRenderer {
                 return;
             }
         };
+        clear_surface::settle(&layer); // DeepBuild patch (windoliver/deepbuild#177)
+        let read = reading.then(|| drawable.texture()); // DeepBuild patch (windoliver/deepbuild#140): the read-back
+        presentation::report_when_shown(&drawable); // DeepBuild patch (windoliver/deepbuild#140): the presented time
 
         if self.presents_with_transaction {
             command_buffer.commit();
@@ -580,6 +604,7 @@ impl MetalRenderer {
             command_buffer.presentDrawable(ProtocolObject::from_ref(&*drawable));
             command_buffer.commit();
         }
+        layer_colorspace::read_back(&command_buffer, read); // DeepBuild patch (windoliver/deepbuild#140)
     }
 
     pub(crate) fn render_frame(
@@ -606,6 +631,7 @@ impl MetalRenderer {
                 scene.surfaces.len(),
             )
         })?;
+        self.bgra_surfaces.sampled.clear(); // DeepBuild patch (windoliver/deepbuild#377)
         let mut surface_textures = Vec::new();
         let command_buffer = self.fast_frame(
             scene,
@@ -618,13 +644,7 @@ impl MetalRenderer {
 
         let instance_buffer_pool = self.instance_buffer_pool.clone();
         let frame_resources = Cell::new(Some((writer.finish(), surface_textures)));
-        let block = RcBlock::new(
-            move |_: ptr::NonNull<ProtocolObject<dyn MTLCommandBuffer>>| {
-                if let Some((instance_buffer, _surface_textures)) = frame_resources.take() {
-                    instance_buffer_pool.lock().release(instance_buffer);
-                }
-            },
-        );
+        let block = self.frame_completed(instance_buffer_pool, frame_resources); // DeepBuild patch (windoliver/deepbuild#499)
         // SAFETY: Metal copies the live block and invokes it once after this frame completes.
         // Its captures own the frame resources and use the pool mutex when returning the buffer.
         unsafe {
@@ -820,6 +840,7 @@ impl MetalRenderer {
 
         let mut quad_cursor: u32 = 0;
         let mut path_tile_cursor = 0;
+        let surfaces_last = gpu_surfaces::planted() == gpu_surfaces::Planted::AfterScene; // DeepBuild patch (windoliver/deepbuild#377): the planted twin that draws surfaces last
         for batch in scene.batches() {
             // Quad shaders assign each quad its own depth.
             // In every other batch type, the depth is fixed to the position of the quad cursor.
@@ -875,6 +896,7 @@ impl MetalRenderer {
                         instance_bindings,
                         &command_encoder,
                     ),
+                PrimitiveBatch::Surfaces(_) if surfaces_last => {} // DeepBuild patch (windoliver/deepbuild#377)
                 PrimitiveBatch::Surfaces(range) => {
                     if let Err(error) = self.draw_surfaces(
                         &scene.surfaces[range.clone()],
@@ -891,8 +913,10 @@ impl MetalRenderer {
                     self.draw_native_views(range, instance_bindings, &command_encoder)
                 }
                 PrimitiveBatch::SubpixelSprites { .. } => unreachable!(),
+                PrimitiveBatch::Chrome(_) => {} // DeepBuild patch (windoliver/deepbuild#1434): a frame that holds one draws in chrome_layers
             }
         }
+        if surfaces_last { self.draw_surfaces(&scene.surfaces, 0, instance_bindings, &command_encoder, surface_textures).inspect_err(|_| command_encoder.endEncoding())?; } // DeepBuild patch (windoliver/deepbuild#377)
 
         command_encoder.endEncoding();
 
@@ -928,6 +952,7 @@ impl MetalRenderer {
             .device
             .newTextureWithDescriptor(&descriptor)
             .context("allocating depth texture")?;
+        self.count_depth(&depth_texture); // DeepBuild patch (windoliver/deepbuild#1431)
         self.depth_texture = Some(depth_texture.clone());
         Ok(depth_texture)
     }
@@ -1293,9 +1318,11 @@ impl MetalRenderer {
                 DevicePixels::from(CVPixelBufferGetHeight(image_buffer) as i32),
             );
 
+            if self.draw_bgra_surface(image_buffer, texture_size, first_surface + index, command_encoder, surface_textures)? { continue; } // DeepBuild patch (windoliver/deepbuild#377): on its own path
+            if self.draw_ycbcr_surface(image_buffer, texture_size, first_surface + index, command_encoder, surface_textures)? { continue; } // DeepBuild patch (windoliver/deepbuild#499): by its own tags
             let pixel_format = CVPixelBufferGetPixelFormatType(image_buffer);
             anyhow::ensure!(
-                pixel_format == kCVPixelFormatType_420YpCbCr8BiPlanarFullRange,
+                pixel_format == ycbcr_surface::stock_takes(image_buffer, kCVPixelFormatType_420YpCbCr8BiPlanarFullRange), // DeepBuild patch (windoliver/deepbuild#499)
                 "unsupported surface pixel format: {pixel_format:#x}"
             );
 
@@ -1407,7 +1434,7 @@ fn new_command_encoder_for_texture(
     Ok(command_encoder)
 }
 
-#[cfg(any(test, feature = "bench-support", feature = "test-support"))]
+// DeepBuild patch (windoliver/deepbuild#140): also the color check's drawable read-back, in any build.
 fn read_texture_to_image(texture: &ProtocolObject<dyn MTLTexture>) -> Result<RgbaImage> {
     let width = texture.width() as u32;
     let height = texture.height() as u32;

@@ -45,6 +45,8 @@ use std::{
 
 use super::ImageCacheProvider;
 
+mod wheel_end; // DeepBuild patch (windoliver/deepbuild#1482)
+
 #[cfg(feature = "stacker")]
 type StackSafe<T> = stacksafe::StackSafe<T>;
 #[cfg(not(feature = "stacker"))]
@@ -2672,6 +2674,7 @@ impl Interactivity {
                 }
 
                 window.with_element_opacity(style.opacity, |window| {
+                    window.note_painted(global_id, bounds); // DeepBuild patch (windoliver/deepbuild#1427)
                     style.paint(bounds, window, cx, |window: &mut Window, cx: &mut App| {
                         window.with_text_style(style.text_style().cloned(), |window| {
                             window.with_content_mask(
@@ -3552,6 +3555,7 @@ impl Interactivity {
                     }
                     scroll_offset.y += delta_y;
                     scroll_offset.x += delta_x;
+                    *scroll_offset = wheel_end::clamp(*scroll_offset, fast_scroll_max); // DeepBuild patch (windoliver/deepbuild#1482)
                     if *scroll_offset != old_scroll_offset {
                         crate::fast::retained::invalidate_retained_subtrees(window, &subtrees);
                         crate::fast::layers::invalidate::note_scrolled(window, &fast_container);

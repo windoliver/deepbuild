@@ -130,6 +130,7 @@ pub(crate) fn draw_order(primitive: &Primitive) -> DrawOrder {
         Primitive::MonochromeSprite(sprite) => sprite.order,
         Primitive::SubpixelSprite(sprite) => sprite.order,
         Primitive::PolychromeSprite(sprite) => sprite.order,
+        Primitive::Chrome(chrome) => chrome.order, // DeepBuild patch (windoliver/deepbuild#1434), by hand: gpui-fast's own match
         Primitive::Surface(surface) => surface.order,
         Primitive::NativeView(native_view) => native_view.order,
     }

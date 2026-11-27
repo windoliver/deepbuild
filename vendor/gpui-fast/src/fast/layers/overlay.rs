@@ -57,6 +57,7 @@ fn rank(primitive: &Primitive) -> u8 {
         Primitive::MonochromeSprite(_) => 4,
         Primitive::SubpixelSprite(_) => 5,
         Primitive::PolychromeSprite(_) => 6,
+        Primitive::Chrome(_) => 8, // DeepBuild patch (windoliver/deepbuild#1434), by hand: gpui-fast's own match
         Primitive::Surface(_) => 7,
         Primitive::NativeView(_) => 8,
     }
@@ -120,6 +121,8 @@ pub(crate) fn split(
             PaintOperation::Primitive(primitive) => PaintOperation::Primitive(primitive.clone()),
             PaintOperation::StartLayer(bounds) => PaintOperation::StartLayer(*bounds),
             PaintOperation::EndLayer => PaintOperation::EndLayer,
+            PaintOperation::StartChrome(open) => PaintOperation::StartChrome(open.clone()), // DeepBuild patch (windoliver/deepbuild#1434), by hand: gpui-fast's own match
+            PaintOperation::EndChrome => PaintOperation::EndChrome,
             PaintOperation::FastRoundedClip(clip) => PaintOperation::FastRoundedClip(*clip),
         })
         .collect();
@@ -138,6 +141,8 @@ pub(crate) fn lift(content: Scene) -> (Scene, Rc<[Primitive]>) {
             PaintOperation::Primitive(primitive) => rest.insert_primitive(primitive),
             PaintOperation::StartLayer(bounds) => rest.push_layer(bounds),
             PaintOperation::EndLayer => rest.pop_layer(),
+            PaintOperation::StartChrome(open) => rest.push_chrome_layer(open), // DeepBuild patch (windoliver/deepbuild#1434), by hand: gpui-fast's own match
+            PaintOperation::EndChrome => rest.pop_chrome_layer(),
             PaintOperation::FastRoundedClip(clip) => {
                 crate::fast::rounded_clip::record(&mut rest, clip)
             }

@@ -1621,6 +1621,8 @@ impl<V: View> ViewElement<V> {
                 }
                 ViewLayout::Retained { previous } => {
                     if window.retained_context_matches(previous, bounds) {
+                        #[cfg(feature = "test-support")]
+                        crate::window::frame_counts::note_reused(entity_id); // DeepBuild patch (windoliver/deepbuild#1482)
                         return ViewPrepaint::Reused(
                             window.reuse_retained_prepaint(previous, true, cx),
                         );
@@ -1688,6 +1690,8 @@ impl<V: View> ViewElement<V> {
                             self.cached_style.as_ref(),
                             layout.as_ref().and_then(|layout| layout.parent_layout_key),
                         );
+                        #[cfg(feature = "test-support")]
+                        crate::window::frame_counts::note_reused(entity_id); // DeepBuild patch (windoliver/deepbuild#1482)
                         let index = window.reuse_retained_prepaint(previous, false, cx);
                         // Cached paint can survive a changed element path, but
                         // its style node was requested again at the new path.

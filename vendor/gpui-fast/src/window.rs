@@ -69,7 +69,16 @@ use uuid::Uuid;
 
 pub(crate) mod a11y;
 mod native_view;
+mod mask_sprite; // DeepBuild patch (windoliver/deepbuild#390)
+mod mask_rect; // DeepBuild patch (windoliver/deepbuild#1480)
 mod prompts;
+
+mod hits; // DeepBuild patch (windoliver/deepbuild#124)
+mod painted; // DeepBuild patch (windoliver/deepbuild#1427)
+mod chrome_layer; // DeepBuild patch (windoliver/deepbuild#1434)
+pub use chrome_layer::plant_multiplies_per_element;
+mod present_only; // DeepBuild patch (windoliver/deepbuild#1551)
+pub use painted::{Painted, note_paints, take_painted};
 
 pub use a11y::A11ySubtreeBuilder;
 use native_view::NativeViewState;
@@ -83,6 +92,10 @@ use crate::util::{
     round_half_toward_zero_f64, round_stroke_to_device_pixel, round_to_device_pixel,
 };
 pub use prompts::*;
+
+mod handed; // DeepBuild patch (windoliver/deepbuild#1482)
+#[cfg(feature = "test-support")]
+pub mod frame_counts; // DeepBuild patch (windoliver/deepbuild#1482)
 
 /// Default window size used when no explicit size is provided.
 pub const DEFAULT_WINDOW_SIZE: Size<Pixels> = size(px(1536.), px(1095.));
@@ -856,6 +869,10 @@ pub struct Hitbox {
     pub content_mask: ContentMask<Pixels>,
     /// Flags that specify hitbox behavior.
     pub behavior: HitboxBehavior,
+    /// DeepBuild patch (windoliver/deepbuild#124): the element that inserted the hitbox, so a
+    /// replica can name what a hit test finds.
+    #[cfg(any(test, feature = "test-support"))]
+    pub element: GlobalElementId,
 }
 
 impl Hitbox {
@@ -2611,6 +2628,7 @@ impl Window {
         let visibility = self.platform_window.visibility();
         if self.visibility != visibility {
             self.visibility = visibility;
+            self.draw_seen(); // DeepBuild patch (windoliver/deepbuild#3232)
             #[cfg(feature = "profiler")]
             profiler::journal::record_window_visibility(self.handle.window_id(), visibility);
             self.visibility_observers
@@ -3883,6 +3901,8 @@ impl Window {
             self.refresh();
         }
         self.invalidate_entities();
+        #[cfg(feature = "test-support")]
+        self.begin_frame_counts(); // DeepBuild patch (windoliver/deepbuild#1482)
         cx.entities.clear_accessed();
         debug_assert!(self.rendered_entity_stack.is_empty());
         self.invalidator.set_dirty(false);
@@ -3920,6 +3940,8 @@ impl Window {
             }
         }
         self.dirty_views.clear();
+        #[cfg(feature = "test-support")]
+        self.end_frame_counts(); // DeepBuild patch (windoliver/deepbuild#1482)
         self.next_frame.window_active = self.active.get();
 
         // Register requested input handler with the platform window.
@@ -5854,6 +5876,8 @@ impl Window {
             bounds,
             content_mask,
             behavior,
+            #[cfg(any(test, feature = "test-support"))]
+            element: self.element_id_stack.global_id(), // DeepBuild patch (windoliver/deepbuild#124)
         };
         self.next_frame.hitboxes.push(hitbox.clone());
         crate::fast::composition::record_input(self, id);

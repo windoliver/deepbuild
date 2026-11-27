@@ -126,6 +126,8 @@ impl LayerFrame {
                     scene.push_layer(translate_bounds(*layer_bounds, delta))
                 }
                 PaintOperation::EndLayer => scene.pop_layer(),
+                PaintOperation::StartChrome(open) => scene.push_chrome_layer(crate::scene::chrome_moved(open, delta)), // DeepBuild patch (windoliver/deepbuild#1434), by hand: gpui-fast's own match
+                PaintOperation::EndChrome => scene.pop_chrome_layer(),
                 PaintOperation::FastRoundedClip(clip) => {
                     crate::fast::rounded_clip::record(&mut scene, clip.translated(delta))
                 }
@@ -343,6 +345,10 @@ pub(crate) fn move_primitive(primitive: &mut Primitive, delta: Point<ScaledPixel
         Primitive::PolychromeSprite(sprite) => {
             mv(&mut sprite.bounds);
             mv(&mut sprite.content_mask.bounds);
+        }
+        Primitive::Chrome(chrome) => { // DeepBuild patch (windoliver/deepbuild#1434), by hand: gpui-fast's own match
+            mv(&mut chrome.bounds);
+            mv(&mut chrome.content_mask.bounds);
         }
         Primitive::Surface(surface) => {
             mv(&mut surface.bounds);

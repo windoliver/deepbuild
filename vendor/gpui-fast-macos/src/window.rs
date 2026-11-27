@@ -75,6 +75,7 @@ use std::{
 };
 
 mod native_views;
+pub mod frame_link; // DeepBuild patch (windoliver/deepbuild#1551)
 
 pub(crate) const WINDOW_STATE_IVAR: &CStr = c"windowState";
 
@@ -2253,7 +2254,7 @@ impl PlatformWindow for MacWindow {
     // GPUI calls this without waking the frame waker when a window only needs
     // a present, so a paused Metal link must resume here too.
     fn schedule_frame(&self) {
-        if let Some(metal_frames) = &self.2 {
+        if let Some(metal_frames) = &self.2.as_ref().filter(|_| frame_link::schedule_frame_wakes()) { // DeepBuild patch (windoliver/deepbuild#1551)
             metal_frames.wake();
         }
     }
@@ -3480,6 +3481,7 @@ extern "C" fn window_did_change_key_status(this: &AnyObject, selector: Sel, _: *
                 crate::fast::composition::set_presents_with_transaction(&mut lock, true);
                 lock.stop_display_link();
                 drop(lock);
+                frame_link::note_callback(); // DeepBuild patch (windoliver/deepbuild#1551)
                 callback(RequestFrameOptions {
                     signal_at,
                     signal_source: FrameRequestSource::NativeCallback,
@@ -3607,6 +3609,7 @@ extern "C" fn display_layer(this: &AnyObject, _: Sel, _: *mut AnyObject) {
         crate::fast::composition::set_presents_with_transaction(&mut lock, true);
         lock.stop_display_link();
         drop(lock);
+        frame_link::note_callback(); // DeepBuild patch (windoliver/deepbuild#1551)
         callback(RequestFrameOptions {
             signal_at,
             signal_source: FrameRequestSource::NativeCallback,
@@ -3638,6 +3641,7 @@ extern "C" fn step(view: *mut c_void) {
         );
         crate::fast::composition::present_for_native_views(&mut lock);
         drop(lock);
+        frame_link::note_callback(); // DeepBuild patch (windoliver/deepbuild#1551)
         callback(RequestFrameOptions {
             signal_at,
             signal_source,
@@ -3658,12 +3662,14 @@ fn metal_frame(
         return;
     };
     let metal_frames = metal_frames.clone();
+    if !frame_link::tick_begins() { return; } // DeepBuild patch (windoliver/deepbuild#1551): the planted late restart
     let Some(mut callback) = lock.request_frame_callback.take() else {
         return;
     };
     lock.renderer.set_frame_drawable(Some(update.drawable()));
     drop(lock);
     metal_frames.begin_frame();
+    frame_link::note_callback(); // DeepBuild patch (windoliver/deepbuild#1551)
     callback(RequestFrameOptions {
         signal_at,
         signal_source: FrameRequestSource::NativeCallback,
@@ -3674,7 +3680,7 @@ fn metal_frame(
     // A frame with nothing to draw leaves its drawable unused; releasing it
     // lets the link hand it out again.
     let used_drawable = lock.renderer.set_frame_drawable(None).is_none();
-    metal_frames.end_frame(used_drawable);
+    frame_link::ended(metal_frames.end_frame(frame_link::keeps_running(used_drawable))); // DeepBuild patch (windoliver/deepbuild#1551)
     drop(lock);
     native_views::check_pointer_after_frame(window_state);
 }

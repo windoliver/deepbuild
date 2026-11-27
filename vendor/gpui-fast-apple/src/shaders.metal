@@ -13,6 +13,9 @@ float4 srgb_to_oklab(float4 color);
 float4 oklab_to_srgb(float4 color);
 float4 to_device_position_impl(float2 position,
                                constant Size_DevicePixels *viewport_size);
+float4 srgb_to_oklab_exact(float4 color); // DeepBuild patch (windoliver/deepbuild#391)
+float4 oklab_to_srgb_exact(float4 color); // DeepBuild patch (windoliver/deepbuild#391)
+float4 exact_gradient_mix(float4 color0, float4 color1, float t); // DeepBuild patch (windoliver/deepbuild#391)
 float4 to_device_position(float2 unit_vertex, Bounds_ScaledPixels bounds,
                           constant Size_DevicePixels *viewport_size);
 float4 to_device_position_transformed(float2 unit_vertex, Bounds_ScaledPixels bounds,
@@ -1240,6 +1243,13 @@ PreparedBackground prepare_background(Background background) {
     if (background.color_space == 1u) {
       prepared.color0 = srgb_to_oklab(prepared.color0);
       prepared.color1 = srgb_to_oklab(prepared.color1);
+    } else if (background.color_space == 2u) {
+      // DeepBuild patch (windoliver/deepbuild#391): the exact gradient mode's stops, in Oklab
+      // through the sRGB curve and premultiplied by their alpha.
+      prepared.color0 = srgb_to_oklab_exact(prepared.color0);
+      prepared.color1 = srgb_to_oklab_exact(prepared.color1);
+      prepared.color0.rgb *= prepared.color0.a;
+      prepared.color1.rgb *= prepared.color1.a;
     }
   } else {
     prepared.color0 = hsla_to_rgba(background.solid);
@@ -1300,6 +1310,10 @@ float4 background_color(PreparedBackground prepared, Background background,
       }
       float2 center = origin + size * 0.5;
       float t = saturate(dot(position - center, gradient.xy) + gradient.z);
+      if (background.color_space == 2u) { // DeepBuild patch (windoliver/deepbuild#391): the exact gradient mode, undithered.
+        color = oklab_to_srgb_exact(exact_gradient_mix(prepared.color0, prepared.color1, t));
+        break;
+      }
       color = mix(prepared.color0, prepared.color1, t);
       if (background.color_space == 1u) {
         color = oklab_to_srgb(color);

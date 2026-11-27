@@ -372,6 +372,8 @@ impl<E: Element> Drawable<E> {
     fn request_layout(&mut self, window: &mut Window, cx: &mut App) -> LayoutId {
         match mem::take(&mut self.phase) {
             ElementDrawPhase::Start => {
+                #[cfg(feature = "test-support")]
+                crate::window::frame_counts::note_laid_out(); // DeepBuild patch (windoliver/deepbuild#1482)
                 let element_id = self.element.id();
                 let fast_layout_key =
                     crate::fast::layout_key::push_layout_key(window, element_id.as_ref());

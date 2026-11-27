@@ -60,6 +60,7 @@ fn clip_to(primitive: &mut Primitive, mask: &Bounds<ScaledPixels>) {
         Primitive::MonochromeSprite(p) => &mut p.content_mask,
         Primitive::SubpixelSprite(p) => &mut p.content_mask,
         Primitive::PolychromeSprite(p) => &mut p.content_mask,
+        Primitive::Chrome(p) => &mut p.content_mask, // DeepBuild patch (windoliver/deepbuild#1434), by hand: gpui-fast's own match
         Primitive::Surface(p) => &mut p.content_mask,
         Primitive::NativeView(p) => &mut p.content_mask,
     };
@@ -90,6 +91,8 @@ fn expand_layer(
                 size: bounds.size,
             }),
             PaintOperation::EndLayer => scratch.pop_layer(),
+            PaintOperation::StartChrome(open) => scratch.push_chrome_layer(crate::scene::chrome_moved(open, translation)), // DeepBuild patch (windoliver/deepbuild#1434), by hand: gpui-fast's own match
+            PaintOperation::EndChrome => scratch.pop_chrome_layer(),
             PaintOperation::FastRoundedClip(clip) => {
                 crate::fast::rounded_clip::record(&mut scratch, clip.translated(translation))
             }
@@ -218,6 +221,7 @@ fn describe(primitive: &Primitive) -> String {
                 ..*p
             }
         ),
+        Primitive::Chrome(p) => format!("chrome {:?} {:?}", p.bounds, p.content_mask), // DeepBuild patch (windoliver/deepbuild#1434), by hand: gpui-fast's own match
         Primitive::Surface(p) => format!("surface {:?} {:?}", p.bounds, p.content_mask),
         Primitive::NativeView(p) => format!("native view {:?} {:?}", p.bounds, p.content_mask),
     }

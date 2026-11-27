@@ -20,6 +20,7 @@ impl MetalRenderer {
         surface_textures: &mut Vec<CFRetained<CVMetalTexture>>,
     ) -> Result<Retained<ProtocolObject<dyn MTLCommandBuffer>>> {
         if scene.layers.frames.is_empty() {
+            if !scene.chrome.is_empty() { return self.draw_chrome_frame(scene, instance_bindings, writer, texture, viewport_size, surface_textures); } // DeepBuild patch (windoliver/deepbuild#1434)
             return self.draw_primitives_to_texture(
                 scene,
                 instance_bindings,
@@ -216,6 +217,7 @@ impl MetalRenderer {
                     self.draw_native_views(range, instance_bindings, command_encoder)
                 }
                 PrimitiveBatch::SubpixelSprites { .. } => unreachable!(),
+                PrimitiveBatch::Chrome(_) => {} // DeepBuild patch (windoliver/deepbuild#1434): not drawn in a frame with scroll layers yet (#3629)
             }
         }
 

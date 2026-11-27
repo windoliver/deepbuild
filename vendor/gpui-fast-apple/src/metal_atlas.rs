@@ -12,6 +12,8 @@ use objc2_metal::{
 use parking_lot::Mutex;
 use std::{borrow::Cow, ptr::NonNull};
 
+mod rect; // DeepBuild patch (windoliver/deepbuild#1480)
+
 pub struct MetalAtlas(Mutex<AtlasState<MetalAtlasTextures>>);
 
 impl MetalAtlas {
@@ -42,7 +44,9 @@ impl MetalAtlas {
 struct MetalAtlasTextures {
     device: Retained<ProtocolObject<dyn MTLDevice>>,
     supports_shared_storage: bool,
+    // cache: entries 65_536, bytes 256_000_000 (DeepBuild patch (windoliver/deepbuild#1431): the glyph atlas)
     monochrome_textures: AtlasTextureList<MetalAtlasTexture>,
+    // cache: entries 16_384, bytes 512_000_000 (DeepBuild patch (windoliver/deepbuild#1431): the images retained)
     polychrome_textures: AtlasTextureList<MetalAtlasTexture>,
 }
 
@@ -57,6 +61,11 @@ impl PlatformAtlas for MetalAtlas {
 
     fn remove(&self, key: &AtlasKey) {
         self.0.lock().remove(key);
+    }
+
+    // DeepBuild patch (windoliver/deepbuild#1480)
+    fn write_rect(&self, key: &AtlasKey, region: Bounds<DevicePixels>, bytes: &[u8], stride: usize) -> bool {
+        self.0.lock().write_rect(key, region, bytes, stride)
     }
 }
 
@@ -73,6 +82,7 @@ impl AtlasBackend for MetalAtlasTextures {
             .texture(tile.texture_id)
             .context("looking up allocated atlas texture")?;
         texture.upload(tile.bounds.origin, &upload)?;
+        crate::held::took(crate::held::atlas(kind), 1, 0); // DeepBuild patch (windoliver/deepbuild#1431)
         Ok(tile)
     }
 
@@ -96,6 +106,7 @@ impl AtlasBackend for MetalAtlasTextures {
         if let Some(mut texture) = texture_slot.take() {
             texture.allocator.deallocate(tile.tile_id.into());
             texture.decrement_ref_count();
+            crate::held::freed(crate::held::atlas(id.kind), 1, 0); // DeepBuild patch (windoliver/deepbuild#1431)
             if texture.is_unreferenced() {
                 textures.free_list.push(id.index as usize);
             } else {
@@ -178,6 +189,7 @@ impl MetalAtlasTextures {
             .device
             .newTextureWithDescriptor(&texture_descriptor)
             .context("allocating atlas texture")?;
+        crate::held::took(crate::held::atlas(kind), 0, metal_texture.allocatedSize() as u64); // DeepBuild patch (windoliver/deepbuild#1431)
 
         let texture_list = match kind {
             AtlasTextureKind::Monochrome => &mut self.monochrome_textures,
@@ -219,6 +231,13 @@ struct MetalAtlasTexture {
     allocator: BucketedAtlasAllocator,
     metal_texture: Retained<ProtocolObject<dyn MTLTexture>>,
     live_atlas_keys: u32,
+}
+
+impl Drop for MetalAtlasTexture { // DeepBuild patch (windoliver/deepbuild#1431)
+    fn drop(&mut self) {
+        let (tiles, bytes) = (u64::from(self.live_atlas_keys), self.metal_texture.allocatedSize() as u64);
+        crate::held::freed(crate::held::atlas(self.id.kind), tiles, bytes);
+    }
 }
 
 impl MetalAtlasTexture {

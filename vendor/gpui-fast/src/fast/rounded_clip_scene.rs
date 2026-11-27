@@ -55,6 +55,8 @@ pub(crate) fn compile(scene: &mut Scene) {
     let mut redundant = Vec::new();
     for operation in &operations {
         match operation {
+            PaintOperation::StartChrome(open) => stack.last_mut().unwrap().push_chrome_layer(open.clone()), // DeepBuild patch (windoliver/deepbuild#1434), by hand: gpui-fast's own match
+            PaintOperation::EndChrome => stack.last_mut().unwrap().pop_chrome_layer(),
             PaintOperation::FastRoundedClip(ClipOperation::Begin(shape)) => {
                 let already_active = shapes.contains(shape);
                 redundant.push(already_active);

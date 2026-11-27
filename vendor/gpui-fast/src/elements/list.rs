@@ -907,6 +907,7 @@ impl StateInner {
             return;
         }
 
+        let was = (self.scroll_anchor.is_some(), self.follow_state); // DeepBuild patch (windoliver/deepbuild#1482)
         let padding = self.last_padding.unwrap_or_default();
         let scroll_max =
             (self.items.summary().height + padding.top + padding.bottom - height).max(px(0.));
@@ -929,6 +930,12 @@ impl StateInner {
 
         if delta.y > px(0.) {
             self.follow_state.stop_following();
+        }
+        // DeepBuild patch (windoliver/deepbuild#1482): a wheel that moved nothing, past an end, notifies nothing.
+        if new_scroll_top == self.scroll_top(scroll_top)
+            && was == (self.scroll_anchor.is_some(), self.follow_state)
+        {
+            return;
         }
 
         if let Some(handler) = self.scroll_handler.as_mut() {

@@ -109,6 +109,8 @@ impl LayerInput {
                 .intersect(&viewport),
             },
             behavior: hitbox.behavior,
+            #[cfg(any(test, feature = "test-support"))]
+            element: hitbox.element.clone(), // DeepBuild patch (windoliver/deepbuild#124), by hand: gpui-fast's own copy of a hitbox
         })
     }
 }

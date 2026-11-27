@@ -27,6 +27,7 @@ use objc2_app_kit::{
 };
 use std::{borrow::Cow, ffi::c_void};
 
+pub mod momentum; // DeepBuild patch (windoliver/deepbuild#542)
 pub(crate) const ESCAPE_KEY: u16 = 0x1b;
 
 const BACKSPACE_KEY: u32 = 0x7f;
@@ -267,6 +268,7 @@ pub(crate) unsafe fn platform_input_from_native(
                 })
             }),
             NSEventType::ScrollWheel => window_height.map(|window_height| {
+                momentum::note(native_event); // DeepBuild patch (windoliver/deepbuild#542)
                 let phase = match native_event.phase() {
                     NSEventPhase::MayBegin | NSEventPhase::Began => TouchPhase::Started,
                     NSEventPhase::Ended => TouchPhase::Ended,

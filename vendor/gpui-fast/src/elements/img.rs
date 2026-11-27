@@ -250,6 +250,7 @@ struct ImgState {
     frame_index: usize,
     last_frame_time: Option<Instant>,
     started_loading: Option<(Instant, Task<()>)>,
+    wake: Option<Task<()>>, // DeepBuild patch (windoliver/deepbuild#1489): armed for the frame's delay
 }
 
 /// The image layout state between frames
@@ -288,6 +289,7 @@ impl Element for Img {
                     frame_index: 0,
                     last_frame_time: None,
                     started_loading: None,
+                    wake: None, // DeepBuild patch (windoliver/deepbuild#1489)
                 })
             });
 
@@ -316,11 +318,11 @@ impl Element for Img {
                                 state.frame_index = state.frame_index.min(max_frame_index);
                                 if frame_count > 1 && !cx.reduce_motion() {
                                     if window.is_window_active() {
-                                        let current_time = Instant::now();
+                                        let current_time = cx.background_executor().now(); // DeepBuild patch (windoliver/deepbuild#1489): the timers' clock
                                         if let Some(last_frame_time) = state.last_frame_time {
                                             let elapsed = current_time - last_frame_time;
-                                            let frame_duration =
-                                                Duration::from(data.delay(state.frame_index));
+                                            let frame_duration = // DeepBuild patch (windoliver/deepbuild#1489)
+                                                shown_for(data.delay(state.frame_index));
 
                                             if elapsed >= frame_duration {
                                                 state.frame_index =
@@ -379,8 +381,13 @@ impl Element for Img {
                                 && data.frame_count() > 1
                                 && window.is_window_active()
                                 && !cx.reduce_motion()
+                                && let Some(state) = &mut state
                             {
-                                window.request_animation_frame();
+                                // DeepBuild patch (windoliver/deepbuild#1489): wake at the frame's delay, not each vsync
+                                let shown = state.last_frame_time.map_or(Duration::ZERO, |t| cx.background_executor().now().saturating_duration_since(t));
+                                let left = shown_for(data.delay(frame_index)).saturating_sub(shown);
+                                let view = window.current_view();
+                                state.wake = Some(window.spawn(cx, async move |cx| { cx.background_executor().timer(left).await; cx.update(|_, cx| cx.notify(view)).ok(); }));
                             }
                         }
                         Some(_err) => {
@@ -699,6 +706,12 @@ pub enum ImageCacheError {
     /// An error that occurred while processing an SVG.
     #[error("svg error: {0}")]
     Usvg(Arc<usvg::Error>),
+}
+
+// DeepBuild patch (windoliver/deepbuild#1489): a delay of 10 ms or less shows for 100 ms.
+fn shown_for(delay: impl Into<Duration>) -> Duration {
+    let delay = delay.into();
+    if delay <= Duration::from_millis(10) { Duration::from_millis(100) } else { delay }
 }
 
 impl From<anyhow::Error> for ImageCacheError {

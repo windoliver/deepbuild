@@ -102,6 +102,11 @@
 use crate::*;
 
 pub(crate) mod debug;
+mod kept; // DeepBuild patch (windoliver/deepbuild#1482)
+mod unseen; // DeepBuild patch (windoliver/deepbuild#3232)
+pub(crate) use kept::Kept;
+#[cfg(feature = "test-support")]
+pub use kept::reuse_plainly;
 
 use crate::{App, Bounds, FocusId, Pixels, SharedString, Window};
 use accesskit::{Action, NodeId, TreeUpdate};
@@ -150,6 +155,9 @@ pub(crate) struct A11y {
     pub(crate) focus_ids: FxHashMap<NodeId, FocusId>,
     pub(crate) node_bounds: FxHashMap<NodeId, Bounds<Pixels>>,
     pub(crate) action_listeners: FxHashMap<NodeId, Vec<(Action, A11yActionListener)>>,
+    /// DeepBuild patch (windoliver/deepbuild#1482): the frame before's listeners, which a reused cached view takes back.
+    pub(crate) kept_listeners: FxHashMap<NodeId, Vec<(Action, A11yActionListener)>>,
+    unseen: unseen::Unseen, // DeepBuild patch (windoliver/deepbuild#3232)
     /// The window's title, used to label the root node so assistive
     /// technology can tell windows apart.
     window_title: Option<SharedString>,
@@ -178,6 +186,8 @@ impl A11y {
             focus_ids: FxHashMap::default(),
             node_bounds: FxHashMap::default(),
             action_listeners: FxHashMap::default(),
+            kept_listeners: FxHashMap::default(), // DeepBuild patch (windoliver/deepbuild#1482)
+            unseen: Default::default(), // DeepBuild patch (windoliver/deepbuild#3232)
             window_title,
             last_focus_without_node: None,
             debug: debug::A11yDebug::default(),
@@ -279,7 +289,7 @@ impl A11y {
         crate::fast::a11y::begin_frame(self);
         self.focus_ids.clear();
         self.node_bounds.clear();
-        self.action_listeners.clear();
+        self.kept_listeners = std::mem::take(&mut self.action_listeners); // DeepBuild patch (windoliver/deepbuild#1482)
         self.nodes.begin_frame(self.window_title.as_ref());
     }
 

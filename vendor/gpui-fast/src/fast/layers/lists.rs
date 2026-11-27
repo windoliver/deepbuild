@@ -1651,6 +1651,8 @@ fn drawn_alike(a: &Row, b: &Row) -> bool {
                     size: bounds.size,
                 }),
                 PaintOperation::EndLayer => PaintOperation::EndLayer,
+                PaintOperation::StartChrome(open) => PaintOperation::StartChrome(crate::scene::chrome_moved(open, to_row)), // DeepBuild patch (windoliver/deepbuild#1434), by hand: gpui-fast's own match
+                PaintOperation::EndChrome => PaintOperation::EndChrome,
                 PaintOperation::FastRoundedClip(clip) => {
                     PaintOperation::FastRoundedClip(clip.translated(to_row))
                 }
@@ -2862,6 +2864,8 @@ pub(crate) fn end_paint_rows(window: &mut Window, cx: &mut App, id: Option<&Glob
                 PaintOperation::Primitive(primitive) => move_primitive(primitive, to_content),
                 PaintOperation::StartLayer(bounds) => bounds.origin = bounds.origin + to_content,
                 PaintOperation::EndLayer => {}
+                PaintOperation::StartChrome(open) => *open = crate::scene::chrome_moved(open, to_content), // DeepBuild patch (windoliver/deepbuild#1434), by hand: gpui-fast's own match
+                PaintOperation::EndChrome => {}
                 PaintOperation::FastRoundedClip(clip) => *clip = clip.translated(to_content),
             }
         }
