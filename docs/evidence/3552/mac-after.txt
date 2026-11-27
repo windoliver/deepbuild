@@ -1,0 +1,15 @@
+#3552, the file index after the step. Reference Mac: 18 cores, macOS 27.2. The home folder is written ~. Times are UTC.
+The folders went on the list by 2026-11-27T00:52:06Z (mac-step.txt).
+
+== 2026-11-27, the same hour
+01:20:38Z wrote ~/Desktop/deepbuild-3552-check-1795742438.txt
+01:20:38Z wrote ~/dev/devin-worktrees/doneright/issue-3552-notes/deepbuild-3552-check-1795742438.txt (a folder on the list)
+01:21:49Z mdfind -name deepbuild-3552-check-1795742438 -> ~/Desktop/deepbuild-3552-check-1795742438.txt  (71 s after the write)
+01:24:37Z mdfind -name deepbuild-3552-check-1795742438 -> ~/Desktop/deepbuild-3552-check-1795742438.txt 
+01:27:42Z mdfind -count -onlyin ~/deepbuild-bays 'kMDItemFSSize > 0' -> 0 (0.1 s)
+01:27:42Z mdfind -count -onlyin ~/dev/devin-worktrees 'kMDItemFSSize > 0' -> 0 (0.1 s)
+01:27:43Z mdfind -count -onlyin ~/dev/claude-worktrees 'kMDItemFSSize > 0' -> 0 (0.1 s)
+01:27:43Z mdfind -count -onlyin ~/deepbuild-shards 'kMDItemFSSize > 0' -> 0 (0.1 s)
+01:27:43Z mdfind -count -onlyin ~/Desktop 'kMDItemFSSize > 0' -> 3 (0.7 s)
+01:27:44Z mdfind -name deepbuild-3552-check-1795742438 -> nothing (the desktop file was removed at 01:25Z; its twin under a folder on the list is still on disk)
+01:27:44Z load { 70.85 56.83 46.10 }
