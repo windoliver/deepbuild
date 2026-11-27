@@ -755,11 +755,6 @@ timed.push('tests/acceptance/173/budgets.test.ts', 'tests/acceptance/173/envelop
 slow.push('tests/acceptance/173/budgets.test.ts', 'tests/acceptance/173/envelope.test.ts');
 // #2070's tests each start their own hub, paseo daemon stand-in and agent stand-in.
 alone.push('tests/acceptance/2070/', 'tests/acceptance/2070-gaps/');
-// #1851's files start real hubs and Claude Code stand-ins, and time the waiter's wake against 2 s.
-alone.push('tests/acceptance/1851/');
-// #1851's first draft is kept as written, by hand only: its tests carry no timeout of their own, so under this entry
-// each ends at Vitest's 5 s; its blind redraft, redraft/, runs in its place (the owner's call on PR #2600).
-byHand.push('tests/acceptance/1851/waiter.test.ts');
 // #1725's tests each start their own hub with two agent stand-ins, and play deep-show run beside it.
 alone.push('tests/acceptance/1725/');
 // #55's AC13 is its blind redraft's since #2070's dispute, settled by the owner (tests/acceptance/55-redraft-ac13/DISPUTE.md).
@@ -1593,7 +1588,7 @@ Object.assign(redrafted, {
   'tests/acceptance/1492/helpers.ts': 'tests/acceptance/1492/redraft-3300/',
   'tests/acceptance/1551/lane.test.ts': 'tests/acceptance/1551/redraft-3300/',
 });
-byHand.push('tests/acceptance/1492/idle-energy.test.ts', 'tests/acceptance/1551/lane.test.ts');
+byHand.push('tests/acceptance/1492/idle-energy.test.ts', 'tests/acceptance/1551/lane.test.ts', 'tests/acceptance/1851/waiter.test.ts');
 
 // #1815's folder (blind) runs alone by its lane.json: its files build deep-drive with env-plants and test-confirm and draw
 // find's field and its matches. budget.test.ts times the first match on a 10,000-line page on the reference Mac;
