@@ -154,6 +154,7 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/1861/', 'tests/acceptance/2897/', 'tests/acceptance/2897-redraft-ac6/', 'tests/acceptance/2697/', 'tests/acceptance/409-redraft-2697/',
     'tests/acceptance/1181/', 'tests/acceptance/1834/', 'tests/acceptance/2035/', 'tests/acceptance/2288/', 'tests/acceptance/2748/', 'tests/acceptance/1500/',
     'tests/acceptance/1500-oracle/', 'tests/acceptance/3234/', 'tests/acceptance/3234-redraft-ac3/', 'tests/acceptance/2039-oracle/',
+    'tests/acceptance/1881-redraft-2047/', 'tests/acceptance/96-redraft-1412/',
   ],
   timing: [
     'tests/acceptance/2513-redraft-2047/',
@@ -221,6 +222,7 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/1488/', 'tests/acceptance/161/', 'tests/acceptance/2034/', 'tests/acceptance/2054/', 'tests/acceptance/3171/', 'tests/acceptance/290/',
     'tests/acceptance/2215/', 'tests/acceptance/2215-redraft-ac5/', 'tests/acceptance/3034/',
     'tests/acceptance/3507-redraft-ac2/',
+    'tests/acceptance/1219/', 'tests/acceptance/231/', 'tests/acceptance/2844/', 'tests/acceptance/2844-redraft-moving/', 'tests/acceptance/3036/', 'tests/acceptance/853/',
   ],
   'shared: the Lima VMs': [
     'tests/acceptance/1942/', 'tests/acceptance/1945/', 'tests/acceptance/1946/', 'tests/acceptance/1943/', 'tests/acceptance/1942-redraft-2073/',
