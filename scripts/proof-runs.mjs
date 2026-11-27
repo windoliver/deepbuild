@@ -372,7 +372,7 @@ function atAssertion(directory, { name = 'Error', code, message = '', stack = ''
 function failure(directory, error) {
   const { name = 'Error', code, message = '' } = error;
   const cause = `${name}${code && !name.includes(code) ? ` [${code}]` : ''}: ${firstLine(message)}`.split(`${directory}/`).join('');
-  const through = [...frames(error.stack ?? '', directory), ...frames(error.thrown?.stack ?? '', directory)];
+  const through = [...frames(error.stack ?? '', directory, message), ...frames(error.thrown?.stack ?? '', directory, error.thrown?.message ?? '')];
   return { atAssertion: atAssertion(directory, error), bySubtests: error.failureType === 'subtestsFailed', cause, through };
 }
 
@@ -525,7 +525,7 @@ function laneLists(root) {
 
 const failedAtAssertion = (result) => result?.status === 'fail' && result.failure.atAssertion;
 
-const DATA = /(?:^|\/)(?:__snapshots__|__fixtures__|fixtures|goldens?|testdata)\//;
+const DATA = /(?:^|\/)(?:__snapshots__|__fixtures__|fixtures|goldens?|testdata)\//i;
 
 // The twins file of a test's acceptance folder: criterion tags, each to the names of its twins.
 function twinsOf(root, path) {
@@ -719,7 +719,7 @@ export function prepareRuns({ root, change, issue }, { coverage = false } = {}) 
       return path.toLowerCase();
     }
   };
-  const configured = new Set([...namedByConfig(root, null, all)].map(fold));
+  const configured = needs.size ? new Set([...namedByConfig(root, null, all)].map(fold)) : new Set();
   for (const [folder, twinFiles] of needs) {
     const own = all.filter((path) => path.startsWith(`${folder}/`));
     // A twin is a wrong program: it replaces code under test, never a test's own files, or a test that asserts nothing
@@ -729,11 +729,12 @@ export function prepareRuns({ root, change, issue }, { coverage = false } = {}) 
     const reach = twinFiles.flatMap((file) => [...testImports(root, null, file)]);
     const imported = new Set(reach.map(([path]) => fold(path)));
     const unresolved = reach.flatMap(([path, source]) => relativeImports(path, source).filter(underTestPaths)).filter((file) => show(root, null, resolveModule(root, null, file)) === null);
-    const run = (path) => !unresolved.length && testPattern.test(path) && !DATA.test(path) && !isTestFile(path) && !RUNNER_CONFIG.test(path) && !configured.has(fold(path))
+    const plantable = (path) => testPattern.test(path) && !DATA.test(path) && !isTestFile(path) && !isTestFile(fold(path)) && !RUNNER_CONFIG.test(path) && !configured.has(fold(path))
       && !fold(path).startsWith('tests/acceptance/') && /\.(?:rs|[cm]?js|tsx?|[cm]ts)$/.test(path) && !imported.has(fold(path));
+    const run = (path) => !unresolved.length && plantable(path);
     const tests = paths.filter((path) => (underTestPaths(path) && !run(path)) || path.split('/').includes('node_modules'));
     if (!own.length || tests.length) {
-      const why = unresolved.length && tests.some((path) => !path.split('/').includes('node_modules')) ? `; its tests import ${[...new Set(unresolved)].join(', ')}, which don't resolve` : '';
+      const why = unresolved.length && tests.some(plantable) ? `; its tests import ${[...new Set(unresolved)].join(', ')}, which don't resolve` : '';
       runs.twins.set(folder, { refused: own.length ? `replaces files under the test paths or node_modules (${tests.join(', ')})${why}` : 'has no files', ...empty() });
       continue;
     }
