@@ -40,6 +40,7 @@ alone.push('tests/acceptance/27/redraft-3178/', 'tests/acceptance/27/outcomes-re
 slow.push('tests/acceptance/3178/suites.test.ts');
 slow.push('tests/acceptance/27/redraft-3178/waits.test.ts');
 byHand.push('tests/acceptance/25/routes/held.test.ts', 'tests/acceptance/25/routes/one-route.test.ts');
+Object.assign(redrafted, { 'tests/acceptance/25/routes/held.test.ts': 'tests/acceptance/25-redraft-3243/', 'tests/acceptance/25/routes/one-route.test.ts': 'tests/acceptance/25-redraft-3243/' });
 byHand.push('tests/acceptance/3243/provisional.test.ts');
 
 // #1876: the design links lane compares the design with files on main, which #2339's first draft doesn't copy into its
