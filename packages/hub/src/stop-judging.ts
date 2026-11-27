@@ -25,7 +25,7 @@ import { mergedWithMain, releaseSpec, switchesOff } from './release.js';
 import { approvedChecks } from './spec-checks.js';
 import { plantedKeeps } from './plant.js';
 import { checksIn, docChecksIn, outsideOf } from './spec-entries.js';
-import { approvedSpec, SPEC, specOnDisk } from './approved-spec.js';
+import { approveChange, approvedSpec, SPEC, specDrift } from './approved-spec.js';
 import { repoOf } from './shared-runs.js';
 import { GateRecord, type GateAsk } from './gate-record.js';
 import { headOf } from './session-facts.js';
@@ -326,8 +326,8 @@ export class StopJudging {
     if (!cwd) return undefined;
     const [row] = (await this.options.services.record.raw(`SELECT base_commit FROM definitions WHERE task_ref = ? LIMIT 1`, [task])) as { base_commit: string | null }[];
     const base = row?.base_commit ?? (await headOf(cwd).catch(() => undefined))?.sha;
-    // The release checks and switches of the revision you approved (#1864): the task's base commit's spec, never the worktree's.
-    const approved = (await approvedSpec(cwd, base ?? '')).spec;
+    // The release checks and switches of the revision you approved (#1864, #3466): the one kept for the repo, or until it has one the task's base commit's spec, never the worktree's.
+    const approved = (await approvedSpec(cwd, base ?? '', this.options.services.record)).spec;
     const spec = releaseSpec(approved);
     const instead = `Say Part of #${issue} instead`;
     if (spec.checks.length) {
@@ -1045,10 +1045,10 @@ export class StopJudging {
       const message = this.lastMessage.get(r.session) ?? '';
       // What the claim leaves open becomes open items before any verdict is made on it (#323). Read beside the session's
       // log for the validity gate and the project's trust for its spec checks, none of which waits on another (#82).
-      // The spec as you approved it (#1864): the claim's base commit's, never the worktree's; a difference is a proposal.
+      // The spec as you approved it (#1864, #3466): the revision kept for the repo, or until it has one the claim's base commit's, never the worktree's; a difference is a proposal.
       // A session on a host (#999): its spec is read from the commit there, its trust is its agent's there, what the validity gate reads of its folder is brought here, and its checks run there.
-      const host = this.options.state().sessionHosts.get(r.session), remote = host && this.options.services.hosts.sessions, approved = r.joins ? undefined : remote ? await remote.spec(host!, r.cwd, r.base) : await approvedSpec(r.cwd, r.base);
-      if (approved && !host) void this.proposeSpecDrift(r, approved.oid).catch((error: unknown) => process.stderr.write(`deep hub: ${r.claim}'s spec drift was not proposed: ${error instanceof Error ? error.message : String(error)}\n`));
+      const host = this.options.state().sessionHosts.get(r.session), remote = host && this.options.services.hosts.sessions, approved = r.joins ? undefined : remote ? await remote.spec(host!, r.cwd, r.base) : await approvedSpec(r.cwd, r.base, this.options.services.record);
+      if (approved && !host) void this.proposeSpecDrift(r, approved).catch((error: unknown) => process.stderr.write(`deep hub: ${r.claim}'s spec drift was not proposed: ${error instanceof Error ? error.message : String(error)}\n`));
       const spec = approved ? approvedChecks(approved) : [];
       const pr = r.joins ? undefined : await this.prOf(r.session);
       const releaseNames = approved && pr ? releaseSpec(approved.spec).checks : [], hasSpec = spec.length > 0 || releaseNames.length > 0;
@@ -1180,16 +1180,19 @@ export class StopJudging {
     return base ? { cwd, base } : undefined;
   }
 
+  /** A change you approved to a repo's spec, made to the revision you approved and kept by digest (#3466). */
+  approveSpec(folder: string, change: (text: string) => string | undefined, ask: string): Promise<void> {
+    return approveChange(this.options.services.record, this.options.events.connection('core'), () => this.options.services.now(), folder, change, ask);
+  }
+
   /**
    * A spec in the claim's folder that differs from the approved revision, a deleted one included, changes no check:
    * the difference is a proposal naming the file (#1864), as a drafted check's is, once per difference.
    */
-  private async proposeSpecDrift(r: { claim: string; session: string; cwd: string }, was: string | undefined): Promise<void> {
-    // Blob ids of the bytes as they are: no repo filter runs, since a clean filter is a program the repo names, so a
-    // checkout that converts line endings shows as a difference.
-    const is = await specOnDisk(r.cwd);
-    if (was === is) return;
-    const diff = `${SPEC} in ${r.cwd}: approved blob ${was ?? 'none'}, now ${is ?? 'deleted'}`;
+  private async proposeSpecDrift(r: { claim: string; session: string; cwd: string }, approved: Parameters<typeof specDrift>[1]): Promise<void> {
+    const drift = await specDrift(r.cwd, approved);
+    if (!drift) return;
+    const diff = `${SPEC} in ${r.cwd}: approved blob ${drift.was ?? 'none'}, now ${drift.is ?? 'deleted'}`;
     if ((await this.options.services.raw(`SELECT 1 FROM events WHERE kind = 'learn.proposed' AND json_extract(data, '$.diff') = ? LIMIT 1`, [diff])).length) return;
     const at = this.options.services.now();
     const agent = this.options.state().live.get(r.session)?.agent ?? 'claude-code';
@@ -1386,7 +1389,7 @@ export class StopJudging {
     // Only the approved run goes outside: a drafted check's approved bytes, or the command the approved spec gives the
     // check, never a deep_run of the worktree's line or a told command under a name the block lists (#1864).
     const scope = await this.claimScope(r.claim);
-    const approved = scope && !r.host && (await approvedSpec(scope.cwd, scope.base)).spec;
+    const approved = scope && !r.host && (await approvedSpec(scope.cwd, scope.base, this.options.services.record)).spec;
     const outside = approved && (r.approved !== null || checksIn(approved).get(r.check)?.run === r.command) ? outsideOf(approved, r.check) : undefined;
     const build = outside && (() => this.builtOutside(r.cwd, outside.build));
     if (heldOut && build) heldOut.build = build;
