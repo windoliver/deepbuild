@@ -1687,12 +1687,12 @@ fn number_runs(text: &str) -> Vec<String> {
 /// What a table column's cell traces to: the table, its column and data row, the cell's byte
 /// range in the file and its raw bytes as the table keeps them, and the table's source.
 fn traced(trace: &Value, row: Option<usize>) -> Value {
-    let cell = row.and_then(|r| trace.get("cells").and_then(|c| c.get(r)));
-    json!({
-        "table": trace.get("table"), "column": trace.get("column"), "row": row,
-        "bytes": cell.and_then(|c| c.get("bytes")), "raw": cell.and_then(|c| c.get("raw")),
-        "origin": trace.get("source"),
-    })
+    let f = |k| row.and_then(|r| trace.get("cells")?.get(r)?.get(k));
+    if let Some(w) = trace.get("weakest") {
+        json!({"table": trace.get("table"), "column": trace.get("column"), "row": row, "bytes": f("bytes"), "raw": f("raw"), "origin": trace.get("source"), "weakest": w, "from": f("from")})
+    } else {
+        json!({"table": trace.get("table"), "column": trace.get("column"), "row": row, "bytes": f("bytes"), "raw": f("raw"), "origin": trace.get("source")})
+    }
 }
 
 /// What a number on an anchor path traces to: the column it reads, and that column's table where

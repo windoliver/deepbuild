@@ -1,0 +1,119 @@
+{
+  "readings": [
+    453.2412910000003,
+    540.2947090000016,
+    704.6024590000015,
+    524.0533329999998,
+    762.9782090000008
+  ],
+  "problem": "not a reference Mac: Mac17,10 / Apple M5 Max / 64 GiB",
+  "load": [
+    76.72265625,
+    38.63720703125,
+    24.73779296875
+  ],
+  "runs": [
+    {
+      "run": 0,
+      "ms": 512.5349159999987,
+      "outputs": {
+        "table": "49a0264f6929738031925cf85230e871cb3bff042693a82bb486c4996e30be69",
+        "lineage": "01f4481e3c4bdda60a378862ab9c464753e0d7a4690b36c11e5f7f7f61f98af1",
+        "receipt": "e96591a4772d3f0a0ab980dec8a84662bddd0bc2f983c38a1fc0c3e9d5ee2eee",
+        "record": "a8acbfcb4ca84cba0a9dd945fc598566f894b416e7e0e06179cab3c673448581"
+      },
+      "receipt": {
+        "rows_in": 3200,
+        "rows_out": 1000,
+        "dropped": 0,
+        "skipped": {},
+        "nonfinite": {}
+      }
+    },
+    {
+      "run": 1,
+      "ms": 453.2412910000003,
+      "outputs": {
+        "table": "214b1f22edd82760e9dc239964d7a73e552b31ef1bd4988498dce496c1ce1390",
+        "lineage": "c78ec2bd620a4307d27ae7224a587d10514907d191ee7471b51ca214e110c89c",
+        "receipt": "e96591a4772d3f0a0ab980dec8a84662bddd0bc2f983c38a1fc0c3e9d5ee2eee",
+        "record": "b32992478e94b8e019564dc81faf9027fe8c6e6b39e636e6258f65168bdc1060"
+      },
+      "receipt": {
+        "rows_in": 3200,
+        "rows_out": 1000,
+        "dropped": 0,
+        "skipped": {},
+        "nonfinite": {}
+      }
+    },
+    {
+      "run": 2,
+      "ms": 540.2947090000016,
+      "outputs": {
+        "table": "1314e246972d42ca2958bcc15ba8921f4471e262d82ea293871e23f33391af89",
+        "lineage": "65317bd3116b58c53bfc63dfc4173c34fbf8e3b425a352f411552d0a597a451d",
+        "receipt": "e96591a4772d3f0a0ab980dec8a84662bddd0bc2f983c38a1fc0c3e9d5ee2eee",
+        "record": "403b3e44257f950ee833910fa328f45a1272c371582c5b34f9306dce95a48fda"
+      },
+      "receipt": {
+        "rows_in": 3200,
+        "rows_out": 1000,
+        "dropped": 0,
+        "skipped": {},
+        "nonfinite": {}
+      }
+    },
+    {
+      "run": 3,
+      "ms": 704.6024590000015,
+      "outputs": {
+        "table": "2b31892825816192f67b3b7e5e0506f7a72af8de8176b60ccee6a0407ce51a70",
+        "lineage": "2836db624ff5c08854a98152827386dabf93e15c3b699314e60a5c0608945673",
+        "receipt": "e96591a4772d3f0a0ab980dec8a84662bddd0bc2f983c38a1fc0c3e9d5ee2eee",
+        "record": "439442f9be8c3c28c115b8752982e2c7ff51c7b219633fb018a8c7f34ff805e1"
+      },
+      "receipt": {
+        "rows_in": 3200,
+        "rows_out": 1000,
+        "dropped": 0,
+        "skipped": {},
+        "nonfinite": {}
+      }
+    },
+    {
+      "run": 4,
+      "ms": 524.0533329999998,
+      "outputs": {
+        "table": "6d50356b5dda0cebc271cdb7f02bddc7dbde5376c9cf3d81ce7e2944dcbb7eba",
+        "lineage": "58edc3e90df8efaa02de35f985ca11ce2aafc3ef0a57fce15720863ebb8bb2ce",
+        "receipt": "e96591a4772d3f0a0ab980dec8a84662bddd0bc2f983c38a1fc0c3e9d5ee2eee",
+        "record": "242ab502389e8423f9c64a5bed640e3b7e1df597ae07fc71a81734f95766368d"
+      },
+      "receipt": {
+        "rows_in": 3200,
+        "rows_out": 1000,
+        "dropped": 0,
+        "skipped": {},
+        "nonfinite": {}
+      }
+    },
+    {
+      "run": 5,
+      "ms": 762.9782090000008,
+      "outputs": {
+        "table": "f9c27e6d62bc8578d5b287b8088b1b9451468077181063a9672cd6b0ccb619fb",
+        "lineage": "bfdc4403a08c43ae37f396e59ebc27a3ce609e20e8170c04af88f339cbcf3c3c",
+        "receipt": "e96591a4772d3f0a0ab980dec8a84662bddd0bc2f983c38a1fc0c3e9d5ee2eee",
+        "record": "2dd885991a3503b19867c8aef3108de8a73fa389422bce3be347e090c1e8c66e"
+      },
+      "receipt": {
+        "rows_in": 3200,
+        "rows_out": 1000,
+        "dropped": 0,
+        "skipped": {},
+        "nonfinite": {}
+      }
+    }
+  ]
+}
