@@ -7,7 +7,8 @@
 use serde_json::Value;
 
 use super::PackId;
-use crate::registry::lists::SealedRegistry;
+use crate::canon::CanonError;
+use crate::registry::lists::{admitted_digest, KitResult, SealedEntry, SealedRegistry};
 
 /// The owner of DeepBuild's own packs, as the hub reads the release's packs (`deepbuild/<name>`).
 pub const OWNER: &str = "deepbuild";
@@ -36,4 +37,26 @@ pub(super) fn with_recipes(value: &Value, recipes: Option<&Value>) -> Value {
         }
     }
     out
+}
+
+pub(super) fn admitted(
+    pack: &str,
+    reg: &SealedRegistry,
+    entry: &str,
+    value: &Value,
+    since: String,
+    kit: KitResult,
+) -> Result<SealedEntry, CanonError> {
+    Ok(SealedEntry {
+        name: entry.to_string(),
+        registry: reg.def.name.clone(),
+        origin: "pack",
+        module: String::new(),
+        pack: pack.to_string(),
+        value: value.clone(),
+        digest: admitted_digest(&reg.def.name, entry, value, &since)?,
+        since,
+        twin: reg.def.twin.map(|t| t(entry, value)),
+        kit,
+    })
 }

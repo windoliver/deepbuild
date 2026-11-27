@@ -351,7 +351,17 @@ impl SealedRegistry {
 
 /// An entry's digest: its name, registry, value and since, frozen per version.
 pub fn entry_digest(registry: &str, name: &str, value: &Value, since: &str) -> String {
-    d1(&json!({"name": name, "registry": registry, "value": value, "since": since}))
+    admitted_digest(registry, name, value, since).unwrap_or_default()
+}
+
+pub(crate) fn admitted_digest(
+    registry: &str,
+    name: &str,
+    value: &Value,
+    since: &str,
+) -> Result<String, crate::canon::CanonError> {
+    let entry = json!({"name": name, "registry": registry, "value": value, "since": since});
+    crate::canon::revision_hash(&entry, &crate::canon::NoShape)
 }
 
 fn d1(v: &Value) -> String {
@@ -721,7 +731,21 @@ pub(super) fn seal(
             return Err(err);
         }
         let twin = reg.def.twin.map(|t| t(&e.name, &e.value));
-        let digest = entry_digest(&e.registry, &e.name, &e.value, &e.since);
+        let digest = match admitted_digest(&e.registry, &e.name, &e.value, &e.since) {
+            Ok(digest) => digest,
+            Err(why) => {
+                return Err(SealError::new(
+                    "entry_refused",
+                    &who,
+                    &[],
+                    format!(
+                        "`{}` in `{}` has no canonical form to digest: {why}",
+                        e.name, e.registry
+                    ),
+                )
+                .at(&e.registry, vec![name], &[]));
+            }
+        };
         taken.entry(digest_owner).or_default().push((
             e.registry.clone(),
             e.name.clone(),
