@@ -97,7 +97,6 @@ export interface SiblingOptions {
   now(): number;
   /** Whether a session DeepBuild started has ended: its agent is gone, though it may have sent no SessionEnd. */
   over(session: string): boolean;
-  /** The planted wrong program, for #3405's twins. */
   plant?: Plant;
 }
 /** A merged pull request's first line, as GitHub writes it: the number and the branch, nothing of its title. */
@@ -135,10 +134,7 @@ export class Siblings {
   /** The sessions on one issue already read as one lead's, or raced, by repo, issue and their IDs. */
   private readonly exempt = new Set<string>();
   private timer: NodeJS.Timeout | undefined;
-  /**
-   * Each session's turns since your last prompt to it: when each began, whether another session's message began it,
-   * and the server of the channel whose event began it (#3405), which counts on its own.
-   */
+  /** Each session's turns since your last prompt to it: when each began, and whether another session's message began it. */
   private readonly turns = new Map<string, { id: string; at: number; peer: boolean; channel?: string }[]>();
   /** The loop asks that hold sessions, by each session they hold, until you answer one to go on or prompt the session. */
   private readonly loops = new Map<string, { ask: string; pair: string[]; at: number; channel?: string }>();
@@ -194,7 +190,6 @@ export class Siblings {
       // The record holds its key hashed: its question names the pair.
       const named = /^Sessions (\S+) \(.+?\) and (\S+) \(/.exec(a.question);
       const pair = named ? [named[1]!, named[2]!] : [a.session_id];
-      // A channel's ask (#3405) names its server, and holds that channel's events alone.
       const channel = /turns started by events from the channel (\S+) in the last 10 minutes/.exec(a.question)?.[1];
       const held = { ask: `ask:${a.id}`, pair, at: a.created, ...(channel === undefined ? {} : { channel }) };
       for (const id of pair) {
@@ -230,11 +225,9 @@ export class Siblings {
    */
   async held(meta: HookMeta, origin: string, sender: () => Promise<string | undefined>, server?: string): Promise<string | undefined> {
     if (origin !== 'session' && (origin !== 'channel' || !server)) return undefined;
-    // The planted wrong program keeps no count of a channel's events, as the merge base did.
     if (origin === 'channel' && this.o.plant === 'channel-without-count') return undefined;
     const channel = origin === 'channel' ? server : undefined;
     const now = this.o.now();
-    // A channel's events count on their own (#3405), under a key of their own.
     const key = channel === undefined ? meta.session : `${meta.session}\0channel:${channel}`;
     let open = this.loops.get(key);
     if (open?.ask) {
@@ -260,8 +253,6 @@ export class Siblings {
       const raised: { ask: string; pair: string[]; at: number; channel?: string } = { ask: '', pair: [meta.session], at: now, ...(channel === undefined ? {} : { channel }) };
       open = raised;
       this.loops.set(key, raised);
-      // The sender is held from now too, before its own next prompt can come; the planted wrong program holds the
-      // receiver alone. A sender another loop ask holds stays held by that one.
       const from = channel === undefined ? await sender().catch(() => undefined) : undefined;
       if (from && from !== meta.session && this.o.plant !== 'loop-holds-receiver-alone') {
         raised.pair.push(from);
@@ -279,7 +270,6 @@ export class Siblings {
   /** The loop's one ask, naming the session and the sender when the facts name one, which it holds too. */
   private async askLoop(meta: HookMeta, held: { ask: string; pair: string[]; at: number; channel?: string }, from: string | undefined): Promise<void> {
     if (held.channel !== undefined) {
-      // A channel's events (#3405): its server is named, and no session but this one is held.
       const count = this.counted(meta.session, held.at, held.channel);
       held.ask = await this.o.ask(meta.session, meta.agent, meta.cwd, 'session.loop', {
         kind: 'exception', may_answer: 'trusted_path',

@@ -1,0 +1,1 @@
+{ "alone": true, "why": "binary: each file starts cargo test for one target of suite/, laid and built in this checkout's target/acceptance-2130; beside the parallel block seven such builds would start at once in that one folder" }
