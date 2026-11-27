@@ -1,0 +1,12 @@
+{
+  "scripts/known-failures-record.mjs": [
+    {
+      "find": [
+        "      if (history.includes('PASS')) {"
+      ],
+      "wrong": [
+        "      if (false && history.includes('PASS')) {"
+      ]
+    }
+  ]
+}

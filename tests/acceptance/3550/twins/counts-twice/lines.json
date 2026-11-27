@@ -1,0 +1,19 @@
+{
+  "scripts/throttle.mjs": [
+    {
+      "find": [
+        "    mine.procs += 1;",
+        "    mine.threads += count.threads;",
+        "    mine.runnable += count.runnable;"
+      ],
+      "wrong": [
+        "    // Planted: a process's threads are added to every grant above it, not to the outermost alone.",
+        "    for (const each of chain(procs, pid).filter((at) => grants.has(at)).map((at) => grants.get(at).tally).concat(owner ? [] : [mine])) {",
+        "      each.procs += 1;",
+        "      each.threads += count.threads;",
+        "      each.runnable += count.runnable;",
+        "    }"
+      ]
+    }
+  ]
+}

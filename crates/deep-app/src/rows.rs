@@ -793,6 +793,8 @@ pub(crate) fn needs_you_heading(
             .gap(sizes().space(1))
             .text_color(chrome.ink_secondary)
             .font_weight(FontWeight::NORMAL)
+            // The asks waiting as new beside a presented card (#3232), on the count's row, so no row moves.
+            .children(crate::said::new_beside())
             .child(
                 // As tall as the control beside it, so the two sit on one line in reading order.
                 observed("sidebar-count")
@@ -891,6 +893,7 @@ pub(crate) fn page_title(
                     .items_center()
                     .gap(s.space(2))
                     .child(count_back(chrome))
+                    .children(crate::said::new_beside())
             },
         )
         .child(div().flex_1().min_w_0().child(inner))

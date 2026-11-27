@@ -1,0 +1,13 @@
+{
+  "packages/paseo/server/plugin.ts": [
+    {
+      "find": [
+        "        const mode = (await snapshot(a))?.currentModeId;",
+        "        return { turn_id: turnId ?? '', ...(typeof mode === 'string' && mode ? { mode } : {}) };"
+      ],
+      "wrong": [
+        "        return { turn_id: turnId ?? '' };"
+      ]
+    }
+  ]
+}

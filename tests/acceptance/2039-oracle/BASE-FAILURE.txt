@@ -1,0 +1,42 @@
+#2039 Oracle lane at the base, dbbddd5dd94d544e7f782519b91bcf73f58141eb (Merge pull request #3244), before any
+implementation.
+
+The lane was run once there, on 2026-11-24 from 08:38:00 to 08:38:02 EST, on macOS arm64 with a one-minute load of
+21.28 on 18 cores, in the blind job's checkout of the base, with this folder's files and tests/acceptance/2039's as
+they stand. The job's caller made the run, in the machine's build queue, right after building the base there (`cargo
+build --locked -j 8 --bin deep-canvas-render --bin deep-show`, debug, the default features, CARGO_INCREMENTAL=0
+CARGO_PROFILE_DEV_DEBUG=0):
+
+  target/debug/deep-canvas-render  sha256 fd7f6b0fb7c23e8f330b54c719f8108b7fd9e541388a16af8d73577035ed0ac0
+
+with the README's command (the run's log starts with it):
+
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/2039-oracle --testTimeout=600000 --no-file-parallelism
+
+Test Files 1 failed (1); Tests 1 failed (1); exit 1; vitest 5.0.5, 1.80 s. The test fails on an assertion its file
+names, because the behaviour is missing: no crash, no timeout, no load or type error, no refused fixture and no
+failed build. The file took 1.7 s with its own `cargo build` and its copy of the binary, so that build compiled no
+workspace crate. `node node_modules/typescript/bin/tsc --noEmit -p tests/acceptance/2039-oracle` exits 0.
+
+The job's own request for this run, through the machine's throttle (`node scripts/throttle.mjs test --wait 60 -- …`,
+06:00 to 07:00 EST), got no grant and ran nothing; the run above is the only one.
+
+minimum-size.test.ts (1 failed of 1)
+- "AC3 #2039.87a8de22 upstream's margins left 10, top 20, right 30 and bottom 40 give the smallest size (40, 60): a
+  row 40 × 60 u passes the check, a row 39 u wide is refused naming the row and the smallest width 40, and a row 59 u
+  tall naming the row and the smallest height 60": fails at minimum-size.test.ts:43 (`none`, ../467/helpers.ts:70):
+  "AssertionError: a row one u under the smallest size, either way, is refused at check, naming the row and that size:
+    row plate#1, 39 u wide with left 10 and right 30: check takes it (ok: true) where it must refuse it, naming the
+      row plate#1 and the smallest width 40
+    row plate#1, 59 u tall with top 20 and bottom 40: check takes it (ok: true) where it must refuse it, naming the
+      row plate#1 and the smallest height 60: expected [ …(2) ] to deeply equal []".
+  Upstream's rule on upstream's margins, [10 + 30, 20 + 40] = (40, 60), held before it (:37), and so did the row of
+  exactly 40 × 60 u, which passes the check (:42).
+  Why: the base reads no `slice` here, so its check takes a row of any size on the set `plate` with `slice: {left:
+  10, top: 20, right: 30, bottom: 40}`. Both lines are the judge's, for the reason the criterion names.
+
+No test of this lane passes at the base.
+
+The job's probe of the base before the run (an earlier build of the same commit, deep-canvas-render sha256
+83aaeb3d…d80d871a, the same three documents through one `check` process, read by the same judge) gave the same two
+lines, and adds nothing the run doesn't show.
