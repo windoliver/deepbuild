@@ -1,8 +1,3 @@
-// The gate runner's scheduler (#29; design: An agent says it's done, from Fast and slow lanes to Stale results stay
-// stale, and Held time is counted): which of a stop's checks run while the agent waits, when its hold replies, when
-// the checks left to the slow lane start, which snapshot each runs on, and where each result goes. It is a pure
-// function of its inputs on a virtual clock (`simulate`): the hub drives the same rules from its stops, and the
-// dogfood week's replays read them back from the record.
 import { moreRuns } from '@deepbuild/verdicts';
 import type { Result, RunOutcome } from '@deepbuild/verdicts';
 import { matches } from './glob.js';
@@ -87,7 +82,6 @@ export interface Trace {
   peak_running: number; max_running_by_ask_check: number; ended_at: number;
 }
 
-// ---- Internal state.
 
 /** A check's results on one snapshot: its runs, and what may still start for it. */
 interface RSet {
@@ -151,7 +145,6 @@ class Sim {
     }));
   }
 
-  // ---- The loop: every instant's events in a fixed order, until nothing more happens at it.
   run(): Trace {
     const script = this.sessions.flatMap((s) => s.def.events.map((e, j) => ({ e, s, j }))).sort((a, b) => a.e.at - b.e.at || a.s.i - b.s.i || a.j - b.j);
     let k = 0;
@@ -180,7 +173,6 @@ class Sim {
     return (this.sc.foreign ?? []).filter((f) => f.at <= at && at < f.at + f.ms).reduce((n, f) => n + f.slots, 0);
   }
 
-  // ---- Script events.
   private event(s: Sess, e: ScriptEvent): void {
     switch (e.kind) {
       case 'prompt': {
@@ -208,7 +200,6 @@ class Sim {
     }
   }
 
-  // ---- Inputs, expected times and predicted starts.
   private changedFor(checks: CheckDef[], changed: string[]): (c: CheckDef) => boolean {
     const unmatched = changed.some((p) => !checks.some((c) => c.inputs.some((g) => matches(g, p))));
     return (c) => changed.length > 0 && (c.inputs.length === 0 || unmatched || changed.some((p) => c.inputs.some((g) => matches(g, p))));
@@ -262,7 +253,6 @@ class Sim {
     slots.sort((a, b) => a - b);
   }
 
-  // ---- A stop: its claim, its checks' lanes, and its hold.
   private stop(s: Sess, e: Extract<ScriptEvent, { kind: 'stop' }>): void {
     const T = e.at;
     const R = T + (e.checkout_ms ?? 0);
@@ -291,9 +281,7 @@ class Sim {
       if (cur && changed) this.supersede(cur, e.snapshot, prompt);
       mustRun.push(def);
     }
-    // Older claims whose checks' inputs this one changed read stale.
     if (codeChanging) for (const c of s.claims) c.stale = true;
-    // The fast lane: on_base fails first, then the rest, each group shortest first, ties in the definition's order.
     const order = this.plant === 'definition-order' ? [...mustRun] : [...mustRun].sort((a, b) => (a.on_base === 'fails' ? 0 : 1) - (b.on_base === 'fails' ? 0 : 1)
       || this.sized(a, e.changed) - this.sized(b, e.changed) || checks.indexOf(a) - checks.indexOf(b));
     const { free, own } = this.slotTimes(T);
@@ -313,7 +301,6 @@ class Sim {
         own.set(this.key(s, def), start + exp);
       } else slow.push(def);
     }
-    // What the hold alone would have run of what the budget left out.
     const budgetCost: string[] = [];
     for (const def of slow) {
       const exp = this.expected(def, e.changed);
@@ -342,7 +329,6 @@ class Sim {
     this.openStops.push(stop);
     this.trace.claims.push(claim.rec);
     s.claimVia = null;
-    // A delivery queued for the next tool call goes out now, checked as it goes.
     this.flushDeliveries(s, 'next_tool_call', stop);
     if (this.plant === 'starts-beside-fast-lane') for (const set of stop.slowSets) this.queueSlow(set, 'turn_end');
     if (stop.R > this.now) this.timers.push({ at: stop.R, fn: () => undefined });
@@ -373,7 +359,6 @@ class Sim {
     p.set.place = null;
   }
 
-  // ---- Slots: fast-lane checks first, then queued places, on_base fails first.
   private dispatch(): boolean {
     let did = false;
     for (;;) {
@@ -389,7 +374,6 @@ class Sim {
         did = true;
         continue;
       }
-      // Slots a fast-lane check admitted for a later moment is counted on stay its own.
       freeSlots -= this.fastQueue.filter((set) => set.claim.stop.R > this.now || blocked(set)).length;
       if (freeSlots <= 0) return did;
       const ready = this.places.filter((p) => !p.held && !blocked(p.set)).sort((a, b) => (a.set.def.on_base === 'fails' ? 0 : 1) - (b.set.def.on_base === 'fails' ? 0 : 1) || a.at - b.at || a.set.n - b.set.n);
@@ -446,7 +430,6 @@ class Sim {
     this.ends.set(rec, { at: rec.ended_at, set, outcome, ...(reason ? { reason } : {}) });
     this.trace.runs.push(rec);
     set.runs.push(rec);
-    // A held place started later: its record says what started it.
     const heldRec = this.trace.held.find((h) => h.session === s.def.id && h.check === def.id && h.snapshot === set.snapshot && h.started_at === null && h.replaced_by === null);
     if (heldRec && lane === 'slow') { heldRec.started_at = this.now; heldRec.started_by = (rec.started_by === 'turn_end' || rec.started_by === 'fast_lane' ? 'loop_paused' : rec.started_by) as HeldRecord['started_by']; }
   }
@@ -461,7 +444,6 @@ class Sim {
     set.running = null;
     if (set.cancelled && set.lane === 'slow') rec.stale_by = set.cancelled.prompt;
     if (end.outcome === 'uncounted') { set.attempt += 1; set.keptProduct = false; }
-    // More runs on this snapshot, unless a newer claim changed the check's inputs first.
     const more = moreRuns({ ...(set.def.runs ? { runs: set.def.runs } : {}) }, this.counted(set));
     if (more > 0 && !set.cancelled && end.outcome !== 'stopped') {
       if (!set.startedBy) set.startedBy = 'turn_end';
@@ -472,7 +454,6 @@ class Sim {
   private counted(set: RSet): RunOutcome[] {
     return set.runs.filter((r) => !this.running.has(r) && r.outcome !== 'uncounted').map((r) => r.outcome);
   }
-  /** A check's result on its snapshot, as it stands. */
   private outcome(set: RSet): Result {
     if (set.running || set.fastWaiting || set.place) return 'pending';
     const outs = this.counted(set);
@@ -490,7 +471,6 @@ class Sim {
   private entryOutcome(e: Entry): Result { return e.set ? this.outcome(e.set) : 'pending'; }
   private verdictOf(c: Claim): Result { return worst([...c.entries.values()].map((e) => this.entryOutcome(e))); }
 
-  // ---- Places: queued and held, at most one per check and ask.
   private addPlace(set: RSet, at: number, held: HeldRecord | null, grace: boolean, starter: StartedBy): Place {
     const p: Place = { set, at, held, grace, starter };
     set.place = p;
@@ -523,7 +503,6 @@ class Sim {
     }
   }
 
-  // ---- Replies.
   private replies(): boolean {
     let did = false;
     for (const stop of [...this.openStops]) {
@@ -571,13 +550,11 @@ class Sim {
         const fit = this.loopFit(s, set);
         if (fit.starts) { this.queueSlow(set, 'loop_paused'); started.push(set); continue; }
         this.holdSlow(set, fit.reason, fit.grace);
-        // Background work holds it at most 30 minutes from this stop; a newer stop that takes the place has its own.
         const place = set.place;
         if (s.facts.background.length && place && this.plant !== 'holds-background-without-limit') {
           this.timers.push({ at: this.now + BACKGROUND_MS, fn: () => { if (set.place === place) this.releaseHeld(s, (p) => p === place); } });
         }
       }
-      // Held places of this session start too when this stop starts things for your words, a claim or the loop's pause.
       if (starter.start) for (const p of this.places.filter((x) => x.held && x.set.sess === s)) { p.held = null; p.starter = starter.by; p.set.startedBy = starter.by; }
       if (this.places.some((p) => p.held && p.grace && p.set.sess === s)) {
         s.graceAt = this.now + this.cfg.grace_ms;
@@ -590,7 +567,6 @@ class Sim {
       for (const set of slowSets) set.never = red ? 'quick_check_failed' : 'kept_working';
       for (const set of slowSets) this.recordSupersede(set, false);
     }
-    // An observed Codex stop is held for slow checks only when they start at this stop and can land in time.
     if (s.def.agent === 'codex-observed' && startsSlow && started.length) {
       const limit = stop.T + this.cfg.stop_timeout_ms - 5000;
       const fits = started.filter((set) => this.now + (set.def.deadline_ms ?? this.expected(set.def, set.changed)) <= limit);
@@ -612,7 +588,6 @@ class Sim {
     const graceAt = this.now + this.cfg.grace_ms;
     let next = Infinity; let reason = 'no prompt foreseen'; let grace = false;
     if (this.plant === 'waits-grace-not-facts') { next = graceAt; reason = 'no prompt foreseen'; grace = true; } else if (f.background.length) {
-      // Work in the background reports when it ends, which nothing foresees, so no check fits before it.
       return { starts: false, reason: `${f.background.join(', ')} in the background`, grace: false };
     } else if (f.goal === 'active') { next = graceAt; reason = 'goal active'; grace = true; } else {
       const due: [number | null, string][] = [[f.wakeup_due, 'wake-up'], [f.heartbeat_due, 'heartbeat'], [f.cron_due, 'cron'], [f.subagent_report_due, 'subagent']];
@@ -700,7 +675,6 @@ class Sim {
     return parts.join(' · ');
   }
 
-  // ---- Results landing, and where they go.
   private landed(set: RSet): void {
     const result = this.outcome(set);
     if (result === 'pending') return;
@@ -709,7 +683,6 @@ class Sim {
     for (const c of s.claims) {
       const e = c.entries.get(set.def.id);
       if (e?.set !== set || set.delivered.has(c)) continue;
-      // A result inside a hold not yet replied goes with that reply.
       if (!c.stop.replied) continue;
       const holding = s.stops.find((st) => !st.replied && st.holdingFor?.includes(set));
       if (holding) continue;
@@ -723,7 +696,6 @@ class Sim {
       else if (s.inTurn || s.stops.some((st) => !st.replied)) s.pendingDeliveries.push({ set, claim: c, stale: this.plant === 'checks-delivery-at-queue' ? false : stale });
       else this.deliver(set, c, result === 'FAIL' || result === 'INVALID' ? 'sent_back' : result === 'PASS' ? 'next_prompt' : 'woke', false);
     }
-    // A late result for an older snapshot is named on the newest claim's line beside that check.
     const origin = set.claim;
     if (origin !== newest && !set.lateNoted) {
       const ne = newest.entries.get(set.def.id);
@@ -746,7 +718,6 @@ class Sim {
     }
   }
 
-  // ---- The end: each claim as it reads now.
   private finish(): void {
     for (const s of this.sessions) {
       for (const c of s.claims) {

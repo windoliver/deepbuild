@@ -1,5 +1,3 @@
-// The gate's admission of a check kind (#68): every kind declares what one run may take in time and cost, so a claim's
-// runs can be planned and billed before they start; a kind with no budget never runs.
 import type { CheckRunnerFill } from '@deepbuild/conformance';
 
 /** Admits a check kind only when it declares a time budget above zero and a cost budget of zero or more. */

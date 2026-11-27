@@ -1,7 +1,3 @@
-// The gate runner's real work (#29; design: Concurrent runs, Pinned to a commit, An agent says it's done): a claim's
-// snapshot and its temporary checkout, its checks run in turn per worktree and each under a `cpu.slot` lease from
-// the kernel's lease table (half the CPU cores), an agent's heavy commands through the same pool and the repo's own
-// lease script, and a timing check that failed under load rerun alone.
 import { execFile, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { accessSync, constants, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
@@ -30,12 +26,6 @@ async function storeEnv(repo: string, store: string): Promise<NodeJS.ProcessEnv>
   const common = await git(repo, ['rev-parse', '--path-format=absolute', '--git-common-dir']);
   return { GIT_OBJECT_DIRECTORY: store, GIT_ALTERNATE_OBJECT_DIRECTORIES: join(common, 'objects') };
 }
-/**
- * The claim's snapshot: HEAD on a clean worktree; otherwise a commit, parent HEAD, written from a copy of the
- * session's index with every change added, with a fixed author, committer, date and message, so the same tree on the
- * same HEAD is the same commit. Its objects go to `store`, never the repo's: the worktree, its index, its refs and
- * its objects stay as they were.
- */
 async function snapshotOf(repo: string, store = DEFAULT_STORE): Promise<string> {
   const head = await git(repo, ['rev-parse', 'HEAD']);
   if (!(await git(repo, ['status', '--porcelain', '--untracked-files=all']))) return head;
@@ -44,8 +34,6 @@ async function snapshotOf(repo: string, store = DEFAULT_STORE): Promise<string> 
     const index = join(dir, 'index');
     const gitDir = await git(repo, ['rev-parse', '--absolute-git-dir']);
     const env = { ...(await storeEnv(repo, store)), GIT_INDEX_FILE: index };
-    // A copy of the session's index keeps its stat cache, so only changed files are hashed again; marks that hide a
-    // change (assume-unchanged, skip-worktree) are cleared in the copy.
     if (existsSync(join(gitDir, 'index'))) copyFileSync(join(gitDir, 'index'), index);
     else await git(repo, ['read-tree', 'HEAD'], env);
     await git(repo, ['update-index', '-q', '--really-refresh', '--no-assume-unchanged', '--no-skip-worktree', '--', '.'], env).catch(() => undefined);
@@ -82,13 +70,11 @@ export async function slot(table: LeaseTable, holder: string, run: string, lane:
 const MEM: Resource = { host: 'local', kind: 'mem', key: 'mem' };
 /** Why a run waits for memory: DeepBuild's runs hold the pool, or the kernel reads less available than it expects. */
 export type MemoryWait = { on: 'pool'; holders: Lease[]; free: number } | { on: 'outside'; available: number };
-/** What a run is admitted on, in memory (#3220). */
 export interface MemoryAsk {
   /** Its expected peak, in MB: the units of `mem` it takes beside its slot. */
   mb: number;
   /** The memory the kernel reads available, in MB: the run starts only while it is at least `mb`. Undefined holds nothing back. */
   available?: () => Promise<number | undefined>;
-  /** Told why it waits whenever that changes. */
   waiting?: (why: MemoryWait) => void;
 }
 /**
@@ -108,7 +94,6 @@ export async function admit(table: LeaseTable, holder: string, run: string, lane
     for (let wait = 5; ; wait = fast ? 5 : Math.min(wait * 2, 50)) {
       if (fast || !fastWaiting.get(table)) {
         const asks = [{ resource: fast ? SLOT : { ...SLOT, key: SLOW_SLOT }, mode: 'exclusive' as const }, ...(memory ? [{ resource: MEM, mode: 'exclusive' as const, units: memory.mb }] : [])];
-        // Memory in use outside DeepBuild's runs holds it back only while the pool itself has room for it.
         const available = memory?.available && (await memFree(table)) >= memory.mb ? await memory.available() : undefined;
         if (available !== undefined && available < memory!.mb) tell({ on: 'outside', available });
         else {
@@ -149,7 +134,6 @@ export interface ExecuteOptions { repo: string; session: string; table: LeaseTab
 export interface ExecutedCheck { id: string; lease: string | null; queued_at: number; started_at: number; ended_at: number; wall_ms: number; exit: number | null; output: string; cwd: string }
 export interface Executed { snapshot: string; checkout: string; snapshot_ms: number; checkout_ms: number; checkout_ready_at: number; checks: ExecutedCheck[] }
 
-/** A claim's checks: its snapshot and one temporary checkout, then each check in turn under a `cpu.slot` lease. */
 export async function executeClaim(o: ExecuteOptions): Promise<Executed> {
   const t0 = Date.now();
   const snapshot = await snapshotOf(o.repo);
@@ -177,7 +161,6 @@ export async function executeClaim(o: ExecuteOptions): Promise<Executed> {
   return { snapshot, checkout, snapshot_ms: t1 - t0, checkout_ms: ready - t1, checkout_ready_at: ready, checks };
 }
 
-// ---- An agent's heavy commands: a full build or an e2e suite.
 export interface Load { avg1: number; cores: number }
 interface Memory { last: Map<string, { key: string; outcome: 'passed' | 'failed'; exit: number | null }>; kept: boolean }
 export interface VerdictMemory { dropEvidence(): void }
@@ -206,11 +189,6 @@ async function inputsKey(repo: string, inputs: string[], argv: string[]): Promis
 }
 const machineLoad = (): Load => ({ avg1: loadavg()[0]!, cores: availableParallelism() });
 
-/**
- * A heavy command: the last verdict when none of its inputs changed and its evidence is kept; otherwise it waits for
- * a `cpu.slot` lease, runs through the repo's `scripts/lease` where there is one, and a failed timing run records the
- * machine's load.
- */
 export async function runHeavy(o: HeavyOptions): Promise<HeavyResult> {
   const memory = memories.get(o.memory)!;
   const key = await inputsKey(o.repo, o.inputs, o.argv);
@@ -233,22 +211,14 @@ export async function runHeavy(o: HeavyOptions): Promise<HeavyResult> {
   }
 }
 
-// ---- A timing check under load.
 export interface TimedRun { outcome: RunOutcome; under_load: boolean; load: number | null; cores: number; output: string }
-/**
- * A timing check: a run that fails while the machine's load is above its core count is kept with its output and the
- * load, `uncounted`; the check is rerun alone, and the runs alone decide as any check's do (#28): a failed one starts
- * up to two more, all failing is FAIL, and a pass among them is INCONCLUSIVE.
- */
 export function runTiming(check: { run(): { passed: boolean; output: string } }, machine: { load(): number; cores: number }): { outcome: Result; runs: TimedRun[] } {
   const runs: TimedRun[] = [];
   const counted = (): RunOutcome[] => runs.filter((r) => r.outcome !== 'uncounted').map((r) => r.outcome);
-  // Real runs end at the first pass, or after a failure and up to two more.
   while (!counted().includes('passed') && counted().length < 3) {
     const r = check.run();
     if (r.passed) { runs.push({ outcome: 'passed', under_load: false, load: null, cores: machine.cores, output: r.output }); continue; }
     const load = machine.load();
-    // Only the first loaded failure is set aside: the run after it goes alone.
     const under = load > machine.cores && !runs.some((x) => x.under_load);
     runs.push({ outcome: under ? 'uncounted' : 'failed', under_load: under, load: under ? load : null, cores: machine.cores, output: r.output });
   }
