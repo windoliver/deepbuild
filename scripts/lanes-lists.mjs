@@ -1619,3 +1619,7 @@ byHand.push('tests/acceptance/3461/once.test.ts');
 // #3467's folder (blind) runs alone by its lane.json: each file draws on Metal and decodes on the hardware decoder.
 // players.test.ts judges #499's five players' frames a second on the real clock on a reference Mac.
 timed.push('tests/acceptance/3467/players.test.ts');
+
+// #3617's folder (blind) runs alone by its lane.json: each file builds deep-gpu and runs GPU surface frames at 1936 x 1584.
+// ac2-onepass.test.ts judges the five-run draw-and-finish p95 on a reference Mac.
+timed.push('tests/acceptance/3617/ac2-onepass.test.ts');

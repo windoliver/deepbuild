@@ -12,10 +12,12 @@ use std::time::{Duration, Instant};
 
 use crate::device::{Device, Gpu};
 use crate::encode::{Encode, Pool};
-use crate::render::{self, RenderModule, Target};
+use crate::render::{self, PassQuery, RenderModule, Target};
 use crate::ring::{Mark, Ring, SlotState};
 use crate::surface::{allocate, Handoff, Path, Shown};
 use crate::upload::Uploads;
+
+const MAX_TIMED_PASSES: u32 = 16;
 
 #[derive(Clone, Debug)]
 pub struct Config {
@@ -151,6 +153,108 @@ impl Times {
     }
 }
 
+/// The draw-and-finish time of a frame and its four disjoint parts (#3617): from the start of
+/// `View::render` to the slot being ready to show.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DrawParts {
+    pub encode: Duration,
+    pub submit: Duration,
+    pub gpu: Duration,
+    pub wait: Duration,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DrawTimes {
+    pub total: Duration,
+    pub parts: DrawParts,
+}
+
+struct PendingDraw {
+    start: Instant,
+    encode: Duration,
+    submit: Duration,
+    submit_end: Instant,
+    query: Option<PassQuery>,
+}
+
+struct SlotQuery {
+    set: Arc<wgpu::QuerySet>,
+    resolve: wgpu::Buffer,
+    read: wgpu::Buffer,
+    period_ns: f64,
+}
+
+impl SlotQuery {
+    fn new(device: &Device, period_ns: f32) -> Self {
+        let d = &device.device;
+        let count = 2 * MAX_TIMED_PASSES;
+        let bytes = u64::from(count) * 8;
+        let set = Arc::new(d.create_query_set(&wgpu::QuerySetDescriptor {
+            label: Some("deep-gpu view passes"),
+            ty: wgpu::QueryType::Timestamp,
+            count,
+        }));
+        let resolve = d.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("deep-gpu view pass times"),
+            size: bytes,
+            usage: wgpu::BufferUsages::QUERY_RESOLVE | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+        let read = d.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("deep-gpu view pass times read"),
+            size: bytes,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        Self {
+            set,
+            resolve,
+            read,
+            period_ns: f64::from(period_ns),
+        }
+    }
+
+    fn resolve_duration(&self, device: &Device, passes: u32) -> Option<Duration> {
+        if passes == 0 {
+            return Some(Duration::ZERO);
+        }
+        let count = 2 * passes;
+        let bytes = u64::from(count) * 8;
+        let mut encoder = device.device.create_command_encoder(&Default::default());
+        encoder.resolve_query_set(&self.set, 0..count, &self.resolve, 0);
+        encoder.copy_buffer_to_buffer(&self.resolve, 0, &self.read, 0, bytes);
+        device.queue.submit([encoder.finish()]);
+        let slice = self.read.slice(..bytes);
+        slice.map_async(wgpu::MapMode::Read, |_| {});
+        let _ = device.device.poll(wgpu::PollType::wait_indefinitely());
+        let mut spans: Vec<[f64; 2]> = match slice.get_mapped_range() {
+            Ok(data) => data
+                .as_chunks::<16>()
+                .0
+                .iter()
+                .filter_map(|t| {
+                    let begin = u64::from_le_bytes(t[..8].try_into().ok()?);
+                    let end = u64::from_le_bytes(t[8..].try_into().ok()?);
+                    (end >= begin)
+                        .then(|| [begin as f64 * self.period_ns, end as f64 * self.period_ns])
+                })
+                .collect(),
+            Err(_) => {
+                self.read.unmap();
+                return None;
+            }
+        };
+        self.read.unmap();
+        spans.sort_unstable_by(|a, b| a[0].total_cmp(&b[0]));
+        let (mut total_ns, mut reach) = (0.0f64, f64::NEG_INFINITY);
+        for [a, b] in spans {
+            total_ns += (b - a.max(reach)).max(0.0);
+            reach = reach.max(b);
+        }
+        Some(Duration::from_nanos(total_ns.round().max(0.0) as u64))
+    }
+}
+
 enum Done {
     /// The layers' passes finished.
     Render,
@@ -175,6 +279,11 @@ pub struct View {
     in_flight: Vec<Option<u64>>,
     render_done: Vec<Option<Instant>>,
     times: Vec<Option<Times>>,
+    record_timings: bool,
+    slot_queries: Vec<Option<SlotQuery>>,
+    pending_draw: Vec<Option<PendingDraw>>,
+    draw_queries: Vec<Option<PassQuery>>,
+    draw_times: Vec<Option<DrawTimes>>,
     rebuilds: u64,
     /// The latency fault fixture: the next render's slot is held, and per slot whether it's held
     /// and whether its `gpu_done` came while it was.
@@ -213,6 +322,11 @@ impl View {
             in_flight: vec![None; n],
             render_done: vec![None; n],
             times: vec![None; n],
+            record_timings: false,
+            slot_queries: (0..n).map(|_| None).collect(),
+            pending_draw: (0..n).map(|_| None).collect(),
+            draw_queries: (0..n).map(|_| None).collect(),
+            draw_times: vec![None; n],
             uploads,
             gpu,
             device,
@@ -251,6 +365,17 @@ impl View {
         &mut self.pool
     }
 
+    /// Enables or disables per-pass timestamp queries on rendered frames (#3617).
+    pub fn record_timings(&mut self, on: bool) {
+        self.record_timings = on;
+    }
+
+    fn pass_query(&mut self, slot: usize) -> Option<PassQuery> {
+        let period = self.device.timestamps.period_ns?;
+        let q = self.slot_queries[slot].get_or_insert_with(|| SlotQuery::new(&self.device, period));
+        Some(PassQuery::new(q.set.clone(), MAX_TIMED_PASSES))
+    }
+
     /// Whether each slot has storage on the current device.
     pub fn slots_built(&self) -> Vec<bool> {
         self.storage.iter().map(Option::is_some).collect()
@@ -275,7 +400,7 @@ impl View {
 
     /// Rebuilds on the app's current device if the view's was lost or replaced.
     pub fn recover(&mut self) -> Result<(), String> {
-        if self.device.is_lost() || self.gpu.device().epoch != self.device.epoch {
+        if self.device.is_lost() || self.gpu.epoch() != self.device.epoch {
             self.rebuild()?;
         }
         Ok(())
@@ -299,6 +424,18 @@ impl View {
             }
         }
         self.device = device;
+        for q in &mut self.slot_queries {
+            *q = None;
+        }
+        for p in &mut self.pending_draw {
+            *p = None;
+        }
+        for q in &mut self.draw_queries {
+            *q = None;
+        }
+        for d in &mut self.draw_times {
+            *d = None;
+        }
         let states = self.ui.states();
         for (slot, state) in states.into_iter().enumerate() {
             // A slot on screen keeps its old pixel buffer in GPUI's hands until it's released,
@@ -345,7 +482,11 @@ impl View {
     /// Begins `frame` in a free slot, encodes and submits it; `None` when no slot is free. Never
     /// waits on the GPU.
     pub fn render(&mut self, frame: u64) -> Result<Option<Drawn>, String> {
+        let start = Instant::now();
         self.recover()?;
+        if self.in_flight.iter().any(Option::is_some) {
+            let _ = self.device.device.poll(wgpu::PollType::Poll);
+        }
         self.collect();
         let Some((slot, stale)) = lock(&self.ui.ring).begin(frame) else {
             return Ok(None);
@@ -363,48 +504,101 @@ impl View {
                 return Err(e);
             }
         }
+        let pass_query = if self.record_timings {
+            self.pass_query(slot)
+        } else {
+            None
+        };
         let storage = self.storage[slot].as_ref().expect("allocated above");
         let target = Target {
             frame,
             size,
             view: storage.target().clone(),
+            pass_query: pass_query.clone(),
         };
         let settling = self.uploads.flush(&self.device.queue);
-        let mut keyed = Vec::new();
-        for (name, job) in self.module.layers(&self.device, &target) {
-            let Some(at) = self.plan.iter().position(|n| *n == name) else {
+        let mut raw_layers = self.module.layers(&self.device, &target);
+        let jobs = if raw_layers.len() == 1 && self.plan.len() == 1 {
+            let (name, job) = raw_layers.pop().expect("one layer");
+            if name != self.plan[0] {
                 lock(&self.ui.ring).abandon(slot);
                 return Err(format!(
                     "undeclared_pass: `{name}` isn't one of {}'s passes",
                     self.module.name()
                 ));
-            };
-            keyed.push((at, job));
-        }
-        keyed.sort_by_key(|(at, _)| *at);
-        let jobs = keyed.into_iter().map(|(_, job)| job).collect();
-        let encodes = self.pool.run(&self.device.device, &self.device.queue, jobs);
+            }
+            vec![job]
+        } else {
+            let mut keyed = Vec::with_capacity(raw_layers.len());
+            for (name, job) in raw_layers {
+                let Some(at) = self.plan.iter().position(|n| *n == name) else {
+                    lock(&self.ui.ring).abandon(slot);
+                    return Err(format!(
+                        "undeclared_pass: `{name}` isn't one of {}'s passes",
+                        self.module.name()
+                    ));
+                };
+                keyed.push((at, job));
+            }
+            keyed.sort_by_key(|(at, _)| *at);
+            keyed.into_iter().map(|(_, job)| job).collect()
+        };
+        let before_pool = Instant::now();
+        let (encodes, pool_encode, pool_submit) =
+            self.pool
+                .run_timed(&self.device.device, &self.device.queue, jobs);
+        let after_pool = Instant::now();
         let epoch = self.device.epoch;
-        let tx = self.done_tx.clone();
-        self.device.queue.on_submitted_work_done(move || {
-            let _ = tx.send((epoch, slot, Done::Render, Instant::now()));
-        });
-        let mut encoder = self
-            .device
-            .device
-            .create_command_encoder(&Default::default());
-        storage.after_render(&mut encoder);
-        self.device.queue.submit([encoder.finish()]);
-        let tx = self.done_tx.clone();
-        self.device.queue.on_submitted_work_done(move || {
-            let _ = tx.send((epoch, slot, Done::All, Instant::now()));
-        });
+        let (encode, submit, submit_end) = if storage.needs_after_render() {
+            let tx = self.done_tx.clone();
+            self.device.queue.on_submitted_work_done(move || {
+                let _ = tx.send((epoch, slot, Done::Render, Instant::now()));
+            });
+            let after_enc_start = Instant::now();
+            let mut encoder = self
+                .device
+                .device
+                .create_command_encoder(&Default::default());
+            storage.after_render(&mut encoder);
+            let after_buf = encoder.finish();
+            let after_submit_start = Instant::now();
+            self.device.queue.submit([after_buf]);
+            let tx = self.done_tx.clone();
+            self.device.queue.on_submitted_work_done(move || {
+                let _ = tx.send((epoch, slot, Done::All, Instant::now()));
+            });
+            let submit_end = Instant::now();
+            let encode = before_pool.saturating_duration_since(start)
+                + pool_encode
+                + after_submit_start.saturating_duration_since(after_enc_start);
+            let submit = pool_submit
+                + after_enc_start.saturating_duration_since(after_pool)
+                + submit_end.saturating_duration_since(after_submit_start);
+            (encode, submit, submit_end)
+        } else {
+            // Zero copy needs no read-back command buffer (#3617): one submission and one
+            // completion signal per frame.
+            let tx = self.done_tx.clone();
+            self.device.queue.on_submitted_work_done(move || {
+                let _ = tx.send((epoch, slot, Done::All, Instant::now()));
+            });
+            let submit_end = Instant::now();
+            let encode = before_pool.saturating_duration_since(start) + pool_encode;
+            let submit = pool_submit + submit_end.saturating_duration_since(after_pool);
+            (encode, submit, submit_end)
+        };
         self.in_flight[slot] = Some(epoch);
         self.render_done[slot] = None;
         self.times[slot] = None;
-        // Lets wgpu run the callbacks for work the GPU already finished, without waiting.
-        let _ = self.device.device.poll(wgpu::PollType::Poll);
-        self.collect();
+        self.draw_times[slot] = None;
+        self.draw_queries[slot] = None;
+        self.pending_draw[slot] = Some(PendingDraw {
+            start,
+            encode,
+            submit,
+            submit_end,
+            query: pass_query,
+        });
         Ok(Some(Drawn {
             frame,
             slot,
@@ -427,14 +621,27 @@ impl View {
                     let render_done = self.render_done[slot].unwrap_or(at);
                     if let Some(storage) = self.storage[slot].as_ref() {
                         if storage.finish(&self.device).is_err() {
+                            self.pending_draw[slot] = None;
                             lock(&self.ui.ring).abandon(slot);
                             continue;
                         }
                     }
-                    self.times[slot] = Some(Times {
-                        render_done,
-                        ready: Instant::now(),
-                    });
+                    let ready = Instant::now();
+                    self.times[slot] = Some(Times { render_done, ready });
+                    if let Some(pending) = self.pending_draw[slot].take() {
+                        let total = ready.saturating_duration_since(pending.start);
+                        let post_submit = ready.saturating_duration_since(pending.submit_end);
+                        self.draw_queries[slot] = pending.query;
+                        self.draw_times[slot] = Some(DrawTimes {
+                            total,
+                            parts: DrawParts {
+                                encode: pending.encode,
+                                submit: pending.submit,
+                                gpu: Duration::ZERO,
+                                wait: post_submit,
+                            },
+                        });
+                    }
                     if self.held[slot] {
                         self.done_while_held[slot] = true;
                     } else {
@@ -448,12 +655,24 @@ impl View {
     /// Off the UI thread: waits until `slot`'s frame is done (the virtual clock's wait for the
     /// GPU, never the UI thread's). False if the device was lost before it finished.
     pub fn wait_done(&mut self, slot: usize) -> bool {
+        // On Metal, `PollType::Poll` reads `MTLCommandBuffer::status()` directly in this thread,
+        // avoiding the background GCD completion-queue hop that `wait_indefinitely()` pays on
+        // sub-millisecond frames (#3617); longer frames fall back to a blocking wait.
+        let spin_until = Instant::now() + Duration::from_micros(500);
         while self.in_flight[slot].is_some() {
             if self.device.is_lost() {
                 return false;
             }
-            let _ = self.device.device.poll(wgpu::PollType::wait_indefinitely());
-            self.collect();
+            if Instant::now() < spin_until {
+                let _ = self.device.device.poll(wgpu::PollType::Poll);
+                self.collect();
+                if self.in_flight[slot].is_some() {
+                    std::hint::spin_loop();
+                }
+            } else {
+                let _ = self.device.device.poll(wgpu::PollType::wait_indefinitely());
+                self.collect();
+            }
         }
         true
     }
@@ -485,6 +704,29 @@ impl View {
 
     pub fn times(&self, slot: usize) -> Option<Times> {
         self.times[slot]
+    }
+
+    /// Resolves pass timestamps for `slot` once the slot's frame has finished, splitting the
+    /// post-submit time into `gpu` and `wait` without adding query resolution to `draw_times`.
+    pub fn resolve_gpu_time(&mut self, slot: usize) {
+        let Some(pass_query) = self.draw_queries[slot].take() else {
+            return;
+        };
+        let Some(slot_query) = self.slot_queries[slot].as_ref() else {
+            return;
+        };
+        let Some(gpu_dur) = slot_query.resolve_duration(&self.device, pass_query.count()) else {
+            return;
+        };
+        if let Some(dt) = self.draw_times[slot].as_mut() {
+            let post = dt.parts.gpu + dt.parts.wait;
+            dt.parts.gpu = gpu_dur.min(post);
+            dt.parts.wait = post.saturating_sub(dt.parts.gpu);
+        }
+    }
+
+    pub fn draw_times(&self, slot: usize) -> Option<DrawTimes> {
+        self.draw_times[slot]
     }
 
     /// The bytes a slot holds now, as GPUI samples them.
