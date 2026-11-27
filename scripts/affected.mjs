@@ -663,7 +663,7 @@ async function prepare(untimed, timedFiles, alone, listedFiles, started) {
       if (stopped) break;
       const at = performance.now(), { bin: names, builds, target } = cwd === root ? { bin: plan.names, builds: plan.builds, target: [] } : selectBinaries(cwd, groups.shared.flat().filter((file) => untimed.includes(file)), true, true);
       buildInPlace(cwd, builds);
-      built.push([cwd, { names, builds }]);
+      built.push([cwd, { names, builds, target }]);
       // No time limit before the test grant: a cold build holds no test slot, and at 2 jobs one ran past 20 minutes.
       const bin = buildBinaries(cwd, join(binRoot, String(binaries.length), 'bin'), [...new Set([...names, ...target])], undefined, { timeout: 0 });
       if (target.length) placeHubBinaries(cwd, bin, target);
@@ -828,10 +828,12 @@ async function main(args) {
     };
     const built = new Map(held.prep.built);
     const ready = (cwd) => {
-      const { names = [], builds = [] } = built.get(cwd) ?? {}, bin = binaries.get(cwd);
+      const { names = [], builds = [], target = [] } = built.get(cwd) ?? {}, bin = binaries.get(cwd);
       const placed = builtIn(cwd, builds).every((path) => existsSync(path)), seen = names.every((name) => existsSync(join(bin, name)));
-      if (placed && seen) return;
-      if (!seen) buildBinaries(cwd, bin, names, undefined, { timeout: 0 });
+      const hub = target.every((name) => existsSync(join(cwd, 'target', 'debug', name)));
+      if (placed && seen && hub) return;
+      if (!seen || !hub) buildBinaries(cwd, bin, [...new Set([...names, ...target])], undefined, { timeout: 0 });
+      if (!hub) placeHubBinaries(cwd, bin, target);
       if (placed) return;
       const grant = acquire('build', { wait: 30 }), before = process.env.DEEP_THROTTLE;
       if (!grant) throw Error('INCONCLUSIVE no grant: no build grant came within 30 min to build again what a cleanup removed');
