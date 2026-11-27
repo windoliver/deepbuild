@@ -16,11 +16,11 @@ Status: accepted. Moved from comments in `packages/gate` by #3454's first pass (
 
 ## A claim's snapshot
 
-- **Each repo's snapshots run one at a time, and never behind another repo's.** `packages/gate/src/checkouts.ts`, `serial`. A prune waits for every snapshot in flight and holds the next, so it never takes what a snapshot is still writing (#31). The `snapshots-one-at-a-time` plant takes no turn in `snapshot`: under its one queue the budgeted stage is already serial, and a second turn would wait on itself.
+- **Each repo's snapshots run one at a time, and never behind another repo's.** `packages/gate/src/checkouts.ts`, `serial`. A prune waits for every snapshot in flight and holds the next, so it never takes what a snapshot is still writing (#31). The `snapshots-one-at-a-time` plant takes no turn in `snapshot`: under its one queue the budgeted stage is already serial.
 - **The tree is read into temporary objects first.** `packages/gate/src/checkouts.ts`, `snapshotOf`. `git add` and `git write-tree` freshen even the objects that exist, so writing straight into the store would change it on an unchanged claim (#2078). Complete objects are published only for a new snapshot, each by a link: a link is atomic and never rewrites an existing object. The temporary objects sit on the store's file system and lose their temporary names when the snapshot ends, however it ends.
 - **The index copy keeps the index's time.** `packages/gate/src/checkouts.ts`, `snapshotOf`. Git tells a file edited in the index's own second from an unchanged one only by comparing the two times, and then reads its bytes.
 - **The marks that hide a change are cleared in the copy, each by its own option.** `packages/gate/src/checkouts.ts`, `snapshotOf`. Assume-unchanged and skip-worktree hide a change from `git add`, and one `update-index` call applies only its first option. A marked file missing from disk keeps its mark, or `add` would read a sparse checkout's absent files as deleted.
-- **The snapshot is written from a copy of the session's index.** `packages/gate/src/exec.ts`, `snapshotOf`. The copy keeps the index's stat cache, so only changed files are hashed again, and the marks that hide a change are cleared in the copy.
+- **The snapshot is written from a copy of the session's index.** `packages/gate/src/exec.ts`, `snapshotOf`. The copy keeps the index's stat cache, so only changed files are hashed again.
 
 ## The budget
 

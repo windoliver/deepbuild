@@ -25,7 +25,7 @@ function literalsOf(path, text) {
   return literals;
 }
 
-function commentsOf(text, literals, script) {
+function commentsOf(text, literals, script, rust) {
   const comments = [];
   let next = 0;
   let i = script && text.startsWith('#!') ? (text.indexOf('\n') + 1 || text.length) : 0;
@@ -34,7 +34,7 @@ function commentsOf(text, literals, script) {
     if (next < literals.length && literals[next][0] <= i) {
       i = literals[next][1];
     } else if (text[i + 1] === '/') {
-      const end = script ? text.slice(i).search(/[\n\r\u2028\u2029]/) : text.indexOf('\n', i) - i;
+      const end = rust ? text.indexOf('\n', i) - i : text.slice(i).search(/[\n\r\u2028\u2029]/);
       comments.push([i, end < 0 ? text.length : i + end]);
       i = comments.at(-1)[1];
     } else if (text[i + 1] === '*') {
@@ -52,7 +52,7 @@ function commentsOf(text, literals, script) {
 export function read(path, text) {
   if (!text.includes('//') && !text.includes('/*')) return { comments: [], literals: null };
   const literals = literalsOf(path, text);
-  return { comments: commentsOf(text, literals, !/\.(?:rs|wgsl)$/.test(path)), literals };
+  return { comments: commentsOf(text, literals, !/\.(?:rs|wgsl)$/.test(path), path.endsWith('.rs')), literals };
 }
 
 const WORD = /[\p{L}\p{N}_$]/u;

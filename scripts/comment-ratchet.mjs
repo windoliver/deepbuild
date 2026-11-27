@@ -14,11 +14,11 @@ const glob = (pattern) => new RegExp(`^${pattern.split(/(\*\*\/|\/\*\*$|\*\*|\*)
   part === '**/' ? '(?:.*/)?' : part === '/**' ? '/.+' : part === '**' ? '.*' : part === '*' ? '[^/]*' : part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('')}$`);
 const TESTS = testPaths.map(glob);
 const MARKERS = [
-  [/^\/\/\s*deadline:\s*\S/, (path) => TESTS.some((pattern) => pattern.test(path))],
+  [/^\/\/\s*deadline:\s*\S/, (path) => !path.endsWith('.wgsl') && TESTS.some((pattern) => pattern.test(path))],
   [/^\/\/\/?\s*cache:\s*(?:[^,]*,\s*)*(?:entries|bytes)\s+\S/, (path) => /^crates\/.*\.rs$/.test(path)],
   [/^\/\/ copy-exception: \S|^\/\/\s*blocking call:\s*\S/, (path) => /^crates\/deep-app\/src\/.*\.rs$/.test(path)],
-  [/^\/\/ size-literal-exception: \S/, (path, trails) => trails && /^crates\/deep-app\/src\/.*\.rs$/.test(path)],
-  [/^\/\/ color-literal-exception: \S/, (path, trails) => trails && /^crates\/deep-app\/(?:src\/.*\.rs|panels\/.*\.js)$/.test(path)],
+  [/^\/\/ size-literal-exception: \S[^;]*?(?:; review \d{4}-\d{2}-\d{2})?\s*$/, (path, trails) => trails && /^crates\/deep-app\/src\/.*\.rs$/.test(path)],
+  [/^\/\/ color-literal-exception: \S[^;]*?(?:; review \d{4}-\d{2}-\d{2})?\s*$/, (path, trails) => trails && /^crates\/deep-app\/(?:src\/.*\.rs|panels\/.*\.js)$/.test(path)],
 ];
 const LICENSE = /\bCopyright (?:\(c\)|©|\d{4}|[A-Z])|\bLicensed under the\b|SPDX-License-Identifier:/;
 
