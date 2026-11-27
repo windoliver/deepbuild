@@ -1,7 +1,3 @@
-// #3510: the drain is unchanged (docs/parallel-proof.md, section 6, Drain and a stuck drain). A buildBinaries call with
-// DEEP_TEST_GRANT_STALL at 0.2 (12 s) waits behind build holders that keep every slot for 8 s; a top-level
-// `throttle.mjs timed --wait 0.05` request made after the call joined the line runs out behind those holders, and the
-// call, still in line, then gets its build grant.
 import assert from 'node:assert/strict';
 import { writeFileSync } from 'node:fs';
 import test from 'node:test';
@@ -10,7 +6,6 @@ import { builtIn, call, EIGHT_SECONDS, entriesOf, fixture, holders, joined, line
 test('#3510.773f906e with DEEP_TEST_GRANT_STALL at 0.2 and every build slot held for 8 s, a top-level timed --wait 0.05 request made after the call joined the line ends INCONCLUSIVE no grant, and the call then gets its build grant and returns its bin holding the binary', LONG, async (t) => {
   const box = sandbox(t);
   const fx = fixture(box);
-  // Each holder keeps its slot until the call is in line and for 8 s after, so the 8 s are all ahead of the call.
   const held = await holders(box, SLOTS, EIGHT_SECONDS);
   assert.ok(held.every(Boolean), `every holder took its build grant\n${held.map((holder) => holder?.child.output()).join('\n')}\n${showLog(box.table)}`);
 
@@ -34,8 +29,6 @@ test('#3510.773f906e with DEEP_TEST_GRANT_STALL at 0.2 and every build slot held
   assert.equal(ended.threw, undefined, `the call kept its place while the holders held and the timed request drained; buildBinaries threw: ${ended.threw}\n${all()}`);
   builtIn(assert, fx, ended, all);
 
-  // The order the criterion gives, in the table's log: the timed request's timeout, then the call's build grant,
-  // which came only once a holder had given its slot back.
   const log = tableLog(box.table);
   const own = entriesOf(box, pid).filter((entry) => entry.event === 'granted');
   assert.equal(own.length, 1, `the log holds one granted entry for the call's build request\n${all()}`);

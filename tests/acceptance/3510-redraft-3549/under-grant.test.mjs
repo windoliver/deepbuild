@@ -1,9 +1,3 @@
-// Blind redraft (#3549) of #3510's under-grant test: every build slot is the limit scripts/throttle.mjs states for this platform
-// on its LIMITS line (../3334-redraft-3549/helpers.mjs buildLimit), not SLOTS's hard-coded 1 or 2. Name, criterion,
-// waits, assertions and expected values are the original's (../3510/under-grant.test.mjs), line for line; only the count differs.
-// #3510: a buildBinaries call under a caller's grant passes through at once, as before the change (regression
-// protection; docs/parallel-proof.md, section 6, Inherited grants). Every build slot of the test's own table is
-// held: all but one by other holders for ten minutes, the last by `node scripts/throttle.mjs build -- <the caller>`.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { builtIn, call, entriesOf, fixture, holders, LONG, sandbox, showLog, tableLog, THROTTLE } from '../3510/helpers.mjs';
@@ -13,7 +7,6 @@ test('#3510.87170af2 with every build slot held, a buildBinaries call made by th
   const SLOTS = buildLimit();
   const box = sandbox(t);
   const fx = fixture(box);
-  // The other sessions' holders take every slot but one (none on the Mac's one slot); the wrapper takes the last.
   const others = await holders(box, SLOTS - 1);
   assert.ok(others.every(Boolean), `every other holder took its build grant\n${others.map((holder) => holder?.child.output()).join('\n')}\n${showLog(box.table)}`);
 
@@ -28,7 +21,6 @@ test('#3510.87170af2 with every build slot held, a buildBinaries call made by th
 
   const log = tableLog(box.table);
   const builds = log.filter((entry) => entry.event === 'granted' && entry.class === 'build');
-  // The wrapper's own grant is the one granted entry of its chain; request.pid is the wrapper's pid.
   const wrapper = builds.filter((entry) => entry.pid === request.pid);
   assert.equal(wrapper.length, 1, `the wrapper took one top-level build grant\n${all()}`);
   assert.equal(builds.length, SLOTS, `every build slot is held, ${SLOTS - 1} by others and one by the wrapper, and nothing else was granted\n${all()}`);
@@ -36,6 +28,5 @@ test('#3510.87170af2 with every build slot held, a buildBinaries call made by th
   assert.ok(passed.length >= 1, `the log reads passed for the call's build request\n${all()}`);
   assert.equal(passed[0].through, `build:${wrapper[0].id}`, `the call passed through on the wrapper's grant\n${all()}`);
   assert.deepEqual(entriesOf(box, pid).filter((entry) => entry.event === 'granted' || entry.event === 'timeout'), [], `the call's own process was granted nothing and timed out on nothing\n${all()}`);
-  // It never waited for a slot to come free: the others still held theirs when the call had returned.
   for (const other of others) assert.ok(!log.some((entry) => entry.event === 'released' && entry.id === other.id), `holder ${other.name} still held its slot when the call returned\n${all()}`);
 });

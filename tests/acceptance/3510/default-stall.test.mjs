@@ -1,6 +1,3 @@
-// #3510: with no setting, a buildBinaries call under no caller's grant asks for its build grant bounded by a stall of
-// 720 minutes, not by a 30-minute wait (docs/parallel-proof.md, section 6). The real buildBinaries builds the
-// fixture's binary on an empty table of the test's own, and the table's log says how its grant was asked.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { builtIn, call, entriesOf, fixture, LONG, sandbox, showLog } from './helpers.mjs';

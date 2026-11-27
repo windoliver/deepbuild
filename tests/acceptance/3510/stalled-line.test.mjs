@@ -1,6 +1,3 @@
-// #3510: a buildBinaries call whose line stalls reads INCONCLUSIVE, with the stall's words, and builds nothing
-// (docs/parallel-proof.md, section 6). Every build slot of the test's own table is held for ten minutes and nothing
-// else changes; the real buildBinaries, with DEEP_TEST_GRANT_STALL at 0.05 (3 s), must throw within 5 minutes.
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -25,7 +22,6 @@ test('#3510.9618ba88 with DEEP_TEST_GRANT_STALL at 0.05 and every build slot hel
   assert.equal(ended.returned, undefined, `the call returns nothing: it got no grant\n${all()}`);
   assert.ok(typeof ended.threw === 'string' && ended.threw.startsWith(head), `buildBinaries throws an error whose message starts "${head}"; it threw ${JSON.stringify(ended.threw)}\n${all()}`);
 
-  // Nothing was built: the build was never started, cargo left nothing in the fixture, and bin holds no binary.
   assert.ok(!existsSync(fx.marker), `the call never started its build (its run argument was never called)\n${all()}`);
   assert.ok(!existsSync(join(fx.cwd, 'target')), `cargo never started in the fixture repository: it holds no target/\n${all()}`);
   assert.ok(!binHolds(fx).includes(BIN), `bin holds no binary\n${all()}`);

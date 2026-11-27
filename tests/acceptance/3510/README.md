@@ -113,6 +113,14 @@ words, ran this suite against it (5 of 5 passed), and ran it against a second co
 failed the two tests that name it, at their assertions). The throwaway isn't kept and proves nothing about the real
 change. `BASE-FAILURE.txt` is the suite's run on the merge base, then a summary of those two runs.
 
+## Comments removed
+
+Main's comment ratchet holds these files to no comment lines, so their comments were removed with no code token
+changed; `// deadline:` markers stay. What they said is above: the surfaces (the caller's `CALLING`/`RETURNED`/`THREW`
+lines, `run`'s started note, the fixture's token, the table read by `fs.watch`), assumption 2 (the drain holders' 8 s
+count from the call being seen in line), and `LONG`, the 20-minute bound each test carries so a hang reads as a failed
+assertion. A planted twin replaces `scripts/proof-binaries.mjs` (`PROOF_BINARIES`) in its own checkout.
+
 ## Files
 
 - `helpers.mjs`: the sandbox, the fixture repository, the caller, the look for a request in line, the holders.

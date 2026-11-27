@@ -27,7 +27,7 @@ Each file imports `tests/acceptance/3510/helpers.mjs` unchanged and `buildLimit(
 | `3510/drain.test.mjs` › #3510.773f906e with DEEP_TEST_GRANT_STALL at 0.2 and every build slot held for 8 s, … | #3510.773f906e | `holders(box, SLOTS, EIGHT_SECONDS)`: the call is admitted before the timed request is made; on a merged tree: "the call got its build grant after the timed request ended" | `drain.test.mjs` › same name. The only change: `holders(box, buildLimit(), EIGHT_SECONDS)` |
 | `3510/under-grant.test.mjs` › #3510.87170af2 with every build slot held, a buildBinaries call made by the command of throttle.mjs build … | #3510.87170af2 | `SLOTS - 1` others plus the wrapper hold 2 of 6: it passes, but not with every build slot held, which its criterion states | `under-grant.test.mjs` › same name. The only change: `SLOTS` is a local `const SLOTS = buildLimit()`, used in its three places (others, the count of granted entries, the message) |
 
-Names, `#3510.<tag>` IDs, waits, assertions, comments and expected values are the original's line for line. Each file
+Names, `#3510.<tag>` IDs, waits, assertions and expected values are the original's line for line (comments were later removed from both for main's comment ratchet, code tokens unchanged). Each file
 holds one test, so the swap by file carries nothing else.
 
 ## Kept as they are
