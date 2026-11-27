@@ -1266,7 +1266,7 @@
   "crates/deep-sandbox-wasmtime/src/main.rs": 3,
   "crates/deep-sandbox-wasmtime/src/service.rs": 57,
   "crates/deep-sandbox-wasmtime/src/web.rs": 27,
-  "crates/deep-sandbox-wasmtime/tests/compile_once.rs": 5,
+  "crates/deep-sandbox-wasmtime/tests/compile_once.rs": 3,
   "crates/deep-sandbox-wasmtime/web/runner.mjs": 13,
   "crates/deep-scene3d-render/src/ambient.wgsl": 27,
   "crates/deep-scene3d-render/src/ao.rs": 28,
