@@ -149,7 +149,9 @@ pub fn numbers(doc: &Map<String, Value>) -> (Vec<Value>, Vec<Issue>) {
                 Some(row) => format!("{id}#{row}"),
                 None => id.clone(),
             };
-            if binds && n["source"]["origin"] == "agent" && !named.contains(&name) {
+            // A derived table's number is only as good as its weakest input (#3569).
+            let agent = n["source"]["origin"] == "agent" || n["source"]["weakest"] == "agent";
+            if binds && agent && !named.contains(&name) {
                 issues.push(Issue::error(
                     "number_unsourced",
                     &name,

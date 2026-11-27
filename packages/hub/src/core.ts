@@ -1,5 +1,5 @@
 
-import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { parseYaml } from './yaml.js';
 
@@ -949,6 +949,8 @@ export class Core {
       adopt: async (bytes) => { await this.control.stored(await this.store.connect({ role: 'agent', session: 'unknown' }).put({ bytes, kind: 'file', source: 'unrecorded', redaction: 'unknown', license: { name: 'unknown', allows: [] } }), 'a file of unknown origin'); },
       send: (request, boundary) => this.store.send(request, boundary),
       raise: (source, ask, plan) => this.asks.raise(this.connection('core'), source, ask, plan),
+      table: (sha) => { try { return JSON.parse(readFileSync(join(this.root.evidence, 'tables', `${sha}.json`), 'utf8')) as Record<string, unknown>; } catch { return undefined; } },
+      keepTable: (sha, record) => { mkdirSync(join(this.root.evidence, 'tables'), { recursive: true }); writeFileSync(join(this.root.evidence, 'tables', `${sha}.json`), JSON.stringify(record)); },
       row: (job, running) => this.state.jobShown(job, running), reserve: (run, usd, step) => this.ledger.reserveCovering(this.connection('core'), run, usd, step), charge: (run, usd) => this.ledger.charge(this.connection('core'), run, usd), approve: (ask, budget) => this.ledger.approveOn(this.connection('core'), ask, budget),
     });
     this.libraries = new Libraries({

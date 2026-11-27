@@ -28,6 +28,8 @@ pub enum MediaCall {
     Table {
         from: TableFrom,
         key: String,
+        /// #3569: each named column's unit, which the probe then writes; a column not named has none.
+        units: Map<String, Value>,
     },
     /// #194: a catalog's table files, each by its path, packed under its schema in the decode
     /// worker into table.layout@1.
@@ -73,6 +75,11 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<MediaCall> {
                 _ => return None,
             },
             key: s("key")?,
+            units: match c.get("units") {
+                None => Map::new(),
+                Some(Value::Object(u)) if u.values().all(Value::is_string) => u.clone(),
+                Some(_) => return None,
+            },
         },
         "catalog_import" => MediaCall::Catalog {
             tables: c
@@ -425,7 +432,7 @@ impl Hub<'_> {
                 reply
             }
             MediaCall::Export { source, out } => self.export(source, out),
-            MediaCall::Table { from, key } => self.table_import(from, key),
+            MediaCall::Table { from, key, units } => self.table_import(from, key, units),
             MediaCall::Catalog { tables, schema } => self.catalog_import(tables, schema),
             MediaCall::Workers => {
                 let list: Vec<Value> = [&self.media.decoder, &self.media.encoder]
@@ -477,7 +484,7 @@ impl Hub<'_> {
     /// hash and probed once in the decode worker; its record (the probe, every cell's raw bytes and
     /// range, and the source the hub writes: the URL and fetch time, or `agent`) kept beside it as
     /// `tables/<sha256>.json`, which a document's `{from: asset, column}` reads.
-    fn table_import(&mut self, from: &TableFrom, key: &str) -> Value {
+    fn table_import(&mut self, from: &TableFrom, key: &str, units: &Map<String, Value>) -> Value {
         let (bytes, source) = match from {
             TableFrom::Url(url) => {
                 let fetched = std::time::SystemTime::now()
@@ -514,7 +521,19 @@ impl Hub<'_> {
         let Some(probe) = reply.get("probe") else {
             return reply;
         };
-        let asset = json!({"sha256": sha, "kind": "table", "probe": {"table": probe["table"]}, "source": source});
+        // #3569: the units the import names, each on its column; a unit for no column of the table is refused.
+        let mut table = probe["table"].clone();
+        for (column, unit) in units {
+            let named = table["columns"]
+                .as_array_mut()
+                .and_then(|cs| cs.iter_mut().find(|c| c["name"] == column.as_str()));
+            let Some(named) = named else {
+                return json!({"code": "ref_unresolved", "path": format!("units/{column}")});
+            };
+            named["unit"] = unit.clone();
+        }
+        let asset =
+            json!({"sha256": sha, "kind": "table", "probe": {"table": table}, "source": source});
         let mut record = asset.clone();
         record["cells"] = probe["cells"].clone();
         // #397's wrong program: the probe's cells kept NFC instead of their raw bytes.

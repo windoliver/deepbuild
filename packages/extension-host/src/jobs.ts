@@ -327,6 +327,13 @@ export class JobTools {
       if (!ext.jobKinds.has(kind)) refuse(`${entry.id}'s manifest declares the job kind ${kind}, which its code doesn't register`);
       try { kinds[kind] = kindOf(kind, ext.jobKinds.get(kind)); } catch (e) { refuse(message(e)); }
     }
+    // A check named like no plug-in's own name or kind's (#3569) is let in only as one of its kinds' output checks.
+    const plugin = entry.id.slice(entry.id.indexOf('/') + 1);
+    const listed = new Set(Object.values(kinds).flatMap((k) => k.output_checks));
+    for (const check of manifest.checks ?? []) {
+      const own = check.startsWith(`ext.${plugin}.`) || (manifest.replaces ?? []).includes(check) || Object.keys(kinds).some((k) => check.startsWith(k) && '_.'.includes(check[k.length] ?? ''));
+      if (!own && !listed.has(check) && !ext.released) refuse(`${entry.id}'s manifest names the check ${check}, which is neither its own name nor an output check of a job kind it registers`);
+    }
     const tools: HeldJobs['tools'] = [];
     for (const { kind, tool, host, provider } of manifest.job_tools ?? []) {
       const raw = ext.jobTools.find((t) => t.kind === kind && (t.tool as { tool?: unknown } | null)?.tool === tool);

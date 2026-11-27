@@ -1685,14 +1685,24 @@ fn number_runs(text: &str) -> Vec<String> {
 }
 
 /// What a table column's cell traces to: the table, its column and data row, the cell's byte
-/// range in the file and its raw bytes as the table keeps them, and the table's source.
+/// range in the file and its raw bytes as the table keeps them, and the table's source. A cell of
+/// a derived table (#3569) also traces to the input files and rows that fed it, and to its weakest
+/// input's source.
 fn traced(trace: &Value, row: Option<usize>) -> Value {
     let cell = row.and_then(|r| trace.get("cells").and_then(|c| c.get(r)));
-    json!({
+    let mut out = json!({
         "table": trace.get("table"), "column": trace.get("column"), "row": row,
         "bytes": cell.and_then(|c| c.get("bytes")), "raw": cell.and_then(|c| c.get("raw")),
         "origin": trace.get("source"),
-    })
+    });
+    if let Some(weakest) = trace.get("weakest") {
+        out["weakest"] = weakest.clone();
+        out["from"] = cell
+            .and_then(|c| c.get("from"))
+            .cloned()
+            .unwrap_or(Value::Null);
+    }
+    out
 }
 
 /// What a number on an anchor path traces to: the column it reads, and that column's table where
