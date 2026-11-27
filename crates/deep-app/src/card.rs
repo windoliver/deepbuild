@@ -36,8 +36,6 @@ thread_local! {
 
 /// The app's prompt builder: every prompt the window shows is a question card.
 pub fn init(cx: &mut App) {
-    // A card of an app before this one in the process, as a second launch in one deep-drive has, is this app's to
-    // neither tick nor focus (#1427).
     MADE.with(|made| *made.borrow_mut() = None);
     SHOWN.with(|shown| *shown.borrow_mut() = None);
     FOCUS.with(|focus| *focus.borrow_mut() = None);

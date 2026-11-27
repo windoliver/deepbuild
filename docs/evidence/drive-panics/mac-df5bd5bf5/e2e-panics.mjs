@@ -1,8 +1,3 @@
-// E2E drive for PRs #3012 and #3028, not part of the repo. In ONE deep-drive process, on the fixture:
-//   launch 1: hover an ask row, then resize the window (main panicked here: "Shell while it is already being updated");
-//   launch 2 and 3: the same process launches again and steps its clock (main panicked in card::tick on a 2nd launch);
-//   then motion_check, the shipped journeys (#1427 AC7), whose launches are further ones in the same process.
-// Each reply's ok and a window screenshot per launch go to <out dir>. Usage, from the clone root: node <this> <out dir>
 import { spawn } from 'node:child_process';
 import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
