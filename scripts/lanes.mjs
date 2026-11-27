@@ -156,7 +156,7 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/1500-oracle/', 'tests/acceptance/3234/', 'tests/acceptance/3234-redraft-ac3/', 'tests/acceptance/2039-oracle/',
   ],
   timing: [
-    'tests/acceptance/2513-redraft-2047/', 'tests/acceptance/3587-redraft-waits/',
+    'tests/acceptance/2513-redraft-2047/',
     'tests/acceptance/896/', 'tests/acceptance/16/', 'tests/acceptance/1098/budgets.test.ts', 'tests/acceptance/1015/budgets.test.ts', 'tests/acceptance/1417-redraft-ac3/',
     'tests/acceptance/1022/', 'tests/acceptance/823/', 'tests/acceptance/14/budgets.test.ts', 'tests/acceptance/42/budgets.test.ts', 'tests/acceptance/62/budgets.test.ts',
     'tests/acceptance/311/redraft-ac12/budgets.test.ts', 'tests/acceptance/28/budgets.test.ts', 'tests/acceptance/319/budgets.test.ts', 'tests/acceptance/315/',
