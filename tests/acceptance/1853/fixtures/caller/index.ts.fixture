@@ -1,0 +1,37 @@
+// The caller test package (#1853): calls.json (written by the test) lists calls, each a method and its arguments;
+// when its report check runs, the package makes each call once, in order, `deep.a.b` as deep.a.b(...args), and
+// reports what each returned or the error it got. Its manifest asks for the `files` word and lists the two preview
+// methods it calls. evidence.txt is a file inside the package's own folder.
+import { readFileSync } from 'node:fs';
+
+interface Call { method: string; args: unknown[] }
+interface Seen { method: string; outcome: 'ok' | 'error' | 'missing'; value: unknown; error: string | null }
+const message = (e: unknown): string => String((e as Error)?.message ?? e);
+
+async function callOne(deep: any, c: Call): Promise<Seen> {
+  const path = c.method.split('.').slice(1);
+  let owner: any = deep;
+  for (const key of path.slice(0, -1)) owner = owner?.[key];
+  const fn = owner?.[path[path.length - 1]!];
+  if (typeof fn !== 'function') return { method: c.method, outcome: 'missing', value: null, error: null };
+  try {
+    const value = await fn.apply(owner, c.args);
+    return { method: c.method, outcome: 'ok', value: value ?? null, error: null };
+  } catch (e) {
+    return { method: c.method, outcome: 'error', value: null, error: message(e) };
+  }
+}
+
+export default function (deep: any): void {
+  const calls: Call[] = JSON.parse(readFileSync(new URL('./calls.json', import.meta.url), 'utf8'));
+  let done: Promise<Seen[]> | undefined;
+  const run = (): Promise<Seen[]> => (done ??= (async () => {
+    const seen: Seen[] = [];
+    for (const c of calls) seen.push(await callOne(deep, c));
+    return seen;
+  })());
+  deep.registerCheck('ext.caller.report', async () => ({
+    outcome: 'failed', testsRun: 1, evidence: [], read: [], mask: null,
+    failures: [{ test: 'report', file: 'index.ts', line: 1, stack: null, assertion: false, message: JSON.stringify({ calls: await run() }) }],
+  }));
+}

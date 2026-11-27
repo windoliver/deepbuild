@@ -542,7 +542,7 @@ export function writeLibrary(dir: string, host: string, lib: Library, serve?: Ta
   const [, name] = lib.id.split('/');
   writeFileSync(join(dir, 'pack.json'), `${JSON.stringify({
     id: lib.id, name, version: lib.version, license: lib.license.id, description: `Takes for the score acceptance tests (${lib.preset}).`,
-    requires: { core: '^1', modules: { media: '^1' } },
+    requires: { core: '>=0.0.0', modules: { media: '^1' } },
     assets: lib.takes.map((t) => ({ path: t.path, url: takeUrl(host, lib, t.path), sha256: sha256(t.bytes), size: t.bytes.length, license: lib.license, upstream: { url: takeUrl(host, lib, t.path), version: lib.version, modified: '2026-01-01T00:00:00Z' } })),
     samples: { [lib.preset]: { sustained: lib.sustained, zones: [{ lo: lib.lo, hi: lib.hi, root: lib.root, takes: lib.takes.map((t) => t.path) }] } },
   }, null, 2)}\n`);
