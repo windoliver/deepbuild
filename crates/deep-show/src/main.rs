@@ -694,6 +694,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
             return Some(Call::Kinds(Value::Object(args)));
         }
         "sandbox" => return Some(Call::Sandbox),
+        "piece_checks" => return Some(Call::PieceChecks),
         "provided" => return Some(Call::Provided(c.get("doc")?.as_str()?.to_string())),
         "validate" => {
             return Some(Call::Validate {
