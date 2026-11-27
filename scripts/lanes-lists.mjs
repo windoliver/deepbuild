@@ -1613,3 +1613,9 @@ byHand.push('tests/acceptance/3461/once.test.ts');
 // #3467's folder (blind) runs alone by its lane.json: each file draws on Metal and decodes on the hardware decoder.
 // players.test.ts judges #499's five players' frames a second on the real clock on a reference Mac.
 timed.push('tests/acceptance/3467/players.test.ts');
+
+// #3502: these two judge a time on a reference Mac (judgeLimit).
+timed.push('tests/acceptance/3502/animation.test.mjs', 'tests/acceptance/3502/withdrawals.test.mjs');
+// #3502: every carried row's test and the whole workspace's build take hours, and two files read the merge base's
+// own build, named by DEEP_3502_BASE_DRIVE and DEEP_3502_BASE_SHOW.
+byHand.push('tests/acceptance/3502/rows.test.mjs', 'tests/acceptance/3502/build.test.mjs', 'tests/acceptance/3502/pictures.test.mjs', 'tests/acceptance/3502/withdrawals.test.mjs');
