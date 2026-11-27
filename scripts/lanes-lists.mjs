@@ -1656,8 +1656,8 @@ for (const name of ['ac1-section', 'ac3-agent-routes', 'ac5-taste-call']) {
 }
 // #3525 moves the asset fetch from deep_kinds to deep_job and refuses deep_kinds' fetch, so the files below, which
 // brought an asset in through deep_kinds, no longer hold their scene; #2898's table, reads and repeats files state
-// deep_kinds' old hints. Each is kept as written, by hand only, and its blind redraft runs in its place, alone as its
-// original's folder does.
+// deep_kinds' old hints. Each is kept as written, by hand only, and its blind redraft runs in its place, alone: each
+// starts a hub with a sandboxed fill (scripts/lanes.mjs names the shared resource).
 const redrafts3525 = {
   '1731-redraft-3525': ['1731/fetch', '1731/off', '1731/offline', '1731/unknown'],
   '1820-redraft-3525': ['1820/disk', '1820/fetch', '1820/license', '1820/offline', '1820/scope/license-file', '1820/scope/resume', '1820/scope/reuse', '1820/export-redraft/export'],
