@@ -1,5 +1,3 @@
-// #2078: reading an unchanged tree must not rewrite the snapshot's objects or retention ref. The hub acceptance
-// twin counts objects; this regression also sees writes to existing files and a ref moved to a new timestamp.
 import { readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { expect, it } from 'vitest';

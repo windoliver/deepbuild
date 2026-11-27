@@ -1,7 +1,3 @@
-// Size and scope (#324; design: An agent says it's done, Size and scope): a change measured with no model. Its lines
-// and files against its base, the dependencies and top-level folders it adds and where each came from, and, for a
-// document, the items its revisions changed by stable ID. The usual size is the median of the changes you accepted.
-// What is outside the plan and what a person is asked are the hub's; this module only measures.
 import { execFile } from 'node:child_process';
 import { lstat, readFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
@@ -19,7 +15,6 @@ const READ_MAX = 4 * 1024 * 1024;
 const BLOCK = 6;
 
 interface ChangedFile { path: string; added: number; removed: number }
-/** Something a change brought in, and the file it came from. */
 interface Brought { name: string; from: string }
 interface Measured {
   files: ChangedFile[];
@@ -76,7 +71,6 @@ export async function measure(folder: string, base: string, head?: string): Prom
   }
   files.sort((a, b) => a.path.localeCompare(b.path));
   const atHead = (path: string) => (head ? showAt(cwd, head, path) : readFile(join(cwd, path), 'utf8').catch(() => undefined));
-  // What a changed file names that its base version didn't: a manifest's dependencies, a compose file's services, Terraform's resources.
   const brought = async (test: (path: string) => boolean, names: (text: string | undefined) => string[]): Promise<Brought[]> => {
     const out: Brought[] = [];
     for (const f of files.filter((x) => test(x.path))) {
@@ -112,7 +106,6 @@ const terraformOf = (text: string | undefined): string[] => [...(text ?? '').mat
  * found more than once across the files it changes as they stand, so a block that only moved is not one.
  */
 async function duplicatedLines(cwd: string, base: string, head: string | undefined, files: ChangedFile[]): Promise<number> {
-  // A file as the change leaves it: a regular file within READ_MAX, never a link followed or a binary read.
   const now = async (path: string): Promise<string[]> => {
     let text: string | undefined;
     if (head) text = await showAt(cwd, head, path);
@@ -127,7 +120,6 @@ async function duplicatedLines(cwd: string, base: string, head: string | undefin
   const changed = files.filter((f) => f.added > 0).slice(0, 200);
   const contents = new Map<string, string[]>();
   for (const f of changed) { const lines = await now(f.path); contents.set(f.path, lines); for (const w of windows(lines)) seen.set(w, (seen.get(w) ?? 0) + 1); }
-  // The runs of lines the change adds: each hunk's added lines, and an untracked file whole.
   const runs: string[][] = [];
   const diff = await git(cwd, ['diff', '-U0', '--no-renames', '--no-color', base, ...(head ? [head] : [])]).catch(() => '');
   const inDiff = new Set<string>();
