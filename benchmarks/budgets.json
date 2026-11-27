@@ -2377,6 +2377,24 @@
       "limits": {},
       "initialReason": "Issue #1857 first measurement (#1857.df51c34e): the merge base copies the document's items for each nested instance. One process checks a board of 4,999 rects and one instance whose step repeats a nested recipe 1,024 times through `deep-show run`, so p50 includes Node's and the binary's start; the criterion's own 1 s, read on the check's clock, stays in tests/acceptance/1857/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task.",
       "criteria": ["#1857.df51c34e"]
+    },
+    {
+      "id": "canvas-gpu-draw-finish",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "draw-finish"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "draw_finish_p95_ms": 0.5
+      },
+      "initialReason": "Issue #3617 first measurement (#3617.ff2c540d, #3617.e5d2f1f1): the merge base does not report draw-and-finish time or its parts. Plays the one-pass fixture at 1936 x 1584 on the zero-copy path for 300 frames in release deep-gpu, one warm-up run and five fresh runs, judging each run's p95 draw_ms against 0.5 ms on a reference Mac at a one-minute load below its cores (at or above reads INCONCLUSIVE). Once main has this task, p50 and peak memory of the whole command get a 50% merge-base margin.",
+      "criteria": [
+        "#3617.ff2c540d",
+        "#3617.e5d2f1f1"
+      ]
     }
   ]
 }

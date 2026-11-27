@@ -1638,3 +1638,7 @@ timed.push('tests/acceptance/3507/ac3-timing.test.mjs');
 Object.assign(redrafted, { 'tests/acceptance/3507/ac2-classes.test.mjs': 'tests/acceptance/3507-redraft-ac2/' });
 byHand.push('tests/acceptance/3507/ac2-classes.test.mjs');
 alone.push('tests/acceptance/3507-redraft-ac2/');
+
+// #3617's folder (blind) runs alone by its lane.json: each file builds deep-gpu and runs GPU surface frames at 1936 x 1584.
+// ac2-onepass.test.ts judges the five-run draw-and-finish p95 on a reference Mac.
+timed.push('tests/acceptance/3617/ac2-onepass.test.ts');
