@@ -4,7 +4,7 @@
 //! normals (made from its faces where it has none) and indices. Only what a mesh needs is read.
 
 use std::borrow::Cow;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{json, Value};
 
@@ -173,7 +173,11 @@ fn numbers_in(
         ext,
         view.get("buffer").and_then(Value::as_u64).unwrap_or(0) as usize,
     )?;
-    accessor_rows(a, view, &data, count, width, component, size, normalized)
+    accessor_rows(a, view, &data, count, width, component, size, normalized).map_err(|fault| {
+        let stride = view.get("byteStride").unwrap_or(&Value::Null);
+        let element = size * width;
+        format!("{fault}, in accessor {i} (byteStride {stride}, element {element} bytes)")
+    })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -187,8 +191,8 @@ fn accessor_rows(
     size: usize,
     normalized: bool,
 ) -> Result<Vec<f64>, Fault> {
-    let base = view.get("byteOffset").and_then(Value::as_u64).unwrap_or(0) as usize
-        + a.get("byteOffset").and_then(Value::as_u64).unwrap_or(0) as usize;
+    let bytes = |v: &Value, k: &str| v.get(k).and_then(Value::as_u64).unwrap_or(0) as usize;
+    let (view_at, rows_at) = (bytes(view, "byteOffset"), bytes(a, "byteOffset"));
     let stride = view
         .get("byteStride")
         .and_then(Value::as_u64)
@@ -197,6 +201,22 @@ fn accessor_rows(
     if stride < size * width {
         return Err(bad("a byte stride under its element"));
     }
+    let held = bytes(view, "byteLength");
+    let rows_end = match count.checked_sub(1) {
+        Some(last) => last
+            .checked_mul(stride)
+            .and_then(|b| b.checked_add(rows_at)?.checked_add(size * width)),
+        None => Some(rows_at),
+    };
+    if rows_end.is_none_or(|end| end > held) {
+        return Err(bad(&format!(
+            "{count} rows past its buffer view of {held} bytes"
+        )));
+    }
+    if view_at.checked_add(held).is_none_or(|end| end > data.len()) {
+        return Err(bad("a buffer view past its buffer"));
+    }
+    let base = view_at + rows_at;
     // A row past the buffer fails, so the rows kept never outnumber what it holds.
     let mut out = Vec::with_capacity(count.min(data.len() / stride.max(1) + 1) * width);
     for r in 0..count {
@@ -854,6 +874,18 @@ pub fn node_materials(bytes: &[u8], node: &Value) -> bool {
         .is_some_and(|ps| ps.iter().any(|p| p.get("material").is_some()))
 }
 
+fn listed(list: Option<&Value>, reached: &mut BTreeSet<u64>) -> Result<Vec<usize>, Fault> {
+    list.and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_u64)
+        .map(|n| match reached.insert(n) {
+            true => Ok(n as usize),
+            false => Err(bad(&format!("node_two_parents: node {n} is reached twice"))),
+        })
+        .collect()
+}
+
 /// What [`rig`] reads: each node by name, with its parent's name and its local matrix.
 type Rig = BTreeMap<String, (Option<String>, [[f64; 4]; 3])>;
 
@@ -868,12 +900,14 @@ pub fn rig(bytes: &[u8], scene: usize) -> Result<Rig, Fault> {
             .and_then(|n| n.get(i)?.get("name")?.as_str())
             .map_or_else(|| i.to_string(), str::to_string)
     };
-    let mut stack: Vec<(usize, Option<String>)> = doc
+    let roots = doc
         .pointer(&format!("/scenes/{scene}/nodes"))
-        .and_then(Value::as_array)
-        .ok_or_else(|| "params/node/scene".to_string())?
-        .iter()
-        .filter_map(|r| Some((r.as_u64()? as usize, None)))
+        .filter(|r| r.is_array())
+        .ok_or_else(|| "params/node/scene".to_string())?;
+    let mut reached = BTreeSet::new();
+    let mut stack: Vec<(usize, Option<String>)> = listed(Some(roots), &mut reached)?
+        .into_iter()
+        .map(|r| (r, None))
         .collect();
     let mut out = BTreeMap::new();
     while let Some((i, parent)) = stack.pop() {
@@ -883,15 +917,8 @@ pub fn rig(bytes: &[u8], scene: usize) -> Result<Rig, Fault> {
         if out.len() > 4096 {
             return Err(bad("a node tree past 4,096 nodes"));
         }
-        for c in n
-            .get("children")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-        {
-            if let Some(c) = c.as_u64() {
-                stack.push((c as usize, Some(name(i))));
-            }
+        for c in listed(n.get("children"), &mut reached)? {
+            stack.push((c, Some(name(i))));
         }
         out.insert(name(i), (parent, local(n)));
     }
@@ -1064,14 +1091,12 @@ pub fn import(
     }
     // Every node of the scene, parent × local, each mesh's triangle primitives.
     let nodes_json = list("nodes");
-    let roots: Vec<usize> = doc
+    let roots = doc
         .pointer(&format!("/scenes/{scene}/nodes"))
-        .and_then(Value::as_array)
-        .ok_or_else(|| "params/node/scene".to_string())?
-        .iter()
-        .filter_map(Value::as_u64)
-        .map(|n| n as usize)
-        .collect();
+        .filter(|r| r.is_array())
+        .ok_or_else(|| "params/node/scene".to_string())?;
+    let mut reached = BTreeSet::new();
+    let roots = listed(Some(roots), &mut reached)?;
     let identity = [
         [1.0, 0.0, 0.0, 0.0],
         [0.0, 1.0, 0.0, 0.0],
@@ -1095,16 +1120,8 @@ pub fn import(
         {
             lights.push((world, l.clone()));
         }
-        for c in n
-            .get("children")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .rev()
-        {
-            if let Some(c) = c.as_u64() {
-                stack.push((c as usize, world, depth + 1));
-            }
+        for c in listed(n.get("children"), &mut reached)?.into_iter().rev() {
+            stack.push((c, world, depth + 1));
         }
         let Some(mesh_i) = n.get("mesh").and_then(Value::as_u64) else {
             continue;
@@ -1297,5 +1314,49 @@ mod tests {
         let view = json!({"byteStride": 0});
         let rows = accessor_rows(&json!({}), &view, &[0; 12], 100_000, 3, 5126, 4, false);
         assert!(rows.is_err());
+    }
+
+    #[test]
+    fn an_accessor_refused_for_its_rows_or_its_stride_is_named_with_the_number_and_its_limit() {
+        let doc = |stride: u64| {
+            json!({
+                "buffers": [{"byteLength": 24}],
+                "bufferViews": [{"buffer": 0, "byteLength": 12, "byteStride": stride}],
+                "accessors": [{"bufferView": 0, "componentType": 5126, "count": 2, "type": "VEC3"}],
+            })
+        };
+        for (stride, names) in [
+            (12, ["2 rows", "of 12 bytes", "accessor 0"]),
+            (0, ["byteStride 0", "element 12 bytes", "accessor 0"]),
+        ] {
+            let fault = numbers(&doc(stride), &[0; 24], 0, 3).unwrap_err();
+            for named in names {
+                assert!(fault.contains(named), "{fault}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_buffer_view_past_its_buffer_is_refused() {
+        let view = json!({"byteOffset": u64::MAX, "byteLength": 12});
+        let rows = accessor_rows(&json!({}), &view, &[0; 24], 1, 3, 5126, 4, false);
+        assert!(rows.is_err());
+    }
+
+    fn tree(children: &[&[u64]]) -> Vec<u8> {
+        let nodes: Vec<Value> = children.iter().map(|c| json!({"children": c})).collect();
+        serde_json::to_vec(&json!({"nodes": nodes, "scenes": [{"nodes": [0]}]})).unwrap()
+    }
+
+    #[test]
+    fn a_node_listed_twice_is_refused_by_both_walks_naming_the_node() {
+        for (file, named) in [
+            (tree(&[&[1, 1], &[]]), "node 1 is reached twice"),
+            (tree(&[&[1, 2], &[3], &[3], &[]]), "node 3 is reached twice"),
+        ] {
+            let imported = import(&file, "", 0, &|_| None).err().expect("a refusal");
+            assert!(imported.contains(named), "{imported}");
+            assert!(rig(&file, 0).unwrap_err().contains(named));
+        }
     }
 }

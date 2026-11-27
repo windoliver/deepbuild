@@ -1,0 +1,457 @@
+#3617 acceptance tests at the base, 35956a44a ("Merge pull request #3492 …"; origin/main).
+
+Run (debug deep-gpu built directly, `CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked --bin deep-gpu`, because
+`node scripts/throttle.mjs build --wait 20` gave no grant in 20 minutes and `throttle.mjs test --wait 3` none in 3; the vitest run below
+was then made directly, one process, about 26 s):
+
+$ npx vitest run --root tests/acceptance/3617 --no-file-parallelism --testTimeout=900000
+
+Result: 21 failed (21), none passed, none skipped. The base builds; every test fails because the surface it reads doesn't exist:
+- frames with `timings: true` carry `handoff_ms` and `ui_ms` and no `draw_ms` or `draw_parts_ms` (AC1, AC2, AC4: "frame 0 reports draw_ms above 0, got null");
+- `--planted leaves_out_part` and `--planted sleeps_in_encode` are refused at startup (`{"ok":false,"code":"bad_input"}`) (AC1, AC3);
+- `benchmarks/budgets.json` has no task `canvas-gpu-draw-finish`, `benchmarks/canvas.mjs` has no `draw-finish` ("Unknown task draw-finish"), and its
+  `judge` has no such task ("Unknown class undefined") (AC2, AC3, AC5);
+- the GPU surface's Cost line names no machine or scene for its figures and carries no draw-and-finish reading (scope).
+AC2's five-run timing and AC5's live reading read INCONCLUSIVE only once the bench exists; at the base it is missing, so they fail first.
+
+
+ RUN  v5.0.5 ~/dev/devin-worktrees/doneright/issue-3617-blind/tests/acceptance/3617
+
+ ❯ ac4-pixels.test.ts (3 tests | 3 failed) 13531ms
+   ❯ #3617.00965c72 frames are byte-equal before and after the change on both paths, and the fences audit clean (3)
+     × #3617.00965c72 zero_copy: all 600 frames of surface-handoff hold the scene's bytes, and the fence record audits clean beside the timing report 6165ms
+     × #3617.00965c72 copy: all 600 frames of surface-handoff hold the scene's bytes, and the fence record audits clean beside the timing report 5298ms
+     × #3617.00965c72 the one-pass fixture's frames are the same bytes on the zero-copy and the copy path 1149ms
+ ❯ ac2-onepass.test.ts (3 tests | 3 failed) 6959ms
+   ❯ #3617.ff2c540d the one-pass fixture at 1936 × 1584 on the zero-copy path costs under 0.5 ms at p95 (3)
+     × #3617.ff2c540d the fixture is one full-screen pass, and the binary draws it at 1936 × 1584 zero copy for 300 frames, each with its draw-and-finish time and parts, and the slot holds the scene's bytes 5669ms
+     × #3617.ff2c540d benchmarks/budgets.json holds the task canvas-gpu-draw-finish with the issue's 0.5 ms, it passes the lane's validator, and lanes-lists.mjs times this file 3ms
+     × #3617.ff2c540d five runs of the bench, after a warm-up one, are judged by the lane: PASS under 0.5 ms at p95 on a reference Mac at rest, INCONCLUSIVE anywhere else 292ms
+ ❯ ac1-parts.test.ts (2 tests | 2 failed) 4986ms
+   ❯ #3617.ac333e6b the timing run reports each frame's draw-and-finish time and its parts (2)
+     × #3617.ac333e6b on both paths every frame reports draw_ms beside handoff_ms and draw_parts_ms with encode, submit, gpu, wait, and the parts add up to the whole within 5% 3393ms
+     × #3617.ac333e6b a planted run that leaves one part out (--planted leaves_out_part) fails the parts check, naming each frame 25ms
+ ❯ ac3-planted.test.ts (2 tests | 2 failed) 5126ms
+   ❯ #3617.55464991 a module that sleeps 2 ms in its encode fails the timing check, naming the part (2)
+     × #3617.55464991 --planted sleeps_in_encode: in five runs every frame's encode part holds the sleep, the parts still add up, and the check fails naming encode 3958ms
+     × #3617.55464991 the lane's judge fails five readings over the limit on a reference Mac at rest and names the part the time went to 60ms
+ ❯ ac5-inconclusive.test.ts (9 tests | 9 failed) 613ms
+   ❯ #3617.e5d2f1f1 off a reference Mac or under load, the times read INCONCLUSIVE and never pass (9)
+     × #3617.e5d2f1f1 the control: a reference Mac (Mac17,10) at rest passes five readings under 0.5 ms and fails five over it 68ms
+     × #3617.e5d2f1f1 another Mac model: readings under the limit read INCONCLUSIVE, and readings over it do too, never a pass and never a fail 60ms
+     × #3617.e5d2f1f1 a reference model with another memory size: readings under the limit read INCONCLUSIVE, and readings over it do too, never a pass and never a fail 62ms
+     × #3617.e5d2f1f1 a machine that reports no model (off macOS): readings under the limit read INCONCLUSIVE, and readings over it do too, never a pass and never a fail 61ms
+     × #3617.e5d2f1f1 a reference Mac on battery: readings under the limit read INCONCLUSIVE, and readings over it do too, never a pass and never a fail 70ms
+     × #3617.e5d2f1f1 a reference Mac in Low Power Mode: readings under the limit read INCONCLUSIVE, and readings over it do too, never a pass and never a fail 91ms
+     × #3617.e5d2f1f1 a reference Mac not thermally nominal: readings under the limit read INCONCLUSIVE, and readings over it do too, never a pass and never a fail 67ms
+     × #3617.e5d2f1f1 a one-minute load at or above the cores at any run's start or end reads INCONCLUSIVE; one under them passes 63ms
+     × #3617.e5d2f1f1 a reading whose load can't be read, or from a build that isn't release, is never a pass 71ms
+ ❯ scope-design.test.ts (2 tests | 2 failed) 15ms
+   ❯ #3617 scope: the GPU surface's cost line names the machine and the scene of each figure (2)
+     × #3617 every timed figure that was read (not estimated) names a machine and a scene in its own clause, and the copy path's 6.6 to 6.8 ms stays 8ms
+     × #3617 the line gives the one-pass slot's 0.9 to 1.0 ms on the Mac17,10 and the draw-and-finish budget of 0.5 ms 6ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 21 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac1-parts.test.ts > #3617.ac333e6b the timing run reports each frame's draw-and-finish time and its parts > #3617.ac333e6b on both paths every frame reports draw_ms beside handoff_ms and draw_parts_ms with encode, submit, gpu, wait, and the parts add up to the whole within 5%
+AssertionError: the zero_copy timing run: frame 0 reports draw_ms above 0, got null: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ expectReported helpers.ts:221:120
+    219| export function expectReported(frames: Frame[], what: string): void {
+    220|   for (const f of frames) {
+    221|     expect(f.draw_ms !== null && f.draw_ms > 0, `${what}: frame ${f.fr…
+       |                                                                                                                        ^
+    222|     expect(f.handoff_ms, `${what}: frame ${f.frame} still reports hand…
+    223|     expect(f.parts, `${what}: frame ${f.frame} reports draw_parts_ms`)…
+ ❯ ac1-parts.test.ts:18:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/21]⎯
+
+ FAIL  ac1-parts.test.ts > #3617.ac333e6b the timing run reports each frame's draw-and-finish time and its parts > #3617.ac333e6b a planted run that leaves one part out (--planted leaves_out_part) fails the parts check, naming each frame
+AssertionError: deep-gpu run --planted leaves_out_part exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ run helpers.ts:111:156
+    109|   const shown = `${BIN_NAME} ${args.join(' ')}`;
+    110|   if (r.error) throw Error(`${shown}: ${r.error.message}`);
+    111|   expect(r.status, `${shown} exited 0 (${r.signal ?? 'no signal'}); st…
+       |                                                                                                                                                            ^
+    112|   const lines = (r.stdout ?? '').split('\n').filter((l) => l !== '');
+    113|   expect(lines.length, `${shown}: one output line per input line`).toB…
+ ❯ ac1-parts.test.ts:24:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/21]⎯
+
+ FAIL  ac2-onepass.test.ts > #3617.ff2c540d the one-pass fixture at 1936 × 1584 on the zero-copy path costs under 0.5 ms at p95 > #3617.ff2c540d the fixture is one full-screen pass, and the binary draws it at 1936 × 1584 zero copy for 300 frames, each with its draw-and-finish time and parts, and the slot holds the scene's bytes
+AssertionError: the one-pass run: frame 0 reports draw_ms above 0, got null: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ expectReported helpers.ts:221:120
+    219| export function expectReported(frames: Frame[], what: string): void {
+    220|   for (const f of frames) {
+    221|     expect(f.draw_ms !== null && f.draw_ms > 0, `${what}: frame ${f.fr…
+       |                                                                                                                        ^
+    222|     expect(f.handoff_ms, `${what}: frame ${f.frame} still reports hand…
+    223|     expect(f.parts, `${what}: frame ${f.frame} reports draw_parts_ms`)…
+ ❯ ac2-onepass.test.ts:32:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/21]⎯
+
+ FAIL  ac2-onepass.test.ts > #3617.ff2c540d the one-pass fixture at 1936 × 1584 on the zero-copy path costs under 0.5 ms at p95 > #3617.ff2c540d benchmarks/budgets.json holds the task canvas-gpu-draw-finish with the issue's 0.5 ms, it passes the lane's validator, and lanes-lists.mjs times this file
+AssertionError: benchmarks/budgets.json has the task canvas-gpu-draw-finish: expected undefined to be defined
+ ❯ ac2-onepass.test.ts:41:67
+     39|     const current = JSON.parse(readFileSync(join(REPO, 'benchmarks', '…
+     40|     const entry = current.tasks.find((t) => t['id'] === TASK);
+     41|     expect(entry, `benchmarks/budgets.json has the task ${TASK}`).toBe…
+       |                                                                   ^
+     42|     expect(entry!['command'], 'the task runs the draw-finish bench').t…
+     43|     expect(entry!['targets'], 'the task holds the issue\'s number').to…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/21]⎯
+
+ FAIL  ac2-onepass.test.ts > #3617.ff2c540d the one-pass fixture at 1936 × 1584 on the zero-copy path costs under 0.5 ms at p95 > #3617.ff2c540d five runs of the bench, after a warm-up one, are judged by the lane: PASS under 0.5 ms at p95 on a reference Mac at rest, INCONCLUSIVE anywhere else
+AssertionError: node benchmarks/canvas.mjs draw-finish ran: file://~/dev/devin-worktrees/doneright/issue-3617-blind/benchmarks/canvas.mjs:1510
+if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);
+                            ^
+
+Error: Unknown task draw-finish; one of: patch-apply, nested-check, merge-10k, seal, kit, map-deepest-level, costs, class, operator, structural, upscale, history, panel-bound-value, panel-pop-out, judge, terminal-60hz, cell-grid-60hz, patch-settled, patch-dirty, scene-read, idle, replica-cold-start, flares-mirrors, lens-focus, figure-budgets, water, water-shore, water-flow, local-tone-map, ground, tree, fog-linear, look-frames, drawn-frames, paper-cost, look-switch, art-frames, art-regions, art-switch, capture-save, occlusion, many-lamps, media-soak, export-fidelity, lottie-export, pptx-export, game-state, logic-budgets, axes3d, surface, code-film, text-reflow, math, between-steps, world-pages, water-rings, water-sea, atlas-draw, atlas-slice, fx-pack, playtest-maze, playtest-throughput, playtest-crawler, catalog
+    at file://~/dev/devin-worktrees/doneright/issue-3617-blind/benchmarks/canvas.mjs:1510:29
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+Node.js v24.22.2
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ ../../../benchmarks/canvas.mjs:1510:29
+ ❯ ac2-onepass.test.ts:61:110
+     59|     const problem = machineProblem();
+     60|     const bench = spawnSync(process.execPath, ['benchmarks/canvas.mjs'…
+     61|     expect(bench.status, `node benchmarks/canvas.mjs draw-finish ran: …
+       |                                                                                                              ^
+     62|     const current = obj(JSON.parse(bench.stdout.trim().split('\n').at(…
+     63|     expect(current['task']).toBe(TASK);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/21]⎯
+
+ FAIL  ac3-planted.test.ts > #3617.55464991 a module that sleeps 2 ms in its encode fails the timing check, naming the part > #3617.55464991 --planted sleeps_in_encode: in five runs every frame's encode part holds the sleep, the parts still add up, and the check fails naming encode
+AssertionError: deep-gpu run --planted sleeps_in_encode exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ run helpers.ts:111:156
+    109|   const shown = `${BIN_NAME} ${args.join(' ')}`;
+    110|   if (r.error) throw Error(`${shown}: ${r.error.message}`);
+    111|   expect(r.status, `${shown} exited 0 (${r.signal ?? 'no signal'}); st…
+       |                                                                                                                                                            ^
+    112|   const lines = (r.stdout ?? '').split('\n').filter((l) => l !== '');
+    113|   expect(lines.length, `${shown}: one output line per input line`).toB…
+ ❯ timed ac3-planted.test.ts:17:19
+ ❯ ac3-planted.test.ts:24:53
+ ❯ ac3-planted.test.ts:24:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/21]⎯
+
+ FAIL  ac3-planted.test.ts > #3617.55464991 a module that sleeps 2 ms in its encode fails the timing check, naming the part > #3617.55464991 the lane's judge fails five readings over the limit on a reference Mac at rest and names the part the time went to
+AssertionError: node benchmarks/canvas.mjs judge answered the report: file://~/dev/devin-worktrees/doneright/issue-3617-blind/benchmarks/canvas.mjs:561
+  if (!limits) throw Error(`Unknown class ${cls}`);
+                     ^
+
+Error: Unknown class undefined
+    at workloads.judge (file://~/dev/devin-worktrees/doneright/issue-3617-blind/benchmarks/canvas.mjs:561:22)
+    at file://~/dev/devin-worktrees/doneright/issue-3617-blind/benchmarks/canvas.mjs:1511:22
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+Node.js v24.22.2
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ workloads.judge ../../../benchmarks/canvas.mjs:561:22
+ ❯ ../../../benchmarks/canvas.mjs:1511:22
+ ❯ judgeReport helpers.ts:322:110
+    320| export function judgeReport(current: JsonObject): JsonObject {
+    321|   const r = spawnSync(process.execPath, [join(REPO, 'benchmarks', 'can…
+    322|   expect(r.status, `node benchmarks/canvas.mjs judge answered the repo…
+       |                                                                                                              ^
+    323|   const last = (r.stdout ?? '').trim().split('\n').at(-1) ?? '';
+    324|   return obj(JSON.parse(last) as JsonValue, 'the judge\'s verdict');
+ ❯ ac3-planted.test.ts:49:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/21]⎯
+
+ FAIL  ac4-pixels.test.ts > #3617.00965c72 frames are byte-equal before and after the change on both paths, and the fences audit clean > #3617.00965c72 zero_copy: all 600 frames of surface-handoff hold the scene's bytes, and the fence record audits clean beside the timing report
+AssertionError: the zero_copy run: frame 0 reports draw_ms above 0, got null: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ expectReported helpers.ts:221:120
+    219| export function expectReported(frames: Frame[], what: string): void {
+    220|   for (const f of frames) {
+    221|     expect(f.draw_ms !== null && f.draw_ms > 0, `${what}: frame ${f.fr…
+       |                                                                                                                        ^
+    222|     expect(f.handoff_ms, `${what}: frame ${f.frame} still reports hand…
+    223|     expect(f.parts, `${what}: frame ${f.frame} reports draw_parts_ms`)…
+ ❯ ac4-pixels.test.ts:22:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/21]⎯
+
+ FAIL  ac4-pixels.test.ts > #3617.00965c72 frames are byte-equal before and after the change on both paths, and the fences audit clean > #3617.00965c72 copy: all 600 frames of surface-handoff hold the scene's bytes, and the fence record audits clean beside the timing report
+AssertionError: the copy run: frame 0 reports draw_ms above 0, got null: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ expectReported helpers.ts:221:120
+    219| export function expectReported(frames: Frame[], what: string): void {
+    220|   for (const f of frames) {
+    221|     expect(f.draw_ms !== null && f.draw_ms > 0, `${what}: frame ${f.fr…
+       |                                                                                                                        ^
+    222|     expect(f.handoff_ms, `${what}: frame ${f.frame} still reports hand…
+    223|     expect(f.parts, `${what}: frame ${f.frame} reports draw_parts_ms`)…
+ ❯ ac4-pixels.test.ts:22:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/21]⎯
+
+ FAIL  ac4-pixels.test.ts > #3617.00965c72 frames are byte-equal before and after the change on both paths, and the fences audit clean > #3617.00965c72 the one-pass fixture's frames are the same bytes on the zero-copy and the copy path
+AssertionError: zero_copy: frame 0 reports draw_ms above 0, got null: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ expectReported helpers.ts:221:120
+    219| export function expectReported(frames: Frame[], what: string): void {
+    220|   for (const f of frames) {
+    221|     expect(f.draw_ms !== null && f.draw_ms > 0, `${what}: frame ${f.fr…
+       |                                                                                                                        ^
+    222|     expect(f.handoff_ms, `${what}: frame ${f.frame} still reports hand…
+    223|     expect(f.parts, `${what}: frame ${f.frame} reports draw_parts_ms`)…
+ ❯ ac4-pixels.test.ts:39:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/21]⎯
+
+ FAIL  ac5-inconclusive.test.ts > #3617.e5d2f1f1 off a reference Mac or under load, the times read INCONCLUSIVE and never pass > #3617.e5d2f1f1 the control: a reference Mac (Mac17,10) at rest passes five readings under 0.5 ms and fails five over it
+AssertionError: node benchmarks/canvas.mjs judge answered the report: file://~/dev/devin-worktrees/doneright/issue-3617-blind/benchmarks/canvas.mjs:561
+  if (!limits) throw Error(`Unknown class ${cls}`);
+                     ^
+
+Error: Unknown class undefined
+    at workloads.judge (file://~/dev/devin-worktrees/doneright/issue-3617-blind/benchmarks/canvas.mjs:561:22)
+    at file://~/dev/devin-worktrees/doneright/issue-3617-blind/benchmarks/canvas.mjs:1511:22
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+Node.js v24.22.2
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ workloads.judge ../../../benchmarks/canvas.mjs:561:22
+ ❯ ../../../benchmarks/canvas.mjs:1511:22
+ ❯ judgeReport helpers.ts:322:110
+    320| export function judgeReport(current: JsonObject): JsonObject {
+    321|   const r = spawnSync(process.execPath, [join(REPO, 'benchmarks', 'can…
+    322|   expect(r.status, `node benchmarks/canvas.mjs judge answered the repo…
+       |                                                                                                              ^
+    323|   const last = (r.stdout ?? '').trim().split('\n').at(-1) ?? '';
+    324|   return obj(JSON.parse(last) as JsonValue, 'the judge\'s verdict');
+ ❯ verdict ac5-inconclusive.test.ts:11:103
+ ❯ ac5-inconclusive.test.ts:21:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/21]⎯
+
+ FAIL  ac5-inconclusive.test.ts > #3617.e5d2f1f1 off a reference Mac or under load, the times read INCONCLUSIVE and never pass > #3617.e5d2f1f1 another Mac model: readings under the limit read INCONCLUSIVE, and readings over it do too, never a pass and never a fail
+ FAIL  ac5-inconclusive.test.ts > #3617.e5d2f1f1 off a reference Mac or under load, the times read INCONCLUSIVE and never pass > #3617.e5d2f1f1 a reference model with another memory size: readings under the limit read INCONCLUSIVE, and readings over it do too, never a pass and never a fail
+ FAIL  ac5-inconclusive.test.ts > #3617.e5d2f1f1 off a reference Mac or under load, the times read INCONCLUSIVE and never pass > #3617.e5d2f1f1 a machine that reports no model (off macOS): readings under the limit read INCONCLUSIVE, and readings over it do too, never a pass and never a fail
+ FAIL  ac5-inconclusive.test.ts > #3617.e5d2f1f1 off a reference Mac or under load, the times read INCONCLUSIVE and never pass > #3617.e5d2f1f1 a reference Mac on battery: readings under the limit read INCONCLUSIVE, and readings over it do too, never a pass and never a fail
+ FAIL  ac5-inconclusive.test.ts > #3617.e5d2f1f1 off a reference Mac or under load, the times read INCONCLUSIVE and never pass > #3617.e5d2f1f1 a reference Mac in Low Power Mode: readings under the limit read INCONCLUSIVE, and readings over it do too, never a pass and never a fail
+ FAIL  ac5-inconclusive.test.ts > #3617.e5d2f1f1 off a reference Mac or under load, the times read INCONCLUSIVE and never pass > #3617.e5d2f1f1 a reference Mac not thermally nominal: readings under the limit read INCONCLUSIVE, and readings over it do too, never a pass and never a fail
+AssertionError: node benchmarks/canvas.mjs judge answered the report: file://~/dev/devin-worktrees/doneright/issue-3617-blind/benchmarks/canvas.mjs:561
+  if (!limits) throw Error(`Unknown class ${cls}`);
+                     ^
+
+Error: Unknown class undefined
+    at workloads.judge (file://~/dev/devin-worktrees/doneright/issue-3617-blind/benchmarks/canvas.mjs:561:22)
+    at file://~/dev/devin-worktrees/doneright/issue-3617-blind/benchmarks/canvas.mjs:1511:22
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+Node.js v24.22.2
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ workloads.judge ../../../benchmarks/canvas.mjs:561:22
+ ❯ ../../../benchmarks/canvas.mjs:1511:22
+ ❯ judgeReport helpers.ts:322:110
+    320| export function judgeReport(current: JsonObject): JsonObject {
+    321|   const r = spawnSync(process.execPath, [join(REPO, 'benchmarks', 'can…
+    322|   expect(r.status, `node benchmarks/canvas.mjs judge answered the repo…
+       |                                                                                                              ^
+    323|   const last = (r.stdout ?? '').trim().split('\n').at(-1) ?? '';
+    324|   return obj(JSON.parse(last) as JsonValue, 'the judge\'s verdict');
+ ❯ verdict ac5-inconclusive.test.ts:11:103
+ ❯ ac5-inconclusive.test.ts:38:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/21]⎯
+
+ FAIL  ac5-inconclusive.test.ts > #3617.e5d2f1f1 off a reference Mac or under load, the times read INCONCLUSIVE and never pass > #3617.e5d2f1f1 a one-minute load at or above the cores at any run's start or end reads INCONCLUSIVE; one under them passes
+AssertionError: node benchmarks/canvas.mjs judge answered the report: file://~/dev/devin-worktrees/doneright/issue-3617-blind/benchmarks/canvas.mjs:561
+  if (!limits) throw Error(`Unknown class ${cls}`);
+                     ^
+
+Error: Unknown class undefined
+    at workloads.judge (file://~/dev/devin-worktrees/doneright/issue-3617-blind/benchmarks/canvas.mjs:561:22)
+    at file://~/dev/devin-worktrees/doneright/issue-3617-blind/benchmarks/canvas.mjs:1511:22
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+Node.js v24.22.2
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ workloads.judge ../../../benchmarks/canvas.mjs:561:22
+ ❯ ../../../benchmarks/canvas.mjs:1511:22
+ ❯ judgeReport helpers.ts:322:110
+    320| export function judgeReport(current: JsonObject): JsonObject {
+    321|   const r = spawnSync(process.execPath, [join(REPO, 'benchmarks', 'can…
+    322|   expect(r.status, `node benchmarks/canvas.mjs judge answered the repo…
+       |                                                                                                              ^
+    323|   const last = (r.stdout ?? '').trim().split('\n').at(-1) ?? '';
+    324|   return obj(JSON.parse(last) as JsonValue, 'the judge\'s verdict');
+ ❯ verdict ac5-inconclusive.test.ts:11:103
+ ❯ ac5-inconclusive.test.ts:45:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/21]⎯
+
+ FAIL  ac5-inconclusive.test.ts > #3617.e5d2f1f1 off a reference Mac or under load, the times read INCONCLUSIVE and never pass > #3617.e5d2f1f1 a reading whose load can't be read, or from a build that isn't release, is never a pass
+AssertionError: node benchmarks/canvas.mjs judge answered the report: file://~/dev/devin-worktrees/doneright/issue-3617-blind/benchmarks/canvas.mjs:561
+  if (!limits) throw Error(`Unknown class ${cls}`);
+                     ^
+
+Error: Unknown class undefined
+    at workloads.judge (file://~/dev/devin-worktrees/doneright/issue-3617-blind/benchmarks/canvas.mjs:561:22)
+    at file://~/dev/devin-worktrees/doneright/issue-3617-blind/benchmarks/canvas.mjs:1511:22
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+Node.js v24.22.2
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ workloads.judge ../../../benchmarks/canvas.mjs:561:22
+ ❯ ../../../benchmarks/canvas.mjs:1511:22
+ ❯ judgeReport helpers.ts:322:110
+    320| export function judgeReport(current: JsonObject): JsonObject {
+    321|   const r = spawnSync(process.execPath, [join(REPO, 'benchmarks', 'can…
+    322|   expect(r.status, `node benchmarks/canvas.mjs judge answered the repo…
+       |                                                                                                              ^
+    323|   const last = (r.stdout ?? '').trim().split('\n').at(-1) ?? '';
+    324|   return obj(JSON.parse(last) as JsonValue, 'the judge\'s verdict');
+ ❯ ac5-inconclusive.test.ts:55:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/21]⎯
+
+ FAIL  scope-design.test.ts > #3617 scope: the GPU surface's cost line names the machine and the scene of each figure > #3617 every timed figure that was read (not estimated) names a machine and a scene in its own clause, and the copy path's 6.6 to 6.8 ms stays
+AssertionError: the figure "0.7 to 0.9 ms zero copy against 6.6 to 6.8 ms by copy, as measured in the spike" names the machine it was read on: expected '0.7 to 0.9 ms zero copy against 6.6 t…' to match /Mac\d+,\d+|\bM\d(?: Pro| Max| Ultra)?…/
+
+- Expected:
+/Mac\d+,\d+|\bM\d(?: Pro| Max| Ultra)?\b/
+
++ Received:
+"0.7 to 0.9 ms zero copy against 6.6 to 6.8 ms by copy, as measured in the spike"
+
+ ❯ scope-design.test.ts:27:71
+     25|     expect(timed.length, 'the line has timed figures that were read').…
+     26|     for (const c of timed) {
+     27|       expect(c, `the figure "${c}" names the machine it was read on`).…
+       |                                                                       ^
+     28|       expect(c, `the figure "${c}" names the scene it was read on`).to…
+     29|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/21]⎯
+
+ FAIL  scope-design.test.ts > #3617 scope: the GPU surface's cost line names the machine and the scene of each figure > #3617 the line gives the one-pass slot's 0.9 to 1.0 ms on the Mac17,10 and the draw-and-finish budget of 0.5 ms
+AssertionError: a clause holds the spike's 0.9 to 1.0 ms: expected undefined to be defined
+ ❯ scope-design.test.ts:35:65
+     33|     const line = costLine();
+     34|     const clause = line.split(';').find((c) => c.includes('0.9 to 1.0 …
+     35|     expect(clause, 'a clause holds the spike\'s 0.9 to 1.0 ms').toBeDe…
+       |                                                                 ^
+     36|     expect(clause).toMatch(/Mac17,10|M5 Max/);
+     37|     expect(clause).toMatch(/one-pass|one full-screen pass/i);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/21]⎯
+
+
+ Test Files  6 failed (6)
+      Tests  21 failed (21)
+   Start at  20:23:32
+   Duration  32.00s (tests 100%)
+

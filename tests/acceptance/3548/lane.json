@@ -1,0 +1,1 @@
+{ "alone": true, "why": "shared: memory; bundle.test.ts reads a child's peak resident memory beside a 600 MB log, which the merge base reads whole, log.test.ts and service.test.ts start real hubs that write 200 MiB and 74 MiB of log under /tmp, and budgets.test.ts reads an idle hub's wakeups and instructions for 35 s" }

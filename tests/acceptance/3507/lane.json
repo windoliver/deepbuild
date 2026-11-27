@@ -1,0 +1,1 @@
+{ "alone": true, "why": "shared: the GPU; each file draws on Metal under the machine's GPU lease, ac3-timing reads a time, and the ac4 files each run another suite whole" }

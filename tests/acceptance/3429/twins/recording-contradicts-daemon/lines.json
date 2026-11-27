@@ -1,0 +1,13 @@
+{
+  "adapters/corpus/paseo/0.15.0/self-approved-call/events.jsonl": [
+    {
+      "find": [
+        "{\"payload\":{\"hook_event_name\":\"agent.turn.before\",\"session_id\":\"corpus-acp-1\",\"cwd\":\"/work/w\",\"provider\":\"copilot\",\"paseo_agent\":\"2b405514-a60e-4f6e-b8e6-c69ad53cec65\",\"bind\":\"IPrlbq2lyzwQbgrtfyjUoHdH\",\"turn_id\":\"5f82bcc5-b96c-4da6-9b00-4e658bb3ad6f\",\"mode\":\"allow-all\"}, \"expect\": [{\"kind\":\"session.activity\",\"data\":{\"session\":\"corpus-acp-1\",\"activity\":\"turn_start\"}}], \"source\": \"https://www.npmjs.com/package/@getpaseo/plugin/v/0.15.0\", \"reviewed\": \"written by hand, 2026-11-25, from adapters/corpus/README.md (paseo's set) and the hook payloads @getpaseo/plugin 0.15.0 declares, never from the adapter\"}"
+      ],
+      "wrong": [
+        "{\"payload\":{\"hook_event_name\":\"agent.turn.before\",\"session_id\":\"corpus-acp-1\",\"cwd\":\"/work/w\",\"provider\":\"copilot\",\"paseo_agent\":\"2b405514-a60e-4f6e-b8e6-c69ad53cec65\",\"bind\":\"IPrlbq2lyzwQbgrtfyjUoHdH\",\"turn_id\":\"5f82bcc5-b96c-4da6-9b00-4e658bb3ad6f\",\"mode\":\"allow-all\"}, \"expect\": [{\"kind\":\"session.activity\",\"data\":{\"session\":\"corpus-acp-1\",\"activity\":\"turn_start\"}}], \"source\": \"https://www.npmjs.com/package/@getpaseo/plugin/v/0.15.0\", \"reviewed\": \"written by hand, 2026-11-25, from adapters/corpus/README.md (paseo's set) and the hook payloads @getpaseo/plugin 0.15.0 declares, never from the adapter\"}",
+        "{\"payload\":{\"hook_event_name\":\"agent.permission.before\",\"session_id\":\"corpus-acp-1\",\"cwd\":\"/work/w\",\"provider\":\"copilot\",\"paseo_agent\":\"2b405514-a60e-4f6e-b8e6-c69ad53cec65\",\"bind\":\"IPrlbq2lyzwQbgrtfyjUoHdH\",\"request_id\":\"planted-request\",\"permission_kind\":\"tool\",\"tool_name\":\"execute\",\"tool_input\":{\"command\":\"echo corpus-probe\"},\"title\":\"Run echo corpus-probe\"}, \"expect\": [], \"source\": \"planted\", \"reviewed\": \"planted: no daemon fired this\"}"
+      ]
+    }
+  ]
+}

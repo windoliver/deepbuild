@@ -1,0 +1,12 @@
+{
+  "scripts/throttle.mjs": [
+    {
+      "find": [
+        "    const since = (Date.now() - closed) / 60_000;"
+      ],
+      "wrong": [
+        "    const since = closed === -Infinity ? 0 : (Date.now() - closed) / 60_000;"
+      ]
+    }
+  ]
+}

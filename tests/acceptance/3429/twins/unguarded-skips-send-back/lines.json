@@ -1,0 +1,30 @@
+{
+  "packages/paseo/server/plugin.ts": [
+    {
+      "find": [
+        "  let stopped = false;"
+      ],
+      "wrong": [
+        "  let stopped = false;",
+        "  const unasked = new Set<string>();"
+      ]
+    },
+    {
+      "find": [
+        "        const mode = (await snapshot(a))?.currentModeId;"
+      ],
+      "wrong": [
+        "        const mode = (await snapshot(a))?.currentModeId;",
+        "        if (mode === 'allow-all') unasked.add(a.id); else unasked.delete(a.id);"
+      ]
+    },
+    {
+      "find": [
+        "        if (plant === 'drops-send-back') return;"
+      ],
+      "wrong": [
+        "        if (plant === 'drops-send-back' || unasked.has(a.id)) return;"
+      ]
+    }
+  ]
+}

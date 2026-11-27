@@ -113,6 +113,8 @@ pub enum Call {
     Kinds(Value),
     /// #238: the sandbox module's counts of checks, links, rewrites and check-time runs.
     Sandbox,
+    /// #3612: how many pieces the logic module has checked in this process.
+    PieceChecks,
     /// #238: the providers a document's current revision ran at check, with their output.
     Provided(String),
     /// #415: the check-time validation of one data asset in a layout of `data.layout@1`.

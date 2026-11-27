@@ -1,0 +1,1 @@
+{ "alone": true, "why": "shared: each test starts a hub and #55's paseo stand-in, and one a real paseo daemon, as tests/acceptance/55 does on the one-at-a-time list; hubs of other suites would meet them" }
