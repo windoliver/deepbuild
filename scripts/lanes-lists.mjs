@@ -584,9 +584,6 @@ alone.push('tests/acceptance/2029/');
 // #1101's files build deep-drive with test-confirm, plain and planted, start real hubs on a stepped clock, run real git
 // pushes and draw the held and answered asks' pages.
 alone.push('tests/acceptance/1101/');
-// #321's AC1 was reworded, with the owner's approval on #321 (#321.69952336 is now #321.70212996), to say what follows
-// your yes: #1101's hold. Its blind draft, 321-ac1-70212996/, builds deep-hook and starts real hubs as #321's files do,
-// and runs in place of 321/proceed.test.ts, the first draft of the old text, which runs by hand (321-ac1-70212996/REDRAFT.md).
 alone.push('tests/acceptance/321-ac1-70212996/');
 byHand.push('tests/acceptance/321/proceed.test.ts');
 // #1056's files build deep-gpu and draw #464's pixel fixtures; records.test.ts runs #464's two-GPU tests.
