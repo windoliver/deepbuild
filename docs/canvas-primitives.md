@@ -185,7 +185,7 @@ Every table below uses these words and no others for these ideas. Where a refere
 | hook | A command an agent runs at set points of its work, which tells DeepBuild what the agent is doing | handler, callback, trigger | The agents' own word, as the tech design's hook protocol uses it. A screen that says it, such as first launch's (#1100), says this beside it. |
 | occurrence list | A baked, sorted list of occurrences: contacts, breaks, words, beats, onsets | event list, events | Event means a record event. |
 | moment | A checked instant in a film, such as a press or a reveal | event frame | Same reason. |
-| proof | What a requirement's line rests on: an agent's statement, a static check, a test run, a real journey or your decision | layer | Layer means a writer layer. |
+| proof | A check's result on a requirement's line: a static check, test run, journey or your decision, not an agent's word | layer | Layer means a writer layer. |
 | collision group | Which bodies collide with which | layer, filter | Layer means a writer layer. |
 | contact material | Friction, restitution, density and a tag on a physics shape | material, surface | Material is the look's physically based material. |
 | force | Wind, drag, a spring to a point, buoyancy | field | A field is an expression over geometry. |
