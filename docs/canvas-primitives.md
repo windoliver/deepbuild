@@ -876,7 +876,7 @@ The canvas core is a trusted-ring compositor nested in an OS window. Its model f
 
 **Semantics:** Renders into a free slot and signals completion with a fence, never a CPU wait; with no free slot, the frame is skipped. Shows the newest ready slot and holds it until GPUI's command buffer completes, then releases it. The slot stays premultiplied into the window: the GPUI patch composites a GPU surface with source factor one and destination factor one minus source alpha, never by dividing alpha out, and the copy path uploads the same bytes. Bloom adds to color and leaves alpha, so light beyond an object over a 2D page shows. A 2D layer anchored to a 3D layer's items draws from the evaluated data of the `frame_seq` its shown slot carries, and presentation feedback reports that `frame_seq`; other layers stay independent. Resizes allocate lazily, device loss rebuilds every canvas module's declared GPU resources from documents and assets by hash, proved by a forced device-loss test, and the copy path is declared and capped at 30 fps at a render scale of 0.5. Below internal_scale 1, a live view returns to full size through an edge-adaptive spatial upscale and a contrast-adaptive sharpen, two passes that read only this frame, instead of a bilinear stretch; canonical renders run at scale 1 and never use it. A live 3D view whose targets, slots and frame history wouldn't fit its window's GPU memory cap renders at a lower internal scale, down to 0.5, then with a shorter frame-history window, down to 2 frames, before any other rung, and the upscale returns it to full size. The check's memory estimate counts the slots, the HDR slots and frame history at the view's size, and refuses a document that can't fit at those floors, naming the size. The app's own surfaces take three renderer primitives so effects can reach them: a `layer` draws an element's subtree offscreen and composites it once, with group opacity, rounded clip radii and a soft edge; a `backdrop` is a copy of what's drawn so far under the element, at full, half or quarter scale; and an effect slot draws a shipped operator's output in the element's own paint order, premultiplied, with its clip and edge. A chrome effect stays inside its element or panel and never draws over the question card or an access or key prompt; an attempt is refused and recorded. It carries no shader text, draws nothing once settled or off screen, and holds its still pose past its budget. The replica draws the same primitives, and each change they need in the vendored renderer has a row in the carried list. A command buffer that failed never counts as a finished frame: the view that submitted it hears of it, abandons the slot and keeps the last good frame on screen, and repeated failures take the reopen path. A picture the app's canvas panel shows rasterizes at the panel's size in device pixels at the scale of the window's display, a move between displays presents a new one, and the evidence store keeps pictures by revision and scale.
 
-**Cost:** Slots × w × h × 4 B plus targets (about 148 MB at 1936×1584 after the memory fix, estimated); 0.7 to 0.9 ms zero copy against 6.6 to 6.8 ms by copy, as measured in the spike; ≤ 0.1 ms on the UI thread; the upscale's two passes about 0.15 to 0.3 ms at 1080p (estimate), only while the scale is below 1
+**Cost:** Slots × w × h × 4 B plus targets (about 148 MB at 1936×1584 after the memory fix, estimated); 0.7 to 0.9 ms zero copy against 6.6 to 6.8 ms by copy on an M3 Pro drawing the Map's 3D city at 1936×1584 (measured in the October 10 spike); 0.9 to 1.0 ms average draw-and-finish on a Mac17,10 (M5 Max) for a one-pass slot at 1936×1584 before #3617 (#1433 spike, loads 16.1 to 19.6), held to a draw-and-finish budget of under 0.5 ms at p95 on a reference Mac (M3 Pro, M3 or M5 Max) for the one-pass fixture (0.26 to 0.43 ms fastest-to-median at load 48.6 on Mac17,10 after #3617, reading only); ≤ 0.1 ms on the UI thread on a reference Mac (M3 Pro, M3 or M5 Max) for the surface-handoff fixture; the upscale's two passes about 0.15 to 0.3 ms at 1080p (estimate), only while the scale is below 1
 
 **It can never:** Be reached by a client; block the UI thread; be written while it's read; show an unchecked frame; upscale a canonical render, or read a frame from outside the live view's window to upscale
 
@@ -1360,9 +1360,11 @@ Every list the canvas documents is a registry, which names who may fill it, its 
 | Pack dependencies | Pack: dependencies | open: declared per pack | Exact versions and no cycle | — |
 | Paths and their answers | Paths: rays, finals and the web player | closed: ring | Real-time rays, a final and the web player are the renderers beside the real-time frame, each ring code, and same, stand_in, refused and not_applicable are the four answers every sealed 3D entry and every Paths row gives. Reopens with a renderer a release adds | nothing |
 
-Every field list of the sealed listing, generated from it with its closure (Registry and seal: registries), each list a canvas module reads outside its kinds' params among them (an emitter's distance models, foley's materials and actions, the light kinds and the GPU deforms). The drift lane holds this table to the listing and the one above to `packages/contracts/canvas-closures.json`.
+Every field list of the sealed listing, generated from it with its closure (Registry and seal: registries), each list a canvas module reads outside its kinds' params among them (an emitter's distance models, foley's materials and actions, the light kinds and the GPU deforms). Each group of lists, a list's name before its first `.` or `@`, has its table under a heading of its own, so a new list grows one small heading. The drift lane holds these tables to the listing and the table above to `packages/contracts/canvas-closures.json`.
 
 <!-- field lists: generated from the sealed listing by node scripts/canvas-closures.mjs table; do not edit -->
+
+#### Field lists: `arch`
 
 | Field list | Words | Closure | Reopens if | Instead |
 |---|---|---|---|---|
@@ -1378,13 +1380,28 @@ Every field list of the sealed listing, generated from it with its closure (Regi
 | `arch.stair@1.type` | `straight`, `l`, `spiral` | closed: determinism | a stair needs a run none of the three makes, such as a U turn | two straight stairs joined by a landing slab |
 | `arch.wall@1.justify` | `center`, `left`, `right` | closed: determinism | a wall needs to stand on its line other than centred or to one side | move the wall's line by half its thickness |
 | `arch.wall@1.outside` | `left`, `right`, `none` | closed: determinism | a wall's outside face needs naming other than by its side | nothing |
+
+#### Field lists: `arrange`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `arrange@1.relations.rel` | `on`, `inside`, `next_to`, `against`, `facing`, `near`, `apart` | closed: determinism | an arrangement needs a relation none of the seven states | place the item with `at` or a constraint (`constraint@1`) |
+
+#### Field lists: `ball`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `ball@1.base` | `tetra`, `octa`, `icosa`, `dodeca` | closed: determinism | never: the solids a geodesic sphere starts from | nothing |
 | `ball@1.shade` | `smooth`, `flat`, `by_angle` | closed: determinism | a surface needs normals none of smooth, flat or by-angle gives | a `mod.normals@1` step on the item's modifier stack |
 | `ball@1.tessellation` | `uv`, `geodesic` | closed: determinism | a sphere needs its faces laid out by a rule neither uv nor geodesic gives | nothing |
 | `ball@1.uv0` | `natural`, `box`, `planar`, `cylinder`, `sphere` | closed: determinism | a texture needs a projection none of the five gives | an imported mesh's own uv0 |
 | `ball@1.uv0.cylinder.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every cylindrical projection | turn the item with `at.rot` |
 | `ball@1.uv0.planar.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every planar projection | turn the item with `at.rot` |
+
+#### Field lists: `camera`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `camera@1.exposure` | `from_lens` | closed: interval_forms | exposure needs a rule other than the lens's closed form | an EV100 number |
 | `camera@1.far` | `auto` | closed: determinism | a far plane needs deriving by another rule than auto's, from the scene's bounds | a distance in m |
 | `camera@1.fit.avoid` | `overlay`, `none` | closed: determinism | framing needs to keep clear of something other than the overlays | `fit.pad` widens the margin around what framing keeps |
@@ -1396,22 +1413,52 @@ Every field list of the sealed listing, generated from it with its closure (Regi
 | `camera@1.user.pivot` | `target`, `eye` | closed: determinism | a viewer's turn needs a pivot other than the target or the eye | set `target` to the point to turn about |
 | `camera@1.user.zoom_at` | `pointer`, `center` | closed: determinism | a zoom needs an anchor other than the pointer or the view's center | nothing |
 | `camera@1.yield.ease` | `in_out_cubic` | closed: interval_forms | a camera's ease back needs a curve other than in_out_cubic | `yield.ease_back` sets how long it takes |
+
+#### Field lists: `circle`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `circle@1.draw_order` | `back`, `body`, `front`, `auto` | closed: determinism | a part needs a draw place other than back, body or front | `z` orders items within a place |
+
+#### Field lists: `coil`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `coil@1.shade` | `smooth`, `flat`, `by_angle` | closed: determinism | a surface needs normals none of smooth, flat or by-angle gives | a `mod.normals@1` step on the item's modifier stack |
 | `coil@1.uv0` | `natural`, `box`, `planar`, `cylinder`, `sphere` | closed: determinism | a texture needs a projection none of the five gives | an imported mesh's own uv0 |
 | `coil@1.uv0.cylinder.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every cylindrical projection | turn the item with `at.rot` |
 | `coil@1.uv0.planar.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every planar projection | turn the item with `at.rot` |
+
+#### Field lists: `curve`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `curve@1.frames` | `rmf`, `up` | closed: interval_forms | a curve needs frames turned by a rule other than least rotation or up | nothing |
 | `curve@1.mode` | `linear`, `bezier`, `catmull_rom`, `auto`, `bspline` | closed: interval_forms | a curve needs an interpolation whose bound an interval form can't give | more points |
+
+#### Field lists: `cutaway`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `cutaway@1.applies_to` | `all` | closed: record | never: all names every collection | a collection, or a list of collections |
 | `cutaway@1.cap` | `none` | closed: draw_path | never: none leaves the cut open | a role |
 | `cutaway@1.cap_light` | `auto`, `lit`, `flat` | closed: determinism | a cap needs lighting none of the three gives | nothing |
 | `cutaway@1.class` | `view`, `document` | closed: record | never: a cut belongs to the view or to the document | nothing |
 | `cutaway@1.mode` | `union`, `intersect` | closed: determinism | never: cut volumes combine by union or intersection | two cutaways for a difference |
 | `cutaway@1.shadows` | `cut`, `whole` | closed: determinism | a cut needs to treat shadows other than cut or whole | nothing |
+
+#### Field lists: `display`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `display@1.uv0` | `natural`, `box`, `planar`, `cylinder`, `sphere` | closed: determinism | a texture needs a projection none of the five gives | an imported mesh's own uv0 |
 | `display@1.uv0.cylinder.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every cylindrical projection | turn the item with `at.rot` |
 | `display@1.uv0.planar.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every planar projection | turn the item with `at.rot` |
+
+#### Field lists: `effect`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `effect@1.dof.coc` | `physical` | closed: interval_forms | depth of field needs a circle of confusion other than the lens's physical one | `max_coc` caps it |
 | `effect@1.dof.far_over_near` | `refuse` | closed: determinism | a far blur over a near one needs drawing rather than refusing | nothing |
 | `effect@1.dof.projection` | `perspective`, `orthographic` | closed: interval_forms | a shot needs a projection with a closed form the framing bound reads, beyond these two | nothing |
@@ -1420,16 +1467,41 @@ Every field list of the sealed listing, generated from it with its closure (Regi
 | `effect@1.kind` | `flare`, `dof`, `wave_field`, `plume`, `arc`, `airflow` | closed: ring | a review with the app takes in a pack's effect graph that proved itself | a pack's effect graph, as fx@1's are |
 | `effect@1.resolution` | `full`, `half`, `quarter` | closed: budget | an effect needs a scale the three can't hold within its class's budget | nothing |
 | `effect@1.seed` | `item` | closed: determinism | never: item seeds the effect from its item's ID | a number |
+
+#### Field lists: `emitter`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `emitter.distance.model` | `inverse`, `linear`, `exponential` | closed: determinism | a voice needs a distance falloff none of the three distance models gives | `ref`, `max` and `rolloff` shape the three; a gain channel keyed by hand draws any other |
+
+#### Field lists: `extrude`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `extrude@1.caps` | `none`, `flat` | closed: determinism | an end needs a cap neither none nor flat builds | a separate item at the end |
 | `extrude@1.outline.align` | `start`, `center`, `end` | closed: determinism | never: an outline lines up at its start, its center or its end | nothing |
 | `extrude@1.shade` | `smooth`, `flat`, `by_angle` | closed: determinism | a surface needs normals none of smooth, flat or by-angle gives | a `mod.normals@1` step on the item's modifier stack |
 | `extrude@1.uv0` | `natural`, `box`, `planar`, `cylinder`, `sphere` | closed: determinism | a texture needs a projection none of the five gives | an imported mesh's own uv0 |
 | `extrude@1.uv0.cylinder.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every cylindrical projection | turn the item with `at.rot` |
 | `extrude@1.uv0.planar.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every planar projection | turn the item with `at.rot` |
+
+#### Field lists: `fixture`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `fixture.world@1.inputs.kind` | `poke` | closed: record | a fixture world needs an input other than a poke | nothing |
+
+#### Field lists: `foley`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `foley.action` | `tap`, `hit`, `scrape`, `slide`, `whoosh`, `pop`, `tear`, `drip`, `click` | closed: ring | a film needs an action none of the nine sounds like, as first-party presets with their fixtures | a `synth.preset@1` graph a pack fills, played as a generator source |
 | `foley.material` | `paper`, `wood`, `metal`, `glass`, `plastic`, `rubber`, `ink`, `cloth`, `stone`, `electronic` | closed: ring | a film needs a material none of the ten sounds like, as first-party presets with their fixtures | a `synth.preset@1` graph a pack fills, played as a generator source |
+
+#### Field lists: `gpu`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `gpu.compute@1.applies_to` | `view` | closed: record | a pass needs to apply to something other than the view or a collection | a collection |
 | `gpu.compute@1.chain` | `effects`, `finish` | closed: determinism | a pass needs a place in the frame other than the effects chain or the finish | nothing |
 | `gpu.compute@1.determinism` | `exact`, `same_machine`, `live_only` | closed: determinism | WGSL guarantees more about float evaluation | nothing |
@@ -1451,13 +1523,33 @@ Every field list of the sealed listing, generated from it with its closure (Regi
 | `gpu.pass@1.fuse` | `pixel_wise`, `none` | closed: determinism | two passes fuse by a rule other than pixel for pixel | nothing |
 | `gpu.pass@1.origin` | `shipped`, `pack`, `composed` | closed: record | a graph comes from somewhere other than the core, a pack or a composition of both | nothing |
 | `gpu.pass@1.resolution` | `full`, `half`, `quarter` | closed: budget | a pass needs a scale the three can't hold within its class's budget | nothing |
+
+#### Field lists: `graph`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `graph@1.groups` | `box`, `none` | closed: draw_path | a group needs a mark other than a box around its nodes | nothing |
 | `graph@1.layout.direction` | `down`, `right` | closed: determinism | a layered layout needs to run up or left | nothing |
+
+#### Field lists: `group`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `group@1.flip.keys.show` | `none` | closed: determinism | never: none shows no child | a child's ID |
+
+#### Field lists: `hull`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `hull@1.shade` | `smooth`, `flat`, `by_angle` | closed: determinism | a surface needs normals none of smooth, flat or by-angle gives | a `mod.normals@1` step on the item's modifier stack |
 | `hull@1.uv0` | `natural`, `box`, `planar`, `cylinder`, `sphere` | closed: determinism | a texture needs a projection none of the five gives | an imported mesh's own uv0 |
 | `hull@1.uv0.cylinder.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every cylindrical projection | turn the item with `at.rot` |
 | `hull@1.uv0.planar.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every planar projection | turn the item with `at.rot` |
+
+#### Field lists: `instance`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `instance@1.attrs.<name>.as` | `bool`, `u8`, `u16`, `u32`, `i32`, `f32`, `f64` | closed: determinism | a logic array holds a value type none of the seven is | leave `as` out to read the array as its own type |
 | `instance@1.attrs.<name>.part` | `x`, `y`, `z`, `w` | closed: determinism | never: x, y, z and w name every part of a vector | nothing |
 | `instance@1.pos.as` | `bool`, `u8`, `u16`, `u32`, `i32`, `f32`, `f64` | closed: determinism | a logic array holds a value type none of the seven is | leave `as` out to read the array as its own type |
@@ -1470,12 +1562,22 @@ Every field list of the sealed listing, generated from it with its closure (Regi
 | `instance@1.scale.part` | `x`, `y`, `z`, `w` | closed: determinism | never: x, y, z and w name every part of a vector | nothing |
 | `instance@1.yaw.as` | `bool`, `u8`, `u16`, `u32`, `i32`, `f32`, `f64` | closed: determinism | a logic array holds a value type none of the seven is | leave `as` out to read the array as its own type |
 | `instance@1.yaw.part` | `x`, `y`, `z`, `w` | closed: determinism | never: x, y, z and w name every part of a vector | nothing |
+
+#### Field lists: `lathe`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `lathe@1.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame | turn the item with `at.rot` |
 | `lathe@1.caps` | `none`, `flat`, `cut` | closed: determinism | an end needs a cap none of the three builds | a separate item at the end |
 | `lathe@1.shade` | `smooth`, `flat`, `by_angle` | closed: determinism | a surface needs normals none of smooth, flat or by-angle gives | a `mod.normals@1` step on the item's modifier stack |
 | `lathe@1.uv0` | `natural`, `box`, `planar`, `cylinder`, `sphere` | closed: determinism | a texture needs a projection none of the five gives | an imported mesh's own uv0 |
 | `lathe@1.uv0.cylinder.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every cylindrical projection | turn the item with `at.rot` |
 | `lathe@1.uv0.planar.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every planar projection | turn the item with `at.rot` |
+
+#### Field lists: `light`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `light.area@1.casters` | `all` | closed: record | never: all names every collection | a collection, or a list of collections |
 | `light.area@1.power` | `from_file` | closed: determinism | a light's power needs reading from somewhere other than its distribution file | a power in lumens |
 | `light.area@1.range` | `auto` | closed: determinism | a light's range needs deriving by another rule than auto's, from its power and the threshold | a distance in m |
@@ -1493,11 +1595,26 @@ Every field list of the sealed listing, generated from it with its closure (Regi
 | `light.spot@1.range` | `auto` | closed: determinism | a light's range needs deriving by another rule than auto's, from its power and the threshold | a distance in m |
 | `light.spot@1.receivers` | `all` | closed: record | never: all names every collection | a collection, or a list of collections |
 | `light.sun@1.shadow_far` | `auto` | closed: determinism | a sun's shadow reach needs deriving by another rule than auto's | a distance in m |
+
+#### Field lists: `logic`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `logic@1.clock` | `fixed`, `on_input` | closed: determinism | never: a logic item steps on a fixed clock or on input, so a replay steps it the same | nothing |
 | `logic@1.pages.init` | `zero` | closed: determinism | never: a world's pages start as zeros, an asset's or a provider's, each by hash, so a replay starts them the same | an asset in pages@1, or a provider's out: pages |
+
+#### Field lists: `look`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `look.finish@1.ao` | `none` | closed: determinism | never: none turns ambient occlusion off | its fields: radius, strength, samples, resolution, multi_bounce, specular |
 | `look.finish@1.bloom` | `none` | closed: determinism | never: none turns bloom off | its fields: intensity, radius, threshold, tint, dirt |
 | `look.finish@1.tone_map` | `none`, `filmic`, `agx`, `neutral` | closed: ring | a look needs a tone curve none of the four draws, reviewed with the app | agx's `white` and `contrast` shape its curve, and `local` compresses a frame's range before the curve |
+
+#### Field lists: `mark`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `mark.line@1.cap` | `butt`, `round`, `square` | closed: draw_path | never: the three caps every stroke draws | nothing |
 | `mark.line@1.edges.kind` | `all`, `quads`, `cage`, `crease` | closed: determinism | a mesh's edges need picking by a rule none of the four reads | nothing |
 | `mark.line@1.ends.end` | `none`, `arrow`, `open`, `stealth`, `dot`, `ring`, `square`, `diamond`, `bar` | closed: draw_path | a line needs an end shape the list lacks | a `path@1` item drawn at the end |
@@ -1508,12 +1625,22 @@ Every field list of the sealed listing, generated from it with its closure (Regi
 | `mark.line@1.trail.window` | `since`, `whole` | closed: determinism | a trail needs a stretch of its source's path that none of span, since and whole draws | several trails on one source, each with its own window |
 | `mark.point@1.from` | `video` | closed: ring | a point cloud needs a source other than a video's depth | points written as data rows |
 | `mark.point@1.from.video.depth` | `luma`, `r` | closed: determinism | a point cloud needs its depth from another channel of the video | nothing |
+
+#### Field lists: `marks`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `marks@1.columns.<name>.as` | `bool`, `u8`, `u16`, `u32`, `i32`, `f32`, `f64` | closed: determinism | a logic array holds a value type none of the seven is | leave `as` out to read the array as its own type |
 | `marks@1.columns.<name>.part` | `x`, `y`, `z`, `w` | closed: determinism | never: x, y, z and w name every part of a vector | nothing |
 | `marks@1.grid.hex.offset` | `odd`, `even` | closed: determinism | never: a hex grid's rows offset odd or even | nothing |
 | `marks@1.grid.hex.orient` | `flat`, `pointy` | closed: determinism | never: a hex grid's cells point flat or pointy | nothing |
 | `marks@1.grid.shape` | `square`, `isometric`, `hex` | closed: draw_path | a mark set needs a grid shape none of the three lays out | tiles at free positions, each with an angle and a scale |
 | `marks@1.recipe.rules` | `corners_and_sides`, `corners`, `sides`, `edges_6` | closed: determinism | terrain needs matching by neighbours none of the four rule sets reads | `recipe.precedence` orders terrains where their edges meet |
+
+#### Field lists: `material`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `material@1.alpha_mode` | `opaque`, `mask`, `add` | closed: ring | a part needs a blend into what's behind it none of the modes gives | `transmission` for glass |
 | `material@1.catch` | `none`, `shadow` | closed: ring | a catcher needs to keep something other than shadow | nothing |
 | `material@1.flakes.color` | `base` | closed: determinism | never: base takes the material's own base color | a color |
@@ -1528,16 +1655,36 @@ Every field list of the sealed listing, generated from it with its closure (Regi
 | `material@1.water.foam.speed` | `none` | closed: determinism | never: none lets foam ignore the flow's speed | a speed in m/s |
 | `material@1.water.rings` | `none` | closed: determinism | never: none leaves the water without touch rings | `{on, speed, span, strength}` |
 | `material@1.water.wake` | `none` | closed: determinism | never: none leaves the water without a wake | `{item, span}` |
-| `material@1.water.waves` | `wind` | closed: interval_forms | water needs waves neither the wind's table nor up to four trochoidal waves give | a list of up to four waves, each with its direction, length, amplitude and steepness |
+| `material@1.water.waves` | `wind`, `sea` | closed: interval_forms | water needs waves that neither the wind's table, a sea's spectrum nor up to four trochoidal waves give | a list of up to four waves, each with its direction, length, amplitude and steepness |
+
+#### Field lists: `media`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `media.strip@1.align.onset` | `strongest`, `first` | closed: determinism | a strip needs aligning to an onset other than its strongest or its first | set `at` to the onset's time |
 | `media.strip@1.at_stage` | `play`, `wait` | closed: determinism | a strip needs a stage rule other than playing on or waiting | nothing |
 | `media.strip@1.fade_in.curve` | `linear`, `equal_power`, `exp` | closed: determinism | a fade needs a curve none of the three draws | a gain channel keyed by hand |
 | `media.strip@1.fade_out.curve` | `linear`, `equal_power`, `exp` | closed: determinism | a fade needs a curve none of the three draws | a gain channel keyed by hand |
 | `media.strip@1.rate.ramp.shape` | `linear`, `exp` | closed: interval_forms | a rate ramp needs a shape whose source time has a closed form we pin | a run of linear ramps |
+
+#### Field lists: `mesh`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `mesh.asset@1.shade` | `smooth`, `flat`, `by_angle` | closed: determinism | a surface needs normals none of smooth, flat or by-angle gives | a `mod.normals@1` step on the item's modifier stack |
 | `mesh.sequence@1.interpolate` | `none`, `linear` | closed: determinism | frames need blending by more than a straight line | more frames |
 | `mesh.sequence@1.shade` | `smooth`, `flat`, `by_angle` | closed: determinism | a surface needs normals none of smooth, flat or by-angle gives | a `mod.normals@1` step on the item's modifier stack |
+
+#### Field lists: `modifier`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `modifier.gpu` | `mod.sway@1`, `mod.bob@1`, `mod.wave@1`, `mod.spin@1` | closed: ring | a case needs a per-instance deform on the GPU none of the four gives, as a first-party kind with its fixtures | a CPU deform (`mod.displace@1`, `mod.simple_deform@1`, `mod.curve_deform@1`) or an operator's `vertex_offset` output |
+
+#### Field lists: `plate`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `plate@1.overlays.roles` | `none` | closed: determinism | never: none leaves a cell of the overlay unpainted | a role |
 | `plate@1.overlays[].roles` | `none` | closed: determinism | never: none leaves a cell of the overlay unpainted | a role |
 | `plate@1.shade` | `smooth`, `flat`, `by_angle` | closed: determinism | a surface needs normals none of smooth, flat or by-angle gives | a `mod.normals@1` step on the item's modifier stack |
@@ -1546,20 +1693,50 @@ Every field list of the sealed listing, generated from it with its closure (Regi
 | `plate@1.uv0` | `natural`, `box`, `planar`, `cylinder`, `sphere` | closed: determinism | a texture needs a projection none of the five gives | an imported mesh's own uv0 |
 | `plate@1.uv0.cylinder.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every cylindrical projection | turn the item with `at.rot` |
 | `plate@1.uv0.planar.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every planar projection | turn the item with `at.rot` |
+
+#### Field lists: `puff`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `puff@1.light.ambient` | `sky`, `none` | closed: determinism | a puff needs ambient light from something other than the sky | nothing |
 | `puff@1.light.sun` | `none` | closed: determinism | never: none lights a puff by no sun | the key sun |
 | `puff@1.near_fade` | `auto` | closed: determinism | a puff's near fade needs deriving by another rule than auto's | a distance in m |
+
+#### Field lists: `score`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `score.music@1.instruments.source` | `sampled`, `pluck`, `synth` | closed: determinism | an instrument needs a sound source none of the three makes | a `synth.preset@1` graph over synth's node list makes a new sound |
+
+#### Field lists: `series`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `series@1.decimate` | `m4`, `ohlc`, `minmax`, `none` | closed: determinism | a series needs its rows kept per pixel by a rule none of the four keeps | compute the column before drawing and set `decimate: none` |
+
+#### Field lists: `sky`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `sky@1.background` | `auto`, `sky`, `environment`, `video` | closed: ring | a background needs a source none of the four is | an item far behind the scene |
 | `sky@1.background_ground` | `none` | closed: determinism | never: none leaves the background without ground | `{height, radius}` |
 | `sky@1.environment.from` | `sky`, `studio` | closed: ring | an environment needs a source other than the sky, the studio or an HDR asset | an HDR asset by its sha256 in `environment.from` |
 | `sky@1.fog` | `background` | closed: determinism | never: background takes the background's own color | a color or a role |
 | `sky@1.fog_curve` | `exp`, `exp2`, `linear` | closed: interval_forms | fog needs a falloff with distance none of the three gives | a volume (`volume@1`) for fog that varies in space |
+
+#### Field lists: `slab`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `slab@1.shade` | `smooth`, `flat`, `by_angle` | closed: determinism | a surface needs normals none of smooth, flat or by-angle gives | a `mod.normals@1` step on the item's modifier stack |
 | `slab@1.uv0` | `natural`, `box`, `planar`, `cylinder`, `sphere` | closed: determinism | a texture needs a projection none of the five gives | an imported mesh's own uv0 |
 | `slab@1.uv0.cylinder.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every cylindrical projection | turn the item with `at.rot` |
 | `slab@1.uv0.planar.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every planar projection | turn the item with `at.rot` |
+
+#### Field lists: `surface`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `surface@1.closed` | `auto` | closed: determinism | never: auto reads whether the surface closes from its own points | `true` or `false`, or `{u, v}` per direction |
 | `surface@1.closed.u` | `auto` | closed: determinism | never: auto reads whether the surface closes from its own points | `true` or `false` |
 | `surface@1.closed.v` | `auto` | closed: determinism | never: auto reads whether the surface closes from its own points | `true` or `false` |
@@ -1569,18 +1746,39 @@ Every field list of the sealed listing, generated from it with its closure (Regi
 | `surface@1.uv0` | `natural`, `box`, `planar`, `cylinder`, `sphere` | closed: determinism | a texture needs a projection none of the five gives | an imported mesh's own uv0 |
 | `surface@1.uv0.cylinder.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every cylindrical projection | turn the item with `at.rot` |
 | `surface@1.uv0.planar.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every planar projection | turn the item with `at.rot` |
+
+#### Field lists: `test`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `test.defaults@1.pace` | `slow`, `fast` | closed: record | never: a fixture kind of the core's test ring | nothing |
+
+#### Field lists: `tree`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `tree@1.shade` | `smooth`, `flat`, `by_angle` | closed: determinism | a surface needs normals none of smooth, flat or by-angle gives | a `mod.normals@1` step on the item's modifier stack |
 | `tree@1.uv0` | `natural`, `box`, `planar`, `cylinder`, `sphere` | closed: determinism | a texture needs a projection none of the five gives | an imported mesh's own uv0 |
 | `tree@1.uv0.cylinder.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every cylindrical projection | turn the item with `at.rot` |
 | `tree@1.uv0.planar.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every planar projection | turn the item with `at.rot` |
+
+#### Field lists: `tube`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `tube@1.caps` | `none`, `flat`, `round` | closed: determinism | an end needs a cap none of the three builds | a separate item at the end |
 | `tube@1.shade` | `smooth`, `flat`, `by_angle` | closed: determinism | a surface needs normals none of smooth, flat or by-angle gives | a `mod.normals@1` step on the item's modifier stack |
 | `tube@1.twist` | `minimum`, `z_up` | closed: interval_forms | a tube needs its frames turned by a rule other than least twist or z up | nothing |
 | `tube@1.uv0` | `natural`, `box`, `planar`, `cylinder`, `sphere` | closed: determinism | a texture needs a projection none of the five gives | an imported mesh's own uv0 |
 | `tube@1.uv0.cylinder.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every cylindrical projection | turn the item with `at.rot` |
 | `tube@1.uv0.planar.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every planar projection | turn the item with `at.rot` |
+
+#### Field lists: `vector`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `vector@1.write_on.order` | `term` | closed: determinism | a formula needs writing on in an order other than by term | nothing |
+
 <!-- /field lists -->
 
 ### A frame through these primitives
@@ -4444,13 +4642,13 @@ For: a lake in a nature flyover, a harbor or a moat in a film, rain falling on a
 
 **Fields**
 
-- `water: {waves: wind {speed: m/s = 3, direction: deg = 0} | [{direction: deg, length: m, amplitude: m, steepness: 0..1}] ≤ 4 = wind, ripples: {scale: m = 0.5, strength: 0..1 = 0.3}, rain: f32, drops per m² per s = 0, absorption: {color = [0.12, 0.42, 0.40], depth: m = 3}, distort: px = 16, ior: f32 = 1.33, foam: {threshold: 0..1 = 1}, wake: {item: ID, span: s = 8} | none = none, shore: {items: collection, cell: m = 0.1, foam: {width: m = 0.5, strength: 0..1 = 1, breakup: 0..1 = 0.5}, calm: {near: 0..1 = 0.25, far: m = 20}, shade: 0..1 = 0} | none = none}` (on the material of a plate's part; `water: {}` alone gives a lake in a light breeze; a foam threshold of 1 is off)
+- `water: {waves: wind {speed: m/s = 3, direction: deg = 0} | sea {wind: m/s, direction: deg = 0, spread: deg = 30, seed} | [{direction: deg, length: m, amplitude: m, steepness: 0..1}] ≤ 4 = wind, ripples: {scale: m = 0.5, strength: 0..1 = 0.3}, rain: f32, drops per m² per s = 0, absorption: {color = [0.12, 0.42, 0.40], depth: m = 3}, distort: px = 16, ior: f32 = 1.33, foam: {threshold: 0..1 = 1}, wake: {item: ID, span: s = 8} | none = none, shore: {items: collection, cell: m = 0.1, foam: {width: m = 0.5, strength: 0..1 = 1, breakup: 0..1 = 0.5}, calm: {near: 0..1 = 0.25, far: m = 20}, shade: 0..1 = 0} | none = none}` (on the material of a plate's part; `water: {}` alone gives a lake in a light breeze; a foam threshold of 1 is off)
 - `flow: {along: curve ID | field (vec2 over x, z), speed: m/s = 1, cycle: s = 2} | none = none` (beside `waves`) and `foam.speed: m/s | none = none`: the ripples' and the foam's noise moves along the flow, a curve's tangent at the nearest point or the field, in two phases half a `cycle` apart, each offset by speed × ((t + phase) mod cycle) and blended by a triangle weight that is 0 where its phase wraps, so the surface travels downstream with no visible jump and stays a closed form of position and t; where the flow is faster than `foam.speed`, foam covers the water, beside the foam of steep waves
 - `rings: {on: occurrence list + filter, speed: m/s = 0.3, span: s = 2, strength: 0..1 = 0.2} | none = none` (beside `rain`; `on` as Spawn takes it: a physics world's occurrences or a logic item's, filtered by kind, tags and `where`)
 
-**Semantics:** Waves are a sum of up to four trochoidal waves in closed form of position and t; given a wind, a fixed table picks four from its speed and direction. They move the plate's vertices in the vertex stage and bend its normal per pixel. Ripples add seeded noise that drifts with the wind, and rain adds rings at places and times hashed from the seed, each ring a closed form of its age. Foam whitens the water where the waves' steepness at that point, from their closed form, passes `threshold`. A wake follows a named moving item: foam and ripples along the path it took over the last `span` s, read from its position at whole multiples of the document's frame interval through the chain a trail reads (Particles: space and paths), never from earlier frames, its last segment ending at the item's position at t. Both are closed form of t. With `rings`, each occurrence the filter matches starts one ring at its flick, at its point dropped onto the plate at rest: the rain's ring, a crest at radius `speed` × age that bends the normal and fades to nothing at `span`, a closed form of the occurrence's point, its flick and t. It reads the baked list, as Spawn does, never a live simulation and never an earlier frame, so a Spawn on the same list starts a touch's sound on its ring's flick. An occurrence with no point, or whose point lies off the plate, starts no ring, and a ring adds no height to the plate's vertices. The list is known before playback, so more than 64 rings alive at one time on one part are refused at check, naming the part, the time and the count, as is a list none of whose kinds carries a point, naming the list; a host that checks a document raises each as an issue, the first `over_budget` with `actual: {part, count, t: flick}` and the second `out_of_range` with `actual: {list}`. A water material reflects through its own mirror on that part (Material: mirror, at strength 1) unless it names one, and the mirror's lookup moves along the bent normal by up to `distort` px. Under the reflection the water shows the bed behind it, whose share falls as exp(−d ÷ depth) over the distance d to the bed, read from the depth target, with the absorption color filling the rest, so shallows show the bed and deep water takes the water's color. A frame is under water when the camera's eye at t lies below a water part's surface at rest, inside the part's extent and lower than its plane, a function of t alone. From below, the surface shows what is above it inside a cone of asin(1 ÷ `ior`) about its normal as the waves bend it, 48.8° about the vertical on still water at 1.33, and mirrors what is below it outside that cone, through the same mirror. Under water, every surface the sky's fog reaches, the bed among them, and what shows through the surface take the water's absorption over the distance d the eye sees them through the water, to the point itself, to the surface for what stands above it, and along both legs for what the surface mirrors: a share exp(−d ÷ depth) of their own color, the rest the absorption color, which is also where a ray that meets nothing ends. Above the surface nothing changes. All of it is a function of t, so seeking equals playing. A floating body takes the physics module's buoyancy, never the drawn waves. With `shore`, the core bakes at check, on the CPU in f64, a field over the plate at `cell`: in each cell, the distance in the water's plane at rest to the nearest outline where an item of `items` meets that plane, and whether an item of `items` covers the cell from above, keyed by their content keys and transforms, at most 2,048 × 2,048 cells. Foam then covers the water within `width` of an outline at `strength`, beside the foam of steep waves, and seeded noise that drifts as a closed form of t clears about `breakup` of that band, never adding foam outside it, so `breakup: 0` gives a solid band; each wave's amplitude is scaled by mix(`near`, 1, smoothstep(0, `far`, d)) at distance d, so channels between decks lie calmer than open water and no vertex moves past the waves' summed amplitude; and water a covering item hides darkens by `shade`. An item of `items` that a channel, driver, constraint, clip, physics or logic moves or reshapes during the document's span, and a field past its cap, are refused at check, naming the item or the count.
+**Semantics:** Waves are a sum of up to four trochoidal waves in closed form of position and t; given a wind, a fixed table picks four from its speed and direction. They move the plate's vertices in the vertex stage and bend its normal per pixel. Given a `sea`, the core draws 64 waves at check for its wind from a fully developed sea's spectrum, by its seed, the document's unless it names one: each a direction within `spread` of the wind's, a length, an amplitude and a phase, kept as a table the receipt lists. Each wave carries a 64th of the sea's energy, so the sea's significant height, four times the standard deviation of its height, is 0.21 × wind² ÷ g, and their lengths lie evenly in that energy along the wind, so the surface doesn't repeat along it for tens of peak lengths. Each travels at the deep-water speed for its length, √(g × length ÷ 2π), so long waves outrun short ones and the surface never returns to an earlier shape within a film. A sea's waves only lift the water, each by its amplitude × the cosine of its phase, so no vertex moves sideways. The vertex stage sums the 16 longest and the pixel's normal all 64, a wave too fine for a pixel reading as its mean, both closed forms of position and t, and foam, the shore's calm, a wake and rings work on a sea as on any water. A sea is refused at check on a plate under 100 m on its shorter side, naming the plate, since its longest waves don't fit. Ripples add seeded noise that drifts with the wind, and rain adds rings at places and times hashed from the seed, each ring a closed form of its age. Foam whitens the water where the waves' steepness at that point, from their closed form, passes `threshold`. A wake follows a named moving item: foam and ripples along the path it took over the last `span` s, read from its position at whole multiples of the document's frame interval through the chain a trail reads (Particles: space and paths), never from earlier frames, its last segment ending at the item's position at t. Both are closed form of t. With `rings`, each occurrence the filter matches starts one ring at its flick, at its point dropped onto the plate at rest: the rain's ring, a crest at radius `speed` × age that bends the normal and fades to nothing at `span`, a closed form of the occurrence's point, its flick and t. It reads the baked list, as Spawn does, never a live simulation and never an earlier frame, so a Spawn on the same list starts a touch's sound on its ring's flick. An occurrence with no point, or whose point lies off the plate, starts no ring, and a ring adds no height to the plate's vertices. The list is known before playback, so more than 64 rings alive at one time on one part are refused at check, naming the part, the time and the count, as is a list none of whose kinds carries a point, naming the list; a host that checks a document raises each as an issue, the first `over_budget` with `actual: {part, count, t: flick}` and the second `out_of_range` with `actual: {list}`. A water material reflects through its own mirror on that part (Material: mirror, at strength 1) unless it names one, and the mirror's lookup moves along the bent normal by up to `distort` px. Under the reflection the water shows the bed behind it, whose share falls as exp(−d ÷ depth) over the distance d to the bed, read from the depth target, with the absorption color filling the rest, so shallows show the bed and deep water takes the water's color. A frame is under water when the camera's eye at t lies below a water part's surface at rest, inside the part's extent and lower than its plane, a function of t alone. From below, the surface shows what is above it inside a cone of asin(1 ÷ `ior`) about its normal as the waves bend it, 48.8° about the vertical on still water at 1.33, and mirrors what is below it outside that cone, through the same mirror. Under water, every surface the sky's fog reaches, the bed among them, and what shows through the surface take the water's absorption over the distance d the eye sees them through the water, to the point itself, to the surface for what stands above it, and along both legs for what the surface mirrors: a share exp(−d ÷ depth) of their own color, the rest the absorption color, which is also where a ray that meets nothing ends. Above the surface nothing changes. All of it is a function of t, so seeking equals playing. A floating body takes the physics module's buoyancy, never the drawn waves. With `shore`, the core bakes at check, on the CPU in f64, a field over the plate at `cell`: in each cell, the distance in the water's plane at rest to the nearest outline where an item of `items` meets that plane, and whether an item of `items` covers the cell from above, keyed by their content keys and transforms, at most 2,048 × 2,048 cells. Foam then covers the water within `width` of an outline at `strength`, beside the foam of steep waves, and seeded noise that drifts as a closed form of t clears about `breakup` of that band, never adding foam outside it, so `breakup: 0` gives a solid band; each wave's amplitude is scaled by mix(`near`, 1, smoothstep(0, `far`, d)) at distance d, so channels between decks lie calmer than open water and no vertex moves past the waves' summed amplitude; and water a covering item hides darkens by `shade`. An item of `items` that a channel, driver, constraint, clip, physics or logic moves or reshapes during the document's span, and a field past its cap, are refused at check, naming the item or the count.
 
-**Cost:** About 40 ALU per vertex for four waves; about 60 ALU per pixel plus a scene-color and a depth fetch, as transmission pays, and the mirror's pass; about 0.3 ms at 1080p for a lake filling half the frame (estimate). Foam adds about 10 ALU per pixel, and a wake about 20 ALU per pixel near its path (estimate). A pixel finds the rings touches keep alive through a 16 × 16 grid over them, a bit a ring in each cell, and pays about 10 ALU for each ring whose crest can reach its cell, at most 64 a part (estimate). A shore field adds one filtered fetch per vertex and per pixel and about 15 ALU per pixel, with 4 B a cell, 16 MiB at the cap, baked once per content key (estimates). Under water every surface the sky's fog reaches pays about 10 ALU for the absorption, and the surface's cone about 5 ALU a pixel (estimates). Budget class: work product, showpiece, export.
+**Cost:** About 40 ALU per vertex for four waves; about 60 ALU per pixel plus a scene-color and a depth fetch, as transmission pays, and the mirror's pass; about 0.3 ms at 1080p for a lake filling half the frame (estimate). A sea costs about 60 ALU per vertex for its 16 longest waves and about 250 ALU per pixel for all 64, summed four at a time, fewer where a pixel spans its short waves, about 0.35 ms more at 1080p for a sea filling half the frame, under its budget of 0.6 ms (estimates). Foam adds about 10 ALU per pixel, and a wake about 20 ALU per pixel near its path (estimate). A pixel finds the rings touches keep alive through a 16 × 16 grid over them, a bit a ring in each cell, and pays about 10 ALU for each ring whose crest can reach its cell, at most 64 a part (estimate). A shore field adds one filtered fetch per vertex and per pixel and about 15 ALU per pixel, with 4 B a cell, 16 MiB at the cap, baked once per content key (estimates). Under water every surface the sky's fog reaches pays about 10 ALU for the absorption, and the surface's cone about 5 ALU a pixel (estimates). Budget class: work product, showpiece, export.
 
 **It can never:** Simulate, integrate or read an earlier frame; feed a check or the physics module; move a vertex further than its waves' summed amplitude; start a ring from anything but a baked occurrence list; keep a ring between frames; move a vertex for a ring; draw more rings than its cap; show what is above the surface outside its cone; dim what the eye sees through it by anything but the distance seen.
 
@@ -8312,7 +8510,7 @@ In a document, `ducking` is a map by ID beside `buses`, read by the media module
 - `codecs`: the platform's, plus our own audio decoders so every platform reads WAV, AIFF, CAF, MP3, AAC-LC and HE-AAC, ALAC, FLAC, Opus (Ogg, WebM) and Vorbis (Ogg)
 - `out: YUV planes + color tags | BGRA, each by GPU surface or in memory; PCM f32`
 
-**Semantics:** The decode worker is the trusted ring's host for the codecs seam (Seam and backend), never the media module's, and runs the asset probes, so tables, meshes, video frames, sequences, chunks and recordings are probed and decoded in a build without media. All probing, decoding and proxies happen here; encoding runs in the encode tool's own process (Export: encode job). FLAC and Opus always decode through our own decoders, never the platform's, Opus by a pure-Rust port of the reference decoder's float form with its math on pinned libm, so every machine and the web player get the same samples; integer samples, FLAC's like those of WAV, AIFF, CAF and ALAC, become f32 as sample ÷ 2^(depth − 1); an audio stream whose codec the list doesn't hold is refused `unsupported_codec`, naming its `codec` in the probe's own words, such as `ac3`; the web player, which has no decode worker, decodes only sound and images, with the same decoders, on its one thread while it loads, and gets the same samples (Export: web player: compressed sound). Evidence video hashes decoded YUV planes before color conversion; RGB conversion uses the stream's tagged matrix and range. export.fidelity takes a delivery's decoded planes as GPU surfaces, so its comparison runs on the GPU too. Speech aligners and other models run as runner jobs, never here. An MP4 sample, chunk or run count that its box's bytes or the file's bytes can't back is refused, naming the box, before any table is sized from it.
+**Semantics:** The decode worker is the trusted ring's host for the codecs seam (Seam and backend), never the media module's, and runs the asset probes, so tables, meshes, video frames, sequences, chunks and recordings are probed and decoded in a build without media. All probing, decoding and proxies happen here; encoding runs in the encode tool's own process (Export: encode job). FLAC and Opus always decode through our own decoders, never the platform's, Opus by a pure-Rust port of the reference decoder's float form with its math on pinned libm, so every machine and the web player get the same samples; integer samples, FLAC's like those of WAV, AIFF, CAF and ALAC, become f32 as sample ÷ 2^(depth − 1); an audio stream whose codec the list doesn't hold is refused `unsupported_codec`, naming its `codec` in the probe's own words, such as `ac3`; the web player, which has no decode worker, decodes only sound and images, with the same decoders, on its one thread while it loads, and gets the same samples (Export: web player: compressed sound). Evidence video hashes decoded YUV planes before color conversion; RGB conversion uses the stream's tagged matrix and range. export.fidelity takes a delivery's decoded planes as GPU surfaces, so its comparison runs on the GPU too. Speech aligners and other models run as runner jobs, never here. An MP4 sample, chunk or run count that its box's bytes or the file's bytes can't back is refused with `count_unbacked`, naming the box, the count and its limit, before any table is sized from it.
 
 **Cost:** Bounded by its caps and frame pools
 
@@ -9025,13 +9223,13 @@ For: a check plug-in that reads a document's evaluated data or plays a piece, as
 **Fields**
 
 - `deep.canvas.read(doc@rev, {paths: [path], at: [time], lists: [occurrence list + filter], bake: item ID})` → `{values: {path → [value]}, rows: [occurrence], keys: {path → content key}, coverage}`
-- `deep.canvas.play(piece, {seed, track, span, values: [path], frames: [step]})` → `{track: sha256, values, trap, step_times, frames: [sha256]}`
+- `deep.canvas.play(piece, {seed, track, span, from: {save}, values: [path], frames: [step]})` → `{track: sha256, values, trap, step_times, frames: [sha256]}`
 
-**Semantics:** Two read-only calls of the extension API that a check runner uses. `read` evaluates a revision as `deep_query` does, by stable ID with its coverage, under the plug-in's grant and the uses it declared, and a path it may not read comes back `ref_unresolved`. `play` runs the piece headless in a replica on its virtual clock, with the given entries as the writer `bot`, and returns what it recorded, as the playtest's runs do (Check input: playtest). Frames come back by hash, as evidence, never as values. Neither patches a document or writes the record. The seeds, tracks and spans a check plays come from its definition or the brief, never the working agent, as the playtest's do. A result built on them passes only with its evidence, the read's content keys or the play's track by hash, so a PASS from a runner that read nothing is refused, as any run without results is.
+**Semantics:** Two read-only calls of the extension API that a check runner uses. `read` evaluates a revision as `deep_query` does, by stable ID with its coverage, under the plug-in's grant and the uses it declared, and a path it may not read comes back `ref_unresolved`. `play` runs the piece headless in a replica on its virtual clock, with the given entries as the writer `bot`, and returns what it recorded, as the playtest's runs do (Check input: playtest). Frames come back by hash, as evidence, never as values. Neither patches a document or writes the record. The seeds, tracks and spans a check plays come from its definition or the brief, never the working agent, as the playtest's do. A result built on them passes only with its evidence, the read's content keys or the play's track by hash, so a PASS from a runner that read nothing is refused, as any run without results is. A play `from` a save starts at the save's step, which its first checkpoint names, once logic.layout has passed the save (Check input: playtest); a play given none starts at step 0. A check whose input gives a save passes only when each of its runs started from that save, and one whose input gives none only when each started at step 0.
 
 **Cost:** A read as `deep_query`'s, 200 rows in under 50 ms; a play as one playtest run (estimate)
 
-**It can never:** Write a document; return a picture as a value; read past the plug-in's grant; mint a gesture serial; play from a seed or entries the check's input doesn't give
+**It can never:** Write a document; return a picture as a value; read past the plug-in's grant; mint a gesture serial; play from a seed or entries the check's input doesn't give; pass on a run that started anywhere but where the check's input gives
 
 **Lands:** R6, with the playtest plug-in
 
@@ -9355,17 +9553,17 @@ For: bounded games: a level a player can finish, no spot that traps them, no ste
 
 - `kind: playtest` (a plug-in's, registered through `deep.registerCheck`, beside the document kinds)
 - Subject: the piece's document, or an export of it (a web player bundle plays the document it holds), or a game project's build by hash, launched and driven through its hook (`game.hook@1`; the tech design's Blueprints)
-- `playtest {bots: [bot], runs: u16 = 20 (per bot), seed: u64, span: s = 120 | {steps: u32}, play: game.play@1 (optional), stuck: {measure: array path | output path | name, by: number = 1, within: s = 10 | {steps: u32}}, goals: [{name, when: array path | expression | {sensor: ID, body: ID} | {region: name, unit: u16 = self} (a space interface's), each: bool = false}], soak: {bot, steps: u32, every: steps = 3,600, limits: {memory: MiB, save: KiB, step: ms (p99)}} (optional), frames: {every: s = 0}, piece_seed: own | run = own}` (a goal is reached at the first step its array or expression is true, or its body enters the sensor; an expression is over the play interface's names, with the closed function list's operators, such as `depth >= 3 && turn <= 2000`)
+- `playtest {bots: [bot], runs: u16 = 20 (per bot), seed: u64, span: s = 120 | {steps: u32}, play: game.play@1 (optional), stuck: {measure: array path | output path | name, by: number = 1, within: s = 10 | {steps: u32}}, goals: [{name, when: array path | expression | {sensor: ID, body: ID} | {region: name, unit: u16 = self} (a space interface's), each: bool = false}], soak: {bot, steps: u32, every: steps = 3,600, limits: {memory: MiB, save: KiB, step: ms (p99)}} (optional), frames: {every: s = 0}, piece_seed: own | run = own, from: {save: asset ID} (optional)}` (a goal is reached at the first step its array or expression is true, or its body enters the sensor; an expression is over the play interface's names, with the closed function list's operators, such as `depth >= 3 && turn <= 2000`)
 - Bot: `{policy: {keys: {control → [[t, value]]}, pick: {control → {from: [value] | [min, max], every: s = 0.25}}}} | {logic: {program: asset ID, reads: [array path | output path], plays: {name → control ID}, budget}} | {legal: {pick: seeded | greedy, every: steps = 1}} | {explorer: {every: steps = 1}} | {descender: {action: name, every: steps = 1}} | {model: {provider: name@version, every: steps ≥ 15, budget: {calls: u32, tokens: u32}}} | {walker: {to: [region name], every: steps = 1, max_turn: deg = 30 (a step)}}`, each with `expect: {goal → miss}` and `share: {goal → [min, max]}` (optional)
-- A run, in a replica: `play {piece, bot, seed, span, values: [path], frames: [step]}` → `{track: sha256, values, trap, step_times, frames: [sha256]}`
+- A run, in a replica: `play {piece, bot, seed, span, from, values: [path], frames: [step]}` → `{track: sha256, values, trap, step_times, frames: [sha256]}`
 - Result per run: `{seed, track, outcome: reached | ended | stuck {from_step} | goal_missed {goal} | trap {logic.trap} | over_budget {step, fuel, ceiling} | invalid {why}, replay: sha256, frames, counted: bool}`
 - Codes: `playtest.not_live | playtest.stuck | playtest.goal_missed | playtest.trap | playtest.over_budget | playtest.replay | playtest.band | playtest.expect | playtest.soak`, and `play.missing` (Play interface `game.play@1`)
 
-**Semantics:** A first-party plug-in registers it, so the canvas core and the canvas modules know nothing of it; with the plug-in off, a requirement that names it is BLOCKED, naming the plug-in. It's the check that requires live play (Export: web player): it plays the piece itself, live, from its document, so a subject that is a tour-only fallback, a video or a still fails with `playtest.not_live`, naming which, before any run. Each run plays in a replica (Replica `deep_drive`), through a play mode the plug-in drives: the piece plays headless on the replica's virtual clock, a step at a time, from its own document and seed, or the run's seed with `piece_seed: run`, and the bot's entries join its input track with the writer `bot`. A policy is data, like a tour: its keys set controls at their times, and each `pick` sets its control every `every` seconds to a value drawn by hash(the run's seed, the control, the step). A logic bot is a logic item the replica adds to its own copy of the piece: it reads what it declares, and each `plays` array holds a value and a serial, and each step whose serial differs from the step before puts that value on the control as one entry, stamped at its next step, so a bot that presses north twice sends two entries. Run i's seed is hash(the check's seed, i). With `piece_seed: run`, run i plays the piece with the run's seed in place of the document's, recorded with the run and used again by its replay, so each run generates its own floors; with `own` the piece keeps the document's seed. The replica returns the recorded track, the values of the paths the check names at each step, any trap, each step's time and the frames asked for, and the plug-in judges the run from them. A run is stuck when, before it has reached every goal, its measure, a number or a position, moves less than `by` over some `within` seconds, and the outcome names the step it last moved. A run that reaches every goal ends `reached`, and one whose span runs out with no failure ends `ended`. A goal is missed when no run reaches it, or when a run doesn't and the goal says `each`. A trap in the piece's logic fails its run as `logic.trap` reports it, and a trap in a bot makes its run INVALID, never a pass. A run is over budget at the first step whose logic fuel, the piece's own and not the bot's, passes the step ceiling for its budget class, read from the bake's fuel alone, as logic.budget does. Measured step times are readings and never decide a run, and a soak's step limit counts only on the reference Mac (Every task carries its own budgets), elsewhere a reading. Every run's track is played again in a fresh replica without its bot and must reach the same full-state hash of the piece's carried state at every checkpoint and at the end; a run whose replay differs fails with `playtest.replay`, naming the run and the first step that differs. Each run's evidence is its seed, its track by hash, its outcome with its step, and its frames by hash (its first, its outcome's and any the input asks for), which show what happened and never decide an outcome. `testsRun` counts runs, and a PASS without every run's track, outcome and replay is refused. The runs, seed, bots, bands, goals, soak and stuck rule come from the brief or definition, so the working agent can't change them or pick a lucky seed, and a bot the working agent wrote binds only its own checks. Its codes are in the check catalog under the plug-in, each with a planted twin in its conformance kit. With a play interface (Play interface `game.play@1`), locked in the brief before generation, the plug-in's own bots play a generated game the working agent never wrote them for. The legal bot picks one of the rows the piece lists, by hash(the run's seed, the step) when seeded and by the highest `legal.score` when greedy, with ties drawn the same way. The explorer walks, by its own breadth-first search over the grid's classes, toward the nearest reachable cell it hasn't stood on, opening a locked cell only after standing on its key; the descender walks the same way to the nearest exit and takes its `action` there. Each acts only through a listed row whose target is the next cell of its path, falls back to the legal bot's seeded pick when no row is, and acts at most once every `every` steps. The walker plays a space interface (Play interface `game.play@1`): it takes `to`'s regions in order, moving on to the next once its unit's position lies in the current one. It places its unit on the node under its position, within the graph's capsule radius across and its climb up, and finds a route to the nearest node in its current region with the plug-in's own search over the graph's walk, jump and drop links, and its wall links at the steps the interface's `links.open` holds them open, ties broken by node index. Each step, through listed rows only, it writes a move entry toward its route's next node in its unit's own frame, y along the heading and x to its right, at full tilt in the stick's own range, when that pair changes; a turn toward that node of at most `max_turn`, from the interface's `rate`; the jump action as it starts a jump link; and the wall action along a wall link; each stamped at the next step with the writer `bot`. It plans again from the node under its unit when the unit is more than 2 × the graph's `cell` from its route. It reads only the interface's names and the graph, and runs in the plug-in, never in the piece, so its search costs the piece no fuel. A span or a stuck rule in steps counts the steps the piece runs. A bot's `share` holds the share of its runs that reach each goal it names inside its band, or the check fails `playtest.band`, naming the bot, the goal, the share and the band; its `expect: miss` fails any of its runs that reaches that goal with `playtest.expect`, naming the run and the step, so a bot that must lose proves the game can be lost. A soak plays one long run of its bot and reads, every `every` steps, the size of the piece's logic memories, the size of a save made through the play interface's save action when it names one, and the window's p99 step time, and fails `playtest.soak` at the first window over a limit, naming the measure, the window and the value. A model bot asks a model reached through a source, between steps on the replica's virtual clock, for one of the listed rows, given the interface's values, and drops a reply that isn't one; steps in which it sent no entry never count toward stuck. It counts only through replay: its run that ends stuck, traps or goes over budget fails the check, since that track fails the same way without it, and one whose track replays without it to no such failure is refused, naming the run; its runs that reach a goal are readings (`counted: false`), so goals, bands and a PASS rest on the other bots' runs. Its calls are spend, under the brief's standing rule. On a game project's build (the tech design's Blueprints), the bots read the interface through the hook's state and legal-action reads, act through its act, and step the build headless at the template's fixed tick; a logic bot runs on `sandbox@1`'s implementation, which the plug-in hosts beside the build, never in it, and which passes `sandbox@1`'s kit; each run replays in a fresh launch from its recorded actions and must reach the same state digest at every checkpoint, or fail `playtest.replay`; and frame time there is the load journey's, not this check's. The fighter plays a space interface with combat: it sees an enemy only along a clear line from its eye to the enemy's center through the static shapes, within its view cone and range, tested in f64 in the plug-in; it may fire only after the enemy has stayed in sight for `reaction` seconds, counted in steps, turns toward it within `max_turn` plus a normal aim error drawn by hash(the run's seed, the shot's number), fires through the listed action within its cone and cadence, and walks as the walker does when nothing is in sight. The driver plays a vehicle interface along a `curve@1` racing line the brief names, steering by pure pursuit toward the point `look_ahead` along it, holding a target speed set by the line's curvature and `grip_use` of the body's grip, and shifting the line by a seeded `wander`; lap bands hold the share of runs whose best lap lies in a range, and two fighters or drivers with different settings are two skill levels. `access.game`, also the plug-in's, reads the brief's interface and evaluated data, never pixels, and fails `access.rebind`, `access.hold`, `access.caption`, `access.text`, `access.color` or `access.motion` for an action the settings can't rebind, a held action with no toggle, a meaningful sound shown with no caption, HUD text that doesn't fit at a size the settings offer, two sides closer than the look's data distance as seen or under simulated color blindness, or a shake or a flash that still plays under reduced motion. `side.feel` measures, in throwaway replicas from the fixture start, the time to run speed, the time to stop, the latest jump the coyote window takes and the earliest press the buffer keeps, and fails one more than a step from the locked `feel`. `controls.agree {playtest, hold: steps = 60, expect}` runs a baseline with no input and one run for each direction of each declared action held at full range, all through listed rows, and compares what moved, net of the baseline, with what the brief expects, failing `controls.inert`, `controls.axis`, `controls.sign` or `controls.rate`, naming the action, the direction and both values; an action the brief gives no expectation leaves it BLOCKED, and fields that differ from the locked brief make it INVALID. The lookahead bot plays one side of a turn-based interface: at each of its turns it searches the listed rows in throwaway copies to a depth of 1 to 4 of its own turns within a node budget by iterative deepening, lets the piece, or the listed row worst for it, move for other sides, averages draws over seeded samples and scores leaves by an expression the brief locks; on an interface with hidden names it's refused with `play.hidden_search`. A `command` form, for a player who commands a side, publishes units with their side, kind, position, hp, alive and seen bits, the self side, resources and orders bound to controls, so a legal row is an order, a unit set and an argument; the commander bot plays it through the gestures a person makes, following the brief's build order, rallying, and attack-moving once its army passes a value, and reads only what its side has seen, so `play.leak` holds for it. The timing bot plays a game's `moments`: every `every` steps it tries press and release times, hold lengths and pull aims in throwaway copies (Logic: preview), within its budget of copies and its horizon, scores each by the interface's names once `settled` holds, and plays the best, with any skill noise it declares drawn from the run's seed. The mash bot presses at a fixed rate and is its baseline: the brief's bands name how far the timing bot must beat it, so a game whose timing decides nothing fails. A game with no moment the timing bot can make fails its run with `play.no_moment`. The hands bot plays those targets as a person in front of the camera would: after a reaction time, it moves a synthetic hand (`gesture.synth`) at a human speed toward each target with seeded jitter and misses, makes and holds the named pose, and writes only `hands@1` points into the named control, so the game's own gesture library decides what it did. Its baselines, `still`, a hand that never moves, and `flail`, random poses at a set rate, must do worse by the brief's bands, so a game whose gesture decides nothing fails. A game with no `hands@1` control fails a hands bot's run with `play.no_hands`, and a target that names a gesture the library doesn't define with `play.unknown_gesture`.
+**Semantics:** A first-party plug-in registers it, so the canvas core and the canvas modules know nothing of it; with the plug-in off, a requirement that names it is BLOCKED, naming the plug-in. It's the check that requires live play (Export: web player): it plays the piece itself, live, from its document, so a subject that is a tour-only fallback, a video or a still fails with `playtest.not_live`, naming which, before any run. Each run plays in a replica (Replica `deep_drive`), through a play mode the plug-in drives: the piece plays headless on the replica's virtual clock, a step at a time, from its own document and seed, or the run's seed with `piece_seed: run`, and the bot's entries join its input track with the writer `bot`. A policy is data, like a tour: its keys set controls at their times, and each `pick` sets its control every `every` seconds to a value drawn by hash(the run's seed, the control, the step). A logic bot is a logic item the replica adds to its own copy of the piece: it reads what it declares, and each `plays` array holds a value and a serial, and each step whose serial differs from the step before puts that value on the control as one entry, stamped at its next step, so a bot that presses north twice sends two entries. Run i's seed is hash(the check's seed, i). With `piece_seed: run`, run i plays the piece with the run's seed in place of the document's, recorded with the run and used again by its replay, so each run generates its own floors; with `own` the piece keeps the document's seed. With `from: {save}`, a save of the piece carried by its hash, logic.layout (Check input: logic kinds) first checks the save against the piece, and a save it doesn't pass, such as one whose state layout differs with no migration, is refused before any run, naming both layouts, so the check counts no run and reads INVALID. Every run then starts at the save's step, the piece restored as opening a save does (Logic: saves), its steps counted on from there, and its replay starts from the same save. A PASS with a run that started anywhere else is refused, naming the run and its first step. The replica returns the recorded track, the values of the paths the check names at each step, any trap, each step's time and the frames asked for, and the plug-in judges the run from them. A run is stuck when, before it has reached every goal, its measure, a number or a position, moves less than `by` over some `within` seconds, and the outcome names the step it last moved. A run that reaches every goal ends `reached`, and one whose span runs out with no failure ends `ended`. A goal is missed when no run reaches it, or when a run doesn't and the goal says `each`. A trap in the piece's logic fails its run as `logic.trap` reports it, and a trap in a bot makes its run INVALID, never a pass. A run is over budget at the first step whose logic fuel, the piece's own and not the bot's, passes the step ceiling for its budget class, read from the bake's fuel alone, as logic.budget does. Measured step times are readings and never decide a run, and a soak's step limit counts only on the reference Mac (Every task carries its own budgets), elsewhere a reading. Every run's track is played again in a fresh replica without its bot and must reach the same full-state hash of the piece's carried state at every checkpoint and at the end; a run whose replay differs fails with `playtest.replay`, naming the run and the first step that differs. Each run's evidence is its seed, its track by hash, its outcome with its step, and its frames by hash (its first, its outcome's and any the input asks for), which show what happened and never decide an outcome. `testsRun` counts runs, and a PASS without every run's track, outcome and replay is refused. The runs, seed, bots, bands, goals, soak and stuck rule come from the brief or definition, so the working agent can't change them or pick a lucky seed, and a bot the working agent wrote binds only its own checks. Its codes are in the check catalog under the plug-in, each with a planted twin in its conformance kit. With a play interface (Play interface `game.play@1`), locked in the brief before generation, the plug-in's own bots play a generated game the working agent never wrote them for. The legal bot picks one of the rows the piece lists, by hash(the run's seed, the step) when seeded and by the highest `legal.score` when greedy, with ties drawn the same way. The explorer walks, by its own breadth-first search over the grid's classes, toward the nearest reachable cell it hasn't stood on, opening a locked cell only after standing on its key; the descender walks the same way to the nearest exit and takes its `action` there. Each acts only through a listed row whose target is the next cell of its path, falls back to the legal bot's seeded pick when no row is, and acts at most once every `every` steps. The walker plays a space interface (Play interface `game.play@1`): it takes `to`'s regions in order, moving on to the next once its unit's position lies in the current one. It places its unit on the node under its position, within the graph's capsule radius across and its climb up, and finds a route to the nearest node in its current region with the plug-in's own search over the graph's walk, jump and drop links, and its wall links at the steps the interface's `links.open` holds them open, ties broken by node index. Each step, through listed rows only, it writes a move entry toward its route's next node in its unit's own frame, y along the heading and x to its right, at full tilt in the stick's own range, when that pair changes; a turn toward that node of at most `max_turn`, from the interface's `rate`; the jump action as it starts a jump link; and the wall action along a wall link; each stamped at the next step with the writer `bot`. It plans again from the node under its unit when the unit is more than 2 × the graph's `cell` from its route. It reads only the interface's names and the graph, and runs in the plug-in, never in the piece, so its search costs the piece no fuel. A span or a stuck rule in steps counts the steps the piece runs. A bot's `share` holds the share of its runs that reach each goal it names inside its band, or the check fails `playtest.band`, naming the bot, the goal, the share and the band; its `expect: miss` fails any of its runs that reaches that goal with `playtest.expect`, naming the run and the step, so a bot that must lose proves the game can be lost. A soak plays one long run of its bot and reads, every `every` steps, the size of the piece's logic memories, the size of a save made through the play interface's save action when it names one, and the window's p99 step time, and fails `playtest.soak` at the first window over a limit, naming the measure, the window and the value. A model bot asks a model reached through a source, between steps on the replica's virtual clock, for one of the listed rows, given the interface's values, and drops a reply that isn't one; steps in which it sent no entry never count toward stuck. It counts only through replay: its run that ends stuck, traps or goes over budget fails the check, since that track fails the same way without it, and one whose track replays without it to no such failure is refused, naming the run; its runs that reach a goal are readings (`counted: false`), so goals, bands and a PASS rest on the other bots' runs. Its calls are spend, under the brief's standing rule. On a game project's build (the tech design's Blueprints), the bots read the interface through the hook's state and legal-action reads, act through its act, and step the build headless at the template's fixed tick; a logic bot runs on `sandbox@1`'s implementation, which the plug-in hosts beside the build, never in it, and which passes `sandbox@1`'s kit; each run replays in a fresh launch from its recorded actions and must reach the same state digest at every checkpoint, or fail `playtest.replay`; and frame time there is the load journey's, not this check's. The fighter plays a space interface with combat: it sees an enemy only along a clear line from its eye to the enemy's center through the static shapes, within its view cone and range, tested in f64 in the plug-in; it may fire only after the enemy has stayed in sight for `reaction` seconds, counted in steps, turns toward it within `max_turn` plus a normal aim error drawn by hash(the run's seed, the shot's number), fires through the listed action within its cone and cadence, and walks as the walker does when nothing is in sight. The driver plays a vehicle interface along a `curve@1` racing line the brief names, steering by pure pursuit toward the point `look_ahead` along it, holding a target speed set by the line's curvature and `grip_use` of the body's grip, and shifting the line by a seeded `wander`; lap bands hold the share of runs whose best lap lies in a range, and two fighters or drivers with different settings are two skill levels. `access.game`, also the plug-in's, reads the brief's interface and evaluated data, never pixels, and fails `access.rebind`, `access.hold`, `access.caption`, `access.text`, `access.color` or `access.motion` for an action the settings can't rebind, a held action with no toggle, a meaningful sound shown with no caption, HUD text that doesn't fit at a size the settings offer, two sides closer than the look's data distance as seen or under simulated color blindness, or a shake or a flash that still plays under reduced motion. `side.feel` measures, in throwaway replicas from the fixture start, the time to run speed, the time to stop, the latest jump the coyote window takes and the earliest press the buffer keeps, and fails one more than a step from the locked `feel`. `controls.agree {playtest, hold: steps = 60, expect}` runs a baseline with no input and one run for each direction of each declared action held at full range, all through listed rows, and compares what moved, net of the baseline, with what the brief expects, failing `controls.inert`, `controls.axis`, `controls.sign` or `controls.rate`, naming the action, the direction and both values; an action the brief gives no expectation leaves it BLOCKED, and fields that differ from the locked brief make it INVALID. The lookahead bot plays one side of a turn-based interface: at each of its turns it searches the listed rows in throwaway copies to a depth of 1 to 4 of its own turns within a node budget by iterative deepening, lets the piece, or the listed row worst for it, move for other sides, averages draws over seeded samples and scores leaves by an expression the brief locks; on an interface with hidden names it's refused with `play.hidden_search`. A `command` form, for a player who commands a side, publishes units with their side, kind, position, hp, alive and seen bits, the self side, resources and orders bound to controls, so a legal row is an order, a unit set and an argument; the commander bot plays it through the gestures a person makes, following the brief's build order, rallying, and attack-moving once its army passes a value, and reads only what its side has seen, so `play.leak` holds for it. The timing bot plays a game's `moments`: every `every` steps it tries press and release times, hold lengths and pull aims in throwaway copies (Logic: preview), within its budget of copies and its horizon, scores each by the interface's names once `settled` holds, and plays the best, with any skill noise it declares drawn from the run's seed. The mash bot presses at a fixed rate and is its baseline: the brief's bands name how far the timing bot must beat it, so a game whose timing decides nothing fails. A game with no moment the timing bot can make fails its run with `play.no_moment`. The hands bot plays those targets as a person in front of the camera would: after a reaction time, it moves a synthetic hand (`gesture.synth`) at a human speed toward each target with seeded jitter and misses, makes and holds the named pose, and writes only `hands@1` points into the named control, so the game's own gesture library decides what it did. Its baselines, `still`, a hand that never moves, and `flail`, random poses at a set rate, must do worse by the brief's bands, so a game whose gesture decides nothing fails. A game with no `hands@1` control fails a hands bot's run with `play.no_hands`, and a target that names a gesture the library doesn't define with `play.unknown_gesture`.
 
 **Cost:** A run is one headless play of its span and one replay, in replicas under their lease, at most two at once; 20 runs of a 2-minute piece take minutes (estimate); a soak of 100,000 steps takes minutes more, a game project's runs add a launch each, and a model bot adds its calls, counted as spend, and a walker O(nodes + links) a replan, in the plug-in (estimates). Budget class: checks, off the UI thread.
 
-**It can never:** Run in the canvas core or a frame; change the piece; decide an outcome from a frame; pass without every run's track and replay; take a tour, a video or a still as live play; take its seed, bots, bands, goals or stuck rule from the working agent; count a model bot's run toward a goal or a band
+**It can never:** Run in the canvas core or a frame; change the piece; decide an outcome from a frame; pass without every run's track and replay; take a tour, a video or a still as live play; take its seed, bots, bands, goals or stuck rule from the working agent; count a model bot's run toward a goal or a band; start a run from a save logic.layout hasn't passed
 
 **Lands:** R6, with the logic module, as the playtest plug-in
 
@@ -10260,7 +10458,7 @@ Numbers marked * are proposals inside each class's existing frame and memory cap
 ### Not proposed, and why
 
 - **Authored morph targets.** An asset's own targets play (Asset: morph targets), so a 3D presenter can speak; authoring or sculpting targets stays out, since puppets, take-aparts and machines are rigid parts with parents and 2D morphs are path channels.
-- **A game engine's heavy systems.** Digital humans and our own liquid solver. The canvas is where agents show people their work, not a game engine: scenes stay modest, characters come licensed or generated, and liquids stay runner jobs. A bounded game takes the physics module's character body, a navigation graph a job bakes and the piece's own logic searches, and the playtest plug-in; a grid or board game takes the grid core kit; big worlds and crowds come as kits on world pages and step blocks; a navigation graph baked again during a run waits for a brief, characters that push what they meet stay out, and a complete game takes the engine project route. Virtualized geometry, dense meshlets drawn by clusters, waits for a case and for an M3 or newer, which its 64-bit texture atomics need. Bounce light from moving lights comes from rays (Light: ray traced), a licensed character's skin and hair from Material: subsurface and Material: hair, and our own path tracer renders finals (Export: path-traced finals).
+- **A game engine's heavy systems.** Digital humans and our own liquid solver. The canvas is where agents show people their work, not a game engine: scenes stay modest, characters come licensed or generated, and liquids stay runner jobs. Open water is a row now: a sea sums waves drawn from its wind's spectrum in closed form, with nothing simulated (Material: water). A bounded game takes the physics module's character body, a navigation graph a job bakes and the piece's own logic searches, and the playtest plug-in; a grid or board game takes the grid core kit; big worlds and crowds come as kits on world pages and step blocks; a navigation graph baked again during a run waits for a brief, characters that push what they meet stay out, and a complete game takes the game shell, or optionally an engine project. Virtualized geometry, dense meshlets drawn by clusters, waits for a case and for an M3 or newer, which its 64-bit texture atomics need. Bounce light from moving lights comes from rays (Light: ray traced), a licensed character's skin and hair from Material: subsurface and Material: hair, and our own path tracer renders finals (Export: path-traced finals).
 - **Image decals.** Insets set 2D content into named faces, and a projected inset casts it over curved surfaces (Inset: projected), which covers signs, screens, labels, data layers and printed marks.
 - **Temporal effects in canonical renders** (TAA, TRAA, TAAU, temporal reprojection, recurrent denoising, after-image, velocity motion blur from the previous frame, GTAO's temporal filtering). Each keeps history, so a frame would depend on how it was reached; MSAA and sample-based motion blur cover exports, render-back and checks. Only the live view reprojects its own frames, over a fixed window that a jump renders again, for antialiasing, upscaling and denoising (Look look@1: frame history); after-images and velocity from the previous frame stay out there too.
 - **Screen-space and voxel reflections and global illumination** (SSR, SSGI, VXGI). Screen-space forms miss what's off screen and keep history, and voxel forms cost too much. Rays give reflections and bounce light where the GPU has ray queries (Light: ray traced); elsewhere the environment covers glossy reflections, light probes add local reflections and baked bounce light without history, and a planar mirror is one pass with no history (Material: mirror). Water ripples a mirror in closed form (Material: water).

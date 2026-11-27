@@ -21,7 +21,7 @@ const agent = (session: string): Connection => ({ writer: `mcp:${session}`, ...w
 const core = (session: string): Connection => ({ writer: 'core', ...who, session });
 const card: Connection = { writer: 'app', ...who };
 const taste = (subject: string): Obj => ({
-  kind: 'taste', question: `Which ${subject}?`,
+  kind: 'taste', may_answer: 'verified_channel', question: `Which ${subject}?`,
   options: [{ id: 'blue', label: 'Blue', decision: 'none' }, { id: 'green', label: 'Green', decision: 'none' }],
   recommended: 'blue', deadline: T0 + 72 * 3_600_000, fallback: 'you', default: 'blue', provisional: false, owner: 'you',
   key: sha(`taste:${subject}`), pinned_to: { kind: 'evidence', ref: sha(subject) },

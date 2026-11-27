@@ -1,0 +1,18 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6X",
+  "kind": "host.link",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "host": "build-01",
+    "up": true,
+    "why": null,
+    "hook_version": "0.0.0",
+    "hook_contract": "1.0",
+    "hub_version": "0.0.0",
+    "hub_contract": "1.0"
+  }
+}

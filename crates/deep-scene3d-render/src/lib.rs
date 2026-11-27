@@ -4754,8 +4754,13 @@ impl Renderer {
             planted: self.planted.water,
             above: (!self.sky).then(|| scene.ground.map(decode)),
         };
+        // #3033: a sea draws through pipelines of its own, made when the water first has one.
+        let sea = w.sea.is_some();
+        if self.waterer.as_ref().is_some_and(|held| held.sea != sea) {
+            self.waterer = None;
+        }
         self.waterer
-            .get_or_insert_with(|| Box::new(water::Waterer::new(device, reversed, samples)))
+            .get_or_insert_with(|| Box::new(water::Waterer::new(device, reversed, samples, sea)))
             .prepare(device, scene, w, &frame, &ids, &depth, [&ids_ms, &depth_ms]);
         self.watering = true;
     }
@@ -7019,6 +7024,39 @@ impl Renderer {
                 .cloned()
                 .collect();
             out.push((format!("probe:{probe}"), kept));
+        }
+        out
+    }
+
+    /// Whether the geometry pass draws a set from the rows a cull kept (#3507).
+    pub(crate) fn draws_culled(&self) -> bool {
+        let sets = self.order.iter().filter_map(|id| self.batches.get(id));
+        self.rows.is_some()
+            && sets
+                .flat_map(|b| b.solids.values())
+                .any(|s| s.cull.is_some())
+    }
+
+    /// The opaque solids the geometry pass draws, by ID in the order it draws them, each with the
+    /// faces its draw culls (0 none, 1 back, 2 front), read once the frame has drawn (#3507): a
+    /// culled set as the camera's list kept it. Nothing a frame draws reads this.
+    pub(crate) fn opaque_order(&self, device: &Device) -> Vec<(String, u32)> {
+        let mut out = Vec::new();
+        for batch in self.order.iter().filter_map(|id| self.batches.get(id)) {
+            let (detailed, lower): (Vec<_>, Vec<_>) =
+                batch.solids.iter().partition(|(_, set)| !set.lower);
+            for (key, set) in detailed.into_iter().chain(lower) {
+                let owners = &set.owners[..set.count.min(set.owners.len())];
+                let kept = set.cull.as_ref().filter(|_| self.rows.is_some());
+                let drawn: Vec<&String> = match kept.and_then(|c| c.views[cull::CAMERA].as_ref()) {
+                    Some(view) => read_list(device, view)
+                        .iter()
+                        .filter_map(|r| owners.get(*r as usize))
+                        .collect(),
+                    None => owners.iter().collect(),
+                };
+                out.extend(drawn.into_iter().map(|o| (o.clone(), key.1 >> CULL_SHIFT)));
+            }
         }
         out
     }

@@ -1,13 +1,3 @@
-// The core's floor (#29; design: An agent says it's done, and First-party extensions, done-gate's row): what holds
-// whatever done gate is installed, and in safe mode, which loads none. Before any check runs, with no model:
-//
-// - the validity gate: the deliverables the definition names exist in the claim's checkout, and everything the
-//   claim cites (a file, a line, a test, a run or a link) resolves and was read or run in this session; a cited run
-//   whose command masked its exit status goes back naming the mask, by the one masked-exit rule (`maskIn`);
-// - the definition's hash, recomputed at the claim: one that differs from the locked one is INVALID, naming what
-//   changed, part by part.
-//
-// A claim's cites are the backticked spans of its final message; words outside them decide nothing.
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { isAbsolute, join, normalize } from 'node:path';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
@@ -89,7 +79,6 @@ function scriptOf(checkout: string, command: string): string | null {
   const [tool, sub, name] = command.trim().split(/\s+/);
   if (!tool || !sub) return null;
   const read = (file: string, target: string): string | null => {
-    // A package script that isn't a string runs nothing the floor can read.
     try { const body = targetBody(file, readFileSync(join(checkout, file), 'utf8'), target); return typeof body === 'string' ? body : null; } catch { return null; }
   };
   if (['npm', 'pnpm', 'yarn', 'bun'].includes(tool)) {
@@ -98,7 +87,6 @@ function scriptOf(checkout: string, command: string): string | null {
   }
   if (tool !== 'make' && tool !== 'just') return null;
   const file = ['Makefile', 'makefile', 'justfile', 'Justfile'].find((f) => isFile(join(checkout, f)));
-  // The recipe lines of the rules the reader found, without the lines that name their targets.
   const rules = file ? read(file, sub) : null;
   return rules === null ? null : rules.split('\n').filter((l) => l !== l.trimStart()).map((l) => l.trim()).join('\n') || null;
 }
@@ -111,12 +99,21 @@ const LINK = /^https?:\/\/\S+$|^[\w./@-]+#[\w-]+$/;
 const TEST = /^(.+?)\s+›\s+(.+)$/;
 const FILE_LINE = /^([\w./@-]+?)(?::(\d+))?$/;
 
-/** What the validity gate reads: the claim and its final message, its checkout, the deliverables named, the session's log. */
-export interface ValidityInput { claim: { claim: string; message: string }; checkout: string; deliverables: string[]; session: SessionLog }
+/** A final message's cites. Inline ones only: a fenced block is code shown, never a cite, and its backticks would pair with the next inline one. */
+function citesOf(message: string): string[] {
+  const prose = message.replace(/^ {0,3}(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:\n {0,3}\1[^\n]*|$)/gm, '');
+  return [...prose.matchAll(/`([^`]+)`/g)].map((m) => m[1]!.trim()).filter(Boolean);
+}
 /**
- * The validity gate's findings, before any check runs, with no model: each cite that doesn't resolve or wasn't read
- * or run here, each cited run whose exit status was masked, and each missing deliverable.
+ * The paths the validity gate may read of a claim's checkout: each deliverable, each file a cite names, and the files
+ * a cited run's script is read from. What a checkout on another machine (#999) brings here for the gate to read.
  */
+export function validityReads(input: Pick<ValidityInput, 'claim' | 'deliverables'>): string[] {
+  const cited = citesOf(input.claim.message).flatMap((cite) => [TEST.exec(cite)?.[1], FILE_LINE.exec(cite)?.[1], LINK.test(cite) && !/^https?:/.test(cite) ? cite.replace(/#.*$/, '') : undefined]);
+  return [...new Set([...input.deliverables, 'package.json', 'Makefile', 'makefile', 'justfile', 'Justfile', ...cited.filter((path): path is string => !!path)])];
+}
+
+export interface ValidityInput { claim: { claim: string; message: string }; checkout: string; deliverables: string[]; session: SessionLog }
 export function validityGate(input: ValidityInput, plant?: FloorPlant): Finding[] {
   const { checkout, session } = input;
   const found: Finding[] = [];
@@ -126,15 +123,11 @@ export function validityGate(input: ValidityInput, plant?: FloorPlant): Finding[
       if (!existsSync(inside(checkout, d) ?? '\0')) found.push({ kind: 'deliverable', ref: d, why: `the deliverable ${d} the definition names doesn't exist in the claim's checkout` });
     }
   }
-  // Inline cites only: a fenced block is code shown, never a cite, and its backticks would pair with the next inline one.
-  const prose = input.claim.message.replace(/^ {0,3}(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:\n {0,3}\1[^\n]*|$)/gm, '');
-  const cites = [...prose.matchAll(/`([^`]+)`/g)].map((m) => m[1]!.trim()).filter(Boolean);
+  const cites = citesOf(input.claim.message);
   const runs = session.ran.map((r) => ({ ...r, command: typed(r.command) }));
   for (const cite of new Set(cites)) {
-    // The run typed as the cite first (#1860), else the first the cite extends with its arguments.
     const run = runs.find((r) => cite === r.command) ?? runs.find((r) => cite.startsWith(`${r.command} `));
     if (run) {
-      // The cite's own text masks too, whichever run it matched: `pnpm test || true` proves nothing beside `pnpm test`.
       const mask = plant === 'run-happened-only' ? null : maskIn(cite) ?? maskOf(checkout, run.command);
       if (mask !== null) found.push({ kind: 'masked_exit', ref: run.command, mask, why: `the run \`${cite}\` it cites proves nothing: exit status masked by \`${mask}\`` });
       continue;
@@ -167,19 +160,13 @@ export function validityGate(input: ValidityInput, plant?: FloorPlant): Finding[
       if (plant !== 'no-read-check' && !read.has(normalize(file))) found.push({ kind, ref: cite, why: `the ${kind} ${cite} it cites was never read in this session` });
       continue;
     }
-    // A command the session never ran: anything else in backticks that reads as a shell command.
     if (/\s/.test(cite) && /^[\w./-]+(\s|$)/.test(cite)) found.push({ kind: 'run', ref: cite, why: `the run \`${cite}\` it cites was never made in this session` });
   }
   return found;
 }
 
-/**
- * The floor, before any check runs. It holds with no extension loaded: `safe` loads none, and an installed done gate
- * is never consulted for it. A hash that differs makes the claim INVALID; anything else it finds sends it back.
- */
 export function floor(input: FloorInput, options: { safe?: boolean; doneGate?: (input: FloorInput) => FloorResult | undefined; plant?: FloorPlant } = {}): FloorResult {
   const { plant } = options;
-  // The planted wrong program: leaves the floor to the done gate, so safe mode, with none loaded, checks nothing.
   if (plant === 'leaves-to-done-gate') return options.safe ? { ok: true } : options.doneGate?.(input) ?? { ok: true };
   const hash = recomputeHash(input.definition, input.locked);
   if (!hash.same) {

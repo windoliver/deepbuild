@@ -1,0 +1,13 @@
+{
+ "scripts/known-failures.json": [
+  {
+   "find": [
+    "  \"skips\": ["
+   ],
+   "wrong": [
+    "  \"skips\": [",
+    "    { \"id\": \"tests/acceptance/1352-redraft-3402/ac1-section.test.mjs › #1352.4c4e63a7 criterion 1 (redraft): the design's section anchored cloud-hub answers each of the eight Scope decisions, with at least eight \\\"Not taken\\\"\", \"reason\": \"planted by tests/acceptance/3402/twins/known-skip-listed\" },"
+   ]
+  }
+ ]
+}

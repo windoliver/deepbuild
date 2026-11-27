@@ -288,11 +288,19 @@ impl Gpu3 {
     }
 
     /// The app's GPU, or `None` where there is none to draw 3D on; it evaluates with the sealed
-    /// build's fills.
-    pub fn open(sealed: &deep_canvas::registry::Sealed, planted: Option<String>) -> Option<Gpu3> {
+    /// build's fills. `count_untested` is #3507's planted count.
+    pub fn open(
+        sealed: &deep_canvas::registry::Sealed,
+        planted: Option<String>,
+        count_untested: bool,
+    ) -> Option<Gpu3> {
         let gpu = Gpu::open(Backend::Gpu).ok()?;
         let device = gpu.recover().ok()?;
-        let renderer = Renderer::new(&device, Planted::default());
+        let wrong = Planted {
+            shaded_count_skips_depth_test: count_untested,
+            ..Planted::default()
+        };
+        let renderer = Renderer::new(&device, wrong);
         let fx = Arc::new(Mutex::new(Effects::new(
             Default::default(),
             Default::default(),

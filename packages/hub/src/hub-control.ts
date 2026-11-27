@@ -27,7 +27,7 @@ import type { Landing } from './landing.js';
 import type { Work } from './work.js';
 import { type JobSpec, type Runner, type WindowReport } from '@deepbuild/runner';
 
-import { ClaudeSettings } from './claude-settings.js';
+import { EntriesWatch } from './entries-watch.js';
 
 import { Confirmer } from './confirm.js';
 
@@ -108,7 +108,7 @@ export interface HubControlOptions {
     readonly spaces: WorkspaceService;
     readonly asks: Asks;
     readonly tasks: AskTasks;
-    readonly claudeSettings: ClaudeSettings;
+    readonly entries: EntriesWatch;
     readonly store: EvidenceStore;
     readonly devices: Devices;
     readonly confirmer: Confirmer;
@@ -291,6 +291,7 @@ export class HubControl {
       case 'host.ran': return this.options.services.hosts.ran(params.ask, params.run);
       case 'host.changes': return this.options.services.hosts.changes(params.host);
       case 'host.remove': return this.options.services.hosts.remove(params.host);
+      case 'host.add': return this.options.services.hosts.sessions.add(params.host);
       case 'start.approve': return this.options.services.sessionStarts.approve(params, context);
       case 'start.session':
         { const held = this.drain.read(); if (held) throw refuse('unavailable', '/method', `${drainWords(drainFor(held, context.role))} Start it again then.`, method, true); }

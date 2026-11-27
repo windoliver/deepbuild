@@ -26,13 +26,15 @@ import { handleOf as ruleHandle, noticeText } from './rules.js';
 import { dropTestSettings, installedRoot, real, repoOf, rootOf, type Root } from './paths.js';
 import { shedStartup, YOUNG } from './settle.js';
 import { processHealth } from './process-health.js';
+import { replay, type Replaying } from './replay.js';
 import { Waits, type HookSeen, type OpenCall, type Restored } from './waits.js';
 import { People } from './people.js';
 import { identityAt, idOf, type Identity } from './identity.js';
 import { plantedStart } from './plant.js';
 import { toolList } from './tools.js';
 import { gatesOff } from './watch.js';
-import { AUTHORITY, CONTRACT, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refuse, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, type Scope, type Scoped, SCREEN_TOOLS, type StageReach, type VfsSettings } from './wire.js';
+import { HostLinks } from './host-link.js';
+import { AUTHORITY, contractOf, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refuse, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, type Scope, type Scoped, SCREEN_TOOLS, type StageReach, type VfsSettings } from './wire.js';
 import { isRecord as isObj } from '@deepbuild/contracts/json';
 import { writeSynced } from './vfs.js';
 import { budgetFile, readBudget, spend, spentWhy } from './restart-budget.js';
@@ -71,7 +73,7 @@ const ALLOWED = new Map<string, readonly Role[]>([
   // The Agents page (#148): a server or a skill proposed for the agents you choose, the page's model, Codex's daemon
   // restarted through an ask, a sync undone; and `deep mcp-exec`, a synced server's command with its secrets by handle.
   ['agents.propose', ['app', 'cli']], ['agents.read', ['app', 'cli']], ['agents.restart', ['app', 'cli']], ['agents.undo', ['app', 'cli']], ['box.say', ['app', 'cli']], ['mcp.exec', ['cli']],
-  ['gates.off', ['app', 'cli']], ['gates.on', ['app', 'cli']], ['you.confirm', ['cli']], ['status.read', ['app', 'cli', 'person']], ['rows.read', ['app', 'cli', 'person']], ['row.read', ['app']], ['hub.stop', ['app', 'cli']], ['hub.restart', ['cli']], ['run.start', ['app', 'cli']], ['run.output', ['app', 'cli']], ['host.list', ['app', 'cli']], ['host.facts', ['app', 'cli']], ['host.plan', ['cli']], ['host.ran', ['cli']], ['host.changes', ['app', 'cli']], ['host.remove', ['cli']], ['test.load', ['app', 'cli']],
+  ['gates.off', ['app', 'cli']], ['gates.on', ['app', 'cli']], ['you.confirm', ['cli']], ['status.read', ['app', 'cli', 'person']], ['rows.read', ['app', 'cli', 'person']], ['row.read', ['app']], ['hub.stop', ['app', 'cli']], ['hub.restart', ['cli']], ['run.start', ['app', 'cli']], ['run.output', ['app', 'cli']], ['host.list', ['app', 'cli']], ['host.facts', ['app', 'cli']], ['host.plan', ['cli']], ['host.ran', ['cli']], ['host.changes', ['app', 'cli']], ['host.remove', ['cli']], ['host.add', ['cli']], ['test.load', ['app', 'cli']],
   // A new secret, on the trusted path, and which are held; values never come back (#70).
   ['secret.enter', ['cli']], ['secret.list', ['app', 'cli']],
   // A hosted terminal the hub reattaches after a restart (#70).
@@ -185,13 +187,14 @@ interface CoreLink {
 /** A frame from the core: its event's JSON text, or, `caught` set, the head its subscriber's replay reached (#1575). */
 type OnFrame = (sub: string, event: string, caught?: boolean) => void;
 
-function coreWorker(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[], judged: string[], resend: string[], cantRun: string[]) => void, onAcking: (session: string) => void, onScrub: (values: string[]) => void, onForgot: (session: string) => void): CoreLink {
+function coreWorker(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[], judged: string[], resend: string[], cantRun: string[]) => void, onAcking: (session: string) => void, onScrub: (values: string[]) => void, onForgot: (session: string) => void, onRebuilding: (at: Replaying | undefined) => void): CoreLink {
   const worker = new Worker(new URL('./core-worker.js', import.meta.url), { workerData: { core: options }, resourceLimits: YOUNG });
   const pending = new Map<number, { resolve(v: unknown): void; reject(e: unknown): void }>();
   let n = 0;
   let started!: (v: { hooks: string[] }) => void;
   const ready = new Promise<{ hooks: string[] }>((resolve) => { started = resolve; });
-  worker.on('message', (m: { op?: string; n?: number; sub?: string; event?: string; caught?: boolean; message?: string; result?: unknown; error?: Refusal; hooks?: string[]; sessions?: string[]; judged?: string[]; resend?: string[]; cantRun?: string[]; session?: string; values?: string[] }) => {
+  worker.on('message', (m: { op?: string; n?: number; sub?: string; event?: string; caught?: boolean; message?: string; result?: unknown; error?: Refusal; hooks?: string[]; sessions?: string[]; judged?: string[]; resend?: string[]; cantRun?: string[]; session?: string; values?: string[]; at?: Replaying }) => {
+    if (m.op === 'rebuilding') return onRebuilding(m.at);
     if (m.op === 'frame') return onFrame(m.sub!, m.event!, m.caught);
     if (m.op === 'asking') return onAsking(m.sessions ?? [], m.judged ?? [], m.resend ?? [], m.cantRun ?? []);
     if (m.op === 'acking') return onAcking(m.session!);
@@ -326,6 +329,8 @@ class Hub {
   private identity!: Identity;
   /** The network listener (#1338), open only while a project here has a member. */
   private network: tls.Server | undefined;
+  /** Each added host's link (#999): its listener here and the ssh that forwards the host's socket to it. */
+  private links: HostLinks | undefined;
   constructor(private readonly root: Root, private readonly token: string, private readonly lock: Lock, private readonly plant: Plant | undefined, private readonly vfs: VfsSettings | undefined, private readonly safe: boolean) {
     this.people = new People(root.dir);
     this.waits = new Waits({ rewrites: (agent) => this.rewrites(agent), ...(plant ? { plant } : {}) });
@@ -377,10 +382,8 @@ class Hub {
     // The record's writer generation (#572), read before the core opens the ledger so every hello carries it from the
     // first; read-only, so this thread never checkpoints or syncs the ledger, and one that can't be read stops the start.
     this.identity = identityAt(join(this.root.dir, 'hub.key'), 'deep-hub');
-    // The planted hub of #1334 speaks a contract one major ahead, so this checkout's deep-hook is the older side.
-    const contract = this.plant === 'contract-major-ahead' ? `${Number(CONTRACT.split('.')[0]) + 1}.0` : CONTRACT;
-    this.helloLine = line({ hello: 'deep-hub', start: this.start, contract, features: FEATURES, generation: writerGeneration(this.root.ledger), hub: this.identity.id });
-    this.core = this.plant === 'commit-on-event-loop' ? await coreInline(options, frame, fatal, asking, acking, scrub, forgot) : coreWorker(options, frame, fatal, asking, acking, scrub, forgot);
+    this.helloLine = line({ hello: 'deep-hub', start: this.start, contract: contractOf(this.plant), features: FEATURES, generation: writerGeneration(this.root.ledger), hub: this.identity.id });
+    this.core = this.plant === 'commit-on-event-loop' ? await coreInline(options, frame, fatal, asking, acking, scrub, forgot) : coreWorker(options, frame, fatal, asking, acking, scrub, forgot, (at) => replay.heard(at));
     this.parsers = this.plant === 'parse-on-event-loop' ? await parserInline(held, this.plant, this.root.dir) : parserPool(held, this.plant, this.root.dir);
     // Read once before any hook, so a rules.json spoiled later can be written again as it was.
     this.rules();
@@ -405,6 +408,8 @@ class Hub {
     // Hooks are acknowledged from the moment the socket exists; the hub reports ready once its core has started.
     this.hooks = new Set((await this.core.started).hooks);
     this.coreUp = true;
+    // Each added host's link (#999): its hooks come in on a listener of its own, and wait there while the core takes its spool.
+    (this.links = new HostLinks({ root: this.root.dir, accept: (sock, host) => this.accept(sock, undefined, host), said: (host, state, why) => this.core.request({ op: 'host-link', host, state, why }).then(() => undefined, () => undefined) })).start();
     // Once lost, the lock stays lost: every gate turns watch-only, BLOCKED, and deep-hook spools what this hub won't take.
     const checking = setInterval(() => {
       // An entry installed since the last hook is in the copy a later rewrite of rules.json is made from (#2204).
@@ -434,7 +439,8 @@ class Hub {
    * instead, which deep-hook matches no more. A reply that already denies the call stands, and `deep off` leaves it.
    */
   private leased(meta: HookMeta, ruled: string): string {
-    if (meta.event !== 'PreToolUse' || this.off) return ruled;
+    // A host has no `deep lease` to run it under (#999).
+    if (meta.event !== 'PreToolUse' || this.off || meta.host) return ruled;
     return heavyReply(meta, ruled, this.rewrites(meta.agent), this.plant);
   }
 
@@ -488,7 +494,7 @@ class Hub {
     this.arm();
   }
 
-  private accept(sock: net.Socket, remote?: Conn['remote']): void {
+  private accept(sock: net.Socket, remote?: Conn['remote'], host?: string): void {
     if (this.plant === 'accept-stops-at-emfile') {
       // The plant stops accepting the first time it finds no descriptor left.
       try {
@@ -499,6 +505,8 @@ class Hub {
     }
     const conn = new Conn(++this.ids, sock);
     conn.remote = remote;
+    // A host's hooks are read once its spool, as of the link's return, is in the record (#999).
+    if (host) Object.assign(conn, { host, queue: this.links!.gate(host) });
     this.conns.add(conn);
     sock.on('error', () => undefined);
     sock.on('close', () => {
@@ -669,10 +677,11 @@ class Hub {
     // session's start, a prompt and a stop the hub can hold are held for the core's (#18); every other hook gets
     // the acknowledgement and the reply in one write, which also ends the connection.
     const meta = parsed.meta;
-    // The person is the connection's, never the payload's, but for the planted wrong program (#1337).
+    // The person is the connection's, never the payload's, but for the planted wrong program (#1337); the host is the connection's too (#999).
     const person = this.plant === 'actor-from-payload' && meta.payloadActor ? meta.payloadActor : conn.person;
     if (person) meta.person = person;
     else delete meta.person;
+    if (conn.host) meta.host = conn.host; else delete meta.host;
     if (this.cantRun.has(meta.agent)) Object.assign(meta, { watchOnly: true, cantRun: true });
     // The planted wrong program consults your standing rules before the guards: their blocks wait for the gate.
     let ruled = this.plant === 'decision-before-guard' && this.gated(meta, parsed.drafts)?.decided ? EMPTY_REPLY : this.reply(meta);
@@ -1280,10 +1289,8 @@ class Hub {
         return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name } }));
       case 'hub.health':
       case 'health':
-        // Health waits for the core's start, as calls through the core's queue do (#2801): its readings aren't open before.
-        // The process readings after the core's: its own checks start short-lived children (the secret store's) that
-        // would count as the hub's.
-        return void reply(this.core.started.then(() => this.core.request({ op: 'health', role: conn.name })).then(async (health) => ({ pid: process.pid, start: this.start, off: this.off, parsers: this.parsers.count(), ...(health as Obj), restarts: this.restarts(), process: await processHealth() })));
+        // While the record replays, health says how far it is, at once or as soon as the replay begins (#3544), which a call waits to hear of only until the core is up, so none gathers on a start that replays nothing. Else it waits for the core's start, as calls through the core's queue do (#2801): its readings aren't open before; the process readings come after the core's, whose own checks start short-lived children (the secret store's) that would count as the hub's.
+        return void reply((this.coreUp ? Promise.resolve() : Promise.race([this.core.started, replay.begun])).then((): Obj | Promise<Obj> => (replay.at ? { pid: process.pid, start: this.start, off: this.off, parsers: this.parsers.count(), restarts: this.restarts(), rebuilding: replay.at } : this.core.started.then(() => this.core.request({ op: 'health', role: conn.name })).then(async (health) => ({ pid: process.pid, start: this.start, off: this.off, parsers: this.parsers.count(), ...(health as Obj), restarts: this.restarts(), process: await processHealth() })))));
       case 'stream.subscribe': {
         const sub = `${conn.id}:${JSON.stringify(id)}`;
         const after = Number.isSafeInteger(params.after) && (params.after as number) >= 0 ? (params.after as number) : 0;
@@ -1313,6 +1320,12 @@ class Hub {
           await this.syncNetwork();
           return result;
         }));
+      case 'host.add':
+        // Once its hooks are installed the host's link opens, and the reply says how its first try ended (#999).
+        return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name } }).then(async (result) => ({ ...(result as Obj), link: await this.links!.open(String((result as Obj).host), String((result as Obj).socket)) })));
+      case 'host.remove':
+        // With what `deep host add` installed undone, the host's link ends too (#999).
+        return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name } }).then(async (result) => { if (!(result as { you?: { stopped?: unknown } | null }).you?.stopped) await this.links?.forget(String((result as Obj).host)); return result; }));
       case 'mcp.cancel': {
         const call = `${conn.id}:${String(params.call)}`;
         if (conn.calls.delete(call)) this.core.post({ op: 'call-gone', call });
@@ -1361,6 +1374,7 @@ class Hub {
     clearTimeout(this.waitTimer);
     this.server.close();
     this.network?.close();
+    this.links?.close();
     // The stop-answers-waiting plant (#823) keeps the connections until the core stops, so a waiting call is answered.
     const answers = this.plant === 'stop-answers-waiting';
     if (!answers) for (const conn of this.conns) if (conn.sock !== requester) conn.sock.destroy();
@@ -1466,6 +1480,7 @@ export async function runHub(options: { root?: string; safe?: boolean }): Promis
   process.on('SIGHUP', () => undefined);
   process.stdout.on('error', () => undefined);
   process.stderr.on('error', () => undefined);
+  (await import('./hub-log.js')).keepLog(join(root.logs, 'hub.log'), plant); // the hub that holds the lock holds its log to its size (#3548)
   const hub = new Hub(root, writeToken(root), lock, plant, vfs, options.safe === true);
   // On the installed hub a signal is a restart, not a stop (#2975): a command's child can send one with no confirmation,
   // and an exit 0 would keep the hub down till your next login. Logout and shutdown send it too, so it doesn't wait.

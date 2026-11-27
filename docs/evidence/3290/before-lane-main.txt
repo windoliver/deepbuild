@@ -1,0 +1,16 @@
+# Thu Nov 26 16:20:08 PST 2026 node v24.22.0 load { 28.24 25.00 22.08 } head 655f193ba base 35956a44a
+$ node scripts/proof.mjs before
+BLOCKED before: tests/acceptance/1333/conflict.test.mjs › #1333.ed47bc1a a revert that conflicts starts an attempt and raises no ask; if that attempt ends with main still red, one ask is raised and landings stay paused: tests/acceptance/1333/twins.json must map each criterion tag to a list of twin folder names
+  Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+BLOCKED before: tests/acceptance/1333/flaky.test.mjs › #1333.aded8275 a test that fails once and passes on repeats reads INCONCLUSIVE, is filed, and pauses nothing: tests/acceptance/1333/twins.json must map each criterion tag to a list of twin folder names
+  Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+BLOCKED before: tests/acceptance/1333/known-failures.test.mjs › #1333.87ce4575 a known-failures.json entry with no open issue fails the lane, naming the entry: tests/acceptance/1333/twins.json must map each criterion tag to a list of twin folder names
+  Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+BLOCKED before: tests/acceptance/1333/watch.test.mjs › #1333.f14d14bc a planted landing that breaks a test is named by the job within one schedule, and landings stop; a job that reports only that main is red fails, naming the missing landing: tests/acceptance/1333/twins.json must map each criterion tag to a list of twin folder names
+  Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+BLOCKED before: tests/acceptance/1333/watch.test.mjs › #1333.747cd5ee the revert lands, the issue reopens naming the failure, and landings resume, with no ask raised: tests/acceptance/1333/twins.json must map each criterion tag to a list of twin folder names
+  Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+BLOCKED before: tests/acceptance/1333/watch.test.mjs › #1333.6c0af23f the job makes no model call and starts no hosted workflow: tests/acceptance/1333/twins.json must map each criterion tag to a list of twin folder names
+  Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+proof: wall time 654.3 s
+# exit 1 Thu Nov 26 16:31:12 PST 2026 load { 27.73 34.76 30.38 }

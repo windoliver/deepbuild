@@ -83,7 +83,7 @@ export function writePack(dir: string, host: string, pack: string, version: stri
   mkdirSync(dir, { recursive: true });
   const [, name] = pack.split('/');
   writeFileSync(join(dir, 'pack.json'), `${JSON.stringify({
-    id: pack, name, version, license: 'MIT', description: `Sample files for the #1820 acceptance tests (${pack}).`, requires: { core: '^1', modules: {} },
+    id: pack, name, version, license: 'MIT', description: `Sample files for the #1820 acceptance tests (${pack}).`, requires: { core: '>=0.0.0', modules: {} },
     assets: list.map((a) => ({ path: a.path, url: urlOf(host, pack, a), sha256: sha256(a.listed), size: a.size, license: a.license, upstream: { url: urlOf(host, pack, a), version, modified: '2026-01-01T00:00:00Z' } })),
   }, null, 2)}\n`);
   return dir;

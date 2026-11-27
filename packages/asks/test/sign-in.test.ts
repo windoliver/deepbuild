@@ -173,7 +173,7 @@ it('under setup\'s 8-hour batches a lapsed sign-in in a session that keeps askin
   const taste = askSources().find((r) => r.source === 'deep_ask.taste')!.source;
   for (const k of [1, 2, 3, 4, 5, 6]) {
     await asks.raise({ ...core, session: S1 }, taste, {
-      kind: 'taste', question: `Which header for screen ${k}?`, options: [{ id: 'blue', label: 'Blue', decision: 'none' }, { id: 'green', label: 'Green', decision: 'none' }], recommended: 'green',
+      kind: 'taste', may_answer: 'verified_channel', question: `Which header for screen ${k}?`, options: [{ id: 'blue', label: 'Blue', decision: 'none' }, { id: 'green', label: 'Green', decision: 'none' }], recommended: 'green',
       fallback: 'you', provisional: false, owner: 'you', key: sha256Hex(new TextEncoder().encode(`taste:screen-${k}`)), pinned_to: { kind: 'evidence', ref: sha256Hex(new TextEncoder().encode(`screen-${k}`)) },
     });
     now += 1000;

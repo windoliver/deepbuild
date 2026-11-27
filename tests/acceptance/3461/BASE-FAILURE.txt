@@ -1,0 +1,284 @@
+# #3461 acceptance suite on the merge base 1b4929ae7 (origin/main), macOS darwin-arm64, Node 24.22.0, 2026-11-24
+# npx vitest run tests/acceptance/3461/   (exit 1; home paths written as ~, colour codes removed)
+
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/agent-ae487613d54849727
+
+ ❯ tests/acceptance/3461/first-wins.test.ts (1 test | 1 failed) 348ms
+   × #3461.bffe987a deep land, deep land judge and deep work --once given --repo twice each print their usage, exit 2 and send the hub nothing 290ms
+ ❯ tests/acceptance/3461/last-wins.test.ts (1 test | 1 failed) 405ms
+   × #3461.7c168213 deep show given --doc twice, deep env up and deep find given --root twice each print their usage and exit 2 345ms
+ ❯ tests/acceptance/3461/table.test.ts (1 test | 1 failed) 8611ms
+   × #3461.b4a5c8f4 every command deep --help lists, given a flag its usage shows once twice (two values, or one value repeated), prints its usage, exits 2 and prints nothing on stdout 8567ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/3461/first-wins.test.ts > #3461.bffe987a deep land, deep land judge and deep work --once given --repo twice each print their usage, exit 2 and send the hub nothing
+AssertionError: 3 of 3 commands acted on a repeated --repo:
+deep land --repo <tmp>/A --repo <tmp>/B: exits 0, not 2; prints no usage of deep land (a line that starts Usage: and names it); sent the hub 2 line(s), calling land.round {"repo":"/private/tmp/dh3461-5auXYN/A"}. It printed: exit 0, stdout "{}\n", stderr ""
+deep land judge --repo <tmp>/A --repo <tmp>/B: exits 0, not 2; prints no usage of deep land (a line that starts Usage: and names it); sent the hub 2 line(s), calling land.judge {"repo":"/private/tmp/dh3461-5auXYN/A"}. It printed: exit 0, stdout "{}\n", stderr ""
+deep work --repo <tmp>/A --issues 1 --once --repo <tmp>/B: exits 0, not 2; prints no usage of deep work (a line that starts Usage: and names it); sent the hub 2 line(s), calling work.once {"repo":"/private/tmp/dh3461-5auXYN/A","issues":[1]}. It printed: exit 0, stdout "{}\n", stderr "": expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep land --repo <tmp>/A --repo <tmp>/B: exits 0, not 2; prints no usage of deep land (a line that starts Usage: and names it); sent the hub 2 line(s), calling land.round {\"repo\":\"/private/tmp/dh3461-5auXYN/A\"}. It printed: exit 0, stdout \"{}\\n\", stderr \"\"",
++   "deep land judge --repo <tmp>/A --repo <tmp>/B: exits 0, not 2; prints no usage of deep land (a line that starts Usage: and names it); sent the hub 2 line(s), calling land.judge {\"repo\":\"/private/tmp/dh3461-5auXYN/A\"}. It printed: exit 0, stdout \"{}\\n\", stderr \"\"",
++   "deep work --repo <tmp>/A --issues 1 --once --repo <tmp>/B: exits 0, not 2; prints no usage of deep work (a line that starts Usage: and names it); sent the hub 2 line(s), calling work.once {\"repo\":\"/private/tmp/dh3461-5auXYN/A\",\"issues\":[1]}. It printed: exit 0, stdout \"{}\\n\", stderr \"\"",
++ ]
+
+ ❯ tests/acceptance/3461/first-wins.test.ts:36:122
+     34|     if (why.length) failures.push(`deep ${args.join(' ').split(w.tmp).…
+     35|   }
+     36|   expect(failures, `${failures.length} of ${cases.length} commands act…
+       |                                                                                                                          ^
+     37| }, 240 * SECOND);
+     38|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/acceptance/3461/last-wins.test.ts > #3461.7c168213 deep show given --doc twice, deep env up and deep find given --root twice each print their usage and exit 2
+AssertionError: 3 of 3 commands acted on a repeated flag:
+deep show --doc X --doc Y --document <tmp>/f.json: exits 0, not 2; prints no usage of deep show (a line that starts Usage: and names it) (the hub at home got canvas.show {"doc":"Y","document":"{}","include":["issues"]}). It printed: exit 0, stdout "presented\n", stderr ""
+deep env up --root <tmp>/a --root <tmp>/b: exits 0, not 2; prints no usage of deep env (a line that starts Usage: and names it) (the hub at b got env.up {"worktree":"/private/tmp/dh3461-7QehWQ/w"}). It printed: exit 0, stdout "ready:  (run:01KAZ3Y8M5Q2W7E4R6T9P1N3B5)\n", stderr ""
+deep find x --root <tmp>/a --root <tmp>/b: exits 0, not 2; prints no usage of deep find (a line that starts Usage: and names it) (the hub at b got handle.read {"find":"x"}). It printed: exit 0, stdout "Nothing in the record holds \"x\".\n", stderr "": expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep show --doc X --doc Y --document <tmp>/f.json: exits 0, not 2; prints no usage of deep show (a line that starts Usage: and names it) (the hub at home got canvas.show {\"doc\":\"Y\",\"document\":\"{}\",\"include\":[\"issues\"]}). It printed: exit 0, stdout \"presented\\n\", stderr \"\"",
++   "deep env up --root <tmp>/a --root <tmp>/b: exits 0, not 2; prints no usage of deep env (a line that starts Usage: and names it) (the hub at b got env.up {\"worktree\":\"/private/tmp/dh3461-7QehWQ/w\"}). It printed: exit 0, stdout \"ready:  (run:01KAZ3Y8M5Q2W7E4R6T9P1N3B5)\\n\", stderr \"\"",
++   "deep find x --root <tmp>/a --root <tmp>/b: exits 0, not 2; prints no usage of deep find (a line that starts Usage: and names it) (the hub at b got handle.read {\"find\":\"x\"}). It printed: exit 0, stdout \"Nothing in the record holds \\\"x\\\".\\n\", stderr \"\"",
++ ]
+
+ ❯ tests/acceptance/3461/last-wins.test.ts:41:120
+     39|     if (why.length) failures.push(`deep ${args.join(' ').split(w.tmp).…
+     40|   }
+     41|   expect(failures, `${failures.length} of ${cases.length} commands act…
+       |                                                                                                                        ^
+     42| }, 240 * SECOND);
+     43|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/acceptance/3461/table.test.ts > #3461.b4a5c8f4 every command deep --help lists, given a flag its usage shows once twice (two values, or one value repeated), prints its usage, exits 2 and prints nothing on stdout
+AssertionError: 46 of 92 rows (commands and flags) took a repeated flag:
+deep land --repo (two values): exits 3, not 2; prints no usage of deep land: deep land --repo <tmp>/repo --json --repo <tmp>/repo-2: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+deep land --repo (one value repeated): exits 3, not 2; prints no usage of deep land: deep land --repo <tmp>/repo --json --repo <tmp>/repo: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+deep land judge --repo (two values): exits 3, not 2; prints no usage of deep land: deep land judge --repo <tmp>/repo --json --repo <tmp>/repo-2: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+deep land judge --repo (one value repeated): exits 3, not 2; prints no usage of deep land: deep land judge --repo <tmp>/repo --json --repo <tmp>/repo: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+deep work --repo (two values): exits 3, not 2; prints no usage of deep work: deep work fix the login page --repo <tmp>/repo --json --repo <tmp>/repo-2: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+deep work --repo (one value repeated): exits 3, not 2; prints no usage of deep work: deep work fix the login page --repo <tmp>/repo --json --repo <tmp>/repo: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+deep work --repo (two values): exits 3, not 2; prints no usage of deep work: deep work --repo <tmp>/repo --issues 1,2 --once --json --repo <tmp>/repo-2: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+deep work --repo (one value repeated): exits 3, not 2; prints no usage of deep work: deep work --repo <tmp>/repo --issues 1,2 --once --json --repo <tmp>/repo: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+deep work --issues (two values): exits 3, not 2; prints no usage of deep work: deep work --repo <tmp>/repo --issues 1,2 --once --json --issues 1,3: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+deep work --issues (one value repeated): exits 3, not 2; prints no usage of deep work: deep work --repo <tmp>/repo --issues 1,2 --once --json --issues 1,2: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+deep workspace task --criterion (two values): exits 3, not 2; prints no usage of deep workspace: deep workspace task ws1 title --criterion text --blocked-by 1 --criterion text-2: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+deep workspace task --criterion (one value repeated): exits 3, not 2; prints no usage of deep workspace: deep workspace task ws1 title --criterion text --blocked-by 1 --criterion text: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+deep workspace task --blocked-by (two values): exits 3, not 2; prints no usage of deep workspace: deep workspace task ws1 title --criterion text --blocked-by 1 --blocked-by 2: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+deep workspace task --blocked-by (one value repeated): exits 3, not 2; prints no usage of deep workspace: deep workspace task ws1 title --criterion text --blocked-by 1 --blocked-by 1: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+deep env up --root (two values): exits 3, not 2; prints no usage of deep env: deep env up --root <tmp>/devhub --json --root <tmp>/devhub-2: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+deep env up --root (one value repeated): exits 3, not 2; prints no usage of deep env: deep env up --root <tmp>/devhub --json --root <tmp>/devhub: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+deep env down --root (two values): exits 3, not 2; prints no usage of deep env: deep env down --root <tmp>/devhub --json --root <tmp>/devhub-2: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+deep env down --root (one value repeated): exits 3, not 2; prints no usage of deep env: deep env down --root <tmp>/devhub --json --root <tmp>/devhub: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+deep show --doc (two values): exits 3, not 2; prints no usage of deep show: deep show --doc doc1 --document <tmp>/doc.json --removes a,b --t 0 --size 10x10 --include issues --check --snap --claim claim1 --json --doc doc1-2: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+deep show --doc (one value repeated): exits 3, not 2; prints no usage of deep show: deep show --doc doc1 --document <tmp>/doc.json --removes a,b --t 0 --size 10x10 --include issues --check --snap --claim claim1 --json --doc doc1: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+deep show --document (two values): prints no usage of deep show: deep show --doc doc1 --document <tmp>/doc.json --removes a,b --t 0 --size 10x10 --include issues --check --snap --claim claim1 --json --document <tmp>/doc-2.json: exit 2, stdout "", stderr "deep show: can't read <tmp>/doc-2.json as JSON: ENOENT: no such file or directory, open '<tmp>/doc-2.json'\n"
+deep show --document (one value repeated): exits 3, not 2; prints no usage of deep show: deep show --doc doc1 --document <tmp>/doc.json --removes a,b --t 0 --size 10x10 --include issues --check --snap --claim claim1 --json --document <tmp>/doc.json: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+deep show --removes (two values): exits 3, not 2; prints no usage of deep show: deep show --doc doc1 --document <tmp>/doc.json --removes a,b --t 0 --size 10x10 --include issues --check --snap --claim claim1 --json --removes a,b-2: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+deep show --removes (one value repeated): exits 3, not 2; prints no usage of deep show: deep show --doc doc1 --document <tmp>/doc.json --removes a,b --t 0 --size 10x10 --include issues --check --snap --claim claim1 --json --removes a,b: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+deep show --t (two values): exits 3, not 2; prints no usage of deep show: deep show --doc doc1 --document <tmp>/doc.json --removes a,b --t 0 --size 10x10 --include issues --check --snap --claim claim1 --json --t 1: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+deep show --t (one value repeated): exits 3, not 2; prints no usage of deep show: deep show --doc doc1 --document <tmp>/doc.json --removes a,b --t 0 --size 10x10 --include issues --check --snap --claim claim1 --json --t 0: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+deep show --size (two values): exits 3, not 2; prints no usage of deep show: deep show --doc doc1 --document <tmp>/doc.json --removes a,b --t 0 --size 10x10 --include issues --check --snap --claim claim1 --json --size 11x10: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+deep show --size (one value repeated): exits 3, not 2; prints no usage of deep show: deep show --doc doc1 --document <tmp>/doc.json --removes a,b --t 0 --size 10x10 --include issues --check --snap --claim claim1 --json --size 10x10: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+deep show --include (two values): exits 3, not 2; prints no usage of deep show: deep show --doc doc1 --document <tmp>/doc.json --removes a,b --t 0 --size 10x10 --include issues --check --snap --claim claim1 --json --include issues-2: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+deep show --include (one value repeated): exits 3, not 2; prints no usage of deep show: deep show --doc doc1 --document <tmp>/doc.json --removes a,b --t 0 --size 10x10 --include issues --check --snap --claim claim1 --json --include issues: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+deep show --claim (two values): exits 3, not 2; prints no usage of deep show: deep show --doc doc1 --document <tmp>/doc.json --removes a,b --t 0 --size 10x10 --include issues --check --snap --claim claim1 --json --claim claim1-2: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+deep show --claim (one value repeated): exits 3, not 2; prints no usage of deep show: deep show --doc doc1 --document <tmp>/doc.json --removes a,b --t 0 --size 10x10 --include issues --check --snap --claim claim1 --json --claim claim1: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+deep kinds --dump (two values): exits 3, not 2; prints no usage of deep kinds: deep kinds --dump <tmp>/dump --dump <tmp>/dump-2: exit 3, stdout "", stderr "deep kinds: No canvas core is built under <checkout>/target; run cargo build --bin deep-show first.\n"
+deep kinds --dump (one value repeated): exits 3, not 2; prints no usage of deep kinds: deep kinds --dump <tmp>/dump --dump <tmp>/dump: exit 3, stdout "", stderr "deep kinds: No canvas core is built under <checkout>/target; run cargo build --bin deep-show first.\n"
+deep kinds --diff (two values): exits 3, not 2; prints no usage of deep kinds: deep kinds --diff <tmp>/doc.json <tmp>/other.json --diff <tmp>/doc-2.json <tmp>/other-2.json: exit 3, stdout "", stderr "deep kinds: No canvas core is built under <checkout>/target; run cargo build --bin deep-show first.\n"
+deep kinds --diff (one value repeated): exits 3, not 2; prints no usage of deep kinds: deep kinds --diff <tmp>/doc.json <tmp>/other.json --diff <tmp>/doc.json <tmp>/other.json: exit 3, stdout "", stderr "deep kinds: No canvas core is built under <checkout>/target; run cargo build --bin deep-show first.\n"
+deep start --mode (two values): exits 3, not 2; prints no usage of deep start: deep start --repo <tmp>/repo --issue 1 --agent claude-code --mode plan --prompt go --json --mode plan-2: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+deep start --mode (one value repeated): exits 3, not 2; prints no usage of deep start: deep start --repo <tmp>/repo --issue 1 --agent claude-code --mode plan --prompt go --json --mode plan: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+deep read --slice (two values): exits 1, not 2; prints no usage of deep read: deep read handle1 --slice c1 --json --root <tmp>/readroot --slice c1-2: exit 1, stdout "", stderr "deep read handle1: no record to read at <tmp>/readroot: Cannot open database because the directory does not exist\n"
+deep read --slice (one value repeated): exits 1, not 2; prints no usage of deep read: deep read handle1 --slice c1 --json --root <tmp>/readroot --slice c1: exit 1, stdout "", stderr "deep read handle1: no record to read at <tmp>/readroot: Cannot open database because the directory does not exist\n"
+deep read --root (two values): exits 1, not 2; prints no usage of deep read: deep read handle1 --slice c1 --json --root <tmp>/readroot --root <tmp>/readroot-2: exit 1, stdout "", stderr "deep read handle1: no record to read at <tmp>/readroot-2: Cannot open database because the directory does not exist\n"
+deep read --root (one value repeated): exits 1, not 2; prints no usage of deep read: deep read handle1 --slice c1 --json --root <tmp>/readroot --root <tmp>/readroot: exit 1, stdout "", stderr "deep read handle1: no record to read at <tmp>/readroot: Cannot open database because the directory does not exist\n"
+deep find --slice (two values): exits 1, not 2; prints no usage of deep find: deep find query --file a.txt --slice c1 --json --root <tmp>/readroot --slice c1-2: exit 1, stdout "", stderr "deep find query: no record to read at <tmp>/readroot: Cannot open database because the directory does not exist\n"
+deep find --slice (one value repeated): exits 1, not 2; prints no usage of deep find: deep find query --file a.txt --slice c1 --json --root <tmp>/readroot --slice c1: exit 1, stdout "", stderr "deep find query: no record to read at <tmp>/readroot: Cannot open database because the directory does not exist\n"
+deep find --root (two values): exits 1, not 2; prints no usage of deep find: deep find query --file a.txt --slice c1 --json --root <tmp>/readroot --root <tmp>/readroot-2: exit 1, stdout "", stderr "deep find query: no record to read at <tmp>/readroot-2: Cannot open database because the directory does not exist\n"
+deep find --root (one value repeated): exits 1, not 2; prints no usage of deep find: deep find query --file a.txt --slice c1 --json --root <tmp>/readroot --root <tmp>/readroot: exit 1, stdout "", stderr "deep find query: no record to read at <tmp>/readroot: Cannot open database because the directory does not exist\n"
+
+The table's rows:
+deep hub status --root (two values)
+deep hub status --root (one value repeated)
+deep hub stop --root (two values)
+deep hub stop --root (one value repeated)
+deep hub use --root (two values)
+deep hub use --root (one value repeated)
+deep run --result (two values)
+deep run --result (one value repeated)
+deep land --repo (two values)
+deep land --repo (one value repeated)
+deep land judge --repo (two values)
+deep land judge --repo (one value repeated)
+deep work --repo (two values)
+deep work --repo (one value repeated)
+deep work --repo (two values)
+deep work --repo (one value repeated)
+deep work --issues (two values)
+deep work --issues (one value repeated)
+deep workspace new --folder (two values)
+deep workspace new --folder (one value repeated)
+deep workspace task --criterion (two values)
+deep workspace task --criterion (one value repeated)
+deep workspace task --blocked-by (two values)
+deep workspace task --blocked-by (one value repeated)
+deep env up --root (two values)
+deep env up --root (one value repeated)
+deep env down --root (two values)
+deep env down --root (one value repeated)
+deep show --doc (two values)
+deep show --doc (one value repeated)
+deep show --document (two values)
+deep show --document (one value repeated)
+deep show --removes (two values)
+deep show --removes (one value repeated)
+deep show --t (two values)
+deep show --t (one value repeated)
+deep show --size (two values)
+deep show --size (one value repeated)
+deep show --include (two values)
+deep show --include (one value repeated)
+deep show --claim (two values)
+deep show --claim (one value repeated)
+deep export --document (two values)
+deep export --document (one value repeated)
+deep export --still (two values)
+deep export --still (one value repeated)
+deep export --out (two values)
+deep export --out (one value repeated)
+deep kinds --dump (two values)
+deep kinds --dump (one value repeated)
+deep kinds --diff (two values)
+deep kinds --diff (one value repeated)
+deep start approve --repo (two values)
+deep start approve --repo (one value repeated)
+deep start approve --issues (two values)
+deep start approve --issues (one value repeated)
+deep start approve --agents (two values)
+deep start approve --agents (one value repeated)
+deep start approve --at-once (two values)
+deep start approve --at-once (one value repeated)
+deep start approve --plan-share (two values)
+deep start approve --plan-share (one value repeated)
+deep start approve --until (two values)
+deep start approve --until (one value repeated)
+deep start --repo (two values)
+deep start --repo (one value repeated)
+deep start --issue (two values)
+deep start --issue (one value repeated)
+deep start --agent (two values)
+deep start --agent (one value repeated)
+deep start --mode (two values)
+deep start --mode (one value repeated)
+deep start --prompt (two values)
+deep start --prompt (one value repeated)
+deep rules reach --repo (two values)
+deep rules reach --repo (one value repeated)
+deep rules reach --scope (two values)
+deep rules reach --scope (one value repeated)
+deep join --invite (two values)
+deep join --invite (one value repeated)
+deep person invite --address (two values)
+deep person invite --address (one value repeated)
+deep read --slice (two values)
+deep read --slice (one value repeated)
+deep read --root (two values)
+deep read --root (one value repeated)
+deep find --file (two values)
+deep find --file (one value repeated)
+deep find --slice (two values)
+deep find --slice (one value repeated)
+deep find --root (two values)
+deep find --root (one value repeated): expected [ …(46) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep land --repo (two values): exits 3, not 2; prints no usage of deep land: deep land --repo <tmp>/repo --json --repo <tmp>/repo-2: exit 3, stdout \"\", stderr \"The hub isn't answering; start it with deep hub start.\\n\"",
++   "deep land --repo (one value repeated): exits 3, not 2; prints no usage of deep land: deep land --repo <tmp>/repo --json --repo <tmp>/repo: exit 3, stdout \"\", stderr \"The hub isn't answering; start it with deep hub start.\\n\"",
++   "deep land judge --repo (two values): exits 3, not 2; prints no usage of deep land: deep land judge --repo <tmp>/repo --json --repo <tmp>/repo-2: exit 3, stdout \"\", stderr \"The hub isn't answering; start it with deep hub start.\\n\"",
++   "deep land judge --repo (one value repeated): exits 3, not 2; prints no usage of deep land: deep land judge --repo <tmp>/repo --json --repo <tmp>/repo: exit 3, stdout \"\", stderr \"The hub isn't answering; start it with deep hub start.\\n\"",
++   "deep work --repo (two values): exits 3, not 2; prints no usage of deep work: deep work fix the login page --repo <tmp>/repo --json --repo <tmp>/repo-2: exit 3, stdout \"\", stderr \"The hub isn't answering; start it with deep hub start.\\n\"",
++   "deep work --repo (one value repeated): exits 3, not 2; prints no usage of deep work: deep work fix the login page --repo <tmp>/repo --json --repo <tmp>/repo: exit 3, stdout \"\", stderr \"The hub isn't answering; start it with deep hub start.\\n\"",
++   "deep work --repo (two values): exits 3, not 2; prints no usage of deep work: deep work --repo <tmp>/repo --issues 1,2 --once --json --repo <tmp>/repo-2: exit 3, stdout \"\", stderr \"The hub isn't answering; start it with deep hub start.\\n\"",
++   "deep work --repo (one value repeated): exits 3, not 2; prints no usage of deep work: deep work --repo <tmp>/repo --issues 1,2 --once --json --repo <tmp>/repo: exit 3, stdout \"\", stderr \"The hub isn't answering; start it with deep hub start.\\n\"",
++   "deep work --issues (two values): exits 3, not 2; prints no usage of deep work: deep work --repo <tmp>/repo --issues 1,2 --once --json --issues 1,3: exit 3, stdout \"\", stderr \"The hub isn't answering; start it with deep hub start.\\n\"",
++   "deep work --issues (one value repeated): exits 3, not 2; prints no usage of deep work: deep work --repo <tmp>/repo --issues 1,2 --once --json --issues 1,2: exit 3, stdout \"\", stderr \"The hub isn't answering; start it with deep hub start.\\n\"",
++   "deep workspace task --criterion (two values): exits 3, not 2; prints no usage of deep workspace: deep workspace task ws1 title --criterion text --blocked-by 1 --criterion text-2: exit 3, stdout \"\", stderr \"The hub isn't answering; start it with deep hub start.\\n\"",
++   "deep workspace task --criterion (one value repeated): exits 3, not 2; prints no usage of deep workspace: deep workspace task ws1 title --criterion text --blocked-by 1 --criterion text: exit 3, stdout \"\", stderr \"The hub isn't answering; start it with deep hub start.\\n\"",
++   "deep workspace task --blocked-by (two values): exits 3, not 2; prints no usage of deep workspace: deep workspace task ws1 title --criterion text --blocked-by 1 --blocked-by 2: exit 3, stdout \"\", stderr \"The hub isn't answering; start it with deep hub start.\\n\"",
++   "deep workspace task --blocked-by (one value repeated): exits 3, not 2; prints no usage of deep workspace: deep workspace task ws1 title --criterion text --blocked-by 1 --blocked-by 1: exit 3, stdout \"\", stderr \"The hub isn't answering; start it with deep hub start.\\n\"",
++   "deep env up --root (two values): exits 3, not 2; prints no usage of deep env: deep env up --root <tmp>/devhub --json --root <tmp>/devhub-2: exit 3, stdout \"\", stderr \"The hub isn't answering; start it with deep hub start.\\n\"",
++   "deep env up --root (one value repeated): exits 3, not 2; prints no usage of deep env: deep env up --root <tmp>/devhub --json --root <tmp>/devhub: exit 3, stdout \"\", stderr \"The hub isn't answering; start it with deep hub start.\\n\"",
++   "deep env down --root (two values): exits 3, not 2; prints no usage of deep env: deep env down --root <tmp>/devhub --json --root <tmp>/devhub-2: exit 3, stdout \"\", stderr \"The hub isn't answering; start it with deep hub start.\\n\"",
++   "deep env down --root (one value repeated): exits 3, not 2; prints no usage of deep env: deep env down --root <tmp>/devhub --json --root <tmp>/devhub: exit 3, stdout \"\", stderr \"The hub isn't answering; start it with deep hub start.\\n\"",
++   "deep show --doc (two values): exits 3, not 2; prints no usage of deep show: deep show --doc doc1 --document <tmp>/doc.json --removes a,b --t 0 --size 10x10 --include issues --check --snap --claim claim1 --json --doc doc1-2: exit 3, stdout \"\", stderr \"The hub isn't answering; start it with deep hub start.\\n\"",
++   "deep show --doc (one value repeated): exits 3, not 2; prints no usage of deep show: deep show --doc doc1 --document <tmp>/doc.json --removes a,b --t 0 --size 10x10 --include issues --check --snap --claim claim1 --json --doc doc1: exit 3, stdout \"\", stderr \"The hub isn't answering; start it with deep hub start.\\n\"",
++   "deep show --document (two values): prints no usage of deep show: deep show --doc doc1 --document <tmp>/doc.json --removes a,b --t 0 --size 10x10 --include issues --check --snap --claim claim1 --json --document <tmp>/doc-2.json: exit 2, stdout \"\", stderr \"deep show: can't read <tmp>/doc-2.json as JSON: ENOENT: no such file or directory, open '<tmp>/doc-2.json'\\n\"",
++   "deep show --document (one value repeated): exits 3, not 2; prints no usage of deep show: deep show --doc doc1 --document <tmp>/doc.json --removes a,b --t 0 --size 10x10 --include issues --check --snap --claim claim1 --json --document <tmp>/doc.json: exit 3, stdout \"\", stderr \"The hub isn't answering; start it with deep hub start.\\n\"",
++   "deep show --removes (two values): exits 3, not 2; prints no usage of deep show: deep show --doc doc1 --document <tmp>/doc.json --removes a,b --t 0 --size 10x10 --include issues --check --snap --claim claim1 --json --removes a,b-2: exit 3, stdout \"\", stderr \"The hub isn't answering; start it with deep hub start.\\n\"",
++   "deep show --removes (one value repeated): exits 3, not 2; prints no usage of deep show: deep show --doc doc1 --document <tmp>/doc.json --removes a,b --t 0 --size 10x10 --include issues --check --snap --claim claim1 --json --removes a,b: exit 3, stdout \"\", stderr \"The hub isn't answering; start it with deep hub start.\\n\"",
++   "deep show --t (two values): exits 3, not 2; prints no usage of deep show: deep show --doc doc1 --document <tmp>/doc.json --removes a,b --t 0 --size 10x10 --include issues --check --snap --claim claim1 --json --t 1: exit 3, stdout \"\", stderr \"The hub isn't answering; start it with deep hub start.\\n\"",
++   "deep show --t (one value repeated): exits 3, not 2; prints no usage of deep show: deep show --doc doc1 --document <tmp>/doc.json --removes a,b --t 0 --size 10x10 --include issues --check --snap --claim claim1 --json --t 0: exit 3, stdout \"\", stderr \"The hub isn't answering; start it with deep hub start.\\n\"",
++   "deep show --size (two values): exits 3, not 2; prints no usage of deep show: deep show --doc doc1 --document <tmp>/doc.json --removes a,b --t 0 --size 10x10 --include issues --check --snap --claim claim1 --json --size 11x10: exit 3, stdout \"\", stderr \"The hub isn't answering; start it with deep hub start.\\n\"",
++   "deep show --size (one value repeated): exits 3, not 2; prints no usage of deep show: deep show --doc doc1 --document <tmp>/doc.json --removes a,b --t 0 --size 10x10 --include issues --check --snap --claim claim1 --json --size 10x10: exit 3, stdout \"\", stderr \"The hub isn't answering; start it with deep hub start.\\n\"",
++   "deep show --include (two values): exits 3, not 2; prints no usage of deep show: deep show --doc doc1 --document <tmp>/doc.json --removes a,b --t 0 --size 10x10 --include issues --check --snap --claim claim1 --json --include issues-2: exit 3, stdout \"\", stderr \"The hub isn't answering; start it with deep hub start.\\n\"",
++   "deep show --include (one value repeated): exits 3, not 2; prints no usage of deep show: deep show --doc doc1 --document <tmp>/doc.json --removes a,b --t 0 --size 10x10 --include issues --check --snap --claim claim1 --json --include issues: exit 3, stdout \"\", stderr \"The hub isn't answering; start it with deep hub start.\\n\"",
++   "deep show --claim (two values): exits 3, not 2; prints no usage of deep show: deep show --doc doc1 --document <tmp>/doc.json --removes a,b --t 0 --size 10x10 --include issues --check --snap --claim claim1 --json --claim claim1-2: exit 3, stdout \"\", stderr \"The hub isn't answering; start it with deep hub start.\\n\"",
++   "deep show --claim (one value repeated): exits 3, not 2; prints no usage of deep show: deep show --doc doc1 --document <tmp>/doc.json --removes a,b --t 0 --size 10x10 --include issues --check --snap --claim claim1 --json --claim claim1: exit 3, stdout \"\", stderr \"The hub isn't answering; start it with deep hub start.\\n\"",
++   "deep kinds --dump (two values): exits 3, not 2; prints no usage of deep kinds: deep kinds --dump <tmp>/dump --dump <tmp>/dump-2: exit 3, stdout \"\", stderr \"deep kinds: No canvas core is built under <checkout>/target; run cargo build --bin deep-show first.\\n\"",
++   "deep kinds --dump (one value repeated): exits 3, not 2; prints no usage of deep kinds: deep kinds --dump <tmp>/dump --dump <tmp>/dump: exit 3, stdout \"\", stderr \"deep kinds: No canvas core is built under <checkout>/target; run cargo build --bin deep-show first.\\n\"",
++   "deep kinds --diff (two values): exits 3, not 2; prints no usage of deep kinds: deep kinds --diff <tmp>/doc.json <tmp>/other.json --diff <tmp>/doc-2.json <tmp>/other-2.json: exit 3, stdout \"\", stderr \"deep kinds: No canvas core is built under <checkout>/target; run cargo build --bin deep-show first.\\n\"",
++   "deep kinds --diff (one value repeated): exits 3, not 2; prints no usage of deep kinds: deep kinds --diff <tmp>/doc.json <tmp>/other.json --diff <tmp>/doc.json <tmp>/other.json: exit 3, stdout \"\", stderr \"deep kinds: No canvas core is built under <checkout>/target; run cargo build --bin deep-show first.\\n\"",
++   "deep start --mode (two values): exits 3, not 2; prints no usage of deep start: deep start --repo <tmp>/repo --issue 1 --agent claude-code --mode plan --prompt go --json --mode plan-2: exit 3, stdout \"\", stderr \"The hub isn't answering; start it with deep hub start.\\n\"",
++   "deep start --mode (one value repeated): exits 3, not 2; prints no usage of deep start: deep start --repo <tmp>/repo --issue 1 --agent claude-code --mode plan --prompt go --json --mode plan: exit 3, stdout \"\", stderr \"The hub isn't answering; start it with deep hub start.\\n\"",
++   "deep read --slice (two values): exits 1, not 2; prints no usage of deep read: deep read handle1 --slice c1 --json --root <tmp>/readroot --slice c1-2: exit 1, stdout \"\", stderr \"deep read handle1: no record to read at <tmp>/readroot: Cannot open database because the directory does not exist\\n\"",
++   "deep read --slice (one value repeated): exits 1, not 2; prints no usage of deep read: deep read handle1 --slice c1 --json --root <tmp>/readroot --slice c1: exit 1, stdout \"\", stderr \"deep read handle1: no record to read at <tmp>/readroot: Cannot open database because the directory does not exist\\n\"",
++   "deep read --root (two values): exits 1, not 2; prints no usage of deep read: deep read handle1 --slice c1 --json --root <tmp>/readroot --root <tmp>/readroot-2: exit 1, stdout \"\", stderr \"deep read handle1: no record to read at <tmp>/readroot-2: Cannot open database because the directory does not exist\\n\"",
++   "deep read --root (one value repeated): exits 1, not 2; prints no usage of deep read: deep read handle1 --slice c1 --json --root <tmp>/readroot --root <tmp>/readroot: exit 1, stdout \"\", stderr \"deep read handle1: no record to read at <tmp>/readroot: Cannot open database because the directory does not exist\\n\"",
++   "deep find --slice (two values): exits 1, not 2; prints no usage of deep find: deep find query --file a.txt --slice c1 --json --root <tmp>/readroot --slice c1-2: exit 1, stdout \"\", stderr \"deep find query: no record to read at <tmp>/readroot: Cannot open database because the directory does not exist\\n\"",
++   "deep find --slice (one value repeated): exits 1, not 2; prints no usage of deep find: deep find query --file a.txt --slice c1 --json --root <tmp>/readroot --slice c1: exit 1, stdout \"\", stderr \"deep find query: no record to read at <tmp>/readroot: Cannot open database because the directory does not exist\\n\"",
++   "deep find --root (two values): exits 1, not 2; prints no usage of deep find: deep find query --file a.txt --slice c1 --json --root <tmp>/readroot --root <tmp>/readroot-2: exit 1, stdout \"\", stderr \"deep find query: no record to read at <tmp>/readroot-2: Cannot open database because the directory does not exist\\n\"",
++   "deep find --root (one value repeated): exits 1, not 2; prints no usage of deep find: deep find query --file a.txt --slice c1 --json --root <tmp>/readroot --root <tmp>/readroot: exit 1, stdout \"\", stderr \"deep find query: no record to read at <tmp>/readroot: Cannot open database because the directory does not exist\\n\"",
++ ]
+
+ ❯ tests/acceptance/3461/table.test.ts:52:175
+     50|   }
+     51|   expect(table.length, 'the table ran rows').toBeGreaterThan(40);
+     52|   expect(failures, `${failures.length} of ${table.length} rows (comman…
+       |                                                                                                                                                                               ^
+     53| }, 1500 * SECOND);
+     54|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  3 failed | 2 passed (5)
+      Tests  3 failed | 2 passed (5)
+   Start at  22:32:27
+   Duration  11.44s (tests 99%)
+
+
+# Planted in the built hub (packages/hub/dist), run, then restored byte for byte (cmp), 2026-11-24:
+#   repeats-refused (start-command.js: REPEATED emptied) -> #3461.1bda0a26 fails: "deep start approve with two --host flags asks the hub for one run" (exit 2, usage, no call)
+#   once-refused for deep land only (land-command.js: refuses any --repo) -> #3461.a80d1545 fails: "2 of 42 commands given each flag once print or exit otherwise than on the merge base" (deep land, deep land judge: code 3 on the merge base, 2 now)
+#   first-wins and last-wins readers: the merge base itself (deep land/work read first-wins, deep show/env/find/read last-wins) fails #3461.b4a5c8f4 on those commands' rows above

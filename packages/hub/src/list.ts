@@ -4,11 +4,12 @@
 // is; `--json` prints the rows. Every clock time is in your time zone.
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { call, clock, notAnswering, notAnsweringSince, Unanswered } from './client.js';
+import { call, clock, notAnswering, notAnsweringSince, Unanswered, type Reply } from './client.js';
 import { StaleHub } from './generations.js';
 import { controlToken, hubAddress, installedRoot, rootOf } from './paths.js';
 import { activePlant } from './plant.js';
 import { elapsed } from './promises.js';
+import { rebuilding, replayingOf, type Replaying } from './replay.js';
 import type { Row, Why } from './rows.js';
 import { SECTION } from './sections.js';
 import { visible } from './visible.js';
@@ -49,7 +50,7 @@ function planted(rows: Row[]): Row[] {
 }
 
 /**
- * The list as text: each project's sessions under its name, the quiet ones folded into one line, then the open asks,
+ * The list as text: each project's sessions under its name, a host's (#999) under the host's, the quiet ones folded into one line, then the open asks,
  * then how many sessions and the count sentence. With `detail`, each session's detail under its row; a finished
  * session's is one line, how many calls, how many failed, its commits, and the handle `deep read` takes for the rest.
  */
@@ -60,6 +61,8 @@ export function listText(rows: readonly Row[], o: { detail?: Record<string, Deta
   const asks = rows.filter((r) => r.id.startsWith('ask:'));
   const age = (r: Row) => (r.since === null ? '' : `, ${elapsed(Math.max(0, now - r.since))}`);
   const quiet = sessions.filter((r) => r.word === 'quiet');
+  // A session on a host (#999) is listed under the host's name, as one here is under its project's.
+  const under = (r: Row) => r.host ?? r.project;
   let project: string | null | undefined;
   let section: number | undefined;
   for (const r of sessions.filter((s) => s.word !== 'quiet')) {
@@ -70,7 +73,7 @@ export function listText(rows: readonly Row[], o: { detail?: Record<string, Deta
       if (at === 1) out.push('Working:');
       if (at === 2) out.push('Finished:');
     }
-    if (r.project !== project) out.push((project = r.project) ?? 'no repo');
+    if (under(r) !== project) out.push((project = under(r)) ?? 'no repo');
     // Its one name, its agent, then its word and why (#2018): its ID shows only in a name another row would otherwise
     // read the same as, and a verdict that isn't PASS or FAIL says whom it waits for and its evidence after its word.
     // Its one flag beside its word (#2019), with the fix where one clears it.
@@ -88,7 +91,7 @@ export function listText(rows: readonly Row[], o: { detail?: Record<string, Deta
     const commits = d.commits?.length ? `, commit${d.commits.length === 1 ? '' : 's'} ${d.commits.map((c) => c.slice(0, 12)).join(', ')}` : ', no commits';
     out.push(`      ${d.verdict ? `${d.verdict}; ` : ''}${d.turn.calls} call${d.turn.calls === 1 ? '' : 's'}, ${d.turn.failed} failed${activePlant() === 'status-omits-commit' ? '' : commits}${d.calls?.length ? `: ${d.calls.join('; ')}` : ''}; the rest: deep read session:${r.session.replace(/[^0-9A-Za-z]/g, '')}`);
   }
-  const byRepo = [...new Set(quiet.map((r) => r.project ?? 'no repo'))].sort().map((p) => `${p} ${quiet.filter((r) => (r.project ?? 'no repo') === p).length}`);
+  const byRepo = [...new Set(quiet.map((r) => under(r) ?? 'no repo'))].sort().map((p) => `${p} ${quiet.filter((r) => (under(r) ?? 'no repo') === p).length}`);
   if (quiet.length) out.push(`${quiet.length} quiet, by repo: ${byRepo.join(', ')}`);
   // A new project from your words (#1342): its heading, your first words, over its one row until its card is ready.
   for (const r of rows.filter((x) => x.id.startsWith('job:brief-'))) out.push(r.title, `  New project  ${r.word} · ${r.why}${age(r)}`);
@@ -190,9 +193,33 @@ async function fromDatabase(ledger: string, detail: boolean, why?: string): Prom
   }
 }
 
+/** How long the list is waited for before the hub's health is asked whether its record replays (#3544). */
+const LIST_WAIT_MS = 400;
+/**
+ * The hub's answer to the list's call, or how far its record's replay is (#3544). A hub reads no list until a replay
+ * ends, and its health says at once that one runs: so a call unanswered after LIST_WAIT_MS asks the health beside it,
+ * and a replay ends the wait for the list.
+ */
+async function listed(at: { socket: string; token: string }, method: string, params: Record<string, unknown>): Promise<Reply | Replaying> {
+  const gone = new AbortController();
+  const list = call(at.socket, at.token, method, params, undefined, gone.signal);
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    if (await Promise.race([list, new Promise<void>((slow) => { timer = setTimeout(slow, LIST_WAIT_MS); })])) return await list;
+    const health = call(at.socket, at.token, 'hub.health', {}, undefined, gone.signal).then((reply) => ('result' in reply ? replayingOf(reply.result) : undefined), () => undefined);
+    return (await Promise.race([list.then(() => undefined, () => undefined), health])) ?? (await list);
+  } finally {
+    clearTimeout(timer);
+    // Whichever call is still unanswered is given up, with its connection.
+    list.catch(() => undefined);
+    gone.abort();
+  }
+}
+
 /**
  * `deep` (`detail` false) and `deep status` (true), each with `--json`: 0 read from the hub, 3 from its database or not
- * at all. `deep status <session> --why` prints why that session reads as it does (#2018), 2 when no session has that ID.
+ * at all, or from a hub whose record replays, which it says in one sentence (#3544). `deep status <session> --why`
+ * prints why that session reads as it does (#2018), 2 when no session has that ID.
  */
 export async function listCommand(args: readonly string[], detail: boolean, setUp: () => Promise<number> = async () => 0): Promise<number> {
   const name = detail ? 'deep status' : 'deep';
@@ -250,7 +277,12 @@ export async function listCommand(args: readonly string[], detail: boolean, setU
   /** What the hub said when it refused this read, or another failure's own words; none for a hub that isn't answering. */
   let why: string | undefined;
   try {
-    const reply = await call(at.socket, at.token, method, params);
+    const reply = await listed(at, method, params);
+    // No list and no count can be read while the record replays: its database holds the tables as they were.
+    if ('replayed' in reply) {
+      process.stderr.write(`${rebuilding(reply)}\n`);
+      return unread;
+    }
     if ('result' in reply) {
       const read = reply.result as unknown as Read;
       if (activePlant() === 'stale-before-ask' && session === undefined) read.rows = await staleBeforeAsk(read.rows, [join(dirname(at.socket), 'ledger.db'), rootOf(installedRoot()).ledger].find((p) => existsSync(p)));

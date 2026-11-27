@@ -86,10 +86,11 @@ export async function withPrompt<T>(work: () => Promise<T>): Promise<T> {
   }
 }
 
-/** One call on the hub's socket with the cli role; rejects only when the hub can't be reached or doesn't answer. */
-export async function call(socket: string, token: string, method: string, params: Obj, peer?: { pid: number; start: string }): Promise<Reply> {
+/** One call on the hub's socket with the cli role; rejects only when the hub can't be reached or doesn't answer, or once `gone` gives it up. */
+export async function call(socket: string, token: string, method: string, params: Obj, peer?: { pid: number; start: string }, gone?: AbortSignal): Promise<Reply> {
   return new Promise((resolve, reject) => {
     const sock = net.connect(socket);
+    gone?.addEventListener('abort', () => sock.destroy());
     let buffer = '';
     let hello = false;
     sock.setEncoding('utf8');
