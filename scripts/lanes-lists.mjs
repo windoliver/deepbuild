@@ -1671,6 +1671,8 @@ for (const name of ['ac1-section', 'ac3-agent-routes', 'ac5-taste-call']) {
 }
 redrafted['tests/acceptance/1352-redraft-3402/ac1-section.test.mjs'] = 'tests/acceptance/1352-redraft-3413/';
 byHand.push('tests/acceptance/1352-redraft-3402/ac1-section.test.mjs');
+redrafted['tests/acceptance/2790/purpose.test.ts'] = 'tests/acceptance/2790-redraft-3413/';
+byHand.push('tests/acceptance/2790/purpose.test.ts');
 
 for (const entry of laneFolders.filter((folder) => !unread.includes(folder))) {
   let text = '';
