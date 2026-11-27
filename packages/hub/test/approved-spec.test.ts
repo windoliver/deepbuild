@@ -139,3 +139,23 @@ it('release checks and the outside block are the kept revision\'s, whatever a wr
     await record.close();
   }
 }, 60_000);
+
+it('a second approval is made to the first one\'s revision, and a worktree two approvals behind is still not proposed', async () => {
+  const s = scene();
+  const shop = s.repo('shop');
+  const second = join(s.tmp, 'second');
+  s.git(shop.dir, 'worktree', 'add', '-q', '-b', 'second', second, 'HEAD');
+  const { record } = await s.open();
+  try {
+    const noTypecheck = (text: string): string | undefined => (text.includes('typecheck, ') ? text.replace('typecheck, unit]', 'unit]') : undefined);
+    await approveChange(record, CORE, s.now, shop.dir, noLint, `ask:${ulid(s.now())}`);
+    await approveChange(record, CORE, s.now, shop.dir, noTypecheck, `ask:${ulid(s.now())}`);
+    const kept = await approvedSpec(second, shop.base, record);
+    expect(kept.text, 'the second change is made to the first approval\'s revision, not to the base commit\'s').toBe(WITH.replace('[lint, typecheck, unit]', '[unit]'));
+    expect(await specDrift(second, kept), 'the second worktree still holds the revision the first approval replaced').toBeUndefined();
+    writeFileSync(join(shop.dir, SPEC), WITHOUT);
+    expect(await specDrift(shop.dir, kept), 'the first approval\'s file, in the checkout the approved file is written in, differs from the kept revision').toBeDefined();
+  } finally {
+    await record.close();
+  }
+}, 60_000);
