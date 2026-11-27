@@ -157,11 +157,17 @@ fn write_source(per_frame: bool, release_always: bool) -> String {
 /// Writes the module under `dir`, where gpui-shell resolves `@deepbuild/panel`, unless it's there already.
 pub fn serve(dir: &Path) -> std::io::Result<()> {
     let path = dir.join(SERVED);
+    let folder = path.parent().expect("the module's folder");
+    for link in [folder, path.as_path()] {
+        if std::fs::symlink_metadata(link).is_ok_and(|meta| meta.is_symlink()) {
+            std::fs::remove_file(link)?;
+        }
+    }
     let source = source();
     if std::fs::read_to_string(&path).is_ok_and(|text| text == source) {
         return Ok(());
     }
-    std::fs::create_dir_all(path.parent().expect("the module's folder"))?;
+    std::fs::create_dir_all(folder)?;
     std::fs::write(path, source)
 }
 
@@ -1087,6 +1093,39 @@ mod tests {
             read("x;\nrequire`gpui-kit`; function f(a) {}"),
             vec![("?".to_owned(), 2)]
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_served_module_is_never_written_through_a_link() {
+        let root = std::env::temp_dir().join(format!("deep-1847-link-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let (dir, outside) = (root.join("panel"), root.join("outside"));
+        std::fs::create_dir_all(dir.join("@deepbuild")).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(
+            dir.join("main.js"),
+            "import { View } from \"@deepbuild/panel\";",
+        )
+        .unwrap();
+        std::fs::write(outside.join("kept"), "kept").unwrap();
+        std::os::unix::fs::symlink(outside.join("kept"), dir.join(SERVED)).unwrap();
+        let _ = check(&dir);
+        serve(&dir).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(outside.join("kept")).unwrap(),
+            "kept"
+        );
+        assert!(!std::fs::symlink_metadata(dir.join(SERVED))
+            .unwrap()
+            .is_symlink());
+        assert_eq!(std::fs::read_to_string(dir.join(SERVED)).unwrap(), source());
+        std::fs::remove_dir_all(dir.join("@deepbuild")).unwrap();
+        std::os::unix::fs::symlink(&outside, dir.join("@deepbuild")).unwrap();
+        serve(&dir).unwrap();
+        assert!(!outside.join("panel.js").exists());
+        assert_eq!(std::fs::read_to_string(dir.join(SERVED)).unwrap(), source());
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]
