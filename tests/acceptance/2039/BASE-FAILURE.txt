@@ -1,0 +1,151 @@
+#2039 acceptance suite at the base, dbbddd5dd94d544e7f782519b91bcf73f58141eb (Merge pull request #3244), before any
+implementation.
+
+The whole suite was run once there, on 2026-11-24 from 08:37:39 to 08:38:00 EST, on macOS arm64 with a one-minute
+load of 25.10 on 18 cores, in the blind job's checkout of the base, with this folder's files as they stand. The
+job's caller made the run, in the machine's build queue, right after building the base there (`cargo build --locked
+-j 8 --bin deep-canvas-render --bin deep-show`, debug, the default features, CARGO_INCREMENTAL=0
+CARGO_PROFILE_DEV_DEBUG=0):
+
+  target/debug/deep-canvas-render  sha256 fd7f6b0fb7c23e8f330b54c719f8108b7fd9e541388a16af8d73577035ed0ac0
+  target/debug/deep-show           sha256 fc9f7cde53439ad3c256ebe8df30ea38a815e3d02bfb7e7bbc279958086755b9
+
+with the README's command (the run's log starts with it):
+
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/2039 --testTimeout=600000 --no-file-parallelism
+
+Test Files 7 failed (7); Tests 11 failed (11); exit 1; vitest 5.0.5, 20.58 s. Every test fails on an assertion its
+file names: nine because the behaviour is missing, the budget's record for its missing task, and the budget's timing
+as `INCONCLUSIVE:` for the machine's load. No crash, no timeout, no load or type error, no refused fixture and no
+failed build: the log holds eleven errors, each an AssertionError at a line of a test file. Each file took between
+0.1 and 6.8 s with its own `cargo build` and its copy of the binary (ac4-budget 0.15 s, ac1-corners 6.8 s,
+ac3-narrow 1.9 s, ac2-tiles 3.3 s, ac3-center 3.1 s, ac4-one-draw 3.1 s, ac4-place-cell 1.7 s), so no file's build
+compiled a workspace crate. `node node_modules/typescript/bin/tsc --noEmit -p tests/acceptance/2039` exits 0.
+
+The job's own request for this run, through the machine's throttle (`node scripts/throttle.mjs test --wait 60 -- …`,
+04:59 to 05:59 EST), got no grant and ran nothing; the run above is the only one.
+
+ac1-corners.test.ts (2 failed of 2)
+- "AC1 #2039.31be1538 a free row 200 × 96 u on whole units, at angle 0 and scale 1, in a snapshot at zoom 1 and scale
+  factor 1: each corner's 8 × 8 pixels equal the source texels exactly, and no pixel holds a texel from a neighbouring
+  cell": fails at ac1-corners.test.ts:54 (`none`, ../467/helpers.ts:70): "AssertionError: each corner's 8 × 8 pixels
+  equal the source texels exactly: row frame#0: pixel (16, 16) reads [240, 160, 0, 255]; the source texel (0, 0), in
+  the cell's top left corner, is [5, 5, 0, 255] … expected [ …(49) ] to deeply equal []": the judge's first 48 lines
+  and "(208 more)", so all 256 corner pixels. The fixture's arithmetic and the two snapshots' size, 232 × 128 px,
+  held before it.
+  Why: the base reads no `slice`, `w` or `h` here. It draws the row as one 24 × 24 u quad of the whole cell in the
+  middle of the box, so each corner shows the item under the row.
+- "AC1 #2039.31be1538 a planted draw that scales the whole cell to the box (whole_cell_scaled_to_box) fails the same
+  check, naming the row and the first differing pixel": fails at ac1-corners.test.ts:67 (`none`): "AssertionError: the
+  shipped draw of the same row passes the check the planted draw fails: row frame#0: pixel (16, 16) reads [240, 160,
+  0, 255]; the source texel (0, 0), in the cell's top left corner, is [5, 5, 0, 255] …", the lines of the test above.
+  Its planted half held at the base, at :63 and :66: the planted draw is the whole cell scaled to the box, and the
+  run printed "AC1 whole_cell_scaled_to_box fails the corners' check with 49 lines, the first: row frame#0: pixel
+  (17, 16) reads [5, 5, 0, 255]; the source texel (1, 0), in the cell's top left corner, is [15, 5, 0, 255]".
+
+ac2-tiles.test.ts (2 failed of 2)
+- "AC2 #2039.18a89663 with fill: tile the top edge repeats its 8-texel strip 23 times across 184 u; with fill:
+  tile_fit and a row 190 u wide it repeats 22 times across 174 u, each tile the same width and none cut": fails at
+  ac2-tiles.test.ts:58 (`none`): "AssertionError: with fill: tile the top edge repeats its 8-texel strip 23 times
+  across 184 u: row frame#0, top edge: 0 of the 23 repeats of its 8-texel strip across 184 u are the strip; row
+  frame#0, top edge: repeat 1 of 23: pixel (24, 16) reads [248, 200, 0, 255]; texel (8, 0) of its 8-texel strip is
+  [85, 5, 0, 255] … expected [ …(24) ] to deeply equal []", one line for each of the 23 repeats. The `tile_fit` half,
+  at :59, is not reached here; the next test's last assertion shows what the base gives it.
+  Why: the base reads no `fill`; the top edge of the box shows the item under the row.
+- "AC2 #2039.18a89663 a planted draw that cuts the last tile under tile_fit (tile_fit_cuts_last_tile) fails the same
+  check, naming the edge": fails at ac2-tiles.test.ts:69 (`none`): "AssertionError: the shipped draw of the same row
+  passes the check the planted draw fails: row fit#0, top edge: its strip repeats 1 times across the 174 u between
+  the corners (on its 8 lines: 1, 1, 1, 1, 1, 1, 1, 1), not 22; row fit#0, top edge: repeat 1 of 22, each 7.909 u
+  wide: pixel (30, 16) reads [250, 166, 0, 255], the strip at texel 17.00 of 8 by its red; a whole repeat of that
+  width shows texel 1.52 there (red 95.2, green 5), so this repeat is cut or not the others' width … expected [ …(23)
+  ] to deeply equal []", one line for the count and one for each of the 22 repeats.
+  Its planted half held at the base, at :64, :67 and :68: the planted draw is 21 tiles of 8 u and the 22nd cut at
+  6 u, its failure names the row, the top edge and its last repeat, and the run printed "AC2 tile_fit_cuts_last_tile
+  fails the top edge's check with 16 lines, the first: row fit#0, top edge: repeat 7 of 22, each 7.909 u wide: pixel
+  (81, 16) reads [125, 5, 0, 255], the strip at texel 4.50 of 8 by its red; a whole repeat of that width shows texel
+  5.10 there (red 131.0, green 5), so this repeat is cut or not the others' width".
+
+ac3-center.test.ts (1 failed of 1)
+- "AC3 #2039.87a8de22 with center: false the middle 184 × 80 u of the first row is not drawn, and an item under it
+  shows through by pixel hash": fails at ac3-center.test.ts:54 (`none`): "AssertionError: with center: false the
+  middle 184 × 80 u is not drawn and the item under it shows through by pixel hash: row frame#0: the middle 184 × 80 u
+  of its box hashes 3bb818893ec0f726…, not b134a6b3289464ea…, the item under it alone: 576 of its pixels are drawn
+  over, the first at pixel (104, 52), which reads [5, 5, 0, 255] where the item under it is [252, 140, 0, 255]". The
+  two legs that keep it from being vacuous held before it: the item's middle holds over 1,000 colors (:52), and the
+  row with nothing but its `slice` hashes differently there (:53), since the base draws its quad in the middle.
+  Why: the base reads no `center`; the 576 pixels are its 24 × 24 u quad of the whole cell.
+
+ac3-narrow.test.ts (2 failed of 2)
+- "AC3 #2039.87a8de22 a row 12 u wide with left 8 and right 8 is refused at check, naming the row and the smallest
+  width 16": fails at ac3-narrow.test.ts:46 (`none`): "AssertionError: the row 12 u wide is refused at check, naming
+  the row and the smallest width 16: row narrow#1, 12 u wide with left 8 and right 8: check takes it (ok: true) where
+  it must refuse it, naming the row narrow#1 and the smallest width 16". The same set with that row 16 u wide passed
+  the check before it (:45).
+  Why: the base's check has no smallest size.
+- "AC3 #2039.87a8de22 a planted check that takes the row (check_takes_narrow_row) draws overlapping corners and fails
+  the same check, naming the row": fails at ac3-narrow.test.ts:70 (`none`): "AssertionError: the shipped check of the
+  same row passes the check the planted check fails: row narrow#1, 12 u wide with left 8 and right 8: check takes it
+  (ok: true) where it must refuse it, naming the row narrow#1 and the smallest width 16".
+  Its planted half held at the base, at :54 to :69: `check` takes the row laid by hand, `raster` at zoom 1 gives the
+  120 × 80 px page, the picture is the two corners overlapping, the corners' check names the row and pixel (88, 20),
+  and the run printed "AC3 check_takes_narrow_row fails the refusal's check: row narrow#1, 12 u wide with left 8 and
+  right 8: check takes it (ok: true) where it must refuse it, naming the row narrow#1 and the smallest width 16".
+
+ac4-one-draw.test.ts (1 failed of 1)
+- "AC4 #2039.2e193c48 500 such rows from one atlas draw in one instanced draw for their atlas": fails at
+  ac4-one-draw.test.ts:34 (`none`): "AssertionError: each of the 500 rows is drawn as a nine-part frame, its corners
+  the source texels (500 rows aren't): row rows#0: pixel (12, 8) reads [255, 255, 255, 255]; the source texel (0, 0),
+  in the cell's top left corner, is [5, 5, 0, 255]; row rows#1: pixel (60, 4) reads [255, 255, 255, 255] …", the
+  first line of each of the first twelve rows. The snapshot's size, 1304 × 884 px, held before it.
+  Why: the base draws each row as a 24 × 24 u quad, smaller than every row's box, so each corner shows the page.
+
+ac4-place-cell.test.ts (1 failed of 1)
+- "AC4 #2039.2e193c48 a set with slice on place: cell is refused, naming the set": fails at ac4-place-cell.test.ts:32
+  (`none`): "AssertionError: a set with slice on place: cell is refused at check, naming the set: set tiles, with
+  slice on place: cell: check takes it (ok: true) where it must refuse it, naming the set tiles". The set with no
+  `slice` passed the check before it (:31).
+
+ac4-budget.test.ts (2 failed of 2)
+- "AC4 #2039.2e193c48 budgets.json holds the task canvas-atlas-slice with the issue's 0.2 ms, compared with the merge
+  base at the lane's margin, it passes the lane's validator, and lanes.mjs times this file": fails at
+  ac4-budget.test.ts:65: "AssertionError: benchmarks/budgets.json has the task canvas-atlas-slice: expected undefined
+  to be defined". The base has no such task.
+- "AC4 #2039.2e193c48 the 500 rows add under 0.2 ms a frame over the same rows drawn as the merge base draws them, in
+  five runs": fails at ac4-budget.test.ts:82 (`inconclusive`, helpers.ts:35): "AssertionError: INCONCLUSIVE: the rows'
+  frame time counts only on a reference Mac at rest: a reading, not a budget result: off the reference Macs (Mac15,7
+  (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state
+  nominal): load 25.095703125 at a run's start or end is above the 18 cores; this is not a pass". The load is the one
+  condition the lane's judge names, so the machine read as a reference Mac on mains power with Low Power Mode off
+  and its thermal state nominal. The test took 0.14 s: it built nothing, timed nothing and started no release build.
+  This is the reading the README gives for a loaded machine, not a result either way.
+
+No test passes at the base.
+
+WHAT THE RUN DOESN'T SHOW, FROM THIS JOB'S PROBES OF THE BASE. A test stops at its first failing assertion, so the
+run is silent on what stands behind it. Before the run, between 04:57 and 06:12 EST, the job handed the base's two
+binaries the suite's own documents (fixtures.ts, planted.ts) and read the answers with its own judges (judges.ts),
+from plain node scripts, not committed. Those binaries were an earlier build of the same commit with the same
+flags (deep-canvas-render sha256 83aaeb3d…d80d871a, deep-show sha256 0783baa4…3be3e2c2d). They are probes, not runs
+of the suite; each agreed with the run wherever the run reaches.
+
+- What the base draws. The item under the first row alone is drawn exactly: 0 of its 232 × 128 pixels differ from the
+  picture's own, and its middle holds 2,048 colors. The first row with `slice` is presented with no issue and is one
+  24 × 24 u quad centred at (116, 64), its 576 pixels the cell's texels exactly, with not one pixel outside it
+  different from the item alone. With `fill: tile`, with `center: false`, and for the row 190 u wide with `fill:
+  tile_fit`, the snapshot is the same picture byte for byte.
+- Behind ac1-corners.test.ts:54. The frame doesn't fill its box (`coverProblems` fails, first at pixel (16, 16)). The
+  same row showing the cell to the frame's right fails the neighbour check, naming the row and pixel (104, 52),
+  [5, 5, 255, 255]. No pixel of the first row's own snapshot has any blue: the base's quad is the frame's own cell.
+  That last clause the base meets, behind the two it lacks.
+- Behind ac3-center.test.ts:54. The corners' check of the row with `center: false` fails as in ac1-corners.test.ts.
+- Behind ac4-one-draw.test.ts:34. `batches` is one entry, `{"batch": "atlas:…", "items": ["rows"], "instances": 500}`,
+  and `oneDrawProblems` finds nothing wrong with it: the base draws the 500 rows in one instanced draw, as plain
+  quads. That clause the base meets, behind the one it lacks.
+- Behind ac4-budget.test.ts:82, with the debug build and three frames a side: both sliding documents are presented,
+  every frame's `ran` is above 0 (10, 4, 4 with `slice`; 6, 4, 4 without), each side's three `pixel_hash`es differ,
+  and the two sides' hashes are equal frame for frame. So on a machine that could judge the timing, its warm-up would
+  fail at "the two sides draw different pixels" at the base, before anything is timed.
+- `check` takes every document of the suite with `ok: true` and no issue.
+
+Still owed: the budget's timing on a reference Mac at rest, with the release build it makes there
+(`cargo build --locked --release --bin deep-show`). Here it read INCONCLUSIVE, which decides nothing.

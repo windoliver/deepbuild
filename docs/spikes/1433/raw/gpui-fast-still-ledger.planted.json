@@ -1,0 +1,2456 @@
+{
+  "spike": 1433,
+  "arm": "gpui-fast",
+  "gate": "still-ledger",
+  "gates": "985cbda74da94b32847f9f9cd45361969781911fc321eed08a5e27d29c536e92",
+  "harness": "82c974f45df3344facfafb21ec0e3dbe1c5a3b19a26e419770622dcf90d10356",
+  "profile": "release",
+  "command": "scripts/lease node run.mjs --gate still-ledger --fast ./gpui-fast/harness",
+  "machine": {
+    "model": "Mac17,10",
+    "chip": "Apple M5 Max",
+    "memoryBytes": 68719476736,
+    "power": "ac",
+    "lowPowerMode": false,
+    "thermalState": "nominal",
+    "macosBuild": "26B8119"
+  },
+  "surface": "window",
+  "planted": "a ledger that counts only the main render",
+  "runs": [
+    {
+      "started": "2026-11-26T04:08:18.531Z",
+      "load": {
+        "start": 22.939453125,
+        "end": 23.921875
+      },
+      "window": {
+        "state": "shown"
+      },
+      "retention": "on",
+      "switch": null,
+      "vsyncs": [
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 356167
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 1
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 1093458
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 383625
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 383583
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 383125
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 383250
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 382583
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 974750
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 1
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 380958
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 382417
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 382917
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 403958
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 383750
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 380875
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 381333
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 383250
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 653875
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 383833
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 382375
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 532625
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 698250
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 377917
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 383000
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 382750
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 383417
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 974875
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 383417
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 383500
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 384000
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 427250
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 383375
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 383667
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 383333
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 381875
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 386875
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 977542
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 382000
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 381583
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 382125
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 443375
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        },
+        {
+          "still": true,
+          "committed": {
+            "main": 0,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 0,
+            "gpu_ns": 0
+          }
+        }
+      ]
+    }
+  ]
+}

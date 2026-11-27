@@ -1,4 +1,3 @@
-// #2065: the persisted equality key stays bounded even when many individually valid open items are listed.
 import { expect, it } from 'vitest';
 import { freshCount, judgeStop } from '../src/index.js';
 

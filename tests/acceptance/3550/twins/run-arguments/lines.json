@@ -1,0 +1,13 @@
+{
+  "scripts/throttle.mjs": [
+    {
+      "find": [
+        "    const { command } = procs.get(pid), key = `${owner?.id ?? ''} ${command}`;"
+      ],
+      "wrong": [
+        "    // Planted: runTop names a command by its whole command line, as ps prints args, not by its name.",
+        "    const command = commands([pid]).get(pid) ?? procs.get(pid).command, key = `${owner?.id ?? ''} ${command}`;"
+      ]
+    }
+  ]
+}

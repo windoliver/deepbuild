@@ -1,0 +1,15 @@
+{
+  "scripts/shards.mjs": [
+    {
+      "find": [
+        "    if (!(Date.now() - statSync(join(dir, '.git/packed-refs'), { throwIfNoEntry: false })?.mtimeMs > IDLE_MS)) continue;",
+        "    const taken = lock(k);",
+        "    if (!taken) continue;"
+      ],
+      "wrong": [
+        "    if (!(Date.now() - statSync(join(dir, '.git/packed-refs'), { throwIfNoEntry: false })?.mtimeMs > IDLE_MS)) continue;",
+        "    const taken = join(folder(), `${k}.gone`);"
+      ]
+    }
+  ]
+}
