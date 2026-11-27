@@ -152,11 +152,12 @@ export function entry({ checks, budgetMs, margin, harness = false }) {
   writeFileSync(join(dir, 'package.json'), '{ "private": true }\n');
   box.recorded = () => readRecorded(box);
   box.log = () => (existsSync(join(box.throttle, 'log')) ? readFileSync(join(box.throttle, 'log'), 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line)) : []);
-  // Read as the file stands, less the test process's own build grant: through throttle.mjs a read would sweep a dead
-  // holder's grant out first.
+  // Read as the file stands, less the test process's own grants: its build grant, by id, and the turn a top-level
+  // build is dealt with it (#3549), by its run. Through throttle.mjs a read would sweep a dead holder's grant out first.
   box.table = () => {
     const table = existsSync(join(box.throttle, 'table.json')) ? JSON.parse(readFileSync(join(box.throttle, 'table.json'), 'utf8')) : { grants: [], requests: [] };
-    return { grants: table.grants.filter((grant) => grant.id !== holder?.id), requests: table.requests };
+    const id = holder?.id, own = (grant) => id !== undefined && (grant.id === id || (grant.class === 'turn' && grant.run === id));
+    return { grants: table.grants.filter((grant) => !own(grant)), requests: table.requests };
   };
   box.start = () => start(box);
   box.stop = () => stop(box);
