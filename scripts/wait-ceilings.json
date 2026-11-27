@@ -6,7 +6,6 @@
   "crates/deep-show/tests/serve_answers.rs": 1,
   "packages/archive/test/forge-deadline.test.ts": 1,
   "packages/archive/test/secrets.test.ts": 1,
-  "packages/asks/test/asks.test.ts": 1,
   "packages/checks-command/test/regressions.test.ts": 1,
   "packages/config-eval/test/judge.test.ts": 1,
   "packages/config-eval/test/launcher.test.ts": 3,

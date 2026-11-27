@@ -2661,7 +2661,7 @@
   "packages/hub/test/stall-progress.test.ts": 2,
   "packages/hub/test/stall-receipt.test.ts": 1,
   "packages/hub/test/stall-recovery.test.ts": 2,
-  "packages/hub/test/start-budget.test.ts": 8,
+  "packages/hub/test/start-budget.test.ts": 7,
   "packages/hub/test/start-ps.test.ts": 6,
   "packages/hub/test/start-version.test.ts": 2,
   "packages/hub/test/startup-memory.test.ts": 22,
