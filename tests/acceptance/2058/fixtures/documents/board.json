@@ -1,0 +1,26 @@
+{
+  "format": 1,
+  "profile": "board",
+  "title": "A board for a newer core",
+  "description": "One rect on a board that names the core it needs; a fixture of the #2058 acceptance suite.",
+  "size": [640, 400],
+  "requires": {
+    "core": "0.0.1",
+    "modules": {
+      "marks2d": ">=0.0.0"
+    }
+  },
+  "items": {
+    "r1": {
+      "id": "r1",
+      "kind": "rect@1",
+      "name": "r1",
+      "order": "a0",
+      "params": {
+        "box": [0, 0, 120, 80],
+        "paint": { "fill": { "role": "muted" } }
+      },
+      "at": { "pos": [20, 20, 0] }
+    }
+  }
+}

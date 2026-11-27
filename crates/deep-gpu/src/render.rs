@@ -4,6 +4,7 @@
 //! pass, which the encode workers record in parallel and submit in the passes' frame order.
 
 use std::collections::HashSet;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
 use deep_canvas::registry::PLACES;
@@ -11,12 +12,42 @@ use deep_canvas::registry::PLACES;
 use crate::device::Device;
 use crate::encode::Job;
 
+/// Per-pass timestamp writes for a frame's render passes (#3617): each pass claims a `(begin, end)`
+/// query pair from `set`; `View` resolves and reads them after the slot is ready.
+#[derive(Clone)]
+pub struct PassQuery {
+    set: Arc<wgpu::QuerySet>,
+    next: Arc<AtomicU32>,
+    max_passes: u32,
+}
+
+impl PassQuery {
+    pub fn new(set: Arc<wgpu::QuerySet>, max_passes: u32) -> Self {
+        Self {
+            set,
+            next: Arc::new(AtomicU32::new(0)),
+            max_passes,
+        }
+    }
+
+    /// Claims the next pass's `(query_set, begin_index, end_index)`, or `None` past `max_passes`.
+    pub fn next_pass(&self) -> Option<(Arc<wgpu::QuerySet>, u32, u32)> {
+        let i = self.next.fetch_add(1, Ordering::Relaxed);
+        (i < self.max_passes).then(|| (self.set.clone(), 2 * i, 2 * i + 1))
+    }
+
+    pub fn count(&self) -> u32 {
+        self.next.load(Ordering::Relaxed).min(self.max_passes)
+    }
+}
+
 /// What a frame's encodes draw into.
 #[derive(Clone)]
 pub struct Target {
     pub frame: u64,
     pub size: [u32; 2],
     pub view: wgpu::TextureView,
+    pub pass_query: Option<PassQuery>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -11,6 +11,7 @@ import { writtenOf } from '@deepbuild/wiki';
 import { renamedSince } from '@deepbuild/workspaces';
 import { Core } from './core.js';
 import type { CoreProviders } from './core-providers.js';
+import type { Replaying } from './replay.js';
 import { selectEnvironment } from './environment-select.js';
 import { openKinds } from './kinds.js';
 import { pageClaims, type IndexFill } from './search.js';
@@ -28,6 +29,7 @@ export function createCore(
   acking?: (session: string) => void,
   scrubbing?: (values: string[]) => void,
   forgot?: (session: string) => void,
+  replayTold?: (at?: Replaying) => void,
 ): Core {
   const providers: CoreProviders = {
     checks: {
@@ -81,5 +83,5 @@ export function createCore(
     forge: { open: openGitHub, gateTokens, repoOf, revoke, sessionToken },
     workspaces: { create: (o) => new Workspaces(o), renamedSince, intake: (o) => new Intake(o) },
   };
-  return new Core(options, emit, providers, asking, acking, scrubbing, forgot);
+  return new Core(options, emit, providers, asking, acking, scrubbing, forgot, replayTold);
 }

@@ -26,6 +26,7 @@ import { handleOf as ruleHandle, noticeText } from './rules.js';
 import { dropTestSettings, installedRoot, real, repoOf, rootOf, type Root } from './paths.js';
 import { shedStartup, YOUNG } from './settle.js';
 import { processHealth } from './process-health.js';
+import { replay, type Replaying } from './replay.js';
 import { Waits, type HookSeen, type OpenCall, type Restored } from './waits.js';
 import { People } from './people.js';
 import { identityAt, idOf, type Identity } from './identity.js';
@@ -186,13 +187,14 @@ interface CoreLink {
 /** A frame from the core: its event's JSON text, or, `caught` set, the head its subscriber's replay reached (#1575). */
 type OnFrame = (sub: string, event: string, caught?: boolean) => void;
 
-function coreWorker(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[], judged: string[], resend: string[], cantRun: string[]) => void, onAcking: (session: string) => void, onScrub: (values: string[]) => void, onForgot: (session: string) => void): CoreLink {
+function coreWorker(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[], judged: string[], resend: string[], cantRun: string[]) => void, onAcking: (session: string) => void, onScrub: (values: string[]) => void, onForgot: (session: string) => void, onRebuilding: (at: Replaying | undefined) => void): CoreLink {
   const worker = new Worker(new URL('./core-worker.js', import.meta.url), { workerData: { core: options }, resourceLimits: YOUNG });
   const pending = new Map<number, { resolve(v: unknown): void; reject(e: unknown): void }>();
   let n = 0;
   let started!: (v: { hooks: string[] }) => void;
   const ready = new Promise<{ hooks: string[] }>((resolve) => { started = resolve; });
-  worker.on('message', (m: { op?: string; n?: number; sub?: string; event?: string; caught?: boolean; message?: string; result?: unknown; error?: Refusal; hooks?: string[]; sessions?: string[]; judged?: string[]; resend?: string[]; cantRun?: string[]; session?: string; values?: string[] }) => {
+  worker.on('message', (m: { op?: string; n?: number; sub?: string; event?: string; caught?: boolean; message?: string; result?: unknown; error?: Refusal; hooks?: string[]; sessions?: string[]; judged?: string[]; resend?: string[]; cantRun?: string[]; session?: string; values?: string[]; at?: Replaying }) => {
+    if (m.op === 'rebuilding') return onRebuilding(m.at);
     if (m.op === 'frame') return onFrame(m.sub!, m.event!, m.caught);
     if (m.op === 'asking') return onAsking(m.sessions ?? [], m.judged ?? [], m.resend ?? [], m.cantRun ?? []);
     if (m.op === 'acking') return onAcking(m.session!);
@@ -381,7 +383,7 @@ class Hub {
     // first; read-only, so this thread never checkpoints or syncs the ledger, and one that can't be read stops the start.
     this.identity = identityAt(join(this.root.dir, 'hub.key'), 'deep-hub');
     this.helloLine = line({ hello: 'deep-hub', start: this.start, contract: contractOf(this.plant), features: FEATURES, generation: writerGeneration(this.root.ledger), hub: this.identity.id });
-    this.core = this.plant === 'commit-on-event-loop' ? await coreInline(options, frame, fatal, asking, acking, scrub, forgot) : coreWorker(options, frame, fatal, asking, acking, scrub, forgot);
+    this.core = this.plant === 'commit-on-event-loop' ? await coreInline(options, frame, fatal, asking, acking, scrub, forgot) : coreWorker(options, frame, fatal, asking, acking, scrub, forgot, (at) => replay.heard(at));
     this.parsers = this.plant === 'parse-on-event-loop' ? await parserInline(held, this.plant, this.root.dir) : parserPool(held, this.plant, this.root.dir);
     // Read once before any hook, so a rules.json spoiled later can be written again as it was.
     this.rules();
@@ -1287,10 +1289,8 @@ class Hub {
         return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name } }));
       case 'hub.health':
       case 'health':
-        // Health waits for the core's start, as calls through the core's queue do (#2801): its readings aren't open before.
-        // The process readings after the core's: its own checks start short-lived children (the secret store's) that
-        // would count as the hub's.
-        return void reply(this.core.started.then(() => this.core.request({ op: 'health', role: conn.name })).then(async (health) => ({ pid: process.pid, start: this.start, off: this.off, parsers: this.parsers.count(), ...(health as Obj), restarts: this.restarts(), process: await processHealth() })));
+        // While the record replays, health says how far it is, at once or as soon as the replay begins (#3544), which a call waits to hear of only until the core is up, so none gathers on a start that replays nothing. Else it waits for the core's start, as calls through the core's queue do (#2801): its readings aren't open before; the process readings come after the core's, whose own checks start short-lived children (the secret store's) that would count as the hub's.
+        return void reply((this.coreUp ? Promise.resolve() : Promise.race([this.core.started, replay.begun])).then((): Obj | Promise<Obj> => (replay.at ? { pid: process.pid, start: this.start, off: this.off, parsers: this.parsers.count(), restarts: this.restarts(), rebuilding: replay.at } : this.core.started.then(() => this.core.request({ op: 'health', role: conn.name })).then(async (health) => ({ pid: process.pid, start: this.start, off: this.off, parsers: this.parsers.count(), ...(health as Obj), restarts: this.restarts(), process: await processHealth() })))));
       case 'stream.subscribe': {
         const sub = `${conn.id}:${JSON.stringify(id)}`;
         const after = Number.isSafeInteger(params.after) && (params.after as number) >= 0 ? (params.after as number) : 0;
@@ -1480,6 +1480,7 @@ export async function runHub(options: { root?: string; safe?: boolean }): Promis
   process.on('SIGHUP', () => undefined);
   process.stdout.on('error', () => undefined);
   process.stderr.on('error', () => undefined);
+  (await import('./hub-log.js')).keepLog(join(root.logs, 'hub.log'), plant); // the hub that holds the lock holds its log to its size (#3548)
   const hub = new Hub(root, writeToken(root), lock, plant, vfs, options.safe === true);
   // On the installed hub a signal is a restart, not a stop (#2975): a command's child can send one with no confirmation,
   // and an exit 0 would keep the hub down till your next login. Logout and shutdown send it too, so it doesn't wait.

@@ -1,0 +1,12 @@
+{
+  "scripts/shards.mjs": [
+    {
+      "find": [
+        "  if (gone.length) say(`SHARD ${gone.join(', ')} removed: ${gone.length} ${gone.length === 1 ? 'shard' : 'shards'}, ${(kb * 1024 / 1e9).toFixed(1)} GB by du, last made a tree more than three days before and held by no live process`);"
+      ],
+      "wrong": [
+        "  say(`SHARD ${gone.join(', ')} removed: ${gone.length} ${gone.length === 1 ? 'shard' : 'shards'}, ${(kb * 1024 / 1e9).toFixed(1)} GB by du, last made a tree more than three days before and held by no live process`);"
+      ]
+    }
+  ]
+}

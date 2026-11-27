@@ -1,0 +1,151 @@
+#3544's acceptance suite at its base, 2edb19ff4 (origin/main when the suite was drafted; the checkout's HEAD and its
+merge base with origin/main), before any implementation. Run on 2026-11-26 at 18:14 on macOS 27.2 (darwin, arm64) with
+Node 24.22.0 and vitest 5.0.5, after `npm run build --workspaces` and `cargo build --locked -p deep-hook` of that
+commit. The one-minute load was 16.9 when the run began and 16.0 when it ended, from other sessions. Run once, alone,
+under a test grant of the machine's throttle (it waited 18 minutes in the line for the grant):
+
+  node scripts/throttle.mjs test --wait 240 -- node node_modules/vitest/vitest.mjs run --root tests/acceptance/3544 --no-file-parallelism
+
+The granted command was a short sh script of this job's that first checks target/debug/deep-hook is there, then runs
+that vitest line with NO_COLOR=1; its own two lines are the `run-base:` ones below. Type-check:
+`node node_modules/typescript/bin/tsc --noEmit -p tests/acceptance/3544/tsconfig.json` reports nothing.
+
+Every test fails at an assertion of its own, 6 of 6, none by a helper's throw, a BLOCKED of the setup or the runner's
+timeout. The suite took 9.8 s: the base reads neither `DEEP_HUB_TEST_START_WAIT_MS` nor `DEEP_HUB_TEST_FOLD`, so no
+page is held, its replay of the 47,500 events is over within the 1.1 to 1.6 s `deep hub start` runs, and each test
+ends at the first thing it needs the work to say.
+
+- #3544.93bc058e (rebuild.test.ts:42): `deep hub start` exited 0 after 1,237 ms having printed `The hub is up.` and no
+  rebuild sentence. The criterion's own sentence about the merge base (exit 3 after the wait, saying the core didn't
+  start) can't be shown by the base, which reads no wait; the twin `start-waits-once` holds it (twins/README.md).
+- #3544.efcb2f1f (rebuild.test.ts:62): the same: exit 0 after 1,354 ms, `The hub is up.`, no rebuild sentence.
+- #3544.916857a5 (rebuild.test.ts:101): with `deep hub start` ended and the core up, `hub.health` holds no
+  `rebuilding`; the three commands are not reached. The criterion's sentence about the merge base (`deep hub status`
+  waits 25 s and exits 3) is held by the twin `status-waits-for-core`.
+- #3544.7b62fddb (rebuild.test.ts:141): the same assertion on `hub.health`, so no hook is sent to the hub. The step
+  before it passed: with no hub running, deep-hook denied the suite's guard entry's call with exit 2 and the entry's
+  reason and next step (rebuild.test.ts:136, the test's BLOCKED check).
+- #3544.99834caf (rebuild.test.ts:189): `deep hub start` exited 0 and `hub.health` answered with no `rebuilding`; it
+  holds no `rebuilds` (its fields are listed in the message).
+- #3544.37bd1895 (budget.test.ts:33): the budgets are valid against the merge base's and `record-replay-100k` keeps
+  its command and margin; it names `#3440.e9dfc29b` and not this criterion. Its command is not run.
+
+After the run no hub of the suite's was left running (the four PIDs the ready lines below name were gone) and no
+`/tmp/dhr-*` folder was left. The planted record built as the setup says: 47,500 events at log positions 1 to 47,500
+and as many rows in `commits`, or each test would have read BLOCKED.
+
+The steps each hub test never reaches on the base were driven once more, by a throwaway probe file through the same
+helpers against a base hub, under a second grant at 19:52 (load 17); the file was removed after it and judged
+nothing. The nineteen hooks were acknowledged and recorded once each in order, the entry's call was denied through
+deep-hook with the hub up as with it down, the last hook came on stream.subscribe, the three commands printed within
+160 ms of their start, `deep` printed `0 asks need you`, and the hub stopped on its token and started again
+(README.md, How the tests were checked). No test, helper or line under Defined here was changed for either run.
+
+Below, <checkout> is the worktree and <root> a test's dev hub root in its temp folder; a test's scratch home would
+read ~. The health in a message is cut at 600 characters by the suite. Nothing else is left out.
+
+---- the run ----
+
+run-base: granted 11-26 18:14:01, load 16.91 31.88 36.61
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/3544
+
+stdout | rebuild.test.ts > #3544.93bc058e deep hub start on a record whose replay a planted fold holds 1 s a page over ten pages, its wait set to 2 s, prints the rebuild sentence with a count that rises and exits 0 once the core answers
+#3544.93bc058e deep hub start --root exited 0 1237 ms after it started, its wait DEEP_HUB_TEST_START_WAIT_MS=2000 and the hub's fold DEEP_HUB_TEST_FOLD=page-1s, having printed 0 rebuild sentences (events replayed: none); its last lines:
+The hub is up.
+
+stdout | rebuild.test.ts > #3544.efcb2f1f deep hub start on the same record with a planted fold that never returns from its third page exits 3 one wait after the count last moved, naming the position, and never waits past this test's deadline
+#3544.efcb2f1f deep hub start --root exited 0 1354 ms after it started, its wait DEEP_HUB_TEST_START_WAIT_MS=2000 and the hub's fold DEEP_HUB_TEST_FOLD=page-3-never, having printed 0 rebuild sentences (events replayed: none); its last lines:
+The hub is up.
+
+ ❯ rebuild.test.ts (5 tests | 5 failed) 9446ms
+   × #3544.93bc058e deep hub start on a record whose replay a planted fold holds 1 s a page over ten pages, its wait set to 2 s, prints the rebuild sentence with a count that rises and exits 0 once the core answers 1371ms
+   × #3544.efcb2f1f deep hub start on the same record with a planted fold that never returns from its third page exits 3 one wait after the count last moved, naming the position, and never waits past this test's deadline 1487ms
+   × #3544.916857a5 while the record replays, deep hub status, deep doctor and deep each report rebuilding with the same two counts as the hub's health at that reading, within 2 s, and none prints a count of asks 1342ms
+   × #3544.7b62fddb of twenty hooks sent during the replay, the nineteen the hub acknowledged are in the record once each after it, in the order they were sent, and the one that matches a fail-closed entry is denied as with the hub down 1850ms
+   × #3544.99834caf after the replay the hub's health holds one reading with the table that was stale, the events replayed and the milliseconds taken, and a second open of the same record rebuilds nothing and adds no reading 1675ms
+ ❯ budget.test.ts (1 test | 1 failed) 87ms
+   × #3544.37bd1895 record-replay-100k names this criterion for the budget window, unchanged against the merge base's budgets, and runs 86ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  budget.test.ts > #3544.37bd1895 record-replay-100k names this criterion for the budget window, unchanged against the merge base's budgets, and runs
+AssertionError: the task record-replay-100k of benchmarks/budgets.json names #3544.37bd1895 in its criteria, so the budget window's record of it proves the criterion: it names ["#3440.e9dfc29b"]: expected [ '#3440.e9dfc29b' ] to include '#3544.37bd1895'
+ ❯ budget.test.ts:33:222
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  rebuild.test.ts > #3544.93bc058e deep hub start on a record whose replay a planted fold holds 1 s a page over ten pages, its wait set to 2 s, prints the rebuild sentence with a count that rises and exits 0 once the core answers
+AssertionError: deep hub start prints the rebuild sentence, a line that holds "rebuild" and both counts (the events replayed and the log's 47500), while the record replays: deep hub start --root exited 0 1237 ms after it started, its wait DEEP_HUB_TEST_START_WAIT_MS=2000 and the hub's fold DEEP_HUB_TEST_FOLD=page-1s, having printed 0 rebuild sentences (events replayed: none); its last lines:
+The hub is up.
+{"v":1,"ready":true,"pid":32176,"socket":"<root>/hub.sock","start":"01M8D26CYPCARQREHJWW2NDADF"}
+: expected 0 to be greater than 0
+ ❯ rebuild.test.ts:42:209
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  rebuild.test.ts > #3544.efcb2f1f deep hub start on the same record with a planted fold that never returns from its third page exits 3 one wait after the count last moved, naming the position, and never waits past this test's deadline
+AssertionError: deep hub start prints the rebuild sentence, a line that holds "rebuild" and both counts (the events replayed and the log's 47500), while the record replays: deep hub start --root exited 0 1354 ms after it started, its wait DEEP_HUB_TEST_START_WAIT_MS=2000 and the hub's fold DEEP_HUB_TEST_FOLD=page-3-never, having printed 0 rebuild sentences (events replayed: none); its last lines:
+The hub is up.
+{"v":1,"ready":true,"pid":32387,"socket":"<root>/hub.sock","start":"01M8D26E7X6N3AGD5VMM29FDNH"}
+: expected 0 to be greater than 0
+ ❯ rebuild.test.ts:62:209
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  rebuild.test.ts > #3544.916857a5 while the record replays, deep hub status, deep doctor and deep each report rebuilding with the same two counts as the hub's health at that reading, within 2 s, and none prints a count of asks
+AssertionError: while the record replays, the hub's health says so, rebuilding {replayed: 10000, events: 47500} with the planted fold stopped at its third page: deep hub start exited 0 1103 ms after it started printing
+The hub is up.
+and hub.health said {"pid":32566,"start":"01M8D26FQQ5C1BHJGDPHAHEGF6","off":false,"parsers":1,"gates":{"watch_only":false,"reason":null},"notifications":null,"secrets":"reachable","network":"reachable","claude":{"relations":[],"readings":[]},"codex":{"relations":[],"readings":[],"trust":null},"sessions":[],"jobs":{"hook-programs":{"failing":null},"spool":{"failing":null},"asks":{"failing":null},"leases":{"failing":null},"heavy":{"failing":null},"gone":{"failing":null},"states":{"failing":null},"unpushed":{"failing":null},"gates":{"failing":null},"agents-reach":{"failing":null},"transcripts":{"failing":null},"back
+{"v":1,"ready":true,"pid":32566,"socket":"<root>/hub.sock","start":"01M8D26FQQ5C1BHJGDPHAHEGF6"}
+: expected undefined to deeply equal { replayed: 10000, events: 47500 }
+
+- Expected:
+{
+  "events": 47500,
+  "replayed": 10000,
+}
+
++ Received:
+undefined
+
+ ❯ rebuild.test.ts:101:305
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  rebuild.test.ts > #3544.7b62fddb of twenty hooks sent during the replay, the nineteen the hub acknowledged are in the record once each after it, in the order they were sent, and the one that matches a fail-closed entry is denied as with the hub down
+AssertionError: while the record replays, the hub's health says it is rebuilding, so hooks can be sent during the replay: deep hub start exited 0 1557 ms after it started printing
+The hub is up.
+and hub.health said {"pid":32808,"start":"01M8D26H4FTGAEMJJ5AB5P4AGM","off":false,"parsers":1,"gates":{"watch_only":false,"reason":null},"notifications":null,"secrets":"reachable","network":"reachable","claude":{"relations":[],"readings":[]},"codex":{"relations":[],"readings":[],"trust":null},"sessions":[],"jobs":{"hook-programs":{"failing":null},"spool":{"failing":null},"asks":{"failing":null},"leases":{"failing":null},"heavy":{"failing":null},"gone":{"failing":null},"states":{"failing":null},"unpushed":{"failing":null},"gates":{"failing":null},"agents-reach":{"failing":null},"transcripts":{"failing":null},"back
+{"v":1,"ready":true,"pid":32808,"socket":"<root>/hub.sock","start":"01M8D26H4FTGAEMJJ5AB5P4AGM"}
+: expected undefined to be defined
+ ❯ rebuild.test.ts:141:283
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+ FAIL  rebuild.test.ts > #3544.99834caf after the replay the hub's health holds one reading with the table that was stale, the events replayed and the milliseconds taken, and a second open of the same record rebuilds nothing and adds no reading
+AssertionError: after the replay the hub's health holds one reading of it, in rebuilds: hub.health holds the fields pid, start, off, parsers, gates, notifications, secrets, network, claude, codex, sessions, jobs, packs, hooks, restarts, process: expected 'undefined, no list' to be 1 // Object.is equality
+
+- Expected:
+1
+
++ Received:
+"undefined, no list"
+
+ ❯ rebuild.test.ts:189:244
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  6 failed (6)
+   Start at  18:14:02
+   Duration  9.83s (tests 99%)
+
+run-base: vitest exit 1 at 11-26 18:14:12, load 16.04 31.19 36.31

@@ -1,0 +1,13 @@
+{
+  "crates/deep-canvas/src/document/packs.rs": [
+    {
+      "find": [
+        "                        i.code == \"module_missing\"",
+        "                            || (i.path == \"requires/core\" && i.what.contains(\"this build has core\"))"
+      ],
+      "wrong": [
+        "                        i.code == \"module_missing\""
+      ]
+    }
+  ]
+}
