@@ -1,0 +1,12 @@
+{
+  "scripts/throttle.mjs": [
+    {
+      "find": [
+        "  return table.requests.filter((other) => other.class === 'turn').sort((a, b) => time(a.run) - time(b.run) || a.seq - b.seq)[0]?.id;"
+      ],
+      "wrong": [
+        "  return table.requests.filter((other) => other.class === 'turn').sort((a, b) => a.seq - b.seq)[0]?.id;"
+      ]
+    }
+  ]
+}

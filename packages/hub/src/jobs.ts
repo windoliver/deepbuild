@@ -35,7 +35,9 @@ import { isRecord as isObj, canonicalize, sha256Hex, type JsonValue } from '@dee
 import type { SendBoundary, SendRequest, Receipt } from '@deepbuild/evidence';
 import type { ExtensionHost } from '@deepbuild/extension-host';
 import { ulid } from '@deepbuild/record';
+import type { Used } from '@deepbuild/supervisor';
 import type { RunningJob } from './rows.js';
+import { tableRecord } from './table-record.js';
 
 type Obj = Record<string, unknown>;
 type Host = Pick<ExtensionHost, 'jobs' | 'jobParams' | 'runJobTool' | 'jobHostReport' | 'runCheck'>;
@@ -79,6 +81,10 @@ export interface JobDeps {
   charge(run: string, usd: number): Promise<void>;
   /** Your yes to a paid run's ask, approving a budget of that run's price for its tool (#509). */
   approve(ask: string, budget: BudgetInput): Promise<unknown>;
+  /** A file the hub fetched through the Source block, by its hash: the URL and the time it fetched it (#1820), else undefined. */
+  fetched?(sha: string): { url: string; fetched: number } | undefined;
+  /** Writes a table output's record beside its bytes in the evidence store, `tables/<sha256>.json` (#3570). */
+  table?(sha: string, record: Record<string, unknown>): Promise<void>;
   plant?: string | undefined;
 }
 interface Cached { outputs: Record<string, string>; build: string | null }
@@ -386,6 +392,7 @@ export class Jobs {
     const job: RunningJob = { key, kind, tool, started: this.d.now() };
     this.d.row(job, true);
     let wrote: Record<string, Uint8Array>;
+    let used: Used | undefined;
     try {
       // A paid call is charged its price as it starts: from here it may be spent, whatever it answers.
       if (spend) await this.d.charge(spend.run, spend.usd);
@@ -393,7 +400,7 @@ export class Jobs {
         job.counter = counter;
         job.at = this.d.now();
         this.d.row(job, true);
-      });
+      }, (u) => { used = u; });
     } catch (e) {
       // The host holds the run on its inputs (#509), such as a word its engine can't say: BLOCKED with its cause, no ask.
       const blocked = e instanceof Error && e.name === 'JobBlocked' ? (e as { blocked?: unknown }).blocked : undefined;
@@ -404,7 +411,8 @@ export class Jobs {
     } finally {
       this.d.row(job, false);
     }
-    const outputs = Object.keys(held.descriptor.outputs);
+    // A tool writes the kind's outputs its format names (#3570), or all of them.
+    const outputs = pinned.descriptor.outputs ?? Object.keys(held.descriptor.outputs);
     const absent = outputs.filter((n) => !wrote[n]);
     if (absent.length) return { status: 'failed', reason: `${tool} wrote no ${absent.join(', ')}, which ${kind} declares; nothing was kept`, receipt: receipt(pinned.build, 'miss') };
     // Its outputs are held here until every output check passes: before that, no store, no cache, nothing an item can name.
@@ -419,9 +427,19 @@ export class Jobs {
     }
     const kept: Record<string, string> = {};
     for (const n of outputs) kept[n] = await this.d.keep(wrote[n]!, `job:${kind}/${tool}#${n}`);
+    // A table output is a table asset (#3570): its record names the job and its inputs, each with the URL and fetch time
+    // the hub recorded, so a number read from it traces through the job to the file the hub fetched.
+    if (kept['table']) {
+      const input = Object.fromEntries(Object.entries(hashes(bytes)).map(([n, h]) => [n, (Array.isArray(h) ? h : [h]).map((sha) => ({ sha256: sha, ...(this.d.fetched?.(sha) ?? { origin: 'agent' }) }))]));
+      const record = tableRecord(kept['table'], wrote['table']!, params['key'], { job: { kind, tool, input } });
+      if (record) await this.d.table?.(kept['table'], record);
+    }
     this.saved.cache[key] = { outputs: kept, build: pinned.build };
     this.save();
-    return done(kept, pinned.build, 'miss');
+    const answer = done(kept, pinned.build, 'miss');
+    // What the tool's run used, as the supervisor read it (#3220), never the tool's word.
+    if (used && isObj(answer.receipt)) answer.receipt.used = used;
+    return answer;
   }
   /**
    * The key: the tool's name@version, the canonical params and each input's hash, and an open model's weight files by

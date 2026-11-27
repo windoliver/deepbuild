@@ -132,6 +132,12 @@
         "type": "boolean"
       },
       "description": "At SessionStart, whether each variable that moves the route to the agent's model off its own, such as a base URL, is set in the environment the agent gave deep-hook, by name: true or false, never a value (#1886)."
+    },
+    "inbox": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8192,
+      "description": "At SessionStart, the session's own inbox address: the path the agent exports to its hooks (Claude Code's CLAUDE_CODE_MESSAGING_SOCKET), never the token beside it (#3405). A minor of hook.request@3."
     }
   },
   "required": [

@@ -101,6 +101,12 @@
           },
           "description": "The route to its model, as the session's adapter read it once at its start from what its SessionStart reported set (#1886): by each variable or setting that moves it, whether it was, never its value. A review reads a transcript's model only on the agent's own route."
         },
+        "inbox": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The session's own inbox address, as deep-hook reported it at SessionStart (#3405): the path its agent exports to its hooks, never the token beside it. Another session's message names its sender by this address. A minor of session.start@3."
+        },
         "loads": {
           "type": "array",
           "description": "What the session loads at its start: the instruction files, skills, hook settings and MCP servers, each with the digest of its files, and each server with its tool list.",

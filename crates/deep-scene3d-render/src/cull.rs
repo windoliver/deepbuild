@@ -798,7 +798,8 @@ struct OcclusionParams {
 pub struct Pyramid {
     pub size: [u32; 2],
     pub samples: u32,
-    /// The prepass's depth target.
+    /// The prepass's depth target: the geometry pass's multisampled depth, which the occluders
+    /// draw into and the pyramid reads before the geometry pass clears it (#3506).
     pub depth: wgpu::TextureView,
     levels: u32,
     first: (wgpu::ComputePipeline, wgpu::BindGroup),
@@ -812,11 +813,15 @@ pub struct Pyramid {
 }
 
 impl Pyramid {
+    /// The pyramid over `depth`, the geometry pass's depth at `size` and `samples`; under the
+    /// planted `own`, over a depth of the occluders' own instead.
     pub fn new(
         d: &deep_gpu::counted::Wgpu,
         kernels: &Kernels,
         size: [u32; 2],
         samples: u32,
+        depth: &wgpu::TextureView,
+        own: bool,
     ) -> Pyramid {
         let [w, h] = size.map(|v| v.max(1));
         let levels = 32 - w.max(h).leading_zeros();
@@ -825,8 +830,8 @@ impl Pyramid {
             height: h,
             depth_or_array_layers: depth,
         };
-        let depth = d
-            .create_texture(&wgpu::TextureDescriptor {
+        let owned = own.then(|| {
+            d.create_texture(&wgpu::TextureDescriptor {
                 label: Some("scene3d occluders' depth"),
                 size: extent(1),
                 mip_level_count: 1,
@@ -837,7 +842,9 @@ impl Pyramid {
                     | wgpu::TextureUsages::TEXTURE_BINDING,
                 view_formats: &[],
             })
-            .create_view(&Default::default());
+            .create_view(&Default::default())
+        });
+        let depth = owned.as_ref().unwrap_or(depth);
         let texture = d.create_texture(&wgpu::TextureDescriptor {
             label: Some(PYRAMID_PASS),
             size: extent(1),
@@ -879,12 +886,12 @@ impl Pyramid {
         let first = if samples > 1 {
             (
                 kernels.first_ms.0.clone(),
-                group(&kernels.first_ms.1, (0, &depth), level(0)),
+                group(&kernels.first_ms.1, (0, depth), level(0)),
             )
         } else {
             (
                 kernels.first.0.clone(),
-                group(&kernels.first.1, (3, &depth), level(0)),
+                group(&kernels.first.1, (3, depth), level(0)),
             )
         };
         let downs = (1..levels)
@@ -914,7 +921,7 @@ impl Pyramid {
         Pyramid {
             size: [w, h],
             samples,
-            depth,
+            depth: depth.clone(),
             levels,
             first,
             down: kernels.down.0.clone(),
