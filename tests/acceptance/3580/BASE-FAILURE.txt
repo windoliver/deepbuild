@@ -1,0 +1,67 @@
+# node --test tests/acceptance/3580/*.test.mjs at base b134dd38f, Darwin arm64, node v24.22.0, 22:53  up 7 days,  3:19, 3 users, load averages: 37.05 36.20 37.87
+
+✖ #3580.54cd2bff load 25 on 20 cores, 100 GiB available, one test grant held: a run request behind a plain one at the head of the line is granted, and the plain one keeps waiting (60519.744625ms)
+✔ #3580.bd6fae70 the same table, the readings then dropping to load 10: the plain request is granted next, ahead of a run request queued after it (3628.552375ms)
+✔ #3580.00ead7ac with a timed request waiting, nothing is granted past the plain request: the drain still holds (3681.277667ms)
+✖ #3580.4b48c6a9 when a waiter is passed over, the throttle log has one line naming it, the one granted past it, and the rule that held it (load 25.0 ≥ 20 cores) (63342.965542ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 2
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 132240.346542
+
+✖ failing tests:
+
+test at tests/acceptance/3580/order.test.mjs:29:1
+✖ #3580.54cd2bff load 25 on 20 cores, 100 GiB available, one test grant held: a run request behind a plain one at the head of the line is granted, and the plain one keeps waiting (60519.744625ms)
+  AssertionError [ERR_ASSERTION]: the run request wasn't granted within 60 s: it waits behind the plain request at the head of the line, which only the load holds back
+  events:
+  {"name":"holder","event":"start","t":1795762392968,"pid":14745,"ppid":14701,"throttle":"test:04ef9adfb4467056"}
+  log (/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-2744-htcRTF/table/log):
+  {"at":"2026-11-27T06:53:12.934Z","event":"granted","class":"test","grant":"top-level","id":"04ef9adfb4467056","pid":14701,"index":1,"load":37.04638671875,"cores":12,"wait":10,"waited":7,"readings":{"memory":107374182400,"load":25,"cores":20}}
+  holder: still running
+  
+  plain: still running
+  
+  run: still running
+  
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-2176-deep-kinds-no-core-d812da/tests/acceptance/3580/order.test.mjs:35:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3580/order.test.mjs:90:1
+✖ #3580.4b48c6a9 when a waiter is passed over, the throttle log has one line naming it, the one granted past it, and the rule that held it (load 25.0 ≥ 20 cores) (63342.965542ms)
+  AssertionError [ERR_ASSERTION]: the log has 0 lines naming the passed-over plain request (pid 19519, 860363f2f6e6a091), the run request granted past it (pid 19566, 2051e69591fd76b6) and the rule `load 25.0 ≥ 20 cores`, not one; the run request was never granted
+  events:
+  {"name":"holder","event":"start","t":1795762460579,"pid":19518,"ppid":19451,"throttle":"test:89cbe5bfd84add58"}
+  log (/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-2744-rMIHVI/table/log):
+  {"at":"2026-11-27T06:54:20.553Z","event":"granted","class":"test","grant":"top-level","id":"89cbe5bfd84add58","pid":19451,"index":1,"load":38.36572265625,"cores":12,"wait":10,"waited":2,"readings":{"memory":107374182400,"load":25,"cores":20}}
+  holder: still running
+  
+  plain: still running
+  
+  run: still running
+  
+  
+  0 !== 1
+  
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-2176-deep-kinds-no-core-d812da/tests/acceptance/3580/order.test.mjs:102:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
