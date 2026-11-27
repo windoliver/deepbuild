@@ -4,7 +4,7 @@
   {"list": "Document profile", "closures": [{"closed": "record", "instead": "nothing"}]},
   {"list": "Input class, input-track writers", "closures": [{"closed": "determinism", "instead": "nothing"}]},
   {"list": "Budget class", "closures": [{"closed": "budget", "instead": "you raise the caps of the class nearest the case"}]},
-  {"list": "Handle schemes, the event catalogue, projections", "closures": [{"closed": "record", "instead": "an extension keeps its own data in its store"}]},
+  {"list": "Handle schemes, the event catalogue, projections", "closures": [{"closed": "record", "instead": "an extension's store keeps its data"}]},
   {"list": "Patch ops and refusal codes", "closures": [{"closed": "record", "instead": "nothing"}]},
   {"list": "Phases, places in the frame, chains", "closures": [{"closed": "determinism", "instead": "nothing"}]},
   {"list": "Read-set terms, carried-state kinds", "closures": [{"closed": "determinism", "instead": "nothing"}]},

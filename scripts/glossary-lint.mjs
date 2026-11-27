@@ -93,7 +93,8 @@ if (pointers !== 1) fail('AGENTS.md', `names ${FILE} in ${pointers} lines, not o
 const GUIDE = 'docs/extension-guide.md';
 for (const doc of ['docs/technical-design.md', 'docs/canvas-primitives.md', GUIDE]) {
   for (const { number, line } of prose(readFileSync(doc, 'utf8'))) {
-    const said = line.replace(/(`+).+?\1/g, '').replace(/<[^>]*>/g, '').replace(/\]\([^)]*\)/g, ']').match(/\bplug-ins?\b/i);
+    const text = targets(line).reduce((rest, target) => rest.replaceAll(target, ''), line.replace(/(`+).+?\1/g, '').replace(/<\/?[a-z][^>]*>/gi, ''));
+    const said = text.replace(/\u00ad/g, '').match(/\bplug[-\u2010\u2011]ins?\b/i);
     if (said) fail(`${doc}:${number}`, `says "${said[0]}"`, `Say extension, the word ${FILE} gives it${doc === GUIDE ? '; the guide is written by scripts/guide.mjs, so change it there and run node scripts/guide.mjs' : ''}.`);
   }
 }
