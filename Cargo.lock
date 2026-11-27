@@ -2761,6 +2761,7 @@ dependencies = [
  "deep-canvas-sheet",
  "deep-canvas-vector",
  "deep-codecs",
+ "deep-effects-render",
  "deep-gpu",
  "deep-images",
  "deep-logic",

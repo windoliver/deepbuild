@@ -3047,6 +3047,10 @@
           "spec": "* path=../deep-scene3d-render",
           "why": "Issue #172: the 3D renderer, on one thread in the web player."
         },
+        "deep-effects-render": {
+          "spec": "* path=../deep-effects-render",
+          "why": "Issue #1042: the effects' post stage, for the pass that draws a painted scene's sun shadow in the web player as the app's frames draw it."
+        },
         "deep-text": {
           "spec": "* path=../deep-text",
           "why": "Issue #172: the bundled faces and shaping the marks draw with."

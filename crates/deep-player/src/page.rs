@@ -297,8 +297,8 @@ impl Player {
         match draw.frame(p, size, &self.maps) {
             crate::draw::Frame::Pixels(rgba) => gpu.show(&rgba, size),
             #[cfg(feature = "full")]
-            crate::draw::Frame::Scene(scene, look, over) => {
-                let drew = gpu.show3d(&scene, &look, &over, size);
+            crate::draw::Frame::Scene(scene, look, light, over) => {
+                let drew = gpu.show3d(&scene, &look, &light, &over, size);
                 self.measured = self.measure.on.then_some(scene);
                 drew
             }
