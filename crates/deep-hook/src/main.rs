@@ -19,7 +19,8 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::{env, io};
 
-use deep_contracts::{parse, parse_lossy, Value};
+use deep_contracts::generated::{HookAckV2, HookReplyV2};
+use deep_contracts::{parse, parse_lossy, Contract, Value};
 
 use deep_hook::matcher;
 
@@ -743,13 +744,6 @@ fn integer(value: Option<&Value>) -> Option<f64> {
     }
 }
 
-/// Whether a socket line is an object of exactly `fields`, its `v` 1: a hook line's contract, before its values.
-fn shaped(value: &Value, fields: &[&str]) -> bool {
-    matches!(value, Value::Object(members)
-        if members.len() == fields.len() && members.iter().all(|(key, _)| fields.contains(&key.as_str())))
-        && integer(member(value, "v")) == Some(1.0)
-}
-
 /// How long a hub has to put a removed rules.json back and say hello (#1856): it writes the file synced first.
 const PUT_BACK: Duration = Duration::from_millis(250);
 
@@ -860,28 +854,22 @@ fn exchange(
         Got::Timeout => return (Some(request), late, hello),
         Got::Closed => return (Some(request), down, hello),
     };
-    // Only a hook.ack@2 of this request: one of another, or out of shape, is the hub away.
-    let ack = match parse(ack_text.trim_end()) {
-        Ok(ack)
-            if shaped(&ack, &["v", "ack", "hold_until_ms"])
-                && matches!(member(&ack, "ack"), Some(Value::String(acked)) if acked == id)
-                && (matches!(member(&ack, "hold_until_ms"), Some(Value::Null))
-                    || integer(member(&ack, "hold_until_ms"))
-                        .is_some_and(|ms| (0.0..=9_007_199_254_740_991.0).contains(&ms))) =>
-        {
-            ack
-        }
+    // Only a hook.ack@2 of this request: one of another, or one the contract's type doesn't decode, is the hub away.
+    let ack = match parse(ack_text.trim_end()).and_then(|line| HookAckV2::from_json(&line, "")) {
+        Ok(ack) if ack.ack == id => ack,
         _ => return (Some(request), down, ack_text),
     };
     // A reply is due by the hold the hub acknowledged, however far ahead; with no hold, by the same deadline. A hold
     // past what this machine's clock can hold is the hub away.
-    let due = match integer(member(&ack, "hold_until_ms")) {
+    let due = match ack.hold_until_ms {
         Some(ms) if !cfg!(feature = "plant-fixed-deadline") => {
             let now = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_millis() as f64;
-            match Instant::now().checked_add(Duration::from_millis((ms - now).max(0.0) as u64)) {
+            match Instant::now()
+                .checked_add(Duration::from_millis((ms as f64 - now).max(0.0) as u64))
+            {
                 Some(due) => Some(due),
                 None => return (Some(request), down, ack_text),
             }
@@ -895,25 +883,15 @@ fn exchange(
         Got::Timeout => return (Some(request), late, ack_text),
         Got::Closed => return (Some(request), down, ack_text),
     };
-    // Only a reply that holds to hook.reply@2 is printed; never bytes deep-hook couldn't parse.
-    let Ok(reply) = parse(reply_text.trim_end()) else {
-        return (Some(request), down, reply_text);
-    };
-    if !shaped(&reply, &["v", "exit", "stdout", "stderr"]) {
-        return (Some(request), down, reply_text);
-    }
-    match (
-        integer(member(&reply, "exit")),
-        member(&reply, "stdout"),
-        member(&reply, "stderr"),
-    ) {
-        (Some(exit), Some(Value::String(stdout)), Some(Value::String(stderr)))
-            if (0.0..=255.0).contains(&exit) =>
-        {
+    // Only a reply the contract's type decodes is printed; never bytes deep-hook couldn't parse. An exit the schema
+    // allows and a process can't return is the hub away too.
+    let reply = parse(reply_text.trim_end()).and_then(|line| HookReplyV2::from_json(&line, ""));
+    match reply.map(|reply| (u8::try_from(reply.exit), reply)) {
+        Ok((Ok(exit), reply)) => {
             let outcome = Outcome::Reply {
-                exit: exit as u8,
-                stdout: stdout.clone(),
-                stderr: stderr.clone(),
+                exit,
+                stdout: reply.stdout,
+                stderr: reply.stderr,
             };
             (Some(request), outcome, reply_text)
         }

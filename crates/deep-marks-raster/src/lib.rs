@@ -16,7 +16,7 @@ use deep_canvas_marks::path;
 use deep_canvas_marks::scene::{self, Fill, Mark, Palette, Record, Rgb, Slot, StatusMark};
 use deep_canvas_motion::eval;
 use deep_canvas_motion::program::Program;
-use deep_marks_vello::{brush, image, sampler, shape, Scopes};
+use deep_marks_vello::{brush, image, image_at, sampler, shape, Scopes};
 use deep_text::{Align, Role, Shaper, Spec};
 use serde_json::json;
 use serde_json::{Map, Value};
@@ -1082,56 +1082,6 @@ impl Renderer {
                 if let Some(g) = grid {
                     return deep_marks_vello::grid(ctx, item, g, *bounds, scales(at).0);
                 }
-                // #1486: a still picture draws the level the drawing's scale takes, cut as its
-                // request is; a video's frame draws whole, cut by its crop.
-                let still = drawn
-                    .pictures
-                    .keys
-                    .get(item)
-                    .zip(drawn.pictures.store.as_ref());
-                let (source, shown, cut) = match (drawn.images.get(asset), still) {
-                    (Some(frame), _) => {
-                        let size = [u32::from(frame.width()), u32::from(frame.height())];
-                        // #1653: an atlas row shows its cell (its flip bits aren't drawn here yet).
-                        let crop = match tile {
-                            Some(t) => t.rect(size),
-                            None => *crop,
-                        };
-                        let [cx, cy, cw, ch] =
-                            crop.unwrap_or([0.0, 0.0, f64::from(size[0]), f64::from(size[1])]);
-                        let shown = [cw.round().max(1.0) as u32, ch.round().max(1.0) as u32];
-                        (frame.clone(), shown, [cx, cy, cw, ch])
-                    }
-                    (None, Some((key, store))) => {
-                        let to = fit.fitted(*bounds, key.shown());
-                        let (sx, sy) = scales(at);
-                        let key = deep_images::Key {
-                            level: deep_images::level_for(key.shown(), [to[2] * sx, to[3] * sy]),
-                            ..*key
-                        };
-                        let Some(pixmap) = self.level(store, key) else {
-                            return;
-                        };
-                        let size = [f64::from(pixmap.width()), f64::from(pixmap.height())];
-                        (pixmap, key.shown(), [0.0, 0.0, size[0], size[1]])
-                    }
-                    (None, None) => return,
-                };
-                // An item's adjust (#373) reaches every pixel of its image.
-                let adjusted;
-                let pixmap = if adjust.is_identity() {
-                    &source
-                } else {
-                    let size = [source.width(), source.height()];
-                    let straight = (*source)
-                        .clone()
-                        .take_rgba8(vello_cpu::peniko::ImageAlphaType::Alpha);
-                    adjusted = Arc::new(image(straight, size, 1.0, adjust));
-                    &adjusted
-                };
-                // #499: a crop (image px) is the part of the picture the box shows.
-                let [cx, cy, cw, ch] = cut;
-                let [x, y, w, h] = fit.fitted(*bounds, shown);
                 // #535: a turned image draws turned about its box's centre; the planted renderer
                 // turns an atlas row about its quad's top-left corner.
                 if *turn != 0.0 {
@@ -1144,27 +1094,74 @@ impl Renderer {
                     let turned = deep_canvas_marks::turn::turn_of(about, *turn);
                     ctx.set_transform(at * Affine::new(turned));
                 }
-                ctx.set_paint(Image {
-                    image: ImageSource::Pixmap(pixmap.clone()),
-                    sampler: ImageSampler {
+                // #1486: a still picture draws the level the drawing's scale takes, cut as its
+                // request is; a video's frame draws whole, cut by its crop.
+                let still = drawn
+                    .pictures
+                    .keys
+                    .get(item)
+                    .zip(drawn.pictures.store.as_ref());
+                // #2039: a nine-part frame draws each part of its cell; any other image, itself.
+                for part in deep_canvas_marks::atlas::parts(tile.as_ref(), *bounds) {
+                    let (source, shown, cut) = match (drawn.images.get(asset), still) {
+                        (Some(frame), _) => {
+                            let size = [u32::from(frame.width()), u32::from(frame.height())];
+                            // #1653: an atlas row shows its cell (its flip bits aren't drawn here yet).
+                            let crop = match part.cell {
+                                Some(t) => t.rect(size),
+                                None => *crop,
+                            };
+                            let [cx, cy, cw, ch] =
+                                crop.unwrap_or([0.0, 0.0, f64::from(size[0]), f64::from(size[1])]);
+                            let shown = [cw.round().max(1.0) as u32, ch.round().max(1.0) as u32];
+                            (frame.clone(), shown, [cx, cy, cw, ch])
+                        }
+                        (None, Some((key, store))) => {
+                            let crop = part.cell.map_or(key.crop, |t| {
+                                t.cut_of(key.crop.map(f64::from)).map(|v| v as u32)
+                            });
+                            let key = deep_images::Key { crop, ..*key };
+                            let to = fit.fitted(part.to, key.shown());
+                            let (sx, sy) = scales(at);
+                            let level =
+                                deep_images::level_for(key.shown(), [to[2] * sx, to[3] * sy]);
+                            let Some(pixmap) = self.level(store, deep_images::Key { level, ..key })
+                            else {
+                                continue;
+                            };
+                            let size = [f64::from(pixmap.width()), f64::from(pixmap.height())];
+                            (pixmap, key.shown(), [0.0, 0.0, size[0], size[1]])
+                        }
+                        (None, None) => continue,
+                    };
+                    // An item's adjust (#373) reaches every pixel of its image.
+                    let adjusted;
+                    let pixmap = if adjust.is_identity() {
+                        &source
+                    } else {
+                        let size = [source.width(), source.height()];
+                        let straight = (*source)
+                            .clone()
+                            .take_rgba8(vello_cpu::peniko::ImageAlphaType::Alpha);
+                        adjusted = Arc::new(image(straight, size, 1.0, adjust));
+                        &adjusted
+                    };
+                    let sampler = ImageSampler {
                         alpha: *opacity as f32,
                         ..sampler(*sampling)
-                    },
-                });
-                ctx.set_paint_transform(
-                    Affine::translate((x, y))
-                        * Affine::scale_non_uniform(w / cw.max(1e-9), h / ch.max(1e-9))
-                        * Affine::translate((-cx, -cy)),
-                );
-                let [bx, by, bw, bh] = *bounds;
-                let shown = Rect::new(
-                    x.max(bx),
-                    y.max(by),
-                    (x + w).min(bx + bw),
-                    (y + h).min(by + bh),
-                );
-                ctx.fill_rect(&shown);
-                ctx.reset_paint_transform();
+                    };
+                    // #499: a crop (image px) is the part of the picture the box shows.
+                    let to = fit.fitted(part.to, shown);
+                    image_at(
+                        ctx,
+                        pixmap.clone(),
+                        sampler,
+                        cut,
+                        to,
+                        part.over,
+                        part.repeat,
+                    );
+                }
                 ctx.set_transform(at);
             }
         }

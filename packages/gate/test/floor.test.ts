@@ -1,5 +1,3 @@
-// The floor's cite of a run: a heavy command deep-hook rewrote into its `deep lease` form (#1015) is the run the agent
-// typed, so a claim citing it isn't sent back as citing a run never made (#669's AC2, found by #70's Linux run).
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -35,7 +33,6 @@ describe('a claim with a fenced code block', () => {
   });
 });
 
-// #1888: the floor reads a Makefile rule through the gate's one script reader, whichever of the rule's targets is cited.
 describe('a cited make target on a rule with several targets (property)', () => {
   const name = fc.stringMatching(/^[a-z][a-z0-9_.-]{0,7}$/);
   const masks = (target: string, text: string, file = 'Makefile'): string[] => {
@@ -51,7 +48,6 @@ describe('a cited make target on a rule with several targets (property)', () => 
     fc.assert(fc.property(fc.uniqueArray(name, { minLength: 3, maxLength: 5 }), fc.nat(), fc.constantFrom(' ', '  ', '\t'), fc.constantFrom('', ' '), (names, pick, gap, beforeColon) => {
       const [other, ...targets] = names as [string, ...string[]];
       const cited = targets[pick % targets.length]!;
-      // A prerequisite of the cited name is not its rule; the masked rule is the one that names it.
       const makefile = `${other}: ${cited}\n\ttrue\n\n${targets.join(gap)}${beforeColon}:\n\teslint . || true\n`;
       expect(masks(cited, makefile)).toEqual(['|| true']);
       expect(masks(other, makefile)).toEqual([]);
@@ -68,8 +64,6 @@ describe('a cited make target on a rule with several targets (property)', () => 
   });
 });
 
-// #1860: a cite resolves first to the run typed as the cite, and the masked-exit rule reads the cite's own text too, so a
-// cite that masks its exit status goes back whichever run it matched.
 describe('a cited run whose cite masks its exit status', () => {
   const dir = mkdtempSync(join(tmpdir(), 'gate-floor-cite-'));
   afterAll(() => rmSync(dir, { recursive: true, force: true }));

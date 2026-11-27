@@ -1,0 +1,13 @@
+{
+  "scripts/throttle.mjs": [
+    {
+      "find": [
+        "    counts.set(Number(pid), { threads: count.threads + 1, runnable: count.runnable + Number(state.startsWith('R')) });"
+      ],
+      "wrong": [
+        "    // Planted: each process the thread listing names counts as one thread, runnable when any of its threads is.",
+        "    counts.set(Number(pid), { threads: 1, runnable: Math.max(count.runnable, Number(state.startsWith('R'))) });"
+      ]
+    }
+  ]
+}

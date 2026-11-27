@@ -259,6 +259,167 @@ fn a_notice_never_covers_the_boxs_send() {
     assert!(apart, "the notice {notice} covers Send {send}");
 }
 
+/// The plain-words record: two sessions and one open ask, Cart totals', whose default is Stop here.
+const WORDS: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/fixtures/plain-words.events.jsonl"
+);
+const CART: &str = "01PWCART000000000000000002";
+const ASK: &str = "01PWASK0000000000000000042";
+const ASKED: &str = "Cart totals came back three times. Keep trying, or stop here?";
+
+/// The lines the window said so far (#3232), in the order made.
+fn said(drive: &mut Drive) -> Vec<String> {
+    let seen = drive.call(json!({"call": "see"}));
+    let list = &seen["snapshot"]["announcements"];
+    let lines = list
+        .as_array()
+        .unwrap_or_else(|| panic!("the snapshot carries the window's announcements: {list}"));
+    lines
+        .iter()
+        .map(|line| line["text"].as_str().unwrap().to_owned())
+        .collect()
+}
+
+/// Lets `ms` of the replica's clock pass, a frame each 100 ms.
+fn pass(drive: &mut Drive, ms: i64) {
+    let t = drive.call(json!({"call": "see"}))["t"].as_i64().unwrap();
+    let waited = drive.call(
+        json!({"call": "wait_for", "wait_for": {"t": t + ms * 705_600, "step_ms": 100},
+        "timeout": ms + 2_000}),
+    );
+    assert_eq!(waited["ok"], true, "{waited}");
+}
+
+/// The core's `nth` event about the record's ask, fed as the hub's stream delivers it; when the replica has it.
+fn feed(drive: &mut Drive, nth: u8, kind: &str, data: Value) -> u64 {
+    let id = format!("01PWFED{nth:019}");
+    let event = json!({"v": 1, "id": id, "kind": kind, "writer": "core", "actor": "you", "scope": "you",
+        "subject": format!("ask:{ASK}"), "data": data});
+    let fed = drive.call(json!({"call": "feed", "feed": {"session": CART, "event": event}}));
+    assert_eq!(fed["ok"], true, "{fed}");
+    fed["ts"].as_u64().unwrap()
+}
+
+/// The record's ask on its page, with nothing said yet.
+fn on_the_asks_page(name: &str) -> Drive {
+    let (mut drive, _) = Drive::launch(name, json!({"from": "fixture", "fixture": WORDS}));
+    let address = format!("ask/{ASK}");
+    let opened = drive.call(json!({"call": "open", "open": {"address": address}}));
+    assert_eq!(opened["address"], json!(address), "{opened}");
+    pass(&mut drive, 3_000);
+    assert_eq!(said(&mut drive), [""; 0], "nothing changed yet");
+    drive
+}
+
+/// #3232: a default applied to the ask on the open page is said once, with the default and that it can be undone.
+#[test]
+fn a_default_applied_to_the_ask_on_the_open_page_is_said_with_the_default() {
+    let mut drive = on_the_asks_page("said-default");
+    let stop = json!({"answer": "stop", "plan_hash": null, "decision": "none"});
+    feed(&mut drive, 1, "ask.defaulted", stop);
+    pass(&mut drive, 3_000);
+    assert_eq!(
+        said(&mut drive),
+        ["Took its default · Stop here · it can be undone"]
+    );
+}
+
+/// #3232: a hold is said at its start with its length and the key that undoes it, and once more when it is withdrawn.
+#[test]
+fn a_hold_withdrawn_before_its_step_started_is_said_after_its_start() {
+    let mut drive = on_the_asks_page("said-withdrawn");
+    let keep = json!({"answer": "keep", "plan_hash": null, "decision": "allow"});
+    let yes = feed(&mut drive, 1, "ask.answered", keep);
+    let steps = json!(["git push origin main"]);
+    let held = json!({"until": yes + 10_000, "steps": steps});
+    feed(&mut drive, 2, "approval.held", held);
+    pass(&mut drive, 3_000);
+    let start = "Starts in 10 s · Undo · ⌘Z";
+    assert_eq!(said(&mut drive), [start]);
+    let withdrawn = json!({"steps": steps, "restarted": false});
+    feed(&mut drive, 3, "approval.withdrawn", withdrawn);
+    pass(&mut drive, 3_000);
+    assert_eq!(said(&mut drive), [start, "Withdrawn before it started"]);
+}
+
+/// #3232: an ask that comes due with notifications off posts nothing, so the key window says it; with them on its
+/// notification says it and the window doesn't, so nothing is heard twice.
+#[test]
+fn an_ask_that_comes_due_with_notifications_off_is_said_in_the_window() {
+    let line = format!("needs you · 1 ask needs you · {ASKED} · ⌘J");
+    for (setting, lines, posts) in [("denied", vec![line], 0), ("allowed", Vec::new(), 1)] {
+        let launch = json!({"from": "fixture", "fixture": WORDS, "notifications": setting});
+        let (mut drive, _) = Drive::launch(&format!("said-{setting}"), launch);
+        pass(&mut drive, 3_000);
+        assert_eq!(said(&mut drive), lines, "notifications {setting}");
+        let closed = drive.call(json!({"call": "close"}));
+        let trace = std::fs::read_to_string(closed["trace"]["path"].as_str().unwrap()).unwrap();
+        let trace: Value = serde_json::from_str(&trace).unwrap();
+        let posted = trace["notifications"].as_array().unwrap();
+        let its = posted
+            .iter()
+            .filter(|post| post["ask"] == format!("ask:{ASK}"));
+        assert_eq!(its.count(), posts, "notifications {setting}: {posted:?}");
+    }
+}
+
+/// The node whose id is `id`; null when the tree holds none.
+fn node_of(node: &Value, id: &str) -> Value {
+    if node["id"] == id {
+        return node.clone();
+    }
+    let children = node["children"].as_array().into_iter().flatten();
+    children
+        .map(|child| node_of(child, id))
+        .find(|found| !found.is_null())
+        .unwrap_or(Value::Null)
+}
+
+/// #3232: asks that come in sight beside a presented card wait as new. Their count is drawn on the row of the list's
+/// count and said once for each change, the card stays where it is, and showing one of them ends the count.
+#[test]
+fn asks_that_arrive_beside_a_presented_card_are_said_as_new_with_their_count() {
+    let mut drive = on_the_asks_page("said-new");
+    // What the window draws of them, and where the card is.
+    let look = |drive: &mut Drive| {
+        let tree = drive.call(json!({"call": "see"}))["snapshot"]["tree"].clone();
+        let card = node_of(&tree, "question-card")["bounds"].clone();
+        (node_of(&tree, "asks-new")["name"].clone(), card)
+    };
+    let (none, card) = look(&mut drive);
+    assert_eq!(none, Value::Null, "no ask is new yet");
+    let mut lines = Vec::new();
+    for (nth, new) in [(1, "1 new"), (2, "2 new")] {
+        let data = json!({"kind": "choice", "question": format!("Is {nth} right?"), "owner": "you",
+            "options": [{"id": "yes", "label": "Yes", "decision": "none"}, {"id": "no", "label": "No", "decision": "none"}],
+            "recommended": "yes", "deadline": 1_800_134_000_000_u64, "fallback": "no", "default": "no",
+            "provisional": false, "key": format!("k-new-{nth}")});
+        let event = json!({"v": 1, "id": format!("01PWNEW{nth:019}"), "kind": "ask.created", "writer": "core",
+            "actor": "you", "scope": "you", "data": data});
+        let fed = drive.call(json!({"call": "feed", "feed": {"session": CART, "event": event}}));
+        assert_eq!(fed["ok"], true, "{fed}");
+        assert_eq!(
+            look(&mut drive),
+            (json!(new), card.clone()),
+            "the card stays"
+        );
+        pass(&mut drive, 3_000);
+        lines.push(format!(
+            "needs you · {} asks need you · {new} · ⌘J",
+            nth + 1
+        ));
+        assert_eq!(said(&mut drive), lines);
+    }
+    // One of them shown: its page opens, and none waits as new beside its card.
+    let address = "ask/01PWNEW0000000000000000001";
+    let opened = drive.call(json!({"call": "open", "open": {"address": address}}));
+    assert_eq!(opened["address"], json!(address), "{opened}");
+    pass(&mut drive, 3_000);
+    assert_eq!(look(&mut drive).0, Value::Null, "shown, so none is new");
+    assert_eq!(said(&mut drive), lines);
+}
+
 /// The press that brings the window back from another app is refused (#1843), so Send is often the first thing pressed
 /// there. A resize re-arms the card too, and Send is pressed at once.
 #[test]

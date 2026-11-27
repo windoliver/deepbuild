@@ -7,6 +7,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { drift } from './design-drift.mjs';
 import { DOCS, anchors, prose, resolve, targets } from './doc-links.mjs';
+import { LIMIT, cost, linked } from './linked-sections.mjs';
 import { openIssues } from './open-issues.mjs';
 import { principles } from './principles.mjs';
 
@@ -48,6 +49,24 @@ function names(text) {
 for (const doc of DOCS) check(doc, doc, readFileSync(doc, 'utf8'));
 const { issues = [], missing } = openIssues();
 for (const { number, body } of issues) check(`#${number}`, null, body ?? '');
+
+// What each open issue's first read costs (#3546): the sections `node scripts/design-section.mjs --issue <n>` prints for
+// it, each once as that script lists them, in tokens. An issue that prints no section isn't read. The median and the
+// 90th percentile are by nearest rank. A reading, on standard error: it fails nothing.
+if (!missing) {
+  const count = (n) => n.toLocaleString('en-US');
+  const reads = [];
+  for (const { number, body } of issues) {
+    const { sections } = linked(body);
+    if (sections.length) reads.push({ number, tokens: (await cost(sections)).tokens });
+  }
+  reads.sort((a, b) => a.tokens - b.tokens || a.number - b.number);
+  const at = (rank) => count(reads[Math.ceil(rank) - 1].tokens);
+  const said = !reads.length ? ''
+    : reads[0].tokens === null ? '; tokens not counted, gpt-tokenizer is not installed (npm ci)'
+      : `; median ${at(reads.length / 2)} tokens, 90th percentile ${at(reads.length * 9 / 10)}, largest ${at(reads.length)} (#${reads.at(-1).number}); ${count(reads.filter(({ tokens }) => tokens > LIMIT).length)} pass ${count(LIMIT)}`;
+  console.error(`an issue's first read (design-section.mjs --issue): ${count(reads.length)} issues read${said}`);
+}
 
 // Names the design holds, and names planned by an open issue (`<name> #<issue>` a line).
 const held = new Set(DOCS.flatMap((doc) => [...names(readFileSync(doc, 'utf8'))]));

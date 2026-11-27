@@ -1,0 +1,47 @@
+# #3593's acceptance tests on the base, 5f95d82bb, where scripts/affected.mjs leaves a settled suite only when the
+# change reaches it through a process. Each file run alone: node --test tests/acceptance/3593/<file>, Node 24.22.0, macOS,
+# 2026-11-26, load 29.79 on 12 cores. Trimmed to each test's result and its assertion message; paths redacted.
+
+## settled.test.mjs
+✖ #3593.419d4752 --list: a settled suite whose test imports the changed package file itself is named on one SETTLED 1 line and leaves the selection; a selection that runs it, or drops it without the line, fails, naming it (1447.505416ms)
+✖ #3593.419d4752 a run: a settled suite whose test imports the changed package file itself doesn't run, the run prints SETTLED 1 naming it and reads INCONCLUSIVE; a run that runs it, or drops it without the line, fails, naming it (4396.213667ms)
+  AssertionError [ERR_ASSERTION]: tests/acceptance/90001/ is on the settled list and the change reaches it only by an import of packages/a/src/util.mjs, but no "SETTLED <n> …" line names it: it is still selected
+  AssertionError [ERR_ASSERTION]: tests/acceptance/90001/ is on the settled list and the change reaches it only by an import of packages/a/src/util.mjs, but the run printed no "SETTLED <n> …" line naming it: it ran
+ℹ pass 0
+ℹ fail 2
+
+## runs.test.mjs
+✖ #3593.0f5c9115 names S's issue: a settled suite the change reaches by import runs when the change's commit messages say Part of or Closes its issue; a selection that leaves it fails, naming the case (3892.992625ms)
+✖ #3593.0f5c9115 edits a file under S: a settled suite the change reaches by import runs when the change edits a file under its folder; a selection that leaves it fails, naming the case (3682.92025ms)
+✖ #3593.0f5c9115 adds a file under S: a settled suite the change reaches by import runs when the change adds a file under its folder; a selection that leaves it fails, naming the case (3922.727667ms)
+✖ #3593.0f5c9115 edits a file S reads by path: a settled suite runs when the change edits a file a test of S reads by path; a selection that leaves it fails, naming the case (3587.667ms)
+  AssertionError [ERR_ASSERTION]: names S's issue: the wider settled rule wasn't in force here, so that tests/acceptance/90001/ ran shows nothing: tests/acceptance/90002/, on the list, reached only by an import of packages/a/src/util.mjs and none of the three cases, ran
+  AssertionError [ERR_ASSERTION]: edits a file under S: the wider settled rule wasn't in force here, so that tests/acceptance/90001/ ran shows nothing: tests/acceptance/90002/, on the list, reached only by an import of packages/a/src/util.mjs and none of the three cases, ran
+  AssertionError [ERR_ASSERTION]: adds a file under S: the wider settled rule wasn't in force here, so that tests/acceptance/90001/ ran shows nothing: tests/acceptance/90002/, on the list, reached only by an import of packages/a/src/util.mjs and none of the three cases, ran
+  AssertionError [ERR_ASSERTION]: edits a file S reads by path: the wider settled rule wasn't in force here, so that tests/acceptance/90001/ ran shows nothing: tests/acceptance/90002/, on the list, reached only by an import of packages/a/src/util.mjs and none of the three cases, ran
+ℹ pass 0
+ℹ fail 4
+
+## not-settled.test.mjs
+✖ #3593.24d41793 a suite off the settled list runs when the change reaches it by import; a list that admits it fails, naming the suite (3122.527334ms)
+✖ #3593.24d41793 a suite whose folder differs from the listed tree runs when the change reaches it by import; a list that admits it fails, naming the suite (3125.077917ms)
+  AssertionError [ERR_ASSERTION]: the wider settled rule wasn't in force in this run, so that tests/acceptance/90001/ ran shows nothing: tests/acceptance/90002/, on the list and reached by the same import, ran
+  AssertionError [ERR_ASSERTION]: the wider settled rule wasn't in force in this run, so that tests/acceptance/90001/ ran shows nothing: tests/acceptance/90002/, which holds the files the list names and is reached by the same import, ran
+ℹ pass 0
+ℹ fail 2
+
+## watch.test.mjs
+✖ #3593.24d41793 a suite whose issue is open runs when the change reaches it by import; a list that admits it fails, naming the suite (21648.641292ms)
+  AssertionError [ERR_ASSERTION]: the wider settled rule wasn't in force for affected.mjs --list, so that tests/acceptance/90023/ is selected shows nothing: tests/acceptance/90021/, which the list holds and the change reaches by the same import, is still selected
+ℹ pass 0
+ℹ fail 1
+
+## no-list.test.mjs
+✔ #3593.5d85614a with no settled list a change that reaches suites by import selects them as today and the run says so on one line; a run that treats a missing list as "all settled" fails (3411.070542ms)
+✔ #3593.5d85614a with a settled list cut short, which can't be read, a change that reaches suites by import selects them as today and the run says so on one line (3327.807958ms)
+✔ #3593.5d85614a with a settled list that isn't the watch's shape, which can't be read as the list, a change that reaches suites by import selects them as today and the run says so on one line (3329.27975ms)
+ℹ pass 3
+ℹ fail 0
+
+# no-list.test.mjs passes on the base, as it must: criterion 4 is "unchanged from #3064". Its proof is the planted twin
+# missing-is-settled (twins.json), which fails all three of its tests at an assertion; see README.md, The twins.
