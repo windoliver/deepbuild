@@ -1,0 +1,331 @@
+# node --test 'tests/acceptance/3419/*.test.mjs' at base 345c9ae26 (origin/main), Node v24.22.0, 2026-11-27T07:38Z
+# Temp paths are the run's scratch folders.
+
+✖ #3419.79d243d9 the guard refuses, even approved, a lane file that names a file an earlier commit added (5066.179708ms)
+✖ #3419.79d243d9 the guard refuses, even approved, a lane file that names a file outside its folder (4261.591542ms)
+✖ #3419.79d243d9 the guard refuses, even approved, a lane file that names a file the tree doesn't hold (3371.848375ms)
+✖ #3419.79d243d9 the guard refuses, even approved, a lane file with a byHand key (3704.547417ms)
+✖ #3419.79d243d9 the guard refuses, even approved, a lane file with a skip key (3668.533125ms)
+✖ #3419.9ce8f264 an alone entry in lanes-lists.mjs for a suite the change adds fails the lint lane, naming the entry and the suite's lane.json; the same entry for a folder that held a file at the merge base passes (4322.502208ms)
+✔ #3419.965359ca a lane file whose timed list is out of shape (a string, not a list) still runs its folder alone, and no file of the folder leaves a plain run (4407.778834ms)
+✔ #3419.965359ca a lane file whose timed list is out of shape (a list holding a number beside a name) still runs its folder alone, and no file of the folder leaves a plain run (4925.989167ms)
+✖ #3419.b70aa6a5 a new redraft folder with a lane file runs alone and passes the guard with no approval tag; the same lane file in a redraft folder that held a file at the merge base is refused, naming the folder (4912.0785ms)
+✔ #3419.10f9c195 on a tree with no lane file changed, the alone, timed and slow lists lanes.mjs exports are equal before and after, entry for entry (3410.808917ms)
+✖ #3419.e45cd630 a lane file naming one file timed and one slow: affected.mjs --list lists each in its block, and a run without --timed or --slow reads INCONCLUSIVE naming both, never PASS (4237.796292ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 3
+ℹ fail 8
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 20239.262666
+
+✖ failing tests:
+
+test at tests/acceptance/3419/guard-plants.test.mjs:29:1
+✖ #3419.79d243d9 the guard refuses, even approved, a lane file that names a file an earlier commit added (5066.179708ms)
+  AssertionError [ERR_ASSERTION]: the guard refuses the well-made lane file (timed: a file of its folder its own commit adds), approved
+  exit 1
+  stdout:
+  FAIL guard: tests/acceptance/9419/lane.json: a suite's lane file refused, since it says "timed", and a lane file may say only "alone" and "why" (commit 05bab4b991b4; refused even as an approved proposal)
+    Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+  proof: wall time 2.6 s
+  
+  stderr:
+  
+  + actual - expected
+  
+  + [
+  +   `FAIL guard: tests/acceptance/9419/lane.json: a suite's lane file refused, since it says "timed", and a lane file may say only "alone" and "why" (commit 05bab4b991b4; refused even as an approved proposal)`
+  + ]
+  - []
+  
+      at assertWellMadePasses (file://<checkout>/tests/acceptance/3419/guard-plants.test.mjs:19:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3419/guard-plants.test.mjs:30:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ `FAIL guard: tests/acceptance/9419/lane.json: a suite's lane file refused, since it says "timed", and a lane file may say only "alone" and "why" (commit 05bab4b991b4; refused even as an approved proposal)` ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3419/guard-plants.test.mjs:35:1
+✖ #3419.79d243d9 the guard refuses, even approved, a lane file that names a file outside its folder (4261.591542ms)
+  AssertionError [ERR_ASSERTION]: the guard refuses the well-made lane file (timed: a file of its folder its own commit adds), approved
+  exit 1
+  stdout:
+  FAIL guard: tests/acceptance/9419/lane.json: a suite's lane file refused, since it says "timed", and a lane file may say only "alone" and "why" (commit e3aa3f0add80; refused even as an approved proposal)
+    Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+  proof: wall time 2.1 s
+  
+  stderr:
+  
+  + actual - expected
+  
+  + [
+  +   `FAIL guard: tests/acceptance/9419/lane.json: a suite's lane file refused, since it says "timed", and a lane file may say only "alone" and "why" (commit e3aa3f0add80; refused even as an approved proposal)`
+  + ]
+  - []
+  
+      at assertWellMadePasses (file://<checkout>/tests/acceptance/3419/guard-plants.test.mjs:19:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3419/guard-plants.test.mjs:36:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ `FAIL guard: tests/acceptance/9419/lane.json: a suite's lane file refused, since it says "timed", and a lane file may say only "alone" and "why" (commit e3aa3f0add80; refused even as an approved proposal)` ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3419/guard-plants.test.mjs:41:1
+✖ #3419.79d243d9 the guard refuses, even approved, a lane file that names a file the tree doesn't hold (3371.848375ms)
+  AssertionError [ERR_ASSERTION]: the guard refuses the well-made lane file (timed: a file of its folder its own commit adds), approved
+  exit 1
+  stdout:
+  FAIL guard: tests/acceptance/9419/lane.json: a suite's lane file refused, since it says "timed", and a lane file may say only "alone" and "why" (commit d2e66e9e16c2; refused even as an approved proposal)
+    Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+  proof: wall time 2.0 s
+  
+  stderr:
+  
+  + actual - expected
+  
+  + [
+  +   `FAIL guard: tests/acceptance/9419/lane.json: a suite's lane file refused, since it says "timed", and a lane file may say only "alone" and "why" (commit d2e66e9e16c2; refused even as an approved proposal)`
+  + ]
+  - []
+  
+      at assertWellMadePasses (file://<checkout>/tests/acceptance/3419/guard-plants.test.mjs:19:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3419/guard-plants.test.mjs:42:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ `FAIL guard: tests/acceptance/9419/lane.json: a suite's lane file refused, since it says "timed", and a lane file may say only "alone" and "why" (commit d2e66e9e16c2; refused even as an approved proposal)` ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3419/guard-plants.test.mjs:48:3
+✖ #3419.79d243d9 the guard refuses, even approved, a lane file with a byHand key (3704.547417ms)
+  AssertionError [ERR_ASSERTION]: the guard refuses the well-made lane file (timed: a file of its folder its own commit adds), approved
+  exit 1
+  stdout:
+  FAIL guard: tests/acceptance/9419/lane.json: a suite's lane file refused, since it says "timed", and a lane file may say only "alone" and "why" (commit 5b9e16555cc4; refused even as an approved proposal)
+    Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+  proof: wall time 1.3 s
+  
+  stderr:
+  
+  + actual - expected
+  
+  + [
+  +   `FAIL guard: tests/acceptance/9419/lane.json: a suite's lane file refused, since it says "timed", and a lane file may say only "alone" and "why" (commit 5b9e16555cc4; refused even as an approved proposal)`
+  + ]
+  - []
+  
+      at assertWellMadePasses (file://<checkout>/tests/acceptance/3419/guard-plants.test.mjs:19:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3419/guard-plants.test.mjs:49:5)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ `FAIL guard: tests/acceptance/9419/lane.json: a suite's lane file refused, since it says "timed", and a lane file may say only "alone" and "why" (commit 5b9e16555cc4; refused even as an approved proposal)` ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3419/guard-plants.test.mjs:48:3
+✖ #3419.79d243d9 the guard refuses, even approved, a lane file with a skip key (3668.533125ms)
+  AssertionError [ERR_ASSERTION]: the guard refuses the well-made lane file (timed: a file of its folder its own commit adds), approved
+  exit 1
+  stdout:
+  FAIL guard: tests/acceptance/9419/lane.json: a suite's lane file refused, since it says "timed", and a lane file may say only "alone" and "why" (commit aacf74c6633a; refused even as an approved proposal)
+    Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+  proof: wall time 1.2 s
+  
+  stderr:
+  
+  + actual - expected
+  
+  + [
+  +   `FAIL guard: tests/acceptance/9419/lane.json: a suite's lane file refused, since it says "timed", and a lane file may say only "alone" and "why" (commit aacf74c6633a; refused even as an approved proposal)`
+  + ]
+  - []
+  
+      at assertWellMadePasses (file://<checkout>/tests/acceptance/3419/guard-plants.test.mjs:19:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3419/guard-plants.test.mjs:49:5)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ `FAIL guard: tests/acceptance/9419/lane.json: a suite's lane file refused, since it says "timed", and a lane file may say only "alone" and "why" (commit aacf74c6633a; refused even as an approved proposal)` ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3419/lint.test.mjs:24:1
+✖ #3419.9ce8f264 an alone entry in lanes-lists.mjs for a suite the change adds fails the lint lane, naming the entry and the suite's lane.json; the same entry for a folder that held a file at the merge base passes (4322.502208ms)
+  AssertionError [ERR_ASSERTION]: no lint-lane command fails with a FAIL line naming the entry tests/acceptance/9419/ and output naming tests/acceptance/9419/lane.json
+  --- scripts/repo-rules.mjs: exit 1
+  
+  --- scripts/vendor-rebase.mjs check: exit 1
+  
+  --- scripts/canvas-lint.mjs: exit 2
+  
+  --- scripts/size-ratchet.mjs: exit 1
+  
+  --- scripts/wait-ratchet.mjs: exit 1
+  
+  --- scripts/comment-ratchet.mjs: exit 1
+  
+  --- scripts/doc-ceilings.mjs: exit 1
+  
+  --- scripts/reading-rule.mjs: exit 1
+  
+  --- scripts/conformance-lint.mjs: exit 3
+  
+  --- scripts/slots-check.mjs: exit 3
+  
+  --- scripts/canvas-closures.mjs closures: exit 0
+  
+  --- scripts/canvas-closures.mjs drift: exit 3
+  
+  --- scripts/canvas-closures.mjs paths: exit 3
+  
+  --- scripts/record-reader-guard.mjs: exit 1
+  
+  --- scripts/render-lint.mjs: exit 1
+  
+  --- scripts/plant-lint.mjs: exit 1
+  
+  --- scripts/loads-lint.mjs: exit 0
+  
+  --- scripts/budget-table.mjs check: exit 1
+  
+  --- scripts/cache-lint.mjs: exit 0
+  
+  --- scripts/blocking-call-guard.mjs: exit 1
+  
+  --- scripts/ask-sources-guard.mjs: exit 2
+  
+  --- scripts/keymap-guard.mjs: exit 2
+  
+  --- scripts/color-literal-guard.mjs: exit 0
+  
+  --- scripts/guide.mjs --check: exit 1
+  
+  --- scripts/panel-catalog.mjs: exit 1
+  
+  --- scripts/known-failures-check.mjs: exit 1
+  
+  --- scripts/fetch-lock.mjs lint: exit 0
+  
+  --- scripts/exit-lint.mjs: exit 1
+  
+  --- scripts/app-copy-lint.mjs: exit 1
+  
+  --- scripts/alone-lint.mjs: exit 1
+  
+  --- scripts/built-escapes.mjs: exit 3
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3419/lint.test.mjs:30:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3419/redraft.test.mjs:17:1
+✖ #3419.b70aa6a5 a new redraft folder with a lane file runs alone and passes the guard with no approval tag; the same lane file in a redraft folder that held a file at the merge base is refused, naming the folder (4912.0785ms)
+  AssertionError [ERR_ASSERTION]: the guard refuses a new redraft folder's lane file, committed with no approval tag
+  exit 1
+  stdout:
+  FAIL guard: tests/acceptance/9419-redraft-ac1/lane.json: a lane file lanes.mjs never reads, since it reads only tests/acceptance/<issue>/lane.json (commit be30aff34e30)
+    Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+  proof: wall time 2.7 s
+  
+  stderr:
+  
+  + actual - expected
+  
+  + [
+  +   'FAIL guard: tests/acceptance/9419-redraft-ac1/lane.json: a lane file lanes.mjs never reads, since it reads only tests/acceptance/<issue>/lane.json (commit be30aff34e30)'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3419/redraft.test.mjs:21:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'FAIL guard: tests/acceptance/9419-redraft-ac1/lane.json: a lane file lanes.mjs never reads, since it reads only tests/acceptance/<issue>/lane.json (commit be30aff34e30)' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3419/timed-slow.test.mjs:17:1
+✖ #3419.e45cd630 a lane file naming one file timed and one slow: affected.mjs --list lists each in its block, and a run without --timed or --slow reads INCONCLUSIVE naming both, never PASS (4237.796292ms)
+  AssertionError [ERR_ASSERTION]: affected.mjs --list does not list tests/acceptance/9419/budgets.test.mjs in the timed block, and only there
+  exit 0
+  stdout:
+  alone node: tests/acceptance/9419/budgets.test.mjs tests/acceptance/9419/build.test.mjs tests/acceptance/9419/plain.test.mjs
+  SETTLED no list: <tmp>/deep-3419-m4idpl/home/.deepbuild/main-watch/settled.json is missing, so every suite the change reaches runs
+  
+  stderr:
+  
+  + actual - expected
+  
+    [
+  +   'alone node'
+  -   'timed node'
+    ]
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3419/timed-slow.test.mjs:26:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'alone node' ],
+    expected: [ 'timed node' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+# exit 1
