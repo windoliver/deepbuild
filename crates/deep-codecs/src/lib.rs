@@ -181,12 +181,23 @@ fn format(data: &[u8]) -> Result<Format<'_>, Value> {
     if let Some(read) = audio::read(data) {
         return read.map(Format::Audio);
     }
-    mp4::parse(data).map(Format::Movie).ok_or_else(|| {
+    let movie = mp4::parse(data).ok_or_else(|| {
         refused(
             "unreadable",
             json!({"why": "not a format the worker reads"}),
         )
-    })
+    })?;
+    backed(movie).map(Format::Movie)
+}
+
+fn backed(movie: mp4::Movie) -> Result<mp4::Movie, Value> {
+    match movie.unbacked {
+        Some(u) => Err(refused(
+            "count_unbacked",
+            json!({"box": String::from_utf8_lossy(&u.kind), "count": u.count, "limit": u.limit}),
+        )),
+        None => Ok(movie),
+    }
 }
 
 /// The planted worker that follows what a file points at: one request to it.
@@ -1393,6 +1404,32 @@ mod tests {
                 String::from_utf8_lossy(&fourcc)
             );
         }
+    }
+
+    #[test]
+    fn a_stream_of_a_movie_whose_file_cannot_back_a_count_is_refused_naming_the_box() {
+        let be =
+            |words: &[u32]| -> Vec<u8> { words.iter().flat_map(|w| w.to_be_bytes()).collect() };
+        let stbl = [
+            full_box(b"stsz", 0, &be(&[1, 1000])),
+            full_box(b"stco", 0, &be(&[1, 0])),
+            full_box(b"stsc", 0, &be(&[1, 1, 4, 1])),
+            full_box(b"stts", 0, &be(&[1, 4, 1])),
+        ];
+        let mdhd = full_box(b"mdhd", 0, &[0; 16]);
+        let hdlr = full_box(b"hdlr", 0, b"\0\0\0\0vide");
+        let minf = mp4_box(b"minf", &mp4_box(b"stbl", &stbl.concat()));
+        let trak = mp4_box(b"trak", &mp4_box(b"mdia", &[mdhd, hdlr, minf].concat()));
+        let movie = mp4_box(b"moov", &trak);
+        let path =
+            std::env::temp_dir().join(format!("deep-codecs-count-{}.mp4", std::process::id()));
+        std::fs::write(&path, &movie).unwrap();
+        let job = json!({"op": "stream", "path": path.to_str().unwrap(), "planes": "luma"});
+        let replies = pipe::tests::streamed(&job, "");
+        std::fs::remove_file(&path).unwrap();
+        let refusal =
+            json!({"code": "count_unbacked", "box": "stsz", "count": 1000, "limit": movie.len()});
+        assert_eq!(replies[0].0, json!({"refused": refusal}));
     }
 
     #[test]

@@ -6,6 +6,7 @@ import type { Core, CallContext } from './core.js';
 import { createCore } from './hub-runtime.js';
 import type { Part } from './context-fit.js';
 import { ReadOnlyCore, unreadable } from './readonly-core.js';
+import { replayTold } from './replay.js';
 import { shedStartup } from './settle.js';
 import { Refused, refusal, type CoreOptions, type Draft, type Gated, type HookMeta, type Scope } from './wire.js';
 
@@ -77,7 +78,7 @@ if (parentPort && workerData?.core) {
   // A record a newer version wrote is opened read-only, by a stand-in that appends nothing (#41).
   const options = workerData.core as CoreOptions;
   const why = unreadable(options);
-  const core = why ? new ReadOnlyCore(why) : createCore(options, (sub, event, caught) => port.postMessage({ op: 'frame', sub, event, ...(caught ? { caught } : {}) }), (sessions, judged, resend, cantRun) => port.postMessage({ op: 'asking', sessions, judged, resend, cantRun }), (session) => port.postMessage({ op: 'acking', session }), (values) => port.postMessage({ op: 'scrub', values }), (session) => port.postMessage({ op: 'forgot', session }));
+  const core = why ? new ReadOnlyCore(why) : createCore(options, (sub, event, caught) => port.postMessage({ op: 'frame', sub, event, ...(caught ? { caught } : {}) }), (sessions, judged, resend, cantRun) => port.postMessage({ op: 'asking', sessions, judged, resend, cantRun }), (session) => port.postMessage({ op: 'acking', session }), (values) => port.postMessage({ op: 'scrub', values }), (session) => port.postMessage({ op: 'forgot', session }), replayTold((message) => port.postMessage(message)));
   core.started().then(
     () => { shedStartup(); port.postMessage({ op: 'started', hooks: core.hooks() }); },
     (error: unknown) => port.postMessage({ op: 'fatal', message: error instanceof Error ? error.stack ?? error.message : String(error) }),

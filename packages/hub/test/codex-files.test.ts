@@ -3,14 +3,14 @@
 // a stale slow check beside a failed one.
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { writeThrough } from '../src/agent-files.js';
 import { codexReadings, heartbeatsGone, rowReadings, standingReadings } from '../src/codex-loops.js';
-import { readTrust, tomlTables, withoutServer, withServer } from '../src/codex-settings.js';
+import { brokenIn, keepIntact, keptIntact, leftAs, readTrust, recordEntries, tomlTables, withEntries, withoutServer, withRecorded, withServer } from '../src/codex-settings.js';
 import { openCheckouts, type Checkouts, type CheckoutsOptions, type RecordedRun } from '@deepbuild/gate';
 import { GateRunner } from '../src/gate-runner.js';
 import { answerWaitMs } from '../src/mcp.js';
@@ -255,5 +255,54 @@ describe('DeepBuild\'s MCP server in Codex', () => {
     const tables = tomlTables(withServer('', '/node', '/cli.js'));
     if ('refused' in tables) throw Error(tables.refused);
     expect(tables.tables.get('mcp_servers.deep')?.get('default_tools_approval_mode')).toBe('"approve"');
+  });
+});
+
+describe('our entries put back into Codex\'s hooks.json (#1867)', () => {
+  /** A root whose record holds our entries for `hook`, and the file's text as setup leaves it after an entry of yours. */
+  const set = (): { root: string; file: string; text: string } => {
+    const root = temp();
+    const before = process.env.CODEX_HOME;
+    process.env.CODEX_HOME = join(root, 'codex');
+    try { recordEntries(root, '/opt/deep-hook', { command: '/node', args: ['/cli.js', 'mcp'] }); } finally { if (before === undefined) delete process.env.CODEX_HOME; else process.env.CODEX_HOME = before; }
+    return { root, file: join(root, 'codex', 'hooks.json'), text: withEntries(`${JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: 'command', command: 'yours' }] }] } }, null, 2)}\n`, '/opt/deep-hook') };
+  };
+  const edited = (text: string, edit: (hooks: Record<string, { hooks: Record<string, unknown>[] }[]>) => void): string => {
+    const value = JSON.parse(text) as { hooks: Record<string, { hooks: Record<string, unknown>[] }[]> };
+    edit(value.hooks);
+    return JSON.stringify(value);
+  };
+  it('names what the file no longer holds, and writes it back as setup did: a removed entry after yours, a changed one in its place', () => {
+    const { root, text } = set();
+    expect(brokenIn(root, text)).toEqual([]);
+    const changed = edited(text, (hooks) => { hooks.Stop!.pop(); hooks.PreToolUse![0]!.hooks[0]!.timeout = 5; });
+    expect(brokenIn(root, changed)).toEqual(["PreToolUse exec '/opt/deep-hook' codex PreToolUse", "Stop exec '/opt/deep-hook' codex Stop"]);
+    expect(withRecorded(root, changed)).toBe(text);
+    // A file that isn't there holds none of ours and gets them; text that is no JSON object, as a file reads while it is written, is judged and written by no one.
+    expect(brokenIn(root, undefined)).toHaveLength(12);
+    expect(JSON.parse(withRecorded(root, undefined)!)).toEqual(JSON.parse(withEntries('', '/opt/deep-hook')));
+    for (const unread of ['', '{ "hooks": ', '[]']) expect([brokenIn(root, unread), withRecorded(root, unread)]).toEqual([undefined, undefined]);
+  });
+  it('keeps the file\'s bytes for that file alone, and gives them back only while they hold what setup recorded', () => {
+    const { root, file, text } = set();
+    const now = Buffer.from('{}');
+    expect(keptIntact(root, file, now)).toBeUndefined();
+    keepIntact(root, file, Buffer.from(text));
+    expect(keptIntact(root, file, now)?.toString()).toBe(text);
+    expect(keptIntact(root, join(root, 'elsewhere', 'hooks.json'), now)).toBeUndefined();
+    expect(statSync(join(root, 'codex-hooks.intact.json')).mode & 0o777).toBe(0o600);
+    // A change to ours left in the file as yours: what was kept goes back over those bytes alone, never over what you
+    // changed after them; a file that holds ours again is kept afresh.
+    const yours = Buffer.from(edited(text, (hooks) => { hooks.Stop!.pop(); }));
+    leftAs(root, file, yours);
+    leftAs(root, file, Buffer.from(`${yours.toString()} `));
+    expect(keptIntact(root, file, yours)?.toString()).toBe(text);
+    expect(keptIntact(root, file, Buffer.from(`${yours.toString()} `))).toBeUndefined();
+    expect(keptIntact(root, file, undefined)).toBeUndefined();
+    keepIntact(root, file, Buffer.from(text));
+    expect(keptIntact(root, file, now)?.toString()).toBe(text);
+    // Setup records other entries (an update that moved deep-hook): the bytes kept before it are no longer ours to put back.
+    writeFileSync(join(root, 'codex-hooks.json'), readFileSync(join(root, 'codex-hooks.json'), 'utf8').replaceAll('/opt/deep-hook', '/new/deep-hook'));
+    expect(keptIntact(root, file, now)).toBeUndefined();
   });
 });

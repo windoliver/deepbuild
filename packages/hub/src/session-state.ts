@@ -35,6 +35,7 @@ import { OWNER, People } from './people.js';
 import type { Hosts } from './hosts.js';
 
 import { UNREAD_WINDOW } from './status.js';
+import { MODE_CODES } from './reading-codes.js';
 
 import { isStatusQuestion } from './verdict-chat.js';
 
@@ -45,7 +46,7 @@ import { Starts } from './starts.js';
 
 import { Replicas } from './drive.js';
 
-import { cursorAt, cursorOf, Refused, refusal, refuse, SETTLED_PAGE, ulid, type CoreOptions, type Draft, type HookMeta } from './wire.js';
+import { cursorAt, cursorOf, Refused, refusal, refuse, SETTLED_PAGE, ulid, type CoreOptions, type Draft, type HookMeta, type ModeRead } from './wire.js';
 import type { CallContext, Session, Live } from './session-types.js';
 
 import { TranscriptReader } from './transcript-reader.js';
@@ -205,6 +206,9 @@ export class SessionState {
   /** Sessions whose caller name the payload contradicted, each read once (#993). */
   readonly miscalled = new Set<string>();
 
+  /** Each gated paseo session's newest mode reading (#3429), the record's after a restart: null where it holds none. */
+  private readonly modes = new Map<string, Promise<ModeRead | null>>();
+
   /** Hooks from a running job's folder held until the runner reads that job's session ID, by job. */
   private readonly parked = new Map<string, Promise<void>>();
 
@@ -246,6 +250,19 @@ export class SessionState {
   }
 
   // ---- What the core reads beside a session's hooks (#18).
+
+  /**
+   * The mode a gated paseo session's turn started in (#3429), as one reading per change of mode: the same mode again
+   * says nothing, and a mode that asks says so only where a line stands for it to take back. Each turn's start is read
+   * after the one before it.
+   */
+  private modeRead(session: string, agent: string, mode: ModeRead): void {
+    const before = this.modes.get(session) ?? this.options.services.record.raw(`SELECT json_extract(data, '$.code') AS code, json_extract(data, '$.reading') AS reading FROM events WHERE session_id = ? AND kind = 'session.reading' AND json_extract(data, '$.code') IN (${MODE_CODES.map((c) => `'${c}'`).join(', ')}) ORDER BY log_pos DESC LIMIT 1`, [session]).then((rows) => (rows as ModeRead[])[0] ?? null, () => null);
+    this.modes.set(session, before.then((last) => {
+      const said = mode.reading !== last?.reading && (mode.code !== 'mode_asks' || (last !== null && last.code !== 'mode_asks'));
+      return said ? this.options.events.appendReading(session, agent, mode.reading, undefined, mode.code).then(() => mode, () => last) : last;
+    }));
+  }
 
   liveOf(meta: HookMeta): Live {
     let live = this.live.get(meta.session);
@@ -316,6 +333,7 @@ export class SessionState {
     else if (meta.event === 'PostCompact' || meta.event === 'SessionEnd') this.compacting.delete(meta.session);
     // Kept under the hook's own ID, so the copy deep-hook spooled when the hub was late is known at its replay.
     if (verified && meta.reading && !again) void this.options.events.appendReading(meta.session, meta.agent, meta.reading, meta.id, meta.readingCode).catch(() => undefined);
+    if (verified && meta.paseo?.mode) this.modeRead(meta.session, meta.agent, meta.paseo.mode);
     // The agent's own title for the session (#2018), when its hook says a new one; a subagent's hook names no session.
     if (verified && meta.fields?.session_title && !meta.fields.agent_id) void this.agentTitled(meta.session, meta.agent, meta.fields.session_title).catch(() => undefined);
     // The record reads these states from the hook events themselves; only unknown, below, is the core's to append.
@@ -1010,7 +1028,7 @@ export class SessionState {
       // wrong program lets it go with the session.
       if (this.options.settings.plant === 'let-go-forgets-time') this.until.delete(id);
       this.rows.delete(`session:${id}`);
-      for (const kept of [this.versioned, this.miscalled]) kept.delete(id);
+      for (const kept of [this.versioned, this.miscalled, this.modes]) kept.delete(id);
       this.startChecked.delete(id);
       for (const reading of this.readings) if (reading.startsWith(`${id}\0`)) this.readings.delete(reading);
       for (const [sha, by] of this.committed) if (by === id) this.committed.delete(sha);
