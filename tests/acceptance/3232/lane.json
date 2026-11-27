@@ -1,0 +1,1 @@
+{ "alone": true, "why": "shared: the screen; live.test.ts opens the real deep-app and brings its window to the front, every other file starts real hubs, which run deep-hook from this checkout's target/, and draws in deep-drive, which helpers build with cargo, and budgets.test.ts holds a replica idle for a minute of its clock" }
