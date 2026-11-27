@@ -1,15 +1,3 @@
-// Acceptance tests for #2784: busy_disk's second test loads the disk on Linux, and reads INCONCLUSIVE when it didn't.
-//
-// Each test runs the real `crates/deep-hook/tests/busy_disk.rs`, built by cargo in a target folder of its own, filtered
-// to its second test, and reads the output as `node scripts/affected.mjs` reads its cargo job: cargoResults over the
-// job's log, readSkips against known-failures.json's `skips`, then classify into KNOWN, INCONCLUSIVE/BLOCKED and NEW
-// FAIL lines (README: The surface). Two stand-ins make each condition on purpose (README: How each condition is made):
-//   - `dd`, first on the test's PATH. For AC1 and AC3 it hands the test's own operands to the machine's GNU dd, which
-//     parses and opens them as it would, and then gives the writer's file the size GNU dd says the operands ask for,
-//     without writing that much. For AC2 it fails, or writes nothing.
-//   - the deep-hook binary the test spawns (its CARGO_BIN_EXE path in this suite's own target folder): for AC1 a
-//     wrapper that runs the real deep-hook cargo built, for AC2 a hook that says nothing, and for AC3 one that leaves a
-//     `spool-sync <folder>` process running behind it.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { chmodSync, closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
@@ -19,10 +7,8 @@ import { test, before } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const CHECKOUT = realpathSync(fileURLToPath(new URL('../../../', import.meta.url)));
-// Its own target folder, so the stand-in hook never replaces the deep-hook any other build or session runs.
 const TARGET = join(CHECKOUT, 'target', 'acceptance-2784');
 const HOOK = join(TARGET, 'debug', 'deep-hook');
-// A copy of the real hook cargo built, outside cargo's own paths, for AC1's wrapper to run.
 const REAL_HOOK = join(TARGET, 'real-deep-hook-2784');
 const TEST = 'hooks_spooling_on_a_stalled_disk_leave_one_sync_and_the_spool_s_makers_running';
 const LONG = { timeout: 40 * 60_000 };
@@ -32,7 +18,6 @@ const { readSkips, timed } = await import(pathToFileURL(join(CHECKOUT, 'scripts/
 
 const cargo = (args) => spawnSync('cargo', args, { cwd: CHECKOUT, encoding: 'utf8', maxBuffer: 1 << 28, timeout: LONG.timeout });
 
-// The machine's dd, as busy_disk would find it on PATH: it must be GNU dd, the dd the criteria name.
 const REAL_DD = process.env.PATH.split(delimiter).map((dir) => join(dir, 'dd')).find((path) => existsSync(path));
 
 let executable;
@@ -43,7 +28,6 @@ before(() => {
   executable = (built.stdout ?? '').split('\n').filter((line) => line.startsWith('{')).map((line) => JSON.parse(line))
     .find((message) => message.reason === 'compiler-artifact' && message.target?.name === 'busy_disk' && message.executable)?.executable;
   if (built.status !== 0 || !executable) throw new Error(`BLOCKED: cargo couldn't build busy_disk: ${(built.stdout ?? '').split('\n').filter(Boolean).slice(-5).join(' | ')} ${(built.stderr ?? '').split('\n').filter(Boolean).slice(-5).join(' | ')}`);
-  // cargo links debug/deep-hook afresh on each build, so here it is the real binary; keep a copy before any stand-in.
   const magic = Buffer.alloc(4);
   const fd = openSync(HOOK, 'r');
   readSync(fd, magic, 0, 4, 0);
@@ -54,12 +38,6 @@ before(() => {
   chmodSync(REAL_HOOK, 0o755);
 }, LONG);
 
-/**
- * The stand-in dd that loads nothing but answers as GNU dd does: GNU dd parses and opens the test's own operands with
- * `count=0` (so it writes nothing, and refuses what it refuses), GNU dd copies what the operands ask for to /dev/null
- * to say how many bytes that is, and the writer's `of=` file is then given that size, sparse. Each call adds a JSON line
- * to `writes`.
- */
 const gnuDd = (events, writes) => `#!${process.execPath}
 const { spawnSync } = require('node:child_process');
 const { appendFileSync, statSync, truncateSync } = require('node:fs');
@@ -92,10 +70,6 @@ process.stderr.write(said);
 process.exit(record.status);
 `;
 
-/**
- * Runs busy_disk's second test with the stand-ins: `dd(events, writes)` and `hook(events, hookLog)` give each one's
- * file text. Returns cargo's output and status, the logs, and the lines affected.mjs prints for that output.
- */
 function runBusyDisk(t, { dd, hook }) {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'deep-2784-')));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
@@ -104,12 +78,9 @@ function runBusyDisk(t, { dd, hook }) {
   const events = join(dir, 'events.log'), writes = join(dir, 'writes.log'), hookLog = join(dir, 'hook.log'), log = join(dir, 'cargo.log');
   writeFileSync(join(bin, 'dd'), dd(events, writes));
   chmodSync(join(bin, 'dd'), 0o755);
-  // A new file, never written through the old one: cargo's deps/ copy of the real hook stays as it was.
   rmSync(HOOK, { force: true });
   writeFileSync(HOOK, hook(events, hookLog));
   chmodSync(HOOK, 0o755);
-  // cargo test's own shape: its Running line, then the test binary's output, run from the crate's folder, stdout and
-  // stderr on one descriptor as affected.mjs's cargo job log has them.
   writeFileSync(log, `     Running tests/busy_disk.rs (${relative(CHECKOUT, executable)})\n`);
   const descriptor = openSync(log, 'a');
   let result;
@@ -127,7 +98,6 @@ function runBusyDisk(t, { dd, hook }) {
   for (const line of output.split('\n').filter((line) => /^test |panicked|still running|proves nothing|test result/.test(line))) t.diagnostic(line);
   if (!readFileSync(HOOK, 'utf8').includes(events)) throw new Error('BLOCKED: the stand-in hook was replaced before the test ran it');
   if (!order.includes('H')) throw new Error(`BLOCKED: busy_disk's second test never ran the stand-in hook (it exited ${result.status}): ${output.split('\n').filter(Boolean).slice(-5).join(' | ')}`);
-  // affected.mjs's reading of its cargo job (scripts/affected.mjs, main): at load 0, so no timing budget reads unmeasured.
   const baseline = JSON.parse(readFileSync(join(CHECKOUT, 'scripts/known-failures.json'), 'utf8'));
   const results = cargoResults(output, result.status, crates(CHECKOUT));
   const { covered, open } = readSkips(results.skips ?? [], baseline.skips, timed);
@@ -146,7 +116,6 @@ function runBusyDisk(t, { dd, hook }) {
 const ours = (id) => id.includes('busy_disk');
 
 test('AC1 #2784.3c3e909f On Linux the writers really write: GNU dd accepts each writer\'s operands, each writer\'s file is written with 1 GB, and the hooks spool after the writers start', LONG, (t) => {
-  // The real deep-hook, through a wrapper that notes when it starts and how many files its spool folder then holds.
   const hook = (events, hookLog) => `#!/bin/sh\nprintf 'H\\n' >> '${events}'\n'${REAL_HOOK}' "$@"\nstatus=$?\nset -- "$HOME"/.deepbuild/spool/*\nn=0\n[ -e "$1" ] && n=$#\nprintf '%s %s\\n' "$status" "$n" >> '${hookLog}'\nexit $status\n`;
   const run = runBusyDisk(t, { dd: gnuDd, hook });
   for (const write of run.written) t.diagnostic(`dd ${write.args.join(' ')} → ${write.refused ?? write.check?.stderr ?? ''}${write.bytes !== undefined ? ` ${write.bytes} bytes, file ${write.size}` : ''}`);
@@ -157,23 +126,18 @@ test('AC1 #2784.3c3e909f On Linux the writers really write: GNU dd accepts each 
     assert.ok(write.bytes >= 1e9, `a writer asked GNU dd for ${write.bytes} bytes, not 1 GB: ${write.args.join(' ')}`);
     assert.equal(write.size, write.bytes, `writer ${write.of}'s file is ${write.size} bytes, not the ${write.bytes} its operands write`);
   }
-  // Each burst: four writers start, then the hooks, so the hooks spool against that load.
   const bursts = run.order.match(/D+H+/g) ?? [];
   assert.equal(bursts.join(''), run.order, `writers and hooks didn't start in bursts of writers, then hooks: ${run.order}`);
   for (const burst of bursts) assert.equal(burst.match(/D+/)[0].length, 4, `a burst started ${burst.match(/D+/)[0].length} writers, not four: ${run.order}`);
   const files = bursts.map((_, index) => new Set(run.written.slice(index * 4, index * 4 + 4).map((write) => write.of)));
   for (const burst of files) assert.equal(burst.size, 4, `a burst's four writers didn't each write a file of its own: ${[...burst].join(', ')}`);
   assert.ok(run.hooks.length > 0 && run.hooks.every((line) => Number(line.split(' ')[1]) > 0), `a hook left nothing in its spool folder, so it didn't spool: ${run.hooks.join(' | ')}`);
-  // With its writers written, the run measured something: affected.mjs must not read it as unproven.
   assert.ok(!run.unsure.some(({ id }) => ours(id)), `a run whose writers all wrote read as unproven: ${run.lines.join(' | ')}`);
   assert.ok(run.passed.some(ours) || run.fresh.some(({ id }) => ours(id)), `busy_disk's second test gave no result: ${run.lines.join(' | ')}`);
 });
 
-// Writers that wrote nothing: one dd that fails as GNU dd fails on an operand it refuses, one that exits 0 having
-// written nothing to its file.
 const failing = (events) => `#!/bin/sh\nprintf 'D\\n' >> '${events}'\nprintf '%s\\n' "dd: invalid number: '1m'" >&2\nexit 1\n`;
 const empty = (events) => `#!/bin/sh\nprintf 'D\\n' >> '${events}'\nfor arg; do case $arg in of=*) : > "\${arg#of=}";; esac; done\nprintf '0+0 records in\\n0+0 records out\\n0 bytes copied, 0 s, 0 B/s\\n' >&2\nexit 0\n`;
-// A hook that spools nothing and leaves nothing running.
 const quiet = (events) => `#!/bin/sh\nprintf 'H\\n' >> '${events}'\ncat > /dev/null\nexit 0\n`;
 
 for (const [name, dd] of [['a dd that fails', failing], ['a dd that writes nothing', empty]])
@@ -190,13 +154,8 @@ for (const [name, dd] of [['a dd that fails', failing], ['a dd that writes nothi
     assert.match(reason, /\bdd\b|writ|wrote|load|busy|proves nothing/i, `busy_disk's INCONCLUSIVE line names no reason: ${reading.id}: ${reading.message}`);
   });
 
-// AC3 runs twice: with writers that write, and with writers that wrote nothing. Syncs left behind are a failure
-// whatever the load was, so a run whose writers wrote nothing must still read NEW FAIL when its hooks left more than
-// three, never INCONCLUSIVE: a program that answers INCONCLUSIVE for empty writers before it counts the syncs fails.
 for (const [name, dd] of [['', gnuDd], [' even when the writers wrote nothing', empty]])
 test(`AC3 #2784.71e24b92 More than three syncs left behind still fails the test${name}: hooks that each leave a spool-sync running read as a NEW FAIL, not INCONCLUSIVE or PASS`, LONG, (t) => {
-  // Each hook leaves one process whose arguments name `spool-sync <its spool folder>`, as a sync the hook stopped
-  // waiting for does, and waits until it is running. Its PID is logged and killed after the run.
   let pids = '';
   const hook = (events, hookLog) => {
     pids = hookLog;
@@ -206,7 +165,6 @@ test(`AC3 #2784.71e24b92 More than three syncs left behind still fails the test$
   try {
     run = runBusyDisk(t, { dd, hook });
   } finally {
-    // Kill them before the folder holding their PIDs goes.
     for (const pid of (existsSync(pids) ? readFileSync(pids, 'utf8') : '').split('\n').filter(Boolean).map(Number))
       try { process.kill(pid, 'SIGKILL'); } catch {}
   }
