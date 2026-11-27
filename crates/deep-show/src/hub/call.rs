@@ -113,6 +113,8 @@ pub enum Call {
     Kinds(Value),
     /// #238: the sandbox module's counts of checks, links, rewrites and check-time runs.
     Sandbox,
+    /// #3612: how many pieces the logic module has checked in this process.
+    PieceChecks,
     /// #238: the providers a document's current revision ran at check, with their output.
     Provided(String),
     /// #415: the check-time validation of one data asset in a layout of `data.layout@1`.
@@ -517,6 +519,7 @@ pub struct Scenario {
     pub delays: Vec<crate::stepped::Delay>,
     /// The packs installed in the store before the first call (#306), each `(owner/name, dir)`.
     pub packs: Vec<(String, PathBuf)>,
+    pub pack_checks: Option<crate::packs::checked::Store>,
     /// #518: the encode tools the hub holds from installed plug-ins, in registration order.
     pub job_tools: Vec<crate::export::tools::Tool>,
     /// #1961: your notes the hub holds when the run starts, each `{note, doc, item, …}`.

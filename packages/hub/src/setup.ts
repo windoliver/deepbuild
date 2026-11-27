@@ -19,13 +19,14 @@ import { draftAskSettings } from '@deepbuild/asks';
 import { keepOriginal, noteWritten, putBack, saveRecord, setupRecord, strictObject, target, writeThrough } from './agent-files.js';
 import { stopAsYou } from './authority.js';
 import { Confirmer } from './confirm.js';
-import { claudeCommand, claudeSettings, installedRecord, longestDeadline, ourGroups, relations, withHooks, withoutOurs, writeJson } from './claude-settings.js';
+import { claudeCommand, claudeJson, claudeSettings, installedRecord, longestDeadline, ourGroups, relations, withHooks, withoutOurs, writeJson } from './claude-settings.js';
 import { codexConfig, codexHooks, codexRelations, fixedHook, forgetEntries, recordedHome, recordedServer, recordEntries, withEntries, withoutEntries, withoutServer, withServer } from './codex-settings.js';
 import { call } from './client.js';
 import { installShipped } from './installer.js';
 import { deepHook, hubControl, installedPrograms, installedRoot, lastingNode, rootOf } from './paths.js';
 import { COLLECTOR } from './settle.js';
 import { activePlant as plant } from './plant.js';
+import { covered, listedPlugin, paseoCovered, paseoVersion, pluginProblem, pluginSource, sourceProblem } from './paseo-reading.js';
 import { removeService, startHub } from './service.js';
 import { changes, doing, installers, key, lands, onPath, planned as plannedRows, saying, setUpLine, type Row } from './setup-steps.js';
 import { restoreShipped, shippedRules } from './guards.js';
@@ -36,8 +37,6 @@ import type { DoctorItem } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
 const REPO = fileURLToPath(new URL('../../../', import.meta.url));
-/** Claude Code's user-scope state, where its user MCP servers live. */
-const claudeJson = (): string => join(homedir(), '.claude.json');
 const skillDir = (): string => join(dirname(claudeSettings()), 'skills', 'deepbuild');
 // #1002: setup's first step writes the second, and keeps in it why it stopped and the fix; its last step writes the
 // first, with its version, and takes the second away. The app and the first `deep` command offer Set up while setup
@@ -131,17 +130,17 @@ async function install(cli: string, quiet = false): Promise<Said> {
     // Each row's step. Codex's or paseo's failing leaves that agent out, and Claude Code's goes on.
     const steps: Record<string, () => Promise<void> | void> = {
       'hooks:claude-code': () => {
+        // deep-actions is the second server entry (#363): the plug-ins' actions, apart from the deep_* tools. deep-hook
+        // serves it, so a session runs one Node server, not two (#824's memory per session).
+        const servers = { deepbuild: { type: 'stdio', ...mcpServer(root, cli) }, 'deep-actions': { type: 'stdio', command: hook, args: ['mcp', 'actions'] } };
         // Each file is read again just before its write, so what a running session wrote since the read above stays.
-        const settings = withStatusLine(root, withHooks(root, current(settingsFile), groups), `${q(hook)} statusline`);
+        const settings = withStatusLine(root, withHooks(root, current(settingsFile), groups, servers), `${q(hook)} statusline`);
         writeJson(settingsFile, settings);
         noteWritten(record, settingsFile);
         // The planted wrong program writes its entries into the repo it runs in too.
-        if (plant() === 'setup-writes-project-settings') writeJson(join(process.cwd(), '.claude', 'settings.json'), withHooks(root, {}, groups));
+        if (plant() === 'setup-writes-project-settings') writeJson(join(process.cwd(), '.claude', 'settings.json'), withHooks(root, {}, groups, servers));
         const user = current(userFile);
-        const servers = isObj(user.mcpServers) ? user.mcpServers : {};
-        // deep-actions is the second server entry (#363): the plug-ins' actions, apart from the deep_* tools. deep-hook
-        // serves it, so a session runs one Node server, not two (#824's memory per session).
-        writeJson(userFile, { ...user, mcpServers: { ...servers, deepbuild: { type: 'stdio', ...mcpServer(root, cli) }, 'deep-actions': { type: 'stdio', command: hook, args: ['mcp', 'actions'] } } });
+        writeJson(userFile, { ...user, mcpServers: { ...(isObj(user.mcpServers) ? user.mcpServers : {}), ...servers } });
         noteWritten(record, userFile);
         const skill = skillDir();
         if (!existsSync(skill) || record.created.includes(skill)) {
@@ -154,7 +153,7 @@ async function install(cli: string, quiet = false): Promise<Said> {
       // pi loads DeepBuild's package in-process (#40), so its sessions reach the hub (#2019).
       'package:pi': () => installPi(root, onPath('pi')!, quiet),
     };
-    const left: Record<string, string> = { 'hooks:codex': 'Fix the file and run deep setup again.', 'plugin:paseo': "Run deep setup again once paseo's daemon runs.", 'package:pi': 'Run deep setup again.' };
+    const left: Record<string, string> = { 'hooks:codex': 'Fix the file and run deep setup again.', 'plugin:paseo': 'Run deep setup again once that is fixed.', 'package:pi': 'Run deep setup again.' };
     for (const row of rows.filter((r) => r.step !== 'history')) {
       const step = row.step === 'install' ? () => installAgent(root, row.agent!) : steps[key(row)];
       if (!step) throw Error(`the list of steps names ${key(row)}, which setup has no step for`);
@@ -545,19 +544,40 @@ const paseoConfig = (): string => join(homedir(), '.paseo', 'config.json');
  * config.json as it installs, so the bytes before are kept for undo. Awaited, so a slow install says what it's doing.
  */
 async function installPaseo(root: string, record: ReturnType<typeof setupRecord>, paseo: string, cli: string, quiet: boolean): Promise<void> {
-  const facts = readFacts<{ install: { source: string } }>('paseo.facts.json');
-  const source = facts.install.source;
+  const source = pluginSource();
+  // Read before anything is written (#3428): paseo's version against the facts, the plugin as paseo lists it, and the source.
+  const untouched = `so setup installed nothing and left ${paseoConfig()} as it is`;
+  const read = await paseoVersion(paseo, 60_000);
+  if ('unread' in read) throw Error(`${read.unread}, ${untouched}`);
+  if (!paseoCovered(read.version)) throw Error(`paseo ${read.version} runs here, and DeepBuild's plugin covers paseo ${covered()} only, ${untouched}; install a covered paseo, or a DeepBuild that covers ${read.version}`);
+  const listed = await listedPlugin(paseo, 60_000);
+  if ('unread' in listed) throw Error(`${listed.unread}, ${untouched}; run deep setup again once paseo's daemon runs`);
+  if (listed.plugin) {
+    const problem = pluginProblem(listed.plugin);
+    if (problem) throw Error(`${problem}; setup left ${paseoConfig()} as it is`);
+    return;
+  }
+  const unresolved = await sourceProblem(60_000);
+  if (unresolved) throw Error(`${unresolved}, ${untouched}`);
   const run = promisify(execFile);
-  const { stdout: listed } = await run(paseo, ['plugin', 'ls', '--json'], { encoding: 'utf8', timeout: 60_000 });
-  if (listed.includes('"deepbuild"')) return;
   if (!quiet) console.log(`paseo: + plugin deepbuild from ${source}, through paseo plugin install; ${paseoConfig()} is kept as it is now, and deep setup --undo puts it back.`);
   keepOriginal(root, record, paseoConfig());
   saveRecord(root, record);
   // The plugin runs DeepBuild's MCP server with this deep, whatever PATH paseo's agents get: your deep command, or this CLI.
   const deep = onPath('deep');
   editConfig(root, (c) => { c.paseo = { deep: deep ? [deep] : [process.execPath, cli], plugin: 'deepbuild' }; });
-  await run(paseo, ['plugin', 'install', source], { timeout: 300_000 });
-  noteWritten(record, paseoConfig());
+  try {
+    await run(paseo, ['plugin', 'install', source], { timeout: 300_000 });
+  } catch (e) {
+    const said = String((e as { stderr?: unknown }).stderr ?? '').trim() || (e instanceof Error ? e.message : String(e));
+    throw Error(`paseo plugin install ${source} failed: ${said.split('\n').at(-1)}; deep setup --undo puts ${paseoConfig()} back`);
+  } finally {
+    noteWritten(record, paseoConfig());
+  }
+  // Installed counts only once paseo lists the plugin as loaded: one it refused is said with paseo's own reason.
+  const after = await listedPlugin(paseo, 60_000);
+  const problem = 'unread' in after ? after.unread : after.plugin ? pluginProblem(after.plugin) : `paseo doesn't list its plugin deepbuild after paseo plugin install`;
+  if (problem) throw Error(`${problem}; deep setup --undo puts ${paseoConfig()} back`);
 }
 /** The plugin taken out through paseo's own manager, and paseo's config.json put back as it was before setup. */
 function undoPaseo(root: string, record: ReturnType<typeof setupRecord>): string | undefined {

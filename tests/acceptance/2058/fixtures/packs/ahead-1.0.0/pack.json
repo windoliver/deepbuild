@@ -1,0 +1,15 @@
+{
+  "name": "ahead",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "A test pack of the #2058 acceptance suite: one recipe, a tile.",
+  "requires": {
+    "core": ">=0.0.1",
+    "modules": {
+      "marks2d": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "ahead.tile@1": "ahead.tile@1.json"
+  }
+}

@@ -1,0 +1,10 @@
+{
+ "docs/technical-design.md": [
+  {
+   "find": [
+    "| Who pays for a hosted hub | Decided by the owner: you pay for what your machine uses, and an idle machine is asleep, costing its disk alone; bring-your-own is always free. Not taken: free for everyone, and a flat plan | Waking an idle machine takes long enough that asks miss their deadlines |"
+   ],
+   "wrong": []
+  }
+ ]
+}
