@@ -6,8 +6,7 @@
 // `throttle.mjs load [--report]` reads the machine's load by who made it (#3067), its GPU time and the cores idle beside
 // the requests in line (#3240), and the threads under each grant (#3550): a sample a minute, and their table.
 // An affected.mjs run's test grant is its admission, and its jobs take turns on one pool of job tokens (#3221). A build
-// asked for under no grant is admitted as a run is and takes a turn on that pool, as a run of one job (#3549). A test
-// request its own rule holds back (the load, a run's disk) is passed over by those behind it for its first hour (#3580).
+// asked for under no grant is admitted as a run is and takes a turn on that pool, as a run of one job (#3549).
 import { spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { appendFileSync, closeSync, existsSync, linkSync, mkdirSync, mkdtempSync, constants as modes, openSync, readdirSync, readFileSync, readSync, realpathSync, renameSync, rmSync, statfsSync, statSync, writeFileSync, writeSync } from 'node:fs';
@@ -319,14 +318,9 @@ function nextTurn(table, now = Date.now()) {
   const time = (run) => (table.grants.find((grant) => grant.id === run)?.used ?? 0) + turns.filter((grant) => grant.run === run).reduce((sum, grant) => sum + now - grant.at, 0);
   return table.requests.filter((other) => other.class === 'turn').sort((a, b) => time(a.run) - time(b.run) || a.seq - b.seq)[0]?.id;
 }
-// How long a test request its own rule holds back may be passed over (#3580), and those passed over at the last grant.
+// How long a waiter its own rule holds back may be passed over: docs/parallel-proof.md section 6 (#3580).
 const PASS_MS = 60 * 60_000;
 let overtaken = [];
-/**
- * What holds a test request back by its own rule, beside `slots`, the test grants held, at the readings `seen`: null when
- * nothing does; the rule, when only the load (a run's admission doesn't read it) or the free disk a run needs (#3221)
- * does, so a request behind it may be served past it; true when the ceiling or the memory does, which hold every request.
- */
 function heldBy(request, slots, seen, now) {
   if (!roomForTest(slots, seen, now, true)) return true;
   if (request.disk) {
@@ -355,12 +349,6 @@ function grantable(table, procs, request, seen) {
   const held = slots.length;
   const room = (other) => other.class === 'timed' || held < (other.limit ?? 1);
   const line = table.requests.filter((other) => other.class === request.class && room(other)).sort(order);
-  // A test request its own rule holds back, by the load or the free disk, doesn't hold back those behind it whose rule
-  // admits them (#3580): they are served past it, in order, until it has waited PASS_MS since it asked, or since its
-  // process started when it records no time of asking, as an older checkout's doesn't. From then on, nothing behind a
-  // load-held one is served, so the grants held end and it gets in, and no run that needs disk is served past a
-  // disk-held one. An older checkout's waiter that would be granted is passed too once one ahead of it is: its own code
-  // serves in order and waits behind that one.
   if (request.class === 'test') {
     overtaken = [];
     if (!request.nested && draining) return false;
@@ -508,7 +496,6 @@ export function acquire(cls, { wait = 30, stall, window = false, run, turns = tr
       table.grants.push(entry);
       const load = loadavg()[0], cores = cpus().length;
       // A top-level request's entry says how long it waited since it asked, in milliseconds (#3549).
-      // Each waiter it was served past, with the rule that held that one (#3580).
       if (cls === 'test') for (const { waiter, rule } of overtaken) log({ event: 'passed-over', class: cls, id: waiter.id, pid: waiter.pid, by: entry.id, byPid: pid, rule });
       log({ event: 'granted', class: cls, grant: entry.nested ? 'nested' : 'top-level', id: entry.id, pid, index, load, cores, ...stall !== undefined ? { stall } : { wait }, ...!entry.nested && { waited: now - asked }, ...entry.run && { run: true }, ...cls === 'test' ? { readings: seen } : {} });
       if (cls !== 'build') return entry;
