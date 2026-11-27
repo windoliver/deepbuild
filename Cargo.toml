@@ -130,8 +130,6 @@ opt-level = 3
 opt-level = 3
 [profile.dev.package.taffy]
 opt-level = 3
-[profile.dev.package.lyon_tessellation]
-opt-level = 3
 [profile.dev.package.quickjs-jit-sys]
 opt-level = 3
 [profile.dev.package.quickjs-jit-core]
