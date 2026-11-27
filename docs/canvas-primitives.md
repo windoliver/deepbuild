@@ -8496,7 +8496,7 @@ In a document, `ducking` is a map by ID beside `buses`, read by the media module
 
 **Cost:** Encoding about real time on the hardware encoder
 
-**It can never:** Record without the hold; make a standing rule for anything; record for an agent
+**It can never:** Record without the hold; be covered by a standing rule; record for an agent
 
 **Lands:** R2 screen and window (bug reports); R6 camera and microphone
 
