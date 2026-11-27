@@ -4,7 +4,7 @@
 // own. Nothing here writes to the repo's files.
 import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -313,11 +313,14 @@ export function compileApple(root, rel) {
   const metal = spawnSync('xcrun', ['--find', 'metal'], { encoding: 'utf8' }).status === 0;
   const args = ['check', '--lib', '--message-format=json', '--config', `patch.crates-io.gpui-fast.path=${JSON.stringify(join(work, 'gpui-fast'))}`, ...(metal ? [] : ['--features', 'runtime_shaders'])];
   console.log(`# cargo ${args.join(' ').split(work).join('<tmp>')} (${metal ? 'with' : 'no'} Metal compiler)`);
-  const run = spawnSync('sh', [join(repoRoot, 'scripts/lease'), 'cargo', ...args], { cwd: join(work, 'gpui-fast-apple'), encoding: 'utf8', maxBuffer: 1 << 30, timeout: 55 * 60_000, env: cleanEnv({ CARGO_INCREMENTAL: '0', CARGO_PROFILE_DEV_DEBUG: '0', CARGO_TARGET_DIR: join(work, 'target'), DEEP_LEASE_WAIT: '20' }) });
+  // Homebrew's rustup, as AGENTS' commands put it first, then rustup's own folder, when cargo isn't on PATH already.
+  const path = [process.env.PATH, '/opt/homebrew/opt/rustup/bin', join(homedir(), '.cargo/bin')].filter(Boolean).join(':');
+  if (spawnSync('cargo', ['--version'], { env: { ...process.env, PATH: path } }).status !== 0) return ['INCONCLUSIVE: no cargo on PATH, in /opt/homebrew/opt/rustup/bin or in ~/.cargo/bin'];
+  const run = spawnSync('sh', [join(repoRoot, 'scripts/lease'), 'cargo', ...args], { cwd: join(work, 'gpui-fast-apple'), encoding: 'utf8', maxBuffer: 1 << 30, timeout: 55 * 60_000, env: cleanEnv({ PATH: path, CARGO_INCREMENTAL: '0', CARGO_PROFILE_DEV_DEBUG: '0', CARGO_TARGET_DIR: join(work, 'target'), DEEP_LEASE_WAIT: '20' }) });
   const messages = (run.stdout ?? '').split('\n').flatMap((line) => { try { return line.startsWith('{') ? [JSON.parse(line)] : []; } catch { return []; } });
   const apple = join(work, 'gpui-fast-apple', 'Cargo.toml'), carried = portedFiles(root, rel);
   const problems = judgeMessages(messages, apple, filesOf(root, rel, 'gpui-fast-apple').filter((file) => file.changed).map(({ inner }) => inner));
-  if (problems.some((line) => line.startsWith('INCONCLUSIVE'))) problems.push(redact((run.stderr ?? '').split('\n').slice(-15).join('\n')));
+  if (problems.some((line) => line.startsWith('INCONCLUSIVE'))) problems.push(redact(`${(run.stdout ?? '').split('\n').filter((line) => !line.startsWith('{')).slice(-8).join('\n')}\n${(run.stderr ?? '').split('\n').slice(-15).join('\n')}`).split(homedir()).join('~'));
   // rustc's dep-info names every source file the lib compiled: a ported file no `mod` reaches compiled nothing.
   const deps = join(work, 'target', 'debug', 'deps');
   const info = existsSync(deps) ? readdirSync(deps).filter((name) => /^gpui_apple-.*\.d$/.test(name)) : [];
