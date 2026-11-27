@@ -24,7 +24,9 @@ pub struct State {
     pub volume: Vec<f64>,
     pub bindings: Vec<i32>,
     pub toggle: Vec<bool>,
+    /// #3605: each level finished in any run, which only start fresh or delete clears.
     pub done: Vec<bool>,
+    /// #3605: the piece's own settings, in `settings.custom`'s order.
     pub custom: Vec<f64>,
 }
 
@@ -326,6 +328,7 @@ impl State {
                     };
                 }
             }
+            // #3605: a choice's value is its option's index; a toggle flips; a slider's is its value.
             Some(("custom", name)) => {
                 if let Some(i) = shell.custom(name) {
                     let options = &control.options;

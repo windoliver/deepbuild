@@ -258,6 +258,8 @@ pub enum Planted {
     MirrorSamplesFullFrame,
     /// #468: a circle of confusion linear in |d − s|, matched to the physical one at 10 m.
     CocLinearInDistance,
+    /// #3506: the depth of field copies the image it shares with motion blur into the linear one
+    /// before its gather writes it.
     DofReadsSharedBeforeWrite,
     /// #166: the water's foam carried from frame to frame as simulation state.
     WaterFoamKeepsState,

@@ -95,6 +95,8 @@ pub use crate::tone::tone;
 
 /// The 3D writer layers' linear target: what the output pass reads.
 pub const LINEAR: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
+/// The label of the image motion blur, the depth of field and the local tone map resolve into
+/// (#3506).
 pub const RESOLVED: &str = "scene3d resolved";
 /// The object-ID target: each pixel the pick ID of the item drawn there, 0 for none.
 pub const IDS: wgpu::TextureFormat = wgpu::TextureFormat::R32Uint;
@@ -3001,6 +3003,11 @@ impl Renderer {
         });
     }
 
+    /// The image motion blur, the depth of field and the local tone map resolve into (#3506),
+    /// made at the targets' size while `wanted` and let go otherwise. Motion blur and the depth
+    /// of field each copy it into the linear target before the next pass starts, and the local
+    /// tone map, which the output then reads, runs after both, so one image serves all three.
+    /// On Metal a texture with all three's usages holds what one with either's does.
     fn ensure_resolved(&mut self, device: &Device, wanted: bool) {
         let size = self.targets.as_ref().filter(|_| wanted).map(|t| t.size);
         let Some(size) = size else {
@@ -5246,6 +5253,8 @@ impl Renderer {
                 });
             if let Some(t) = self.targets.as_ref().filter(|_| culled) {
                 let samples = self.families.samples;
+                // The occluders draw into the geometry pass's depth, which that pass clears
+                // after the pyramid reads it (#3506).
                 let depth = &t.drawn.depth_ms;
                 let own = self.planted.occluders_own_depth;
                 if self.pyramid.as_ref().is_none_or(|p| {

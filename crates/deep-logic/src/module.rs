@@ -88,6 +88,7 @@ const PARAMS: [(&str, &str); 28] = [
         "profile",
         "{arrays: {name → {type, count?: u32}}, request: name}",
     ),
+    // #3605: the shell settings a level takes, each entering its track as a number control's entries.
     ("settings", "{name → default number}"),
     (
         "preview",

@@ -798,6 +798,8 @@ struct OcclusionParams {
 pub struct Pyramid {
     pub size: [u32; 2],
     pub samples: u32,
+    /// The prepass's depth target: the geometry pass's multisampled depth, which the occluders
+    /// draw into and the pyramid reads before the geometry pass clears it (#3506).
     pub depth: wgpu::TextureView,
     levels: u32,
     first: (wgpu::ComputePipeline, wgpu::BindGroup),
@@ -811,6 +813,8 @@ pub struct Pyramid {
 }
 
 impl Pyramid {
+    /// The pyramid over `depth`, the geometry pass's depth at `size` and `samples`; under the
+    /// planted `own`, over a depth of the occluders' own instead.
     pub fn new(
         d: &deep_gpu::counted::Wgpu,
         kernels: &Kernels,

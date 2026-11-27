@@ -531,6 +531,8 @@ pub fn play(
         .unwrap_or([1512.0, 982.0]);
     let policy = Policy::of(spec.get("level"));
     let mut run = Run::new(shell, stored, screens, plants, size);
+    // #3605: the shell's profile record, read at its start unless the viewer started fresh (a relaunch journey's
+    // `launch: fresh`).
     run.keeper = super::profile::Keeper::new(call, plants.done_in_save);
     let fresh = call.get("fresh") == Some(&Value::Bool(true))
         || spec.get("launch").and_then(Value::as_str) == Some("fresh");
@@ -577,6 +579,7 @@ pub fn play(
                                       "text": c.text.as_ref().and_then(|t| items.get(t)), "does": does}))
             })
             .collect();
+        // #3605: each screen as the shell's arrays left it at the play's last step: its frame and what its texts show.
         let doc = run.prompted(s);
         let frame = run.screens.frame(&doc, size, 0.0);
         let texts = run.screens.texts(&doc, size).unwrap_or_default();
@@ -602,6 +605,7 @@ pub fn play(
         }
         shown.insert(screen.name.clone(), v);
     }
+    // The level still loaded at the end gives its track so far, too.
     if let Some(l) = run.level.as_ref() {
         let t = l.given_track();
         run.tracks.push(t);
@@ -811,6 +815,7 @@ fn script(
             }
         }
         "layout" => {}
+        // #3605: a script of moves, each with the run's device; a relaunch journey's first launch plays them too.
         "moves" | "relaunch" => {
             for m in spec
                 .get("moves")
@@ -828,6 +833,7 @@ fn script(
     Ok(())
 }
 
+/// #3605: one move of a `moves` journey, made with the run's device and ended with any transition settled.
 fn moved(j: &mut J, m: &Value, policy: &Policy) -> Result<(), Stop> {
     if let Some(id) = m.get("activate").and_then(Value::as_str) {
         let known = j
@@ -859,6 +865,7 @@ fn moved(j: &mut J, m: &Value, policy: &Policy) -> Result<(), Stop> {
             );
         };
         let want = m.get("value").and_then(Value::as_f64).unwrap_or(0.0);
+        // A choice is set to the option that holds the value; a slider to its increments above its least.
         let steps = match c.kind {
             Kind::Choice => c.options.iter().position(|o| o.as_f64() == Some(want)).ok_or_else(|| {
                 json!({"code": "shell.device", "control": id, "message": format!("{id} has no option {want}")})
@@ -875,6 +882,7 @@ fn moved(j: &mut J, m: &Value, policy: &Policy) -> Result<(), Stop> {
         return j.pause();
     }
     match m.get("play") {
+        // Until its step k has run: k + 1 steps.
         Some(Value::Number(k)) => j.play(policy, Some(k.as_i64().unwrap_or(0) + 1)),
         Some(_) => j.play(policy, None),
         None => Err(json!({"code": "bad_input", "message": format!("no move {m}")})),

@@ -129,6 +129,9 @@ fn adjust_issue(
     None
 }
 
+/// Whether a table's source is an agent's word: a table an agent wrote, or one a job wrote from a
+/// file the hub fetched none of (#3570: `job {kind, tool, input}`, each input `origin: agent` where
+/// no fetch of the hub's brought it).
 fn agents_word(origin: &Value) -> bool {
     if origin == "agent" {
         return true;

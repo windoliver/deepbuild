@@ -319,6 +319,8 @@ impl Toner {
         }
     }
 
+    /// The local tone map over `source` at `size`, resolved into `into`, the image motion blur
+    /// and the depth of field share (#3506), which the output then reads.
     pub fn job(
         &mut self,
         device: &Device,

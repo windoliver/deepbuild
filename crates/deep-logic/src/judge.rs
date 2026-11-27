@@ -104,6 +104,8 @@ impl Logic {
                 .into()
         };
         for item in &piece.items {
+            // #1181, #3604: circuit@1's and circuit@2's rules read the arrays its library writes at
+            // every step, and circuit.range the set values the track and the item's arrays give.
             if let Some(c) = &item.circuit {
                 let rules = line.get("rules").unwrap_or(&Value::Null);
                 let mut judge =

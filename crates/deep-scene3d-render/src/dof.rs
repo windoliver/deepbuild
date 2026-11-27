@@ -26,6 +26,8 @@ const TILE: u32 = 16;
 pub struct Planted {
     /// A circle of confusion linear in |d − s|, matched to the physical one at 10 m.
     pub linear_coc: bool,
+    /// #3506: the image this pass shares with motion blur is copied into the linear one before
+    /// the gather writes it, so the frame shows motion blur's resolved image in this pass's place.
     pub reads_shared_before_write: bool,
 }
 
@@ -352,6 +354,8 @@ impl Dofer {
         }
     }
 
+    /// The dof over `linear` (its texture and view) against `depth`, at `size`, resolved into
+    /// `resolved`, the image motion blur shares, and copied back into `linear` (#3506).
     pub fn job(
         &mut self,
         device: &Device,

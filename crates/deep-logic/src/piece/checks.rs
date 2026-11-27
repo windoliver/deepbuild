@@ -21,6 +21,7 @@ pub(super) struct Declared {
     carry: Option<Value>,
     carry_in: Option<crate::carry::CarryIn>,
     profile: Option<Value>,
+    /// #3605: the shell settings it takes, each with its default, in declaration order.
     settings: Vec<(String, f64)>,
     /// #276: the seats a profile's read entry has a block for: the piece's `players`, else 1.
     seats: u32,
@@ -631,6 +632,7 @@ pub(super) fn region_map(
             read: Read::Profile,
         });
     }
+    // #3605: each shell setting it takes, after those, as a number control's slot.
     for (name, _) in &d.settings {
         let at = entries.last().map_or(at, |e| align8(e.offset + e.size));
         entries.push(Region {
@@ -793,10 +795,12 @@ fn reading_max(r: &Read) -> u32 {
     }
 }
 
+/// #3605: the track key and read entry of shell setting `name`, which no control's ID can be.
 pub fn setting_read(name: &str) -> String {
     format!("settings.{name}")
 }
 
+/// #3605: `settings: {name → default}`, each default a number.
 fn settings_of(v: Option<&Value>) -> Result<Vec<(String, f64)>, Value> {
     let Some(v) = v else { return Ok(Vec::new()) };
     let o = v.as_object().ok_or_else(|| {
@@ -926,6 +930,8 @@ pub fn check_in(
             )
         };
         let given = asset(&d.program).ok_or_else(|| missing("program", &d.program))?;
+        // #3604: an item whose program imports circuit@2, or links a library implementing it or
+        // exporting its builders, declares its `circuit` under circuit@2.
         let circuit2 = crate::interfaces::imported(&given)
             .iter()
             .any(|n| n == "circuit@2");
@@ -957,6 +963,8 @@ pub fn check_in(
             given = links::empty_linking(given);
         }
         let linked = !d.links.is_empty() || planted.linker_adds_linking_section;
+        // A library linked by its own name that claims no interface still reads circuit@2's table
+        // when it exports circuit@2's builders.
         let circuit_major = if circuit2
             || libraries.iter().any(|l| {
                 l.implements.iter().any(|i| i == "circuit@2")
@@ -1125,6 +1133,9 @@ pub fn check_in(
                 Some(std::sync::Arc::new(t))
             }
         };
+        // #1181: the table `circuit` declares, its nodes and parts, is asset 0; each input that
+        // closes a part is found by its slot in the item's read region, and under circuit@2
+        // (#3604) each of the item's own arrays that drives one by its place in the write region.
         let circuit = match &d.circuit {
             None => None,
             Some(v) => {
