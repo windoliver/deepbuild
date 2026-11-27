@@ -9,7 +9,8 @@ import { testPaths } from './lanes.mjs';
 
 const CEILINGS = 'scripts/comment-ceilings.json';
 const GENERATED = /@generated|auto-generated|do not edit/i;
-const OUT = /(?:^|\/)vendor\/|^tests\/acceptance\//;
+const OUT = /(?:^|\/)vendor\/|^tests\/acceptance\/(?:[^/]+\/)*twins\//;
+const BLIND = 'tests/acceptance/';
 const glob = (pattern) => new RegExp(`^${pattern.split(/(\*\*\/|\/\*\*$|\*\*|\*)/).map((part) =>
   part === '**/' ? '(?:.*/)?' : part === '/**' ? '/.+' : part === '**' ? '.*' : part === '*' ? '[^/]*' : part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('')}$`);
 const TESTS = testPaths.map(glob);
@@ -100,8 +101,10 @@ try {
   ceilings = {};
 }
 let base = null;
+let landed = new Set();
 try {
   const at = git('merge-base', 'HEAD', 'origin/main').trim();
+  landed = new Set(git('ls-tree', '-r', '-z', '--name-only', at, '--', BLIND).split('\0'));
   if (git('ls-tree', '--name-only', at, '--', CEILINGS).trim()) base = parse(git('show', `${at}:${CEILINGS}`), `${CEILINGS} at the merge base`);
 } catch {}
 let listing;
@@ -112,7 +115,7 @@ try {
   process.exit(2);
 }
 
-const paths = listing.filter((path) => SOURCE.test(path) && !OUT.test(path)).sort();
+const paths = listing.filter((path) => SOURCE.test(path) && !OUT.test(path) && !landed.has(path)).sort();
 const workers = Math.min(4, availableParallelism(), paths.length);
 const shares = Array.from({ length: workers }, (_, share) => paths.filter((_, index) => index % workers === share));
 let counts;
@@ -128,7 +131,7 @@ try {
 if (write) {
   const next = {};
   for (const [path, found] of Object.entries(counts)) {
-    const most = base ? base[path] ?? 0 : found;
+    const most = path.startsWith(BLIND) ? 0 : base ? base[path] ?? 0 : found;
     const ceiling = Math.min(found, most);
     if (ceiling) next[path] = ceiling;
   }
@@ -142,13 +145,14 @@ const MOVE = 'Remove the comment: say it in the code\'s names, or record a decis
 let total = 0;
 for (const [path, found] of Object.entries(counts)) {
   total += found;
-  const ceiling = ceilings[path] ?? 0;
+  const ceiling = path.startsWith(BLIND) ? 0 : ceilings[path] ?? 0;
   const bound = base ? Math.min(ceiling, base[path] ?? 0) : ceiling;
   if (found > bound) fail(`${path}: ${found} comment line${found === 1 ? '' : 's'}, over its ceiling of ${bound}${bound < ceiling ? ', the merge base\'s' : ''}`, `${MOVE} A ceiling never rises.`);
   else if (found < ceiling) fail(`${path}: ${found} comment line${found === 1 ? '' : 's'}, under its ceiling of ${ceiling}; lower it to ${found}`, `Run node scripts/comment-ratchet.mjs --write, which ${found ? `sets its ceiling in ${CEILINGS} to ${found}` : `removes its entry from ${CEILINGS}`}.`);
 }
 for (const [path, ceiling] of Object.entries(ceilings))
-  if (!(path in counts)) fail(`${path}: not a hand-written source file the work tree holds, with a ceiling of ${ceiling}`, `Remove its entry from ${CEILINGS}, which node scripts/comment-ratchet.mjs --write does.`);
+  if (path.startsWith(BLIND)) fail(`${path}: a blind suite's file, with a ceiling of ${ceiling}; a suite's file has none`, `Remove its entry from ${CEILINGS}, which node scripts/comment-ratchet.mjs --write does.`);
+  else if (!(path in counts)) fail(`${path}: not a hand-written source file the work tree holds, with a ceiling of ${ceiling}`, `Remove its entry from ${CEILINGS}, which node scripts/comment-ratchet.mjs --write does.`);
 
 if (out.length) console.log(out.join('\n'));
 else console.log(`PASS comments: ${Object.keys(counts).length} hand-written source files, ${Object.keys(ceilings).length} of them listed with ${total} comment line${total === 1 ? '' : 's'} in all, each at its ceiling${base ? '' : '; no ceilings at a merge base with origin/main to compare with'}`);
