@@ -92,7 +92,7 @@ function signatures(root, paths, rev) {
       const payload = tag.slice(0, at);
       const message = payload.split('\n\n').slice(1).join('\n\n');
       const object = /^object ([0-9a-f]{40})$/m.exec(payload.split('\n\n')[0])?.[1];
-      const named = object ? [...message.matchAll(/^Approves: (.+?)(?: @([0-9a-f]{40}))?\s*$/gm)].map(([, p, sha]) => ({ p, sha: sha ?? object })).filter(({ p }) => wanted.has(p)) : [];
+      const named = object ? [...message.matchAll(/^Approves: (.+?)(?: @([0-9a-f]{40}))?\s*$/gm)].map(([, p, sha]) => ({ p, sha: sha ?? object })).filter(({ p, sha }) => wanted.has(p) && bringsCall(root, sha, p)) : [];
       if (!named.length) continue;
       const sig = join(dir, 'sig');
       writeFileSync(sig, tag.slice(at));
@@ -112,6 +112,13 @@ function signatures(root, paths, rev) {
 }
 
 const said = (record) => JSON.stringify([callOf(record), record.criterion ?? null, [...hashesOf(record)].sort()]);
+
+function bringsCall(root, sha, file) {
+  const readAt = (rev) => { try { const r = JSON.parse(show(root, rev, file) ?? 'null'); return isObject(r) ? said(r) : null; } catch { return null; } };
+  const now = readAt(sha);
+  const parents = git(root, ['rev-list', '--parents', '-n', '1', sha]).out.trim().split(' ').slice(1);
+  return now !== null && (parents.length === 0 || parents.some((parent) => readAt(parent) !== now));
+}
 
 function approvedAsItReads(root, file, record, signed) {
   return signed.map(({ sha, ...s }) => {
