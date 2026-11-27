@@ -1680,4 +1680,3 @@ for (const entry of laneFolders.filter((folder) => !unread.includes(folder))) {
 
 Object.assign(redrafted, { 'tests/acceptance/138/manifest.test.ts': 'tests/acceptance/138-redraft-3648/' });
 byHand.push('tests/acceptance/138/manifest.test.ts');
-alone.push('tests/acceptance/138-redraft-3648/');

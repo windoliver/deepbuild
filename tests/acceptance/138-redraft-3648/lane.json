@@ -1,0 +1,1 @@
+{ "alone": true, "why": "binary: the files build deep-show with cargo into target/debug (the full set, and the full set with test-kit-formula) and run its manifest and kit scenarios" }
