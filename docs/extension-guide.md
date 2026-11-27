@@ -13,7 +13,7 @@ The same check twice, `ext.<plugin>.relative`: it passes when every input a chec
 - [`extension-guide/typescript`](extension-guide/typescript/): `index.ts`, calling `deep.registerCheck` in-process style through the `deep` object the host hands it.
 - [`extension-guide/json-rpc`](extension-guide/json-rpc/): `main`, a Python program that answers the host's `load` by calling `deep.registerCheck` over JSON-RPC, then answers each `run`.
 
-And a plug-in, [`extension-guide/plugin`](extension-guide/plugin/): a weather panel with a source behind a secret, a store, two actions, a schedule that sends a notice, a view with a page per city and a ⌘K command, its panel in `panel/main.js`, and its own tests in `tests/`.
+And an extension, [`extension-guide/plugin`](extension-guide/plugin/): a weather panel with a source behind a secret, a store, two actions, a schedule that sends a notice, a view with a page per city and a ⌘K command, its panel in `panel/main.js`, and its own tests in `tests/`.
 
 ## The manifest
 
@@ -27,7 +27,7 @@ Put them in `tests/`, each file named `*.test.ts` or `*.test.mjs`. A file's defa
 
 ## A panel's module
 
-A panel imports only `@deepbuild/panel`, DeepBuild's own module, by name: `import { View, div, v_flex } from "@deepbuild/panel"`, as `panel/main.js` does. It never names the toolkit under it, so a change of toolkit breaks no plug-in. A panel that imports the toolkit, or a name off the list below, is refused at install and again at load, naming the file and line, and for a name off the list the closest name on it. The list is checked in at `crates/deep-app/panel-catalog.json`, with every component the toolkit has that isn't offered and why.
+A panel imports only `@deepbuild/panel`, DeepBuild's own module, by name: `import { View, div, v_flex } from "@deepbuild/panel"`, as `panel/main.js` does. It never names the toolkit under it, so a change of toolkit breaks no extension. A panel that imports the toolkit, or a name off the list below, is refused at install and again at load, naming the file and line, and for a name off the list the closest name on it. The list is checked in at `crates/deep-app/panel-catalog.json`, with every component the toolkit has that isn't offered and why.
 
 - `View`: The class a panel's views extend: init(props, cx), render(cx).
 - `div`: A box element, styled by chained calls such as .p(8), .bg(color) and .child(x).
@@ -52,9 +52,11 @@ Its components, each with its props:
 
 A component whose script runs per frame, such as a table drawing each cell or a list drawing each row through a callback, is never offered: a panel's rows are data.
 
-## A first plug-in
+## A first extension
 
-Most plug-ins need few methods. Start with these 13, in this order.
+<a id="a-first-plug-in"></a>
+
+Most extensions need few methods. Start with these 13, in this order.
 
 ### `deep.on`
 
@@ -83,7 +85,7 @@ A JavaScript panel in the app, in the sidebar, the home screen, a tab or the lin
 
 In R1 · preview · `d1:b91a9a6d1bfbe5bfd0808335a7b1f6780a6b9282d48581ebfa3c5edbb58b9f10` · variants: `stream`, `polled`, `mcp`, `library`
 
-A source of readings, each with its unit, source and as-of time: polled from a host with a secret, a quota and a timeout, a stream read from a cursor, or an MCP tool counted as read. A polled source is one path on its host, query included, and its `parse(answer)` gets `{ status, headers, body }` and returns `{ value, unit }`: one finite number and its unit, such as `{ value: 187.25, unit: 'USD' }`. A list or a record is no reading, unless the source declares `shape: 'series'`: then `parse` returns `{ values, unit }`, up to 10,000 named numbers a call, which the hub keeps as one batch, each bound as `reading:<source>#<name>`. `while_shown: { every }`, at least 10 s, is a cadence the hub runs only while a view that binds the source is shown; one its quota can't serve is refused at install. A source's readings over time are its history, which the hub keeps: a chart draws from them, so a plug-in needs no source per point. A library source (`variant: 'library'`, asset.library@1, #1731) names its one host in the manifest, which the install grants, and gives `search(ctx, {words, kind, size_m, license, limit})` and `fetch(ctx, {id})`: they read the library's API through `ctx.fetch`, the hub's call to that host, and the hub downloads every file a fetch names, so a library's rows and licenses reach `deep_kinds` and the evidence store with no byte through the plug-in.
+A source of readings, each with its unit, source and as-of time: polled from a host with a secret, a quota and a timeout, a stream read from a cursor, or an MCP tool counted as read. A polled source is one path on its host, query included, and its `parse(answer)` gets `{ status, headers, body }` and returns `{ value, unit }`: one finite number and its unit, such as `{ value: 187.25, unit: 'USD' }`. A list or a record is no reading, unless the source declares `shape: 'series'`: then `parse` returns `{ values, unit }`, up to 10,000 named numbers a call, which the hub keeps as one batch, each bound as `reading:<source>#<name>`. `while_shown: { every }`, at least 10 s, is a cadence the hub runs only while a view that binds the source is shown; one its quota can't serve is refused at install. A source's readings over time are its history, which the hub keeps: a chart draws from them, so an extension needs no source per point. A library source (`variant: 'library'`, asset.library@1, #1731) names its one host in the manifest, which the install grants, and gives `search(ctx, {words, kind, size_m, license, limit})` and `fetch(ctx, {id})`: they read the library's API through `ctx.fetch`, the hub's call to that host, and the hub downloads every file a fetch names, so a library's rows and licenses reach `deep_kinds` and the evidence store with no byte through the extension.
 
 | Parameter | Type | Required |
 |---|---|---|
@@ -94,7 +96,7 @@ A source of readings, each with its unit, source and as-of time: polled from a h
 
 In R1 · preview · `d1:7b959c929cca7fc80f98820934c9c93e767a8866fadad5a3db367ccfe61e0900`
 
-The plug-in's own data, kept in the record under a kind and a schema that only moves forward.
+The extension's own data, kept in the record under a kind and a schema that only moves forward.
 
 | Parameter | Type | Required |
 |---|---|---|
@@ -116,7 +118,7 @@ Runs a job on a cadence: never overlapping, with a deadline per run and one catc
 
 Arrives in R2 · preview · `d1:5a52fe18cc22318cd0ccc42e606723a61abef05b0cd255a25489008cba588bb8`
 
-What panels, your words and agents' MCP tools can do to the plug-in's data. It declares read, change or send, and a change or send returns its report.
+What panels, your words and agents' MCP tools can do to the extension's data. It declares read, change or send, and a change or send returns its report.
 
 | Parameter | Type | Required |
 |---|---|---|
@@ -127,7 +129,7 @@ What panels, your words and agents' MCP tools can do to the plug-in's data. It d
 
 In R1 · preview · `d1:9d5f56c1393c2dc10d5439a7b123f1c677a1dce2c5b57c3efc307d4689a1ce43`
 
-A handle to a secret: the hub adds its value to the request, and the plug-in never sees it.
+A handle to a secret: the hub adds its value to the request, and the extension never sees it.
 
 | Parameter | Type | Required |
 |---|---|---|
@@ -218,7 +220,7 @@ Answers an ask with an option and the decision that covers it. The core applies 
 
 In R1 · preview · `d1:c1a0515e41f2a3869341f5cb779d2ce7e1098964f8aa4a1f1645968f95b4538c`
 
-A plug-in's side of a piece's port: `entries` and `rows`, the entries and occurrence rows it takes, and `sources`, the sources it gives for readings in, each one the plug-in registers. The piece must list each of them, and the port carries what the piece lists, which may be more. `sound` says whether its gear makes sound, which makes the plug-in a device gate owner whatever the document says. Registering opens nothing: a port opens only after a person clicks Connect on the app's prompt, and sends only while the piece plays live and forward, never on a seek, a replay or an export.
+An extension's side of a piece's port: `entries` and `rows`, the entries and occurrence rows it takes, and `sources`, the sources it gives for readings in, each one the extension registers. The piece must list each of them, and the port carries what the piece lists, which may be more. `sound` says whether its gear makes sound, which makes the extension a device gate owner whatever the document says. Registering opens nothing: a port opens only after a person clicks Connect on the app's prompt, and sends only while the piece plays live and forward, never on a seek, a replay or an export.
 
 | Parameter | Type | Required |
 |---|---|---|
@@ -364,7 +366,7 @@ Reads one of the package's settings.
 
 In R1 · preview · `d1:ac1335306776e0ed3ee5cdeba7b615c6f0dfde8fcd5c367f3f6f513bf15ec830`
 
-Writes one item of the plug-in's own store under its key, checked against the store's schema and tied to the action call that wrote it.
+Writes one item of the extension's own store under its key, checked against the store's schema and tied to the action call that wrote it.
 
 | Parameter | Type | Required |
 |---|---|---|
@@ -376,7 +378,7 @@ Writes one item of the plug-in's own store under its key, checked against the st
 
 In R1 · preview · `d1:c730609691c50bf822922c5ed1f8c3f9a1b0e16003aaf842b0905856483fc6cf`
 
-Reads the latest item of the plug-in's own store under a key, or nothing when there is none.
+Reads the latest item of the extension's own store under a key, or nothing when there is none.
 
 | Parameter | Type | Required |
 |---|---|---|
@@ -387,7 +389,7 @@ Reads the latest item of the plug-in's own store under a key, or nothing when th
 
 In R1 · preview · `d1:3a6e7074261baae03245f92663edcc20c0c3c888edcd18c537680339239048b9`
 
-Reads the latest item under every key of the plug-in's own store.
+Reads the latest item under every key of the extension's own store.
 
 | Parameter | Type | Required |
 |---|---|---|
@@ -407,7 +409,7 @@ Reads a source the job declared among its readings, for the run under way: a job
 
 In R1 · preview · `d1:867ba9b60a91e097afdb8ecb28794259d5f1bfa59f66065c0ede01b825b56ea0`
 
-A model job on your own agent, headless on your plan, with its inputs by handle, a budget in USD and a deadline in ms. Each handle is checked against the plug-in's grant before the job starts. The job answers one JSON object, `{ value, cites }`; the plug-in gets a reading, `{ handle, value, cites, as_of, stale_at }`, as old as the oldest reading it cites, citing only handles its grant reaches. A job that fails rejects with its stop cause, never with text.
+A model job on your own agent, headless on your plan, with its inputs by handle, a budget in USD and a deadline in ms. Each handle is checked against the extension's grant before the job starts. The job answers one JSON object, `{ value, cites }`; the extension gets a reading, `{ handle, value, cites, as_of, stale_at }`, as old as the oldest reading it cites, citing only handles its grant reaches. A job that fails rejects with its stop cause, never with text.
 
 | Parameter | Type | Required |
 |---|---|---|
@@ -532,7 +534,7 @@ For a check runner: a piece played headless in a replica on its virtual clock, a
 
 Arrives in R6 · preview · `d1:d0835533deaa7af647e1972af79858f1e2f367ea8118be8b50466f1db38390cb`
 
-A plug-in asks a model source its manifest lists for a reply to a prompt. The hub makes the call, from a recording when replaying, and the plug-in gets the answer's status and body, or no answer and why; it never reaches the network itself.
+An extension asks a model source its manifest lists for a reply to a prompt. The hub makes the call, from a recording when replaying, and the extension gets the answer's status and body, or no answer and why; it never reaches the network itself.
 
 | Parameter | Type | Required |
 |---|---|---|
