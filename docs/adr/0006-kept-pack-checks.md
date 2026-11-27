@@ -16,7 +16,7 @@ Status: accepted (#3611). The design states the rule under Pack: a check's resul
 
 - **The entries' kits come from the row, named by the registry's own rules.** `crates/deep-canvas/src/registry/lists.rs`, `KitResult::from_kept`. A rule's name and message are the build's statics; a kept rule that is none of the registry's makes the row unfit, and the check runs.
 - **An entry the row lacks runs its kit, and then the whole check runs.** `crates/deep-canvas/src/document/packs.rs`, `Packs::admit_kept`. The kit that ran is counted before the row is given up.
-- **The sandbox half is seeded, then asked as a later host is.** `crates/deep-show/src/sandbox.rs`, `Host::take`. It puts what the row holds into `VETTED` and the logic module's reply into `LIB_CHECKS`, then calls `vet`, which finds both. Rewritten programs are not restored: `rewrite_in` rewrites one when a piece first runs it.
+- **The sandbox half is seeded, then asked as a later host is.** `crates/deep-show/src/sandbox.rs`, `Host::take_kept`. It puts what the row holds into `VETTED` and the logic module's reply into `LIB_CHECKS`, then calls `vet`, which finds both. Rewritten programs are not restored: `rewrite_in` rewrites one when a piece first runs it.
 
 ## The counts
 

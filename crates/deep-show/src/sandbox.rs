@@ -296,7 +296,13 @@ impl Host {
         }))
     }
 
-    pub fn take(&mut self, manifest: &Value, pack: &Pack, sealed: &Sealed, left: &Value) -> bool {
+    pub fn take_kept(
+        &mut self,
+        manifest: &Value,
+        pack: &Pack,
+        sealed: &Sealed,
+        left: &Value,
+    ) -> bool {
         let pairs = |key: &str| -> Option<Vec<((String, String), Value)>> {
             let list = left.get(key)?.as_array()?.iter();
             list.map(|p| {

@@ -159,7 +159,7 @@ pub fn install(
                     let core = (found.left.get("core"))
                         .and_then(|left| packs.admit_kept(&manifest, sealed, left).cloned());
                     let pack = core.and_then(|pack| {
-                        if host.take(&manifest, &pack, sealed, &found.left["programs"]) {
+                        if host.take_kept(&manifest, &pack, sealed, &found.left["programs"]) {
                             return Some(pack);
                         }
                         packs.withdraw(&pack.id.text());
