@@ -4,6 +4,7 @@ Status: accepted. Moved from comments in `packages/gate` by #3454's first pass (
 
 ## The floor's cites
 
+- **A claim's cites are the backticked spans of its final message.** `packages/gate/src/floor.ts`, `citesOf`. Words outside them decide nothing.
 - **A cite resolves first to the run typed as the cite.** `packages/gate/src/floor.ts`, `validityGate`. Only when none was typed so does it take the first run the cite extends with its arguments (#1860).
 - **The cite's own text masks too.** `packages/gate/src/floor.ts`, `validityGate`. Whichever run it matched, `pnpm test || true` proves nothing beside `pnpm test`.
 - **Anything else in backticks that reads as a shell command is a run never made.** `packages/gate/src/floor.ts`, `validityGate`. A cite with white space that starts with a program-like word and resolves to nothing is sent back as a run the session never made.

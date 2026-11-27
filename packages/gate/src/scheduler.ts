@@ -82,7 +82,6 @@ export interface Trace {
   peak_running: number; max_running_by_ask_check: number; ended_at: number;
 }
 
-
 /** A check's results on one snapshot: its runs, and what may still start for it. */
 interface RSet {
   n: number; sess: Sess; def: CheckDef; snapshot: string; claim: Claim; changed: string[];

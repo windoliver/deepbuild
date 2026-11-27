@@ -10,11 +10,11 @@ Status: accepted. Moved from comments in `packages/gate` by #3454's first pass (
 - **No check fits before background work.** `packages/gate/src/scheduler.ts`, `Sim.loopFit`. Work in the background reports when it ends, which nothing foresees.
 - **A result inside a hold not yet replied goes with that reply.** `packages/gate/src/scheduler.ts`, `Sim.landed`. It is not delivered on its own first.
 - **A late result for an older snapshot is named on the newest claim's line.** `packages/gate/src/scheduler.ts`, `Sim.landed`. It sits beside that check, read as stale.
-- **A delivery queued for the next tool call goes out at a stop, checked as it goes.** `packages/gate/src/scheduler.ts`, `Sim.stop`. A stop is the last moment before the agent waits.
+- **A delivery queued for the next tool call goes out at a stop, checked as it goes.** `packages/gate/src/scheduler.ts`, `Sim.stop`.
 
 ## Stalled claims
 
-- **A stalled claim gets no second decision.** `packages/gate/src/stalls.ts`, `judgeStop`. It stays with you until new evidence comes: no further send-back, and the rule that stalled it isn't raised again.
+- **A stalled claim gets no second decision.** `packages/gate/src/stalls.ts`, `judgeStop`. It stays with you until new evidence comes: no further send-back, and no second decision.
 
 ## Slots and memory
 

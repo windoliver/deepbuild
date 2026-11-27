@@ -1,12 +1,12 @@
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SOURCE, tokens } from './comment-source.mjs';
 
 const USAGE = 'node scripts/comment-only.mjs <path>';
 const root = fileURLToPath(new URL('../', import.meta.url));
-const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024 });
+const git = (...args) => execFileSync('git', ['--literal-pathspecs', ...args], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024 });
 const under = process.argv[2];
 if (process.argv.length !== 3 || under.startsWith('-')) {
   console.log(`BLOCKED comment-only: it takes one path\n  Fix: ${USAGE}`);
@@ -17,6 +17,7 @@ let at;
 let changed;
 try {
   at = git('merge-base', 'HEAD', 'origin/main').trim();
+  if (!existsSync(join(root, under)) && !git('ls-tree', '--name-only', at, '--', under).trim()) throw Error(`fatal: no ${under} in the work tree or at the merge base`);
   changed = [...new Set([...git('diff', '--name-only', '--no-renames', '-z', at, '--', under).split('\0'), ...git('ls-files', '-z', '--others', '--exclude-standard', '--', under).split('\0')])].filter(Boolean).sort();
 } catch (error) {
   console.log(`BLOCKED comment-only: git can't compare ${under} with the merge base with origin/main: ${error.message.split('\n').find((line) => /fatal|error/.test(line)) ?? error.message.split('\n')[0]}\n  Fix: Run it in a git checkout that has origin/main, on a path inside it: ${USAGE}`);
@@ -36,9 +37,8 @@ for (const path of changed) {
   } catch {}
   if (was === null) fail(`${path}: not at the merge base, so all of it is new`);
   else if (now === null) fail(`${path}: deleted`);
-  else if (!SOURCE.test(path)) {
-    if (was.replace(/\s+/g, '') !== now.replace(/\s+/g, '')) fail(`${path}: changed, and not a source file whose comments it can tell from its code`);
-  } else {
+  else if (!SOURCE.test(path)) fail(`${path}: changed, and not a source file whose comments it can tell from its code`);
+  else {
     const [before, after] = [tokens(path, was), tokens(path, now)];
     const first = before.findIndex((token, index) => token.text !== after[index]?.text);
     const differs = first !== -1 ? first : after.length > before.length ? before.length : -1;

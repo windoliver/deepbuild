@@ -39,6 +39,7 @@ function git(cwd: string, args: string[]): Promise<string> {
     execFile('git', ['-C', cwd, '-c', 'core.quotepath=off', ...args], { env: gitEnv(), maxBuffer: 64 * 1024 * 1024, timeout: 10_000 }, (error, stdout) => (error ? reject(error) : resolve(stdout)));
   });
 }
+/** A file's bytes at a commit, or undefined where it has none. */
 const showAt = (cwd: string, commit: string, path: string): Promise<string | undefined> => git(cwd, ['show', `${commit}:${path}`]).catch(() => undefined);
 const lineCount = (text: string): number => (text === '' ? 0 : text.split('\n').length - (text.endsWith('\n') ? 1 : 0));
 
@@ -183,6 +184,7 @@ function itemsOf(doc: unknown): Map<string, string> {
 /** A value as JSON with every object's keys sorted, so key order never reads as a change. */
 const canon = (v: unknown): string => (Array.isArray(v) ? `[${v.map(canon).join(',')}]`
   : v && typeof v === 'object' ? `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${canon((v as Record<string, unknown>)[k])}`).join(',')}}` : JSON.stringify(v) ?? 'null');
+/** What a document's revisions added, changed or removed between `before` (none for a new document) and `after`. */
 export function itemChanges(before: unknown, after: unknown): ItemChange[] {
   const was = itemsOf(before);
   const now = itemsOf(after);

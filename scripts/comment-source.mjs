@@ -25,10 +25,10 @@ function literalsOf(path, text) {
   return literals;
 }
 
-function commentsOf(text, literals, nest) {
+function commentsOf(text, literals, script) {
   const comments = [];
   let next = 0;
-  let i = text.startsWith('#!') ? Math.max(text.indexOf('\n'), 0) : 0;
+  let i = script && text.startsWith('#!') ? (text.indexOf('\n') + 1 || text.length) : 0;
   while ((i = text.indexOf('/', i)) !== -1) {
     while (next < literals.length && literals[next][1] <= i) next++;
     if (next < literals.length && literals[next][0] <= i) {
@@ -40,7 +40,7 @@ function commentsOf(text, literals, nest) {
     } else if (text[i + 1] === '*') {
       let end = i + 2;
       for (let depth = 1; depth && end < text.length;) {
-        if (nest && text.startsWith('/*', end)) { depth++; end += 2; } else if (text.startsWith('*/', end)) { depth--; end += 2; } else end++;
+        if (!script && text.startsWith('/*', end)) { depth++; end += 2; } else if (text.startsWith('*/', end)) { depth--; end += 2; } else end++;
       }
       comments.push([i, end]);
       i = end;
@@ -52,7 +52,7 @@ function commentsOf(text, literals, nest) {
 export function read(path, text) {
   if (!text.includes('//') && !text.includes('/*')) return { comments: [], literals: null };
   const literals = literalsOf(path, text);
-  return { comments: commentsOf(text, literals, /\.(?:rs|wgsl)$/.test(path)), literals };
+  return { comments: commentsOf(text, literals, !/\.(?:rs|wgsl)$/.test(path)), literals };
 }
 
 const WORD = /[\p{L}\p{N}_$]/u;

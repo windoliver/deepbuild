@@ -1,6 +1,5 @@
 import type { CheckRunnerFill } from '@deepbuild/conformance';
 
-/** Admits a check kind only when it declares a time budget above zero and a cost budget of zero or more. */
 export function admitKind(fill: CheckRunnerFill): { admitted: boolean; reason: string | null } {
   const b = fill.budget;
   const ok = b !== undefined && Number.isFinite(b.time_ms) && b.time_ms > 0 && Number.isFinite(b.cost_usd) && b.cost_usd >= 0;

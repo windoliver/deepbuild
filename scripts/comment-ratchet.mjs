@@ -5,12 +5,20 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isMainThread, parentPort, Worker, workerData } from 'node:worker_threads';
 import { SOURCE, read } from './comment-source.mjs';
+import { testPaths } from './lanes.mjs';
 
 const CEILINGS = 'scripts/comment-ceilings.json';
 const GENERATED = /@generated|auto-generated|do not edit/i;
 const OUT = /(?:^|\/)vendor\/|^tests\/acceptance\//;
-const MARKER = /^\/\/[/!]?\s*(?:deadline|cache|copy-exception|color-literal-exception|size-literal-exception|blocking call):\s*\S/;
-const LICENSE = /\bcopyright\b|\blicensed under\b|SPDX-License-Identifier|\b(?:MIT|Apache|BSD|ISC|Mozilla Public) License\b/i;
+const glob = (pattern) => new RegExp(`^${pattern.split(/(\*\*\/|\/\*\*$|\*\*|\*)/).map((part) =>
+  part === '**/' ? '(?:.*/)?' : part === '/**' ? '/.+' : part === '**' ? '.*' : part === '*' ? '[^/]*' : part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('')}$`);
+const TESTS = testPaths.map(glob);
+const MARKERS = [
+  [/^\/\/\s*deadline:\s*\S/, (path) => TESTS.some((pattern) => pattern.test(path))],
+  [/^\/\/\/?\s*cache:\s*(?:[^,]*,\s*)*(?:entries|bytes)\s+\S/, (path) => /^crates\/[^/]+\/src\//.test(path)],
+  [/^\/\/\s*(?:copy-exception|color-literal-exception|size-literal-exception|blocking call):\s*\S/, (path) => /^crates\/deep-app\/(?:src|panels)\//.test(path)],
+];
+const LICENSE = /\bCopyright (?:\(c\)|©|\d{4}|[A-Z])|\bLicensed under the\b|SPDX-License-Identifier:/;
 
 const write = process.argv.includes('--write');
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -44,7 +52,7 @@ function count(path, text) {
     const last = lineOf(Math.max(from, to - 1));
     for (let at = first; at <= last; at++) commented.add(at);
     const body = text.slice(from, to);
-    if (MARKER.test(body) || LICENSE.test(body)) kept.push([first, last]);
+    if (LICENSE.test(body) || MARKERS.some(([marker, read]) => marker.test(body) && read(path))) kept.push([first, last]);
     code = to;
   }
   codeTo(text.length);
@@ -82,7 +90,7 @@ try {
     console.log(`INVALID comments: ${CEILINGS} can't be read: ${error.message}\n  Fix: Restore ${CEILINGS}: a JSON object mapping each hand-written source file that holds comments to its count of comment lines.`);
     process.exit(1);
   }
-  ceilings = {};
+  ceilings = null;
 }
 let base = null;
 try {
@@ -101,14 +109,14 @@ const paths = listing.filter((path) => SOURCE.test(path) && !OUT.test(path)).sor
 const workers = Math.min(4, availableParallelism(), paths.length);
 const shares = Array.from({ length: workers }, (_, share) => paths.filter((_, index) => index % workers === share));
 const counts = Object.fromEntries((await Promise.all(shares.map((share) => new Promise((resolve, reject) => {
-  new Worker(new URL(import.meta.url), { workerData: share }).once('message', resolve).once('error', reject);
+  new Worker(new URL(import.meta.url), { workerData: share }).once('message', resolve).once('error', reject).once('exit', () => reject(Error('a counting thread ended with no counts')));
 })))).flat().sort(([a], [b]) => (a < b ? -1 : 1)));
 
 if (write) {
   const next = {};
   for (const [path, found] of Object.entries(counts)) {
-    const most = base ? base[path] ?? 0 : found;
-    const ceiling = found <= most ? found : Math.min(ceilings[path] ?? 0, most);
+    const most = base ? base[path] ?? 0 : ceilings ? ceilings[path] ?? 0 : found;
+    const ceiling = Math.min(found, most);
     if (ceiling) next[path] = ceiling;
   }
   writeFileSync(join(root, CEILINGS), `${JSON.stringify(next, null, 2)}\n`);

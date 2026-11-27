@@ -75,6 +75,7 @@ export interface MemoryAsk {
   mb: number;
   /** The memory the kernel reads available, in MB: the run starts only while it is at least `mb`. Undefined holds nothing back. */
   available?: () => Promise<number | undefined>;
+  /** Told why it waits whenever that changes. */
   waiting?: (why: MemoryWait) => void;
 }
 /**

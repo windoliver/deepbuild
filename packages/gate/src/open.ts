@@ -1,4 +1,5 @@
 export type LeftFrom = 'section' | 'bug' | 'issue' | 'limit' | 'placeholder' | 'task';
+/** One thing left open: its words, where they came from, and for a section's item the section's heading. */
 export interface LeftOpen { text: string; from: LeftFrom; section?: string }
 
 /** The headings whose lists are open items. */
@@ -151,7 +152,6 @@ export function openTasks(facts: TaskListFacts, input: unknown): LeftOpen[] {
       ? [{ text: `the agent's task list leaves "${clean(text)}" ${status.replace(/_/g, ' ')}`, from: 'task' as const }] : [];
   });
 }
-
 
 const OP = /\b(under|below|less than|fewer than|at most|no more than|within|over|above|more than|at least|no less than)\b|(<=|>=|≤|≥|<|>)/i;
 const THRESHOLD = new RegExp(`(?:${OP.source})\\s*(\\d+(?:\\.\\d+)?)(?:\\s*(%|[A-Za-zµ][\\w/µ]*))?`, 'gi');
