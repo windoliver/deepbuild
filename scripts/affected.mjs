@@ -450,7 +450,6 @@ const BOUND_MIN = Number(process.env.DEEP_AFFECTED_MIN ?? 60);
 const stoppers = new Set();
 let ends = Infinity, bound = null;
 const untilBound = () => Math.max(0, (ends - Date.now()) / 60_000);
-// At the bound the run starts nothing more and stops each job running, whether its timer fired or a wait ran into it.
 const reachBound = () => {
   if (stopped || bound) return;
   bound = BOUND_MIN;
@@ -831,13 +830,9 @@ async function main(args) {
       const { names = [], builds = [] } = built.get(cwd) ?? {}, bin = binaries.get(cwd);
       const placed = builtIn(cwd, builds).every((path) => existsSync(path)), seen = names.every((name) => existsSync(join(bin, name)));
       if (placed && seen) return;
-      // A rebuild is work started, so at the bound there is none (#3567). Before a timed job the run's own grant is
-      // given back, so the rebuild asks for a build grant of its own, waiting at most the time left to the bound, and
-      // buildBinaries and the in-place builds pass through on it (#3588).
       if (!untilBound()) return reachBound();
       const wait = Math.min(30, untilBound());
       const grant = acquire('build', { wait }), before = process.env.DEEP_THROTTLE;
-      // A wait the bound cut short ran out at the bound, not before it.
       if (!grant && wait < 30) return reachBound();
       if (!grant) throw Error(`INCONCLUSIVE no grant: no build grant came within ${wait} min to build again what a cleanup removed`);
       process.env.DEEP_THROTTLE = grant.token;
@@ -848,7 +843,6 @@ async function main(args) {
         process.env.DEEP_THROTTLE = before;
         release(grant);
       }
-      // A build that ran into the bound starts no job after it; the bound's timer couldn't fire while it ran.
       if (!untilBound()) reachBound();
     };
     // Tests that run a package's build read dist, so a change to a package builds them first, as the typecheck lane does,
