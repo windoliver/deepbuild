@@ -520,7 +520,7 @@ export class Core {
       }),
       acking: (session) => this.acking(session), queue: (work) => void this.queue(work).catch(() => undefined), wake: (session, text) => this.noticeWake(session, text),
       over: (session) => { const s = this.sessionStarts.runOf(session); return s !== undefined && !this.sessionStarts.live(s.run); },
-      plant: this.options.plant,
+      ...(this.options.plant ? { plant: this.options.plant } : {}),
     });
     this.delivery.answers = new Answers({
       raw: this.raw, settled: (except) => Promise.allSettled([...this.inflight].flatMap(([append, { id, kind }]) => (id !== except && readsAnswer(kind) ? [append] : []))),
@@ -1596,7 +1596,8 @@ export class Core {
           this.state.midTurn.delete(meta.session);
           // The prompt that opens a turn is its origin, and ends the grace window a loop's last stop started (#965).
           live.turnFrom = String(data.from);
-          live.turnServer = typeof data.server === 'string' ? data.server : undefined;
+          if (typeof data.server === 'string') live.turnServer = data.server;
+          else delete live.turnServer;
           this.siblings.turn(meta.session, draft.id, live.turnFrom, this.now(), live.turnServer);
           // An adapter with no route to hold a prompt leaves the loop rule watch-only for its session, which says so once (#352).
           if (HOLDS_NO_PROMPT.has(meta.agent) && this.siblings.looping(meta.session) && !this.loopWatched.has(meta.session)) {
