@@ -1,7 +1,3 @@
-// A claim's verdict from its checks' command runs (#30): the gate's records of each run, as the command check kind
-// closes them, become the verdict engine's run records (#28), and the core's masked-exit rule makes a check whose
-// locked command masks its exit one that can't fail. Pure: every input, the time included, is an argument. The gate
-// never imports the extension that made the runs, so the run's shape is stated here by its fields.
 import { createHash } from 'node:crypto';
 import { stableText } from '@deepbuild/contracts';
 import { verdict } from '@deepbuild/verdicts';
@@ -82,13 +78,11 @@ const KIT_CONTRACT: NumericContract = {
   reference: { precision: 'fp64' }, accumulate: 'fp32', tolerances: [{ output: 'total', size: 2, atol: 0, rtol: 0, unit: 'cents' }], twin: { accumulate: 'fp16' }, assert: 'the totals match the reference',
 };
 const DAY_MS = 86_400_000;
-/** The claim's runs as the fault leaves them, before the engine's records are made: a contract and its counts. */
 function faultedRuns(claim: ClaimedRuns, fault: JudgeFault): ClaimedRuns {
   if (fault !== 'contract-unreported' && fault !== 'contract-short') return claim;
   const counts = fault === 'contract-short' ? [{ output: 'total', size: 2, compared: 1, largest_error: 0 }] : null;
   return { ...claim, checks: claim.checks.map((c) => ({ ...c, contract: KIT_CONTRACT, runs: c.runs.map((r) => ({ ...r, contract: counts })) })) };
 }
-/** The engine's input as the fault leaves it. */
 function faultedInput(input: ClaimInput, fault: JudgeFault): ClaimInput {
   const slot = (state: EvidenceSlot): ((r: Run) => Run) => (r) => ({ ...r, evidence: r.evidence.map((s) => (s.slot === 'stdout' ? state : s)) });
   const answered = (answer: 'PASS' | 'FAIL' | 'unanswered') => ({ ...input, requirements: input.requirements.map((q) => (q.oracle === 'person' ? { ...q, answer, ask: 'ask:gatekit' } : q)) });
@@ -129,15 +123,11 @@ function contractOf(contract: NumericContract, r: RecordedRun): ContractResult |
     if (count.largest_error !== null) largest[t.output] = count.largest_error;
     if (count.compared < t.size) reasons.push(`output ${t.output}: ${count.compared} of ${t.size} elements compared`);
   }
-  // The report gives counts, never where a failed run failed, and a command run compares no precision twin: that
-  // side is unrun, nothing compared. The engine judges the report by its outcome and reasons alone.
   const twin: ContractSide = { outcome: 'unrun', failed_at: null, compared: {}, largest_error: {} };
   return { run: { outcome: r.outcome === 'passed' ? 'passed' : 'failed', failed_at: null, compared, largest_error: largest }, twin, outcome: reasons.length ? 'INVALID' : 'counts', reasons };
 }
 
-/** The engine's run record of one command run. */
 function recordOf(claim: ClaimedRuns, c: ClaimedCheck, digest: string, r: RecordedRun, exitOnly: boolean): Run {
-  // The planted gate reads a run's outcome from its exit alone; the real one takes the kind's closed outcome.
   const outcome: RunOutcome = exitOnly && r.exit ? (r.exit.code === 0 ? 'passed' : 'failed') : r.outcome;
   const failures: Failure[] = r.failures.map((f) => ({ test: f.test, message: f.message, cause: c.check, frames: [{ file: f.file, line: f.line }], covers: [], case: null }));
   const evidence: EvidenceSlot[] = [
@@ -146,13 +136,9 @@ function recordOf(claim: ClaimedRuns, c: ClaimedCheck, digest: string, r: Record
   ];
   const standIns = r.seeded.filter((s) => s.standIn).map((s) => ({ table: s.name, by: s.by }));
   const contract = c.contract ? contractOf(c.contract, r) : undefined;
-  // The record carries no clock and no fingerprint of its own: every run ends at the claim's `now`, in one
-  // environment with one set of tools, so each counts for the check it ran for.
   return {
     run: r.run, check: c.check, claim: claim.claim, commit: claim.commit, digest, environment: {}, tools: {},
-    // An exit status says nothing of how many tests ran: the planted gate takes a clean exit for a run that ran one.
     outcome, ended: claim.now, tests_run: exitOnly && outcome === 'passed' ? Math.max(r.testsRun, 1) : r.testsRun, reads: [...r.read], failures, evidence, kept: true,
-    // A run that never started names why (a program the run's PATH lacks, a checkout gone): the machine's, so yours to provide.
     ...(outcome === 'missing' ? { missing: { cause: r.failures[0]?.message ?? 'the run never started', owner: 'you', since: claim.now } } : {}),
     ...(contract ? { contract } : {}),
     ...(r.speed ? { timing: { ...r.speed, reasons: [...r.speed.reasons] } } : {}),
@@ -161,7 +147,6 @@ function recordOf(claim: ClaimedRuns, c: ClaimedCheck, digest: string, r: Record
   };
 }
 
-/** The claim's verdict from its checks' runs: the gate's records of them, judged by the verdict engine. */
 export function claimVerdict(given: ClaimedRuns, options: { plant?: VerdictPlant; fault?: JudgeFault } = {}): Verdict {
   const exitOnly = options.plant === 'exit-code-only';
   const claim = options.fault ? faultedRuns(given, options.fault) : given;
@@ -169,14 +154,8 @@ export function claimVerdict(given: ClaimedRuns, options: { plant?: VerdictPlant
   const runs: Run[] = [];
   for (const c of claim.checks) {
     const digest = digestOf(c);
-    // The locked command's own mask, or one the kind found by the same rule in what it runs (a script, a package.json
-    // script, named `<mask> in <file>`): either can't fail. The kind's other uncounted causes (an untraced program,
-    // altered evidence) name no mask the rule reads.
     const mask = exitOnly ? null : maskIn(c.command) ?? c.runs.map((r) => r.mask).find((m): m is string => m !== null && maskIn(m) !== null) ?? null;
-    // A run whose report showed a control passed, or none at all, can't record a failure: its check can't fail (#1099).
     const unrecorded = exitOnly ? undefined : c.runs.map((r) => r.mask).find((m): m is string => m?.startsWith("the report can't record a failure") ?? false);
-    // A check whose runs no test tool's report counted proves by a static check, never a test run (#1861; design: a
-    // lower proof is never shown as a higher one); one with a run a test tool counted, or of a kind that doesn't say, a test run.
     const proof: Proof = c.proof ?? (c.runs.some((r) => r.tested === false) && !c.runs.some((r) => r.tested) ? 'static_check' : 'test_run');
     checks.push({
       check: c.check, digest, source: c.source, depth: c.depth ?? 'unit', proof, covers: [...c.covers],

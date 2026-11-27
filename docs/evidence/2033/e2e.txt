@@ -1,0 +1,10 @@
+#2033 e2e: head 326fedcd5, last code commit 326fedcd5
+machine Mac18,1, 2026-11-25 19:51 PST, load { 4.17 3.94 4.88 }
+
+base  spot  light at 16 m: 29837 plane px behind the wall,  896 reached by the light
+base  point light at 16 m: 29837 plane px behind the wall,  435 reached by the light
+fix   spot  light at 16 m: 29837 plane px behind the wall,  488 reached by the light
+fix   point light at 16 m: 29837 plane px behind the wall,  392 reached by the light
+
+frames written (leaked px in magenta): base-spot-16m.png base-point-16m.png fix-spot-16m.png fix-point-16m.png
+e2e run finished

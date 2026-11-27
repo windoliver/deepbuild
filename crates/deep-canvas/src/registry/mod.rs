@@ -40,6 +40,12 @@ use shapes::module_shapes;
 /// crate's version, written here since the lint keeps `env!` out of a scope crate.
 pub const CORE_VERSION: &str = "0.0.0";
 
+/// The build's core as a version: what a document's and a pack's `requires.core` are compared
+/// with (#2058), and a canvas module's core range at the seal.
+pub(crate) fn core_semver() -> Semver {
+    Semver::parse(CORE_VERSION).expect("CORE_VERSION is major.minor.patch")
+}
+
 /// `core@<version>`.
 pub fn core_name() -> String {
     format!("core@{CORE_VERSION}")
@@ -1921,7 +1927,7 @@ impl Registry {
     pub fn seal(mut self) -> Result<Sealed, Box<SealError>> {
         self.modules
             .sort_by(|a, b| a.manifest.name.cmp(&b.manifest.name));
-        let core = Semver::parse(CORE_VERSION).expect("CORE_VERSION is major.minor.patch");
+        let core = core_semver();
 
         // One implementation per interface, before names: two implementations of one interface
         // may register under its one module name.
