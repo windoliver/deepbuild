@@ -718,18 +718,13 @@ fn check_entries(
                 ));
                 continue;
             }
-            out.push(registry::lists::SealedEntry {
-                name: entry.to_string(),
-                registry: name.clone(),
-                origin: "pack",
-                module: String::new(),
-                pack: pack.clone(),
-                value: value.clone(),
-                since: id.version.to_string(),
-                digest: registry::lists::entry_digest(name, entry, value, &id.version.to_string()),
-                twin: reg.def.twin.map(|t| t(entry, value)),
-                kit,
-            });
+            match entries::admitted(&pack, reg, entry, value, id.version.to_string(), kit) {
+                Ok(admitted) => out.push(admitted),
+                Err(why) => issues.push(refuse(
+                    json!({"registry": name, "entry": entry}),
+                    format!("`{entry}` of `{name}` has no canonical form to digest: {why}"),
+                )),
+            }
         }
     }
     out
