@@ -17,7 +17,7 @@ use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use deep_contracts::generated::McpHandshakeProtocolVersion;
+use deep_contracts::generated::{McpHandshakeProtocolVersion, McpMetaProtocolVersion};
 use deep_contracts::{jcs, parse, Contract, Value};
 
 use super::{address, home, member, quoted, read_line, set_cwd, setting, worktree_hub, Got};
@@ -28,6 +28,22 @@ const DATA: &str = include_str!("actions.json");
 const UNREACHABLE: Duration = Duration::from_millis(1000);
 /// Longer than any call the hub holds open, as `deep mcp` waits.
 const ANSWER: Duration = Duration::from_secs(55);
+/// The `_meta` key a request with no handshake names its revision under (#2855).
+const VERSION_KEY: &str = "io.modelcontextprotocol/protocolVersion";
+
+/// server/discover's list and an unheld version's: the revisions with no handshake (mcp.meta@1), then the
+/// handshake's (mcp.handshake@1), newest first.
+fn supported() -> Value {
+    let alone = McpMetaProtocolVersion::ALL
+        .iter()
+        .rev()
+        .map(|v| v.to_json());
+    let held = McpHandshakeProtocolVersion::ALL
+        .iter()
+        .rev()
+        .map(|v| v.to_json());
+    Value::Array(alone.chain(held).collect())
+}
 
 fn object(members: Vec<(&str, Value)>) -> Value {
     Value::Object(
@@ -357,6 +373,8 @@ pub fn serve() -> ExitCode {
             ("message", Value::String(message)),
         ])
     };
+    // A client is served the way it opens (#2855): once it sends initialize, as the handshake settled.
+    let mut opened = false;
     thread::scope(|scope| {
         for raw in io::stdin().lock().lines() {
             let Ok(raw) = raw else { break };
@@ -382,8 +400,68 @@ pub fn serve() -> ExitCode {
                 Some(other) => jcs(other),
                 None => "undefined".into(),
             };
+            // With no handshake a request names its revision in `_meta` (#2855); one held neither way is refused here,
+            // before anything reaches the hub. A handshake revision named so is served as today.
+            let asked = (!opened && method != "initialize")
+                .then(|| member(params, "_meta").and_then(|meta| member(meta, VERSION_KEY)))
+                .flatten();
+            let alone = asked
+                .is_some_and(|v| McpMetaProtocolVersion::from_json(v, "/params/_meta").is_ok());
+            if let Some(v) = asked.filter(|v| {
+                !alone && McpHandshakeProtocolVersion::from_json(v, "/params/_meta").is_err()
+            }) {
+                let data = object(vec![("supported", supported()), ("requested", v.clone())]);
+                let mut error = failure(-32022.0, "Unsupported protocol version".into());
+                if let Value::Object(members) = &mut error {
+                    members.push(("data".into(), data));
+                }
+                send(&id, "error", error);
+                continue;
+            }
+            let cached = matches!(
+                method.as_str(),
+                "server/discover" | "tools/list" | "resources/list" | "resources/read"
+            );
+            let send = move |id: &Value, key: &str, value: Value| match value {
+                // Results with no handshake say they are complete; those a client may cache say to re-fetch every
+                // time and never from a shared cache.
+                Value::Object(mut members) if alone && key == "result" => {
+                    members.insert(0, ("resultType".into(), text("complete")));
+                    if cached {
+                        members.push(("ttlMs".into(), Value::Number(0.0)));
+                        members.push(("cacheScope".into(), text("private")));
+                    }
+                    send(id, key, Value::Object(members))
+                }
+                value => send(id, key, value),
+            };
+            let info = || {
+                object(vec![
+                    ("name", text("deep-actions")),
+                    // #1495: the hook binary's version is its crate's, which a release moves.
+                    ("version", text(env!("CARGO_PKG_VERSION"))),
+                ])
+            };
+            let capabilities =
+                || object(vec![("tools", empty.clone()), ("resources", empty.clone())]);
             match method.as_str() {
+                "server/discover" => {
+                    let meta = object(vec![("io.modelcontextprotocol/serverInfo", info())]);
+                    let mut result = vec![
+                        ("supportedVersions", supported()),
+                        ("capabilities", capabilities()),
+                        ("_meta", meta),
+                        ("instructions", instructions.clone()),
+                    ];
+                    if !alone {
+                        result.insert(0, ("resultType", text("complete")));
+                        result.push(("ttlMs", Value::Number(0.0)));
+                        result.push(("cacheScope", text("private")));
+                    }
+                    send(&id, "result", object(result));
+                }
                 "initialize" => {
+                    opened = true;
                     // #2854: the client's revision when mcp.handshake@1 holds it, as a whole string; the newest otherwise.
                     let version = member(params, "protocolVersion")
                         .and_then(|v| {
@@ -395,26 +473,19 @@ pub fn serve() -> ExitCode {
                                 [McpHandshakeProtocolVersion::ALL.len() - 1],
                         )
                         .to_json();
-                    let capabilities =
-                        object(vec![("tools", empty.clone()), ("resources", empty.clone())]);
-                    let info = object(vec![
-                        ("name", text("deep-actions")),
-                        // #1495: the hook binary's version is its crate's, which a release moves.
-                        ("version", text(env!("CARGO_PKG_VERSION"))),
-                    ]);
                     send(
                         &id,
                         "result",
                         object(vec![
                             ("protocolVersion", version),
-                            ("capabilities", capabilities),
-                            ("serverInfo", info),
+                            ("capabilities", capabilities()),
+                            ("serverInfo", info()),
                             // #2897: what a client that loads tools by search reads at the start.
                             ("instructions", instructions.clone()),
                         ]),
                     );
                 }
-                "ping" => send(&id, "result", empty.clone()),
+                "ping" if !alone => send(&id, "result", empty.clone()),
                 "tools/list" => send(
                     &id,
                     "result",
@@ -472,7 +543,8 @@ pub fn serve() -> ExitCode {
                                 &id,
                                 "error",
                                 failure(
-                                    -32002.0,
+                                    // The revision with no handshake answers an unknown resource as invalid params.
+                                    if alone { -32602.0 } else { -32002.0 },
                                     format!(
                                         "No resource {uri}; the codes' pages are {}.",
                                         all.join(", ")
@@ -505,7 +577,7 @@ pub fn serve() -> ExitCode {
                         None | Some(Value::Null) => empty.clone(),
                         Some(given) => given.clone(),
                     };
-                    let (send, hub) = (&send, &hub);
+                    let hub = &hub;
                     // A call that waits holds up no other call.
                     scope.spawn(move || {
                         let (ok, value) = match hub.call(&name, &arguments) {

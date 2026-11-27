@@ -90,13 +90,24 @@ export function countMcp(server: string, tool: string, cwd: string, unknownAs: C
 export const OWN_SERVERS: readonly string[] = ['deep', 'deepbuild', 'deep-actions'];
 
 /** One server's tool list at a session's start (#321): each tool with its input schema's digest and its hints. */
-export interface Listed { server: string; scope: 'local' | 'project' | 'user'; version: string | null; tools: { name: string; digest: string; hints: Obj }[] }
+export interface Listed { server: string; scope: 'local' | 'project' | 'user'; version: string | null; handshake: boolean; tools: { name: string; digest: string; hints: Obj }[] }
 const LIST_MS = 10_000;
+/** How long the server/discover probe waits before the server is taken for a handshake server (#2855). */
+const PROBE_MS = 2_000;
+let stateless: string[] | undefined;
+/** The revisions with no handshake this lister speaks, newest first: mcp.meta@1's list. */
+const revisions = (): string[] => {
+  stateless ??= [...(JSON.parse(readFileSync(new URL('../schemas/mcp.meta@1.json', import.meta.resolve('@deepbuild/contracts/json')), 'utf8')) as { properties: { protocolVersion: { enum: string[] } } }).properties.protocolVersion.enum].reverse();
+  return stateless;
+};
+const CLIENT = { name: 'deepbuild', version: '0' };
 
 /**
  * The tool list of every stdio server Claude Code loads in `cwd`, synced by DeepBuild or added by you, asked of
- * each server over MCP as the agent asks it (initialize, then tools/list, page by page), in the order its configs
- * win. A server that doesn't answer within 10 s, or that isn't a command (a remote one), gives no list.
+ * each server over MCP as a client of both eras asks it (#2855): server/discover first; a discover result, or the
+ * revision's own version error, lists with the revision in each request's _meta, and any other error, or no answer
+ * within 2 s, sends initialize as before; then tools/list, page by page, in the order its configs win. A server that
+ * doesn't answer within 10 s, or that isn't a command (a remote one), gives no list.
  */
 export async function toolLists(cwd: string): Promise<Listed[]> {
   const user = json(join(homedir(), '.claude.json'));
@@ -123,14 +134,25 @@ function listOf(config: Obj, cwd: string): Promise<Omit<Listed, 'server' | 'scop
     const tools: Listed['tools'] = [];
     let version: string | null = null;
     let buffer = '';
+    // Set once the probe is answered or given up: the revision each request names, or null for a handshake server.
+    let alone: string | null | undefined;
     const end = (error?: Error) => {
       clearTimeout(timer);
+      clearTimeout(probe);
       child.kill();
       if (error) fail(error);
-      else done({ version, tools });
+      else done({ version, handshake: alone === null, tools });
     };
     const timer = setTimeout(() => end(Error('no tool list within 10 s')), LIST_MS);
     const send = (m: Obj) => child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', ...m })}\n`);
+    const meta = (revision: string) => ({ _meta: { 'io.modelcontextprotocol/protocolVersion': revision, 'io.modelcontextprotocol/clientInfo': CLIENT, 'io.modelcontextprotocol/clientCapabilities': {} } });
+    const list = (id: number, cursor?: string) => send({ id, method: 'tools/list', params: { ...(cursor === undefined ? {} : { cursor }), ...(alone ? meta(alone) : {}) } });
+    const handshake = () => {
+      clearTimeout(probe);
+      alone = null;
+      send({ id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: CLIENT } });
+    };
+    const probe = setTimeout(handshake, PROBE_MS);
     child.on('error', end);
     child.stdin.on('error', () => undefined);
     child.stdout.setEncoding('utf8').on('data', (chunk: string) => {
@@ -140,6 +162,23 @@ function listOf(config: Obj, cwd: string): Promise<Omit<Listed, 'server' | 'scop
         let m: unknown;
         try { m = JSON.parse(buffer.slice(0, at)); } catch { /* not a message */ }
         buffer = buffer.slice(at + 1);
+        // The probe's answer is a response to id 0, never a request the server sends with that id.
+        if (isObj(m) && m.id === 0 && m.method === undefined && (m.result !== undefined || m.error !== undefined)) {
+          if (alone !== undefined) continue; // the probe's answer after it was given up
+          // A discover result names the versions; the revision's version error lists them too. Any other answer is a
+          // handshake server's.
+          const error = isObj(m.error) ? m.error : undefined;
+          const listed = isObj(m.result) ? m.result.supportedVersions : error?.code === -32022 && isObj(error.data) ? error.data.supported : undefined;
+          const chosen = revisions().find((r) => Array.isArray(listed) && listed.includes(r));
+          if (!chosen) { handshake(); continue; }
+          clearTimeout(probe);
+          alone = chosen;
+          const info = isObj(m.result) && isObj(m.result._meta) && isObj(m.result._meta['io.modelcontextprotocol/serverInfo']) ? m.result._meta['io.modelcontextprotocol/serverInfo'] : {};
+          version = typeof info.version === 'string' && info.version ? info.version : null;
+          list(2);
+          continue;
+        }
+        if (alone === undefined) continue; // nothing else is asked before the probe settles
         if (!isObj(m) || !isObj(m.result)) {
           if (isObj(m) && m.error !== undefined) end(Error(`the server refused ${m.id === 1 ? 'initialize' : 'tools/list'}`));
           continue;
@@ -148,17 +187,17 @@ function listOf(config: Obj, cwd: string): Promise<Omit<Listed, 'server' | 'scop
           const info = isObj(m.result.serverInfo) ? m.result.serverInfo : {};
           version = typeof info.version === 'string' && info.version ? info.version : null;
           send({ method: 'notifications/initialized' });
-          send({ id: 2, method: 'tools/list', params: {} });
+          list(2);
         } else if (typeof m.id === 'number' && m.id >= 2) {
           for (const t of Array.isArray(m.result.tools) ? m.result.tools : []) {
             if (!isObj(t) || typeof t.name !== 'string' || !t.name) continue;
             tools.push({ name: t.name, digest: sha256Hex(canonicalize((t.inputSchema ?? null) as JsonValue)), hints: isObj(t.annotations) ? t.annotations : {} });
           }
-          if (typeof m.result.nextCursor === 'string' && m.id < 50) send({ id: m.id + 1, method: 'tools/list', params: { cursor: m.result.nextCursor } });
+          if (typeof m.result.nextCursor === 'string' && m.id < 50) list(m.id + 1, m.result.nextCursor);
           else end();
         }
       }
     });
-    send({ id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'deepbuild', version: '0' } } });
+    send({ id: 0, method: 'server/discover', params: meta(revisions()[0]!) });
   });
 }

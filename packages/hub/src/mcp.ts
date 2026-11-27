@@ -26,11 +26,23 @@ export const answerWaitMs = (client: unknown, toolS: () => number): number => (i
  * The handshake revisions this server holds, oldest first (#2854): mcp.handshake@1's list, read from the contract file
  * itself so deep mcp loads no contract code. The client's revision is answered when held, the newest otherwise.
  */
+const revisions = (entry: string): string[] => (JSON.parse(readFileSync(new URL(`../schemas/${entry}`, import.meta.resolve('@deepbuild/contracts/json')), 'utf8')) as { properties: { protocolVersion: { enum: string[] } } }).properties.protocolVersion.enum;
 let held: string[] | undefined;
 const handshake = (asked: unknown): string => {
-  held ??= (JSON.parse(readFileSync(new URL('../schemas/mcp.handshake@1.json', import.meta.resolve('@deepbuild/contracts/json')), 'utf8')) as { properties: { protocolVersion: { enum: string[] } } }).properties.protocolVersion.enum;
+  held ??= revisions('mcp.handshake@1.json');
   return typeof asked === 'string' && held.includes(asked) ? asked : held[held.length - 1]!;
 };
+/** The revisions served with no handshake (#2855), mcp.meta@1's list: a request naming one in its `_meta` stands alone. */
+let stateless: string[] | undefined;
+const META = 'io.modelcontextprotocol/';
+/** What server/discover and an unheld version's error list: the revisions with no handshake, then the handshake's, newest first. */
+const supported = (): string[] => {
+  stateless ??= revisions('mcp.meta@1.json');
+  held ??= revisions('mcp.handshake@1.json');
+  return [...stateless].reverse().concat([...held].reverse());
+};
+/** Results a client may cache carry the hints the issue states: re-fetch every time, and never from a shared cache. */
+const CACHED = new Set(['server/discover', 'tools/list', 'resources/list', 'resources/read']);
 const unreachable = (why: string): Refusal => refusal('unavailable', '', `The DeepBuild hub is unreachable (${why}); nothing was recorded. Call again once it is back.`, '', true);
 
 /**
@@ -167,6 +179,8 @@ class Hub {
    */
   async named(info: { name?: unknown; version?: unknown } | undefined): Promise<void> {
     const client = info?.name;
+    // A client with no handshake names itself in each request (#2855): its settings load once, when its name changes.
+    if (this.info && this.info.name === (client ?? null) && this.info.version === (info?.version ?? null)) return;
     this.client = client;
     this.info = { name: client ?? null, version: info?.version ?? null };
     if (!isCodex(client)) return;
@@ -243,19 +257,21 @@ export async function runMcp(server: 'deep' | 'deep-actions' = 'deep'): Promise<
   }
   const hub = new Hub();
   const tools = server === 'deep' ? toolList() : actionToolList();
-  const send = (message: Obj) => process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', ...message })}\n`);
+  const write = (message: Obj) => process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', ...message })}\n`);
   const calls: Promise<void>[] = [];
   const cancelled = new Set<string>();
+  // A client is served the way it opens (#2855): once it sends initialize, as the handshake settled.
+  let opened = false;
   for await (const raw of requests()) {
     if (raw === null) {
-      send({ id: null, error: { code: -32600, message: `A request line ran past ${CAP_TEXT}; it was dropped unread. Send each JSON-RPC message as one line of at most 16 MiB.` } });
+      write({ id: null, error: { code: -32600, message: `A request line ran past ${CAP_TEXT}; it was dropped unread. Send each JSON-RPC message as one line of at most 16 MiB.` } });
       continue;
     }
     let request: Obj;
     try {
       request = JSON.parse(raw) as Obj;
     } catch {
-      send({ id: null, error: { code: -32700, message: 'Parse error: send one JSON-RPC message per line.' } });
+      write({ id: null, error: { code: -32700, message: 'Parse error: send one JSON-RPC message per line.' } });
       continue;
     }
     const { id, method } = request;
@@ -266,13 +282,32 @@ export async function runMcp(server: 'deep' | 'deep-actions' = 'deep'): Promise<
       continue;
     }
     if (id === undefined) continue; // a notification
+    // With no handshake, a request carries its own revision and client in `_meta` (#2855). A revision held neither
+    // way is refused here, before anything reaches the hub.
+    const meta = (!opened && method !== 'initialize' && params._meta && typeof params._meta === 'object' ? params._meta : {}) as Obj;
+    const asked = meta[`${META}protocolVersion`];
+    const alone = asked !== undefined && supported().slice(0, stateless!.length).includes(asked as string);
+    // A handshake revision named with no handshake is served as today, as a request naming none is.
+    if (asked !== undefined && !supported().includes(asked as string)) {
+      write({ id, error: { code: -32022, message: 'Unsupported protocol version', data: { supported: supported(), requested: asked } } });
+      continue;
+    }
+    const send = (message: Obj) => write(alone && 'result' in message ? { ...message, result: { resultType: 'complete', ...(message.result as Obj), ...(CACHED.has(String(method)) ? { ttlMs: 0, cacheScope: 'private' } : {}) } } : message);
+    // A request that names no client keeps the name an earlier one gave.
+    if (alone && meta[`${META}clientInfo`] !== undefined) await hub.named(meta[`${META}clientInfo`] as Obj | undefined);
     switch (method) {
       case 'initialize':
+        opened = true;
         await hub.named(params.clientInfo as Obj | undefined);
         send({ id, result: { protocolVersion: handshake(params.protocolVersion), capabilities: { tools: {}, resources: {} }, serverInfo: { name: server, version: '0.0.0' }, instructions: instructionsFor(server) } });
         break;
+      case 'server/discover':
+        write({ id, result: { resultType: 'complete', supportedVersions: supported(), capabilities: { tools: {}, resources: {} }, _meta: { [`${META}serverInfo`]: { name: server, version: '0.0.0' } }, instructions: instructionsFor(server), ttlMs: 0, cacheScope: 'private' } });
+        break;
       case 'ping':
-        send({ id, result: {} });
+        // The revision with no handshake has no ping.
+        if (alone) send({ id, error: { code: -32601, message: 'Method ping not found.' } });
+        else send({ id, result: {} });
         break;
       case 'tools/list':
         // The hub's list while it can be reached, so what is listed is what its check holds a call to; else this build's.
@@ -284,7 +319,8 @@ export async function runMcp(server: 'deep' | 'deep-actions' = 'deep'): Promise<
       case 'resources/read': {
         const uri = String(params.uri);
         const page = /^deep:\/\/codes\/([a-z_]+)$/.exec(uri) ? codePage(uri.slice('deep://codes/'.length)) : undefined;
-        if (!page) send({ id, error: { code: -32002, message: `No resource ${uri}; the codes' pages are ${CODES.map((p) => `deep://codes/${p.code}`).join(', ')}.` } });
+        // The revision with no handshake answers an unknown resource as invalid params.
+        if (!page) send({ id, error: { code: alone ? -32602 : -32002, message: `No resource ${uri}; the codes' pages are ${CODES.map((p) => `deep://codes/${p.code}`).join(', ')}.` } });
         else send({ id, result: { contents: [{ uri, mimeType: 'application/json', text: JSON.stringify(page) }] } });
         break;
       }

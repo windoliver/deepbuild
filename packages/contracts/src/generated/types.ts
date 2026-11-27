@@ -9948,6 +9948,11 @@ export interface McpHandshake {
   protocolVersion: "2025-06-18" | "2025-11-25";
 }
 
+/** mcp.meta@1 */
+export interface McpMeta {
+  protocolVersion: "2026-07-28";
+}
+
 /** mcp.tools_listed@1 */
 export interface McpToolsListed {
   v: 1;
@@ -10027,6 +10032,61 @@ export interface McpToolsListedV2 {
         bytes?: number;
       };
     };
+  };
+  evidence?: Array<string>;
+}
+
+/** mcp.tools_listed@3 */
+export interface McpToolsListedV3 {
+  v: 3;
+  id: string;
+  kind: "mcp.tools_listed";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    server: string;
+    scope: "user" | "local" | "project";
+    version: string | null;
+    tools: Array<{
+      name: string;
+      digest: string;
+      hints: unknown;
+    }>;
+    held?: {
+      ask: string;
+      tools: Array<string>;
+    };
+    limit?: {
+      client: string | null;
+      client_version: string | null;
+      from: string;
+      result: {
+        chars?: number;
+        tokens?: number;
+        bytes?: number;
+      };
+      error: {
+        chars?: number;
+        tokens?: number;
+        bytes?: number;
+      };
+      cap: {
+        chars?: number;
+        tokens?: number;
+        bytes?: number;
+      };
+      error_cap: {
+        chars?: number;
+        tokens?: number;
+        bytes?: number;
+      };
+    };
+    handshake: boolean;
   };
   evidence?: Array<string>;
 }
