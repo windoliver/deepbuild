@@ -1606,6 +1606,10 @@ timed.push('tests/acceptance/3257/ac7-budget.test.ts');
 // child's peak on the reference Mac.
 timed.push('tests/acceptance/1857/cap.test.ts', 'tests/acceptance/1857/budgets.test.ts');
 
+// #1867's folder (blind) runs alone by its lane.json: each file starts hubs of its own. Two of its files read a
+// put-back against the criterion's second, and read INCONCLUSIVE past it while the load is over the cores.
+timed.push('tests/acceptance/1867/codex-watch.test.ts', 'tests/acceptance/1867/claude-json.test.ts');
+
 // #2750's folder (blind) runs alone by its lane.json: each test starts real hubs, a forge on 127.0.0.1 and git
 // repositories. budgets.test.ts times a rebuild from the event log on the reference Mac.
 timed.push('tests/acceptance/2750/budgets.test.ts');
