@@ -740,7 +740,7 @@
   "crates/deep-canvas/src/registry/fields.rs": 37,
   "crates/deep-canvas/src/registry/implementation.rs": 25,
   "crates/deep-canvas/src/registry/lists.rs": 82,
-  "crates/deep-canvas/src/registry/mod.rs": 566,
+  "crates/deep-canvas/src/registry/mod.rs": 561,
   "crates/deep-canvas/src/registry/paths.rs": 59,
   "crates/deep-canvas/src/registry/semver.rs": 23,
   "crates/deep-canvas/src/registry/shapes.rs": 13,
