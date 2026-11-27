@@ -1397,6 +1397,9 @@ timed.push('tests/acceptance/1255/ac5-budget.test.ts');
 // #1181's folder (blind) runs alone by its lane.json; ac09-budget.test.ts times a 64-node, 128-part circuit's step with
 // judgeLimit.
 timed.push('tests/acceptance/1181/ac09-budget.test.ts');
+// #3604's folder (blind) runs alone by its lane.json; ac15-budget.test.ts times a 64-node, 128-part board with breakers, RCDs,
+// changeovers and a transformer with judgeLimit.
+timed.push('tests/acceptance/3604/ac15-budget.test.ts');
 
 // #2898's files (blind) each start real hubs, plug-ins and jobs and hold 40 s deep_wait calls; no timing.
 alone.push('tests/acceptance/2898/');
@@ -1648,6 +1651,14 @@ timed.push('tests/acceptance/3467/players.test.ts');
 Object.assign(redrafted, Object.fromEntries([['1113', 'cli'], ['3238', 'serial'], ['3238', 'no-grant'], ['3240', 'line'], ['3334', 'stall'], ['3334', 'far-stalled'], ['3567', 'grant'], ['2820', 'failures']]
   .map(([issue, file]) => [`tests/acceptance/${issue}/${file}.test.mjs`, `tests/acceptance/${issue}-redraft-3549/`])));
 byHand.push(...Object.keys(redrafted).filter((path) => redrafted[path].endsWith('-redraft-3549/')));
+
+// #3694 admits a plain test request without the load and gives it a turn on the pool, so these files, whose scene held
+// such a request on the load or ran its command beside a pool all held, no longer hold it on the right program
+// (tests/acceptance/<issue>/DISPUTE-3694.md). Each, kept as written, maps to its blind redraft, which runs in its place
+// with every test of the file; the originals run by hand until the owner rules on the swap.
+Object.assign(redrafted, Object.fromEntries([['2924', 'test-grants'], ['2924', 'blocked'], ['2924', 'log'], ['3238', 'inherited'], ['3549', 'passes'], ['3549', 'timed'], ['3549', 'window']]
+  .map(([issue, file]) => [`tests/acceptance/${issue}/${file}.test.mjs`, `tests/acceptance/${issue}-redraft-3694/`])));
+byHand.push(...Object.keys(redrafted).filter((path) => redrafted[path].endsWith('-redraft-3694/')));
 
 // #3507's folder (blind) runs alone by its lane.json: its files build deep-show and deep-gpu and draw on Metal.
 // ac3-timing.test.mjs times the geometry pass against the merge base's on the reference Mac, where a pass changed.

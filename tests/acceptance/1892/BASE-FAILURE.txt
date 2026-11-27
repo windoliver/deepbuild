@@ -1,0 +1,180 @@
+#1892 acceptance suite on the base, before any implementation.
+
+Base: 8e3278862 (origin/main), clean checkout plus tests/acceptance/1892/ only.
+Setup: Node 24, `npm ci`, `npm run build --workspaces`. macOS (Darwin 27.2.0), load average 64 at the start.
+Command: npx vitest run tests/acceptance/1892 --reporter=verbose
+Exit: 1. 4 failed (AC1 x1, AC2 x3, each an AssertionError thrown in its test file), 14 passed (AC3).
+
+Output, the checkout's absolute path cut to `.` and ANSI colors removed, otherwise as printed:
+
+
+ RUN  v5.0.5 .
+
+ × tests/acceptance/1892/names.test.ts > #1892.4c7de5fe AC1: runner.ts names no agent: no line of it compares against an agent's name 7ms
+   → lines of runner.ts that name an agent; each belongs behind AgentParts in agents.ts: expected [ …(4) ] to deeply equal []
+ × tests/acceptance/1892/test-agent.test.ts > #1892.3bee48f8 AC2: a test agent registered with Codex's parts under its own name runs a job to Codex's recorded result 2585ms
+   → the job's record: expected { state: 'stopped', …(8) } to deeply equal { state: 'finished', …(8) }
+ ✓ tests/acceptance/1892/shipped.test.ts > a Claude Code job > #1892.6f3b1f79 AC3: records its result, session, cost, each message's usage once, and the model with the most output tokens 2584ms
+ × tests/acceptance/1892/test-agent.test.ts > #1892.3bee48f8 AC2: a test agent registered with pi's parts under its own name runs a job to pi's recorded result 1325ms
+   → the job's record: expected { state: 'stopped', …(8) } to deeply equal { state: 'finished', …(8) }
+ ✓ tests/acceptance/1892/shipped.test.ts > a Claude Code job > #1892.6f3b1f79 AC3: with no model usage in its result, records the last model that answered 1387ms
+ ✓ tests/acceptance/1892/shipped.test.ts > a Claude Code job > #1892.6f3b1f79 AC3: stops for max_turns when its result is an error of that subtype 1687ms
+ × tests/acceptance/1892/test-agent.test.ts > #1892.3bee48f8 AC2: a test agent with parts and a stream parser of its own runs a job to a recorded result 1771ms
+   → the job's record: expected { state: 'stopped', …(8) } to deeply equal { state: 'finished', …(8) }
+ ✓ tests/acceptance/1892/shipped.test.ts > a Claude Code job > #1892.6f3b1f79 AC3: stops for the cause its facts map an API error entry to 1389ms
+ ✓ tests/acceptance/1892/shipped.test.ts > a Claude Code job > #1892.6f3b1f79 AC3: finishes with a refusal when its result lists a permission denial 1629ms
+ ✓ tests/acceptance/1892/shipped.test.ts > a Claude Code job > #1892.6f3b1f79 AC3: stops as crashed when it ends with no result 1890ms
+ ✓ tests/acceptance/1892/shipped.test.ts > a Codex job > #1892.6f3b1f79 AC3: records its thread as its session, its last message as its result, and its input without the cached tokens 1976ms
+ ✓ tests/acceptance/1892/shipped.test.ts > a Codex job > #1892.6f3b1f79 AC3: stops for a cause unknown when its turn fails 1709ms
+ ✓ tests/acceptance/1892/shipped.test.ts > a Codex job > #1892.6f3b1f79 AC3: finishes with a refusal when it declined a patch or the sandbox stopped a write 3915ms
+ ✓ tests/acceptance/1892/shipped.test.ts > a pi job > #1892.6f3b1f79 AC3: records its session, its last message's text and model, and each message's usage and cost 1777ms
+ ✓ tests/acceptance/1892/shipped.test.ts > a pi job > #1892.6f3b1f79 AC3: finishes when a message after an error it retried answers 1462ms
+ ✓ tests/acceptance/1892/shipped.test.ts > a pi job > #1892.6f3b1f79 AC3: stops for the cause its facts name for its last message's error, with no result 1309ms
+ ✓ tests/acceptance/1892/shipped.test.ts > a pi job > #1892.6f3b1f79 AC3: stops for a cause unknown when it is cut off at its output limit 1744ms
+ ✓ tests/acceptance/1892/shipped.test.ts > #1892.6f3b1f79 AC3: the runner's entry exports openRunner and nothing new 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1892/names.test.ts > #1892.4c7de5fe AC1: runner.ts names no agent: no line of it compares against an agent's name
+AssertionError: lines of runner.ts that name an agent; each belongs behind AgentParts in agents.ts: expected [ …(4) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "packages/runner/src/runner.ts:541 if (agent === 'claude-code') {",
++   "packages/runner/src/runner.ts:963 for (const name of [...ALLOWED_ENV, ...facts.billing.apiKeyVariables, ...(agent === 'claude-code' ? ['CLAUDE_CONFIG_DIR'",
++   "packages/runner/src/runner.ts:1069 if (job.spec.agent === 'codex') this.codexEvent(job, e);",
++   "packages/runner/src/runner.ts:1136 if (job.spec.agent === 'pi') return this.piEvent(job, e);",
++ ]
+
+ ❯ tests/acceptance/1892/names.test.ts:20:103
+     18|   const named = readFileSync(RUNNER, 'utf8').split('\n').flatMap((line…
+     19|     !/^\s*(\/\/|\*|\/\*)/.test(line) && LITERAL.test(line) ? [`package…
+     20|   expect(named, 'lines of runner.ts that name an agent; each belongs b…
+       |                                                                                                       ^
+     21| });
+     22|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  tests/acceptance/1892/test-agent.test.ts > #1892.3bee48f8 AC2: a test agent registered with Codex's parts under its own name runs a job to Codex's recorded result
+AssertionError: the job's record: expected { state: 'stopped', …(8) } to deeply equal { state: 'finished', …(8) }
+
+- Expected
++ Received
+
+  {
+    "blocked": undefined,
+-   "cause": undefined,
++   "cause": "agent_crashed",
+    "cost_usd": undefined,
+    "model": "unknown",
+    "refused": undefined,
+-   "result": "A test agent on Codex's parts answered.",
+-   "session": "018f1892-0000-7000-8000-00000000c0de",
+-   "state": "finished",
+-   "usage": {
+-     "cached": 100,
+-     "input": 20,
+-     "output": 9,
+-   },
++   "result": undefined,
++   "session": undefined,
++   "state": "stopped",
++   "usage": undefined,
+  }
+
+ ❯ tests/acceptance/1892/test-agent.test.ts:46:43
+     44|     usage: { input: 20, cached: 100, output: 9 }, cost_usd: undefined,…
+     45|   };
+     46|   expect(shown(rec), 'the job\'s record').toEqual({ ...expected, block…
+       |                                           ^
+     47|   expect(ended.map(shownEnded), 'its job.ended event').toEqual([expect…
+     48| }, 180_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  tests/acceptance/1892/test-agent.test.ts > #1892.3bee48f8 AC2: a test agent registered with pi's parts under its own name runs a job to pi's recorded result
+AssertionError: the job's record: expected { state: 'stopped', …(8) } to deeply equal { state: 'finished', …(8) }
+
+- Expected
++ Received
+
+  {
+    "blocked": undefined,
+-   "cause": undefined,
+-   "cost_usd": 0.25,
+-   "model": "pi-model-1892",
++   "cause": "agent_crashed",
++   "cost_usd": undefined,
++   "model": "unknown",
+    "refused": undefined,
+-   "result": "A test agent on pi's parts answered.",
+-   "session": "pi-session-1892",
+-   "state": "finished",
+-   "usage": {
+-     "cached": 50,
+-     "input": 10,
+-     "output": 8,
+-   },
++   "result": undefined,
++   "session": undefined,
++   "state": "stopped",
++   "usage": undefined,
+  }
+
+ ❯ tests/acceptance/1892/test-agent.test.ts:59:43
+     57|     usage: { input: 10, cached: 50, output: 8 }, cost_usd: 0.25, cause…
+     58|   };
+     59|   expect(shown(rec), 'the job\'s record').toEqual({ ...expected, block…
+       |                                           ^
+     60|   expect(ended.map(shownEnded), 'its job.ended event').toEqual([expect…
+     61| }, 180_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  tests/acceptance/1892/test-agent.test.ts > #1892.3bee48f8 AC2: a test agent with parts and a stream parser of its own runs a job to a recorded result
+AssertionError: the job's record: expected { state: 'stopped', …(8) } to deeply equal { state: 'finished', …(8) }
+
+- Expected
++ Received
+
+  {
+    "blocked": undefined,
+-   "cause": undefined,
++   "cause": "agent_crashed",
+    "cost_usd": undefined,
+    "model": "unknown",
+    "refused": undefined,
+-   "result": "An agent of the test's own answered.",
+-   "session": "own-session-1892",
+-   "state": "finished",
+-   "usage": {
+-     "cached": 30,
+-     "input": 10,
+-     "output": 7,
+-   },
++   "result": undefined,
++   "session": undefined,
++   "state": "stopped",
++   "usage": undefined,
+  }
+
+ ❯ tests/acceptance/1892/test-agent.test.ts:112:43
+    110|     usage: { input: 10, cached: 30, output: 7 }, cost_usd: undefined, …
+    111|   };
+    112|   expect(shown(rec), 'the job\'s record').toEqual({ ...expected, block…
+       |                                           ^
+    113|   expect(ended.map(shownEnded), 'its job.ended event').toEqual([expect…
+    114| }, 180_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  2 failed | 1 passed (3)
+      Tests  4 failed | 14 passed (18)
+   Start at  21:07:46
+   Duration  26.89s (tests 92%, transform 6%, import 2%)
+
