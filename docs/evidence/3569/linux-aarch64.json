@@ -4,12 +4,19 @@
     "arch": "arm64",
     "node": "v24.22.2"
   },
-  "linux": {
+  "linux_arm64": {
     "platform": "linux",
     "arch": "arm64",
     "kernel": "Linux 7.0.0-44-generic aarch64 GNU/Linux",
     "node": "v24.22.0",
     "env": { "TZ": "Pacific/Chatham", "LC_ALL": "C" }
+  },
+  "linux_x64": {
+    "platform": "linux",
+    "arch": "x64",
+    "emulated": true,
+    "node": "v24.22.0",
+    "env": { "TZ": "UTC", "LC_ALL": "C" }
   },
   "byte_identical": true,
   "hashes": {
