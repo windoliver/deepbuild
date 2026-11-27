@@ -1,13 +1,9 @@
-// #2198 AC5: a twin of each still passes. A taste ask with its deadline declared is raised; a stack with an environment
-// block comes up; a full SHA is taken. Each through a session's own `deep mcp` on a live hub, as AC1, AC3 and AC4 call.
 import { afterEach, describe, expect, it } from 'vitest';
 import { AC5, call, claimArgs, cleanup, events, tasteArgs, world, type Line } from './helpers.ts';
 
 afterEach(cleanup, 60_000);
 
 describe(`${AC5} A twin of each still passes`, () => {
-  // "A twin of each still passes: a taste ask with its deadline declared is raised, a stack with an environment block comes
-  // up, and a full SHA is taken."
   it(`${AC5} a taste ask with its deadline declared in done.yaml is raised: deep_ask returns its ask and the record holds ask.created for the session`, async () => {
     const w = await world('taste-deadline');
     const args = tasteArgs();
@@ -26,7 +22,6 @@ describe(`${AC5} A twin of each still passes`, () => {
       expect(up.isError, `deep_env up with an environment block is not an error: ${JSON.stringify(up.reply).slice(0, 1500)}`).toBe(false);
       expect((up.value as Line)?.status, `deep_env up reports the stack ready: ${JSON.stringify(up.value)}`).toBe('ready');
     } finally {
-      // The stack is the hub's to take down; asked here so nothing it started outlives the test.
       await call(w, 'deep_env', { action: 'down' }).catch(() => undefined);
     }
   }, 240_000);
