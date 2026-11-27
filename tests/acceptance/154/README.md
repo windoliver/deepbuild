@@ -132,7 +132,7 @@ event's ID in the issue's JSON. Codes `score.pad_too_low` and `score.note_too_lo
 ### Libraries, the fetch and the rule (#1820's surfaces)
 
 - A library is a pack folder: `pack.json` `{id: "test/<name>", name, version: "1.0.0", license: <SPDX>, description,
-  requires: {core: "^1", modules: {}}, assets: [{path, url, sha256, size, license: {id, terms, shareable, credit},
+  requires: {core: ">=0.0.0", modules: {}}, assets: [{path, url, sha256, size, license: {id, terms, shareable, credit},
   upstream: {url, version, modified}}], samples: {<preset> → {sustained?, zones: [{lo, hi, root, takes: [path]}]}}}`.
   Each take is a **48 kHz mono 16-bit PCM WAV** *(chosen)*, served over HTTPS on 127.0.0.1 (the shelf) under a test CA
   the hub trusts (`NODE_EXTRA_CA_CERTS`). A pack's `name` is never a module's or kind family's.

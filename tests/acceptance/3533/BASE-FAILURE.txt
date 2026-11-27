@@ -1,0 +1,120 @@
+# #3533 acceptance tests: the one run at the base
+
+## The base (d303e2b64, no implementation), in this worktree, run once
+
+$ node --test --test-concurrency=1 --test-reporter=spec 'tests/acceptance/3533/*.test.mjs'
+(2026-11-27T05:43:32Z to 2026-11-27T05:57:15Z; network on, gh not used by the tests; load averages 79.05 72.07 66.33 from
+other sessions; stack-trace lines dropped, home folders written ~ and temp folders <tmp>; every listed word the lane
+printed is written <withheld> by the suite's own filter; AC3's 252 hit lines cut after eight)
+
+Six tests: one passes, five fail, each for the reason its criterion names.
+
+- AC1 #3533.4fe1349f, "fails on a change that names no product": fails. The base lane reads no pack folder, so with the
+  base's list and packs and a clean change it passes (exit 0) and names none of the 4 folders (3 packs) that read as
+  listed. Its fixture check, that those folders are three packs, held.
+- AC1 #3533.4fe1349f, "before it reads the change": fails. With no origin/main the base lane ends INCONCLUSIVE
+  ("the change could not be worked out") and names no pack folder.
+- AC1 #3533.4fe1349f, "no folder packs/ ships reads as listed": fails. 4 of the 23 folders under packs/ read as listed
+  in the base's list.
+- AC1 #3533.4fe1349f, "the lane passes on main": passes at the base, as it should: the base lane checks no pack name, so
+  it passes on main with a clean change. It guards the decision against a fix that leaves main failing the lane.
+- AC2 #3533.d97bed63: fails. With the invented word's hash planted in the copy's list and packs/zorvanthique-1.0.0/ in
+  its main, the base lane passes, naming nothing.
+- AC3 #3533.cc941d25: fails. docs/spikes/3445/ from origin's spike/3445-sandbox-uncounted-costs (b37d52fa2, 42 files)
+  added as the change fails the base lane with 252 hits, all in the change, as the issue counts them.
+
+Before this run the helpers were checked once by hand against a planted right program in a scratch copy (a pack-folder
+check at the top of scripts/public-text.mjs, before the change is read, and the list with the packs' words dropped): AC1's
+two before-tests saw FAIL naming 4 of 4 folders, AC1's after-test and AC3 saw PASS (43 changed files). That copy was
+deleted; nothing of it is in this suite.
+
+✖ #3533.4fe1349f AC1: with the base's list and packs, the lane fails on a change that names no product, naming each pack folder that reads as listed (85630.548667ms)
+✖ #3533.4fe1349f AC1: with the base's list and packs, the lane fails naming each pack folder that reads as listed before it reads the change, even when the change can't be worked out (62141.318958ms)
+✖ #3533.4fe1349f AC1: after the decision, no folder packs/ ships reads as listed in scripts/studied-names.json (2.354042ms)
+✔ #3533.4fe1349f AC1: after the decision, the lane passes on main with a change that names no product (78803.264959ms)
+✖ #3533.d97bed63 AC2: a pack folder planted in main, named after a word the list holds, fails the lane, naming the folder (78530.468459ms)
+✖ #3533.cc941d25 AC3: the lane passes on a change that adds #3445's docs/spikes/3445/ to main (517669.239542ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 1
+ℹ fail 5
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 823299.459833
+
+✖ failing tests:
+
+test at tests/acceptance/3533/ac1-shipped-packs.test.mjs:32:1
+✖ #3533.4fe1349f AC1: with the base's list and packs, the lane fails on a change that names no product, naming each pack folder that reads as listed (85630.548667ms)
+  AssertionError [ERR_ASSERTION]: the lane doesn't fail (exit 0, PASS):
+  public text: 189 dependency and adapter names read as not listed
+  public text: 1 changed files, 1 commit messages and 3 open issues name no studied product
+  
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3533/ac1-shipped-packs.test.mjs:43:1
+✖ #3533.4fe1349f AC1: with the base's list and packs, the lane fails naming each pack folder that reads as listed before it reads the change, even when the change can't be worked out (62141.318958ms)
+  AssertionError [ERR_ASSERTION]: the lane doesn't fail on the pack folders when the change can't be read (exit 1, INCONCLUSIVE):
+  INCONCLUSIVE the change could not be worked out: no merge base with origin/main
+  
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3533/ac1-shipped-packs.test.mjs:52:1
+✖ #3533.4fe1349f AC1: after the decision, no folder packs/ ships reads as listed in scripts/studied-names.json (2.354042ms)
+  AssertionError [ERR_ASSERTION]: 4 of the 23 pack folders still read as listed: packs/<withheld>, packs/<withheld>, packs/<withheld>, packs/<withheld>
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3533/ac2-planted-pack.test.mjs:14:1
+✖ #3533.d97bed63 AC2: a pack folder planted in main, named after a word the list holds, fails the lane, naming the folder (78530.468459ms)
+  AssertionError [ERR_ASSERTION]: the lane doesn't fail on the planted pack folder packs/zorvanthique-1.0.0 (exit 0, PASS):
+  public text: 189 dependency and adapter names read as not listed
+  public text: 1 changed files, 1 commit messages and 3 open issues name no studied product
+  
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3533/ac3-spike-3445.test.mjs:14:1
+✖ #3533.cc941d25 AC3: the lane passes on a change that adds #3445's docs/spikes/3445/ to main (517669.239542ms)
+  AssertionError [ERR_ASSERTION]: the lane doesn't pass on docs/spikes/3445/ from spike/3445-sandbox-uncounted-costs (exit 1, FAIL):
+  FAIL 252 studied names in public text (252 in the change, 0 in open issues)
+    docs/spikes/3445/README.md:111 "<withheld>"
+    docs/spikes/3445/README.md:132 "<withheld>"
+    docs/spikes/3445/README.md:133 "<withheld>"
+    docs/spikes/3445/README.md:177 "<withheld>"
+    docs/spikes/3445/README.md:211 "<withheld>"
+    docs/spikes/3445/README.md:216 "<withheld>"
+    docs/spikes/3445/README.md:222 "<withheld>"
+    docs/spikes/3445/README.md:225 "<withheld>"
+    … 244 more lines of the same shape, each one withheld word in docs/spikes/3445/, cut here
+  
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
