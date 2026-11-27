@@ -1,0 +1,185 @@
+{
+  "name": "supply",
+  "item": {
+    "kind": "logic@1",
+    "params": {
+      "program": "288644b219467c68a20d2beccc6317894206032ad0a5fef6b145bb0c37bbbf43",
+      "step_rate": 1000,
+      "reads": [
+        "volts",
+        "hertz",
+        "rated"
+      ],
+      "writes": {
+        "v": {
+          "type": "f64",
+          "count": 2
+        },
+        "i_rms": {
+          "type": "f64",
+          "count": 2
+        },
+        "i": {
+          "type": "f64",
+          "count": 2
+        },
+        "p": {
+          "type": "f64",
+          "count": 2
+        },
+        "r": {
+          "type": "f64",
+          "count": 2
+        },
+        "on": {
+          "type": "i32",
+          "count": 2
+        },
+        "energy": {
+          "type": "f64",
+          "count": 2
+        },
+        "kwh": {
+          "type": "f64",
+          "count": 2
+        },
+        "drift": {
+          "type": "f64",
+          "count": 2
+        },
+        "drift_x": {
+          "type": "f64",
+          "count": 2
+        },
+        "heat": {
+          "type": "f64",
+          "count": 2
+        },
+        "residual": {
+          "type": "f64",
+          "count": 2
+        },
+        "i2_rms": {
+          "type": "f64",
+          "count": 2
+        },
+        "i2": {
+          "type": "f64",
+          "count": 2
+        }
+      },
+      "circuit": {
+        "nodes": [
+          "neutral",
+          "live"
+        ],
+        "parts": [
+          {
+            "id": "mains",
+            "kind": "source_ac",
+            "from": "neutral",
+            "to": "live",
+            "v_rms": {
+              "set_by": "volts",
+              "range": [
+                0,
+                250
+              ]
+            },
+            "f": {
+              "set_by": "hertz",
+              "range": [
+                40,
+                70
+              ]
+            }
+          },
+          {
+            "id": "lamp",
+            "kind": "load",
+            "from": "live",
+            "to": "neutral",
+            "p_rated": 60,
+            "v_rated": {
+              "set_by": "rated",
+              "range": [
+                100,
+                250
+              ]
+            }
+          }
+        ]
+      },
+      "budget": {
+        "fuel": 10000000
+      }
+    }
+  },
+  "controls": {
+    "volts": {
+      "kind": "slider"
+    },
+    "hertz": {
+      "kind": "slider"
+    },
+    "rated": {
+      "kind": "slider"
+    }
+  },
+  "track": [
+    {
+      "t": 0,
+      "seq": 1,
+      "control": "volts",
+      "value": 120,
+      "writer": "you",
+      "player": 1
+    },
+    {
+      "t": 0,
+      "seq": 2,
+      "control": "hertz",
+      "value": 60,
+      "writer": "you",
+      "player": 1
+    },
+    {
+      "t": 0,
+      "seq": 3,
+      "control": "rated",
+      "value": 120,
+      "writer": "you",
+      "player": 1
+    }
+  ],
+  "steps": 6,
+  "expect": {
+    "arrays": {
+      "0": {
+        "i_rms": [
+          0.5,
+          0.5
+        ],
+        "p": [
+          60,
+          60
+        ],
+        "r": [
+          0,
+          240
+        ]
+      },
+      "5": {
+        "i": [
+          0.6724985119639574,
+          0.6724985119639574
+        ]
+      }
+    },
+    "tolerance": {
+      "abs": 1e-12,
+      "rel": 1e-9
+    }
+  },
+  "answer": "The lamp is 120² ÷ 60 = 240 Ω on 120 V: 0.5 A rms and 60 W. At step 5, t = 5 ms, the wave is at 60 × 0.005 = 0.3 turns: 0.5 × √2 × sin(0.6π) = 0.67250 A."
+}

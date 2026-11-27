@@ -1,0 +1,1 @@
+{ "alone": true, "why": "binary: both files build deep-gpu with cargo and draw on the Metal GPU through deep-gpu run, so they share the target folder and the GPU with any other GPU suite" }

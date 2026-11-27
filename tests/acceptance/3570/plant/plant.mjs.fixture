@@ -1,0 +1,16 @@
+// A planted reader's entry (issue #3570 acceptance; README: The planted readers). The hub runs it as it runs the table
+// tool: from the tool's own folder, a copy of the table tool's, with whatever stdin, stdout and stderr the host gives
+// it. It runs the table tool's own entry, which lies beside it, with the same three streams handed through and
+// DEEP_3570_PLANT set to the plant its plan names, and exits as that entry exits. Under the plan `as_is` it sets
+// nothing, so it is the right reader. What each plant reads wrong is the table tool's to do when it sees its name.
+import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const plan = JSON.parse(readFileSync(join(here, 'deep-3570-plan.json'), 'utf8'));
+const env = { ...process.env };
+if (plan.plant) env.DEEP_3570_PLANT = plan.plant;
+const ran = spawnSync(process.execPath, [join(here, plan.entry), ...process.argv.slice(2)], { cwd: process.cwd(), env, stdio: 'inherit' });
+process.exitCode = ran.error ? 1 : ran.status ?? 1;

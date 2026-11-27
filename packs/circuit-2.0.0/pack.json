@@ -1,0 +1,533 @@
+{
+  "name": "circuit",
+  "version": "2.0.0",
+  "license": "Apache-2.0",
+  "description": "circuit@2 (#3604): circuit@1's nodes and parts plus a breaker that trips on its thermal and magnetic elements, an RCD that opens on the current that doesn't come back, a changeover, and an ideal transformer; inputs the item's own arrays drive; and number fields a control or one of the item's arrays sets within a range. Its fixtures' expected values are worked by hand from Ohm's law and the closed forms. Its planted libraries each fail a fixture, and are its kind kit's twins for circuit.kcl, circuit.power, circuit.fuse, circuit.breaker, circuit.rcd and circuit.range. Written by scripts/circuit2-pack.mjs; the library is src/circuit.rs, its layouts are LAYOUT.md, and each program's text is in src/.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "logic": ">=0.0.0",
+      "sandbox": ">=0.0.0"
+    }
+  },
+  "interfaces": {
+    "circuit@2": {
+      "exports": [
+        {
+          "name": "node",
+          "params": [
+            "i32",
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "source_dc",
+          "params": [
+            "i32",
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "source_ac",
+          "params": [
+            "i32",
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "resistor",
+          "params": [
+            "i32",
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "load",
+          "params": [
+            "i32",
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "switch",
+          "params": [
+            "i32",
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "connector",
+          "params": [
+            "i32",
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "fuse",
+          "params": [
+            "i32",
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "meter",
+          "params": [
+            "i32",
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "wire",
+          "params": [
+            "i32",
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "fault",
+          "params": [
+            "i32",
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "breaker",
+          "params": [
+            "i32",
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "rcd",
+          "params": [
+            "i32",
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "changeover",
+          "params": [
+            "i32",
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "transformer",
+          "params": [
+            "i32",
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "solve",
+          "params": [
+            "i32",
+            "i32",
+            "i64",
+            "i64"
+          ],
+          "results": [
+            "i32"
+          ]
+        }
+      ],
+      "layout": "circuit.state@2",
+      "fixtures": [
+        "feb6dc42c16c6b59136f49ff97e094e10819378efef0e7cfa0738346c785dfa0",
+        "e9db5b52b9b640ca049c48a4ea7191a8cb66b87c4fc769d40935ceef95618354",
+        "a62ced7f98d87379cf8719ed6221db2b2002989d65f3f0aefbac86c4d433e84e",
+        "56b390229f5c46f4671b0e8c6432b1546db5ea068dbb5271b432d95f8e10e09d",
+        "b9d786aa065b8334f5a19ffb9703a134a3b9bbbc1a9399411d3cd2bcb50eb80b",
+        "401b2f82aa17519313565e542b1ae63eaa3519dacf371a6b9d0fc3d953dde194",
+        "2f21788d88911cd83b2c1c4330bf9b28896abb1e42a7c003d938a623a959f55e",
+        "4a01ff0dcc6526e2aa2a14908e2cc0f61d665f29bb98c56055e81556cfcd159d",
+        "20ea07b9d42f579db547f1ec89ebdfc6322661bf93600256f53e0f56bb39b200",
+        "2e7680ef8d3f0284b61e5e359f76dd882b32a2f880e78e904ae5ba864a85ef0c"
+      ],
+      "planted": [
+        "1343a6f1453d96fc31639a4dd1031cae6b293634987d1cc410c2d13b9c19341f",
+        "4e38b92220637f4b04256598251c763b40ee70145889e441efe6c56af9cce954",
+        "9c157ef54199ceb90e5f636e2ef4cb2bf909fc53c07353418d3a19dbf4157713",
+        "de5eaae930ccfa2c03bd47b19096ba97827c2be4b471bba5b56f4b60937ced7a",
+        "69417e1800f7026c602e88d292b2d0ae8ef3166efaf7fe02d440fed3603052c6",
+        "e90b3e4b12b95947ce4283de94fd57c242a466262b92247245c09775203559a4",
+        "3db668f0ccd60a1194db861ecaf7841c1cd6d53a027340fa2ee1e4e0eb668762"
+      ],
+      "digest": "221e39f1b45f6cdff902a08169513191b14a0d30b13f8fe0a4964aa30a654c49",
+      "rules": {
+        "circuit.kcl": {
+          "tolerance": 1e-9
+        },
+        "circuit.power": {
+          "tolerance": 0.000001
+        },
+        "circuit.fuse": {},
+        "circuit.breaker": {},
+        "circuit.rcd": {},
+        "circuit.range": {}
+      },
+      "twins": [
+        {
+          "planted": "de5eaae930ccfa2c03bd47b19096ba97827c2be4b471bba5b56f4b60937ced7a",
+          "example": "b9d786aa065b8334f5a19ffb9703a134a3b9bbbc1a9399411d3cd2bcb50eb80b",
+          "expect": "circuit.kcl"
+        },
+        {
+          "planted": "69417e1800f7026c602e88d292b2d0ae8ef3166efaf7fe02d440fed3603052c6",
+          "example": "401b2f82aa17519313565e542b1ae63eaa3519dacf371a6b9d0fc3d953dde194",
+          "expect": "circuit.power"
+        },
+        {
+          "planted": "3db668f0ccd60a1194db861ecaf7841c1cd6d53a027340fa2ee1e4e0eb668762",
+          "example": "2e7680ef8d3f0284b61e5e359f76dd882b32a2f880e78e904ae5ba864a85ef0c",
+          "expect": "circuit.fuse"
+        },
+        {
+          "planted": "1343a6f1453d96fc31639a4dd1031cae6b293634987d1cc410c2d13b9c19341f",
+          "example": "e9db5b52b9b640ca049c48a4ea7191a8cb66b87c4fc769d40935ceef95618354",
+          "expect": "circuit.breaker"
+        },
+        {
+          "planted": "9c157ef54199ceb90e5f636e2ef4cb2bf909fc53c07353418d3a19dbf4157713",
+          "example": "a62ced7f98d87379cf8719ed6221db2b2002989d65f3f0aefbac86c4d433e84e",
+          "expect": "circuit.rcd"
+        },
+        {
+          "planted": "e90b3e4b12b95947ce4283de94fd57c242a466262b92247245c09775203559a4",
+          "example": "2f21788d88911cd83b2c1c4330bf9b28896abb1e42a7c003d938a623a959f55e",
+          "expect": "circuit.range"
+        }
+      ],
+      "plants": {
+        "no_magnetic": "1343a6f1453d96fc31639a4dd1031cae6b293634987d1cc410c2d13b9c19341f",
+        "cold_reset": "4e38b92220637f4b04256598251c763b40ee70145889e441efe6c56af9cce954",
+        "one_pole": "9c157ef54199ceb90e5f636e2ef4cb2bf909fc53c07353418d3a19dbf4157713",
+        "both_ways": "de5eaae930ccfa2c03bd47b19096ba97827c2be4b471bba5b56f4b60937ced7a",
+        "primary_current": "69417e1800f7026c602e88d292b2d0ae8ef3166efaf7fe02d440fed3603052c6",
+        "late_set": "e90b3e4b12b95947ce4283de94fd57c242a466262b92247245c09775203559a4",
+        "late_fuse": "3db668f0ccd60a1194db861ecaf7841c1cd6d53a027340fa2ee1e4e0eb668762"
+      },
+      "constants": {
+        "carriers": {
+          "copper": {
+            "value": 8.5e+28,
+            "unit": "m^-3",
+            "source": "one conduction electron an atom: 8.96 g/cm^3 / 63.546 g/mol x N_A = 8.49e28 m^-3"
+          },
+          "aluminium": {
+            "value": 1.8e+29,
+            "unit": "m^-3",
+            "source": "three conduction electrons an atom: 2.70 g/cm^3 / 26.98 g/mol x N_A x 3 = 1.81e29 m^-3"
+          }
+        },
+        "curves": {
+          "fast": {
+            "tau": 1,
+            "unit": "s",
+            "source": "circuit@1's quick-acting fuse: tau ln(I^2 / (I^2 - In^2)) inside the quick-acting band of IEC 60127-2"
+          },
+          "slow": {
+            "tau": 10,
+            "unit": "s",
+            "source": "circuit@1's time-lag fuse: the same heat balance with tau 10 s, inside the time-lag band of IEC 60127-2"
+          }
+        },
+        "charge": {
+          "value": 1.602176634e-19,
+          "unit": "C",
+          "source": "the elementary charge, exact in the SI since 2019"
+        },
+        "breaker": {
+          "tau": {
+            "value": 60,
+            "unit": "s",
+            "source": "the thermal element's time constant: with the opening heat 1.69 it holds 1.13 x In for good (heat 1.2769) and opens after 97.72 s at 1.45 x In and 18.06 s at 2.55 x In, inside the standard for household breakers (IEC 60898-1): hold 1.13 x In for an hour, open at 1.45 x In within an hour and at 2.55 x In between 1 s and 60 s"
+          },
+          "heat_open": {
+            "value": 1.69,
+            "source": "the thermal element opens at the start of the first step its heat has reached 1.3^2, the current 1.3 x In would hold it at: between the 1.13 x In it must hold and the 1.45 x In it must open at"
+          },
+          "curves": {
+            "B": {
+              "multiple": 4,
+              "band": [
+                3,
+                5
+              ],
+              "source": "the magnetic element opens at 4 x In, inside the standard for household breakers (IEC 60898-1)'s instantaneous band for type B, 3 to 5 x In"
+            },
+            "C": {
+              "multiple": 7.5,
+              "band": [
+                5,
+                10
+              ],
+              "source": "7.5 x In, inside the standard for household breakers (IEC 60898-1)'s band for type C, 5 to 10 x In"
+            },
+            "D": {
+              "multiple": 15,
+              "band": [
+                10,
+                20
+              ],
+              "source": "15 x In, inside the standard for household breakers (IEC 60898-1)'s band for type D, 10 to 20 x In"
+            }
+          }
+        },
+        "rcd": {
+          "time": {
+            "value": 0.2,
+            "unit": "s",
+            "source": "an RCD opens 0.2 s x rating / residual after its residual reached its rating: 0.2 s at its rating, 0.1 s at twice and 0.04 s at five times, inside the standard for household RCDs (IEC 61008-1), 0.3 s, 0.15 s and 0.04 s"
+          },
+          "floor": {
+            "value": 0.01,
+            "unit": "s",
+            "source": "that time is never under 0.01 s, a contact's opening"
+          }
+        }
+      }
+    }
+  },
+  "libs": {
+    "circuit_ref@2.0.0": {
+      "asset": "20ca7b6512186c85a8e47307f43e3a45ec9ecc99c7cae8418a545ae40d7bd151",
+      "exports": [
+        "node",
+        "source_dc",
+        "source_ac",
+        "resistor",
+        "load",
+        "switch",
+        "connector",
+        "fuse",
+        "meter",
+        "wire",
+        "fault",
+        "breaker",
+        "rcd",
+        "changeover",
+        "transformer",
+        "solve"
+      ],
+      "fixtures": [
+        "42920a663626e419b8ab2c86155605a8b061f7e4140df362a7dc05249488c25a"
+      ],
+      "implements": [
+        "circuit@2"
+      ]
+    }
+  },
+  "assets": [
+    {
+      "path": "objects/circuit_ref.wasm",
+      "sha256": "20ca7b6512186c85a8e47307f43e3a45ec9ecc99c7cae8418a545ae40d7bd151",
+      "size": 16669
+    },
+    {
+      "path": "objects/no_magnetic.wasm",
+      "sha256": "1343a6f1453d96fc31639a4dd1031cae6b293634987d1cc410c2d13b9c19341f",
+      "size": 16665
+    },
+    {
+      "path": "objects/cold_reset.wasm",
+      "sha256": "4e38b92220637f4b04256598251c763b40ee70145889e441efe6c56af9cce954",
+      "size": 16694
+    },
+    {
+      "path": "objects/one_pole.wasm",
+      "sha256": "9c157ef54199ceb90e5f636e2ef4cb2bf909fc53c07353418d3a19dbf4157713",
+      "size": 16646
+    },
+    {
+      "path": "objects/both_ways.wasm",
+      "sha256": "de5eaae930ccfa2c03bd47b19096ba97827c2be4b471bba5b56f4b60937ced7a",
+      "size": 16718
+    },
+    {
+      "path": "objects/primary_current.wasm",
+      "sha256": "69417e1800f7026c602e88d292b2d0ae8ef3166efaf7fe02d440fed3603052c6",
+      "size": 16677
+    },
+    {
+      "path": "objects/late_set.wasm",
+      "sha256": "e90b3e4b12b95947ce4283de94fd57c242a466262b92247245c09775203559a4",
+      "size": 16685
+    },
+    {
+      "path": "objects/late_fuse.wasm",
+      "sha256": "3db668f0ccd60a1194db861ecaf7841c1cd6d53a027340fa2ee1e4e0eb668762",
+      "size": 16685
+    },
+    {
+      "path": "objects/overload.wasm",
+      "sha256": "2957353ab40027c310ef2028012efedd3a51f3dde9e0cf9b0c33426a75c53e64",
+      "size": 557
+    },
+    {
+      "path": "fixtures/overload.json",
+      "sha256": "feb6dc42c16c6b59136f49ff97e094e10819378efef0e7cfa0738346c785dfa0",
+      "size": 5546
+    },
+    {
+      "path": "objects/short.wasm",
+      "sha256": "6b66e7e938509d6c3e58e14a481dc8cdd44e5649dedf2b491020db30a5bdb36d",
+      "size": 561
+    },
+    {
+      "path": "fixtures/short.json",
+      "sha256": "e9db5b52b9b640ca049c48a4ea7191a8cb66b87c4fc769d40935ceef95618354",
+      "size": 4059
+    },
+    {
+      "path": "objects/leak.wasm",
+      "sha256": "9358ed55552ca183014a76a0a2ffbe5c3ceb8e2b0461ee65848653b9643c5fff",
+      "size": 651
+    },
+    {
+      "path": "fixtures/leak.json",
+      "sha256": "a62ced7f98d87379cf8719ed6221db2b2002989d65f3f0aefbac86c4d433e84e",
+      "size": 5194
+    },
+    {
+      "path": "objects/test_button.wasm",
+      "sha256": "ff0c077ab734e636c01d299880721f41eabecfc069af455fd3aa57e7256bdc87",
+      "size": 532
+    },
+    {
+      "path": "fixtures/test_button.json",
+      "sha256": "56b390229f5c46f4671b0e8c6432b1546db5ea068dbb5271b432d95f8e10e09d",
+      "size": 4204
+    },
+    {
+      "path": "objects/stair.wasm",
+      "sha256": "4763ab79096e774db72f7fdd194d36e42acf30cbc7279e61865cfa0297724424",
+      "size": 699
+    },
+    {
+      "path": "fixtures/stair.json",
+      "sha256": "b9d786aa065b8334f5a19ffb9703a134a3b9bbbc1a9399411d3cd2bcb50eb80b",
+      "size": 6170
+    },
+    {
+      "path": "objects/doorbell.wasm",
+      "sha256": "229420585482ea25ae9697957f05b8e031d0d52cea5264b525203a98483afba4",
+      "size": 540
+    },
+    {
+      "path": "fixtures/doorbell.json",
+      "sha256": "401b2f82aa17519313565e542b1ae63eaa3519dacf371a6b9d0fc3d953dde194",
+      "size": 3640
+    },
+    {
+      "path": "objects/dimmer.wasm",
+      "sha256": "c3f0ddcc7bbbf0c8e2b5f4230ab71e7962ff3843df0597605afac3927ea7fb8d",
+      "size": 514
+    },
+    {
+      "path": "fixtures/dimmer.json",
+      "sha256": "2f21788d88911cd83b2c1c4330bf9b28896abb1e42a7c003d938a623a959f55e",
+      "size": 4002
+    },
+    {
+      "path": "objects/timer.wasm",
+      "sha256": "a0aa6f571d1e53c7caf925e99f1bffc02ac1e6d79fdcfe935acf5b856d7e6340",
+      "size": 530
+    },
+    {
+      "path": "fixtures/timer.json",
+      "sha256": "4a01ff0dcc6526e2aa2a14908e2cc0f61d665f29bb98c56055e81556cfcd159d",
+      "size": 3795
+    },
+    {
+      "path": "objects/supply.wasm",
+      "sha256": "288644b219467c68a20d2beccc6317894206032ad0a5fef6b145bb0c37bbbf43",
+      "size": 442
+    },
+    {
+      "path": "fixtures/supply.json",
+      "sha256": "20ea07b9d42f579db547f1ec89ebdfc6322661bf93600256f53e0f56bb39b200",
+      "size": 3423
+    },
+    {
+      "path": "objects/fuse.wasm",
+      "sha256": "ef5a2e68704fe8674260251048c00cb99ef5eec1a7f7590c085994c4397db66e",
+      "size": 631
+    },
+    {
+      "path": "fixtures/fuse.json",
+      "sha256": "2e7680ef8d3f0284b61e5e359f76dd882b32a2f880e78e904ae5ba864a85ef0c",
+      "size": 3636
+    },
+    {
+      "path": "objects/lamp_own.wasm",
+      "sha256": "f40dc0e28e09906de47058337ed83571234cfba9f3aa8363e23f41fe73487a37",
+      "size": 523
+    },
+    {
+      "path": "fixtures/lamp_own.json",
+      "sha256": "42920a663626e419b8ab2c86155605a8b061f7e4140df362a7dc05249488c25a",
+      "size": 2702
+    }
+  ]
+}
