@@ -45,7 +45,7 @@ pub(super) fn admitted(
     entry: &str,
     value: &Value,
     since: String,
-    kit: KitResult,
+    (kit, twin): (KitResult, Option<KitResult>),
 ) -> Result<SealedEntry, CanonError> {
     Ok(SealedEntry {
         name: entry.to_string(),
@@ -56,7 +56,7 @@ pub(super) fn admitted(
         value: value.clone(),
         digest: admitted_digest(&reg.def.name, entry, value, &since)?,
         since,
-        twin: reg.def.twin.map(|t| t(entry, value)),
+        twin,
         kit,
     })
 }

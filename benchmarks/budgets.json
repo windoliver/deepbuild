@@ -2506,6 +2506,21 @@
         "#3617.ff2c540d",
         "#3617.e5d2f1f1"
       ]
+    },
+    {
+      "id": "canvas-pack-checks",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "pack-checks"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "first_reply_ms": 500
+      },
+      "initialReason": "Issue #3611 first measurement (#3611.3b726ffd): the merge base keeps no pack check's result, so every fresh canvas core checks every pack before its first reply (#3531 read 3,592 to 3,671 ms on the Mac17,10 with the 21 packs of the release). A run is one fresh `deep-show canvas` of a release build, given the world a hub gives it: each folder of packs/ that holds a pack.json, an evidence folder, and `pack_checks`, the folder of kept check results and a key made for this command. It is asked deep_kinds' listing and then `packs`; first_reply_ms runs from just before the process starts to the listing's answer, under 500 ms (drafted). One core that isn't timed fills the store, then one warm-up and five runs; a timed core whose `packs` reply counts any kit, field check, rewrite, run or compile, or any check run, is no reading of a filled store and fails the command. p50 and peak memory get a 50% margin against the merge base once main has this task.",
+      "criteria": ["#3611.3b726ffd"]
     }
   ]
 }
