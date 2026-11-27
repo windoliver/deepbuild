@@ -168,7 +168,7 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
   if (existsSync(kept)) {
     const at = statSync(kept);
     const bytes = await sizeOf(kept);
-    add('record.kept', 'deepbuild', 'healthy', 'ok', `${kept} holds the record a restore replaced on ${new Date(at.birthtimeMs || at.mtimeMs).toISOString().slice(0, 10)}, ${(bytes / 2 ** 20).toFixed(1)} MB`, `deep restore ${kept} puts it back; remove the folder once you no longer need it.`);
+    add('record.kept', 'deepbuild', 'healthy', 'ok', `${kept} holds the record a restore replaced on ${new Date(at.birthtimeMs || at.mtimeMs).toISOString().slice(0, 10)}, ${(bytes / 1e6).toFixed(1)} MB`, `deep restore ${kept} puts it back; remove the folder once you no longer need it.`);
   }
 
   items.push(serviceItem(root));

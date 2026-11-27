@@ -50,19 +50,22 @@ const utc = (ms: number): string => `${new Date(ms).toISOString().slice(0, 16).r
 const events = (n: number): string => `${n} event${n === 1 ? '' : 's'}`;
 
 /** What the restore would take away from the record there, as the sentence you confirm says it (#3459). */
-function lossSaid(loss: RestoreLoss): string {
-  if (loss.kind === 'none') return ', where there is no record yet';
+function lossSaid(loss: RestoreLoss, keeps: boolean): string {
+  if (loss.kind === 'none') return keeps ? ', whose record holds no events yet' : ', where there is no record yet';
   if (loss.kind === 'other') return `: the backup was not taken from this record, which holds ${events(loss.events)}`;
   if (!loss.events) return ', which holds no event past the backup\'s last';
   return `, which holds ${events(loss.events)} past the backup's last, the newest at ${utc(loss.newest ?? 0)}`;
 }
 
-/** Where the replaced record goes, and the folder kept from an earlier restore that it replaces, by the day it was made. */
-function keptSaid(root: Root): string {
+/**
+ * Where the replaced record goes, and the folder kept from an earlier restore that it replaces, by the day it was made:
+ * deleted, or, where that folder is the one restored, put back in its place.
+ */
+function keptSaid(root: Root, folder: string): string {
   if (!existsSync(root.kept)) return `; the replaced record is kept in ${root.kept}`;
   const at = statSync(root.kept);
   const day = new Date(at.birthtimeMs || at.mtimeMs).toISOString().slice(0, 10);
-  return `; the replaced record is kept in ${root.kept}, in place of the one kept there on ${day}, which is deleted`;
+  return `; the replaced record is kept in ${root.kept}, in place of the one kept there on ${day}, which ${folder === root.kept ? 'this restore puts back' : 'is deleted'}`;
 }
 
 /** `deep restore <folder>`: with the hub stopped and the OS confirming you, the backup in place of the record. */
@@ -111,7 +114,7 @@ export async function restoreCommand(args: readonly string[]): Promise<number> {
     const confirmer = new Confirmer({ devices: new Devices(root.devices), key: root.confirmKey, ...(process.env.DEEP_HUB_TEST_CONFIRM ? { stub: process.env.DEEP_HUB_TEST_CONFIRM } : {}), ...(process.env.DEEP_HUB_TEST_POLKIT ? { polkit: process.env.DEEP_HUB_TEST_POLKIT } : {}) });
     const self = { pid: process.pid, start: (await startOf(process.pid)) ?? '' };
     const sentence = cut === undefined
-      ? `restore DeepBuild's record from ${folder}, replacing the one in ${root.dir}${lossSaid(restoreLoss(from, root.ledger))}${keeps ? keptSaid(root) : ''}`
+      ? `restore DeepBuild's record from ${folder}, replacing the one in ${root.dir}${lossSaid(restoreLoss(from, root.ledger), keeps)}${keeps ? keptSaid(root, folder) : ''}`
       : `finish restoring DeepBuild's record from ${folder} into ${root.dir}, a restore cut off midway${keeps ? `; the record it replaced is kept in ${root.kept}` : ''}`;
     const why = await withPrompt(() => confirmer.you(sentence, { handle: `restore:${folder}`, revision: root.dir, process: self }));
     if (why) {
@@ -153,9 +156,10 @@ export async function restoreCommand(args: readonly string[]): Promise<number> {
     durable.point('restore_aside');
     prepared.put();
     for (const name of FOLDERS) {
-      if (!existsSync(staged(name))) continue;
+      // On a rerun, a folder with nothing staged was already put in place.
+      if (!existsSync(staged(name)) && cut !== undefined) continue;
       rmSync(join(root.dir, name), { recursive: true, force: true });
-      renameSync(staged(name), join(root.dir, name));
+      if (existsSync(staged(name))) renameSync(staged(name), join(root.dir, name));
     }
     if (existsSync(written.staged)) renameSync(written.staged, written.to);
     else if (!keeps) rmSync(written.to, { force: true });

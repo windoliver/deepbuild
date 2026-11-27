@@ -3,7 +3,7 @@
     {
       "find": [
         "    const sentence = cut === undefined",
-        "      ? `restore DeepBuild's record from ${folder}, replacing the one in ${root.dir}${lossSaid(restoreLoss(from, root.ledger))}${keeps ? keptSaid(root) : ''}`"
+        "      ? `restore DeepBuild's record from ${folder}, replacing the one in ${root.dir}${lossSaid(restoreLoss(from, root.ledger), keeps)}${keeps ? keptSaid(root, folder) : ''}`"
       ],
       "wrong": [
         "    // Planted: the merge base's sentence, naming only the two folders.",
