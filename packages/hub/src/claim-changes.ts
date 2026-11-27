@@ -5,18 +5,12 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { runnerConfig } from '@deepbuild/gate';
 
-/**
- * What a claim's worktree changed against its merge base when its snapshot was taken, and the test runners' configs it held, each with its text (#33);
- * and, where a read of them failed or ran past its deadline, which one and why (#1869): then nothing is known of what it changed.
- */
+/** What a claim's worktree changed against its merge base when its snapshot was taken, and the test runners' configs it held, each with its text (#33). */
 export interface Changes { changed: string[]; configs: Map<string, string>; scripts: boolean; unread?: string }
-/** Read as the snapshot's git reads are bounded (#1869): fsmonitor off, up to 1 GB of output (its untracked listing's), and all of them ended within `ms`, by SIGKILL. */
 export async function changesOf(cwd: string, base: string, ms: number): Promise<Changes> {
   const deadline = Date.now() + ms;
-  // In C's locale: a missing base file is known by git's English words.
   const env = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_'))), LC_ALL: 'C' };
   const unread: string[] = [];
-  // A read that fails is recorded unless `missing` allows it (a file the base never had); either way it gives nothing.
   const git = (args: string[], missing = false): Promise<Buffer> => new Promise((done) => {
     const left = Math.max(1, Math.ceil(deadline - Date.now()));
     execFile('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', ...args], { cwd, env, encoding: 'buffer', maxBuffer: 1 << 30, timeout: left, killSignal: 'SIGKILL' }, (error, out, err) => {
@@ -28,7 +22,6 @@ export async function changesOf(cwd: string, base: string, ms: number): Promise<
     });
   });
   // Paths as git stores them (#3114): with -z, never quoted and escaped by core.quotePath, so they match a run's reads.
-  // Kept as bytes and cut at each NUL (#1869): up to 1 GB is more than one string holds.
   const paths = async (args: string[]): Promise<string[]> => {
     const out = await git(args);
     const listed: string[] = [];

@@ -1,6 +1,3 @@
-// The read of what a claim changed (#1869): it takes as much output as the snapshot's own git reads allow, it ends by
-// its deadline even when git leaves a process holding its output open, a hung `git show` of the base's package.json
-// never reads as no change, and a base with no package.json is no failed read.
 import { execFileSync } from 'node:child_process';
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -10,30 +7,22 @@ import type { RecordedRun } from '@deepbuild/gate';
 import type { Connection } from '@deepbuild/record';
 import { GateRunner, type GateOptions } from '../src/gate-runner.js';
 
-/** The digest of no bytes. */
 const EMPTY = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
 const dirs: string[] = [];
 const pids: string[] = [];
 const path = process.env.PATH;
 afterEach(() => {
   process.env.PATH = path;
-  // The stub's sleeps end by their PIDs: each is one this file's stub started.
-  for (const file of pids.splice(0)) for (const pid of readFileSync(file, 'utf8').split('\n').filter(Boolean)) { try { process.kill(Number(pid), 'SIGKILL'); } catch { /* ended */ } }
+  for (const file of pids.splice(0)) for (const pid of readFileSync(file, 'utf8').split('\n').filter(Boolean)) { try { process.kill(Number(pid), 'SIGKILL'); } catch {} }
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 const temp = (): string => { const d = mkdtempSync(join(tmpdir(), 'changes-read-')); dirs.push(d); return d; };
-/** Whether this machine's git answers in German (a de_DE locale and git's German messages): without them git answers in English anyway. */
 const german = ((): boolean => {
   const env = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_'))), LC_ALL: 'de_DE.UTF-8', LANGUAGE: 'de', GIT_CEILING_DIRECTORIES: tmpdir() };
   try { execFileSync('git', ['rev-parse'], { cwd: tmpdir(), env, stdio: 'pipe' }); return false; }
   catch (e) { return /Kein Git-Repository/.test(String((e as { stderr?: Buffer }).stderr)); }
 })();
 
-/**
- * A claim on a repo whose base holds `base` and whose worktree then holds `head`, staged, stopped with a git first on PATH
- * that runs `stub` (shell, `$PIDS` the file to log its sleeps' PIDs in, `$GIT` the real git) before the real git. Its one approved check
- * read `read` and passed; returns the verdict and how long the stop took.
- */
 async function claimed(o: { base: Record<string, string>; head: Record<string, string>; stub: string; read: string[]; hold_ms?: number }) {
   const dir = temp();
   const git = (...args: string[]) => execFileSync('git', ['-c', 'user.name=T', '-c', 'user.email=t@example.test', '-c', 'commit.gpgsign=false', ...args], { cwd: dir, stdio: 'pipe' }).toString().trim();
@@ -43,7 +32,6 @@ async function claimed(o: { base: Record<string, string>; head: Record<string, s
   git('add', '-A');
   git('commit', '-qm', 'one');
   const base = git('rev-parse', 'HEAD');
-  // Added to the index, so `git diff` lists a new file as well as an edited one.
   put(o.head);
   git('add', '-A');
   const bin = temp();
@@ -77,8 +65,6 @@ const TEST = { 'test/price.test.js': 'one\n' };
 
 describe('the read of what a claim changed (#1869)', () => {
   it('takes a git diff listing past 64 MB: the edited test file makes its approved check the agent\'s own', async () => {
-    // The diff of names lists 75 MB of other paths after the real ones, with or without -z: a very large repo's diff.
-    // Under -z, as git does, each path ends in NUL.
     const stub = 'case " $* " in *" diff "*"--name-only "*) "$GIT" "$@"; case " $* " in *" -z "*) yes other/path.txt | head -n 5000000 | tr \'\\n\' \'\\0\' ;; *) yes other/path.txt | head -n 5000000 ;; esac; exit 0 ;; esac';
     const { v } = await claimed({ base: TEST, head: { 'test/price.test.js': 'two\n' }, read: ['test/price.test.js'], stub });
     expect(v?.outcome, `the claim edited price-approved's test file, yet reads ${JSON.stringify(v)}`).not.toBe('PASS');
@@ -86,16 +72,13 @@ describe('the read of what a claim changed (#1869)', () => {
   }, 60_000);
 
   it('takes an untracked listing past 512 MB, more than one string holds, as the snapshot\'s own untracked read does (1 GB): a claim no check reads passes', async () => {
-    // `ls-files --others` lists 600 MB of untracked paths after the real ones; the snapshot lists them with -o, unstubbed.
     const name = `other/${'u'.repeat(244)}.txt`;
-    // Under -z, as git does, each path ends in NUL.
     const stub = `case " $* " in *" ls-files "*"--others "*) "$GIT" "$@"; case " $* " in *" -z "*) yes '${name}' | head -n 2400000 | tr '\\n' '\\0' ;; *) yes '${name}' | head -n 2400000 ;; esac; exit 0 ;; esac`;
     const { v } = await claimed({ base: TEST, head: { 'src/a.js': 'x\n' }, read: ['test/price.test.js'], stub });
     expect(v?.outcome, `the claim changed no file a check reads, yet reads ${JSON.stringify(v?.reasons)}`).toBe('PASS');
   }, 120_000);
 
   it('ends a read by its deadline though git leaves a process holding its output open', async () => {
-    // `ls-files` starts a process that keeps git's output open, then hangs itself.
     const stub = 'case " $* " in *" ls-files "*) sleep 600 & echo $! >> "$PIDS"; echo $$ >> "$PIDS"; exec sleep 600 ;; esac';
     const { v, ms } = await claimed({ base: TEST, head: { 'src/a.js': 'x\n' }, read: ['test/price.test.js'], stub, hold_ms: 10_000 });
     expect(ms, 'the stop came back within its 10 s hold').toBeLessThan(10_000);
@@ -123,7 +106,6 @@ describe('the read of what a claim changed (#1869)', () => {
     expect(v?.outcome, JSON.stringify(v?.reasons)).toBe('PASS');
   }, 60_000);
 
-  // Skipped, so shown unrun, where git can't answer in German.
   it.skipIf(!german)('a base with no package.json is no failed read under a German locale either, where git words the missing file in German', async () => {
     const { LC_ALL, LANGUAGE } = process.env;
     Object.assign(process.env, { LC_ALL: 'de_DE.UTF-8', LANGUAGE: 'de' });
