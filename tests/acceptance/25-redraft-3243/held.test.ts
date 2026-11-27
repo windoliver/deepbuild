@@ -1,14 +1,3 @@
-// AC1 #25.0215da31 A held stop continues with the answer.
-//
-// A session asks you a question its stop waits on (asking.ts: a choice with no recommended option) and stops with
-// the ask open. Claude Code runs DeepBuild's Stop entries: the foreground one, which the hub holds, and the waiter in
-// the background. You answer with `deep inbox answer` while the stop is held. The held Stop's reply is Claude Code's
-// `decision: block` with the answer as its reason, so the turn goes on with it; the continued turn's next Stop isn't
-// sent back with the same answer again.
-//
-// A try where deep-hook failed open, as on a starved machine, is no verdict: it is made again, and reads INCONCLUSIVE
-// after asking.ts's TRIES (README: A starved machine).
-
 import { afterAll, describe, expect, it } from 'vitest';
 import { answer, assistantSays, carries, cleanup, firedShown, ours, payload } from '../25/routes/helpers.ts';
 import { heldAsk, replyText, starvedIf, stopBeside, stopWithAskOpen, untilFed } from './asking.ts';
@@ -28,14 +17,12 @@ describe('AC1 #25.0215da31 A held stop continues with the answer', () => {
 
     await answer(home, a.handle, a.green.id);
     const fired = await stop.stopping;
-    // A Stop the hub had on its record can still have been let through late; that try is no verdict either.
     if (!(fired.blocked !== undefined && carries(fired.blocked, a.green))) await starvedIf(t, stop, 'answered');
     for (const r of ours(fired).filter((x) => !x.async)) {
       expect({ timedOut: r.timedOut, code: r.code }, `AC1 DeepBuild's Stop entry answers before Claude Code's timeout, exit 0: ${firedShown(fired)}`).toEqual({ timedOut: false, code: 0 });
     }
     expect(fired.blocked !== undefined && carries(fired.blocked, a.green), `AC1 the held stop must continue with the answer: Claude Code's Stop must get decision: block whose reason carries ${a.green.label} (${a.green.id}) for ${a.handle}; it got ${fired.blocked === undefined ? 'no decision: block' : 'a block without it'}: ${firedShown(fired)}`).toBe(true);
 
-    // The turn goes on with the answer; its next Stop isn't sent back with it again.
     assistantSays(a.s, `You chose ${a.green.label}; the header is green now.`);
     const continued = await stopBeside(t, a.s, payload(a.s, 'Stop', { stop_hook_active: true, last_assistant_message: `You chose ${a.green.label}; the header is green now.` }));
     const next = await continued.stopping;

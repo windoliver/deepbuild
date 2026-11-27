@@ -1,17 +1,3 @@
-// A session that asks you a question its stop waits on, and stops (README: The ask). The agent calls `deep_ask` with
-// a choice between two options and no recommended option: the design gives only "a taste call or a choice with a
-// recommendation" work that goes on at once, and "a taste call or choice that isn't provisional leaves the agent
-// waiting on you", so this question holds the session's stop until you answer. Everything is reached through the
-// infrastructure of tests/acceptance/25/routes/helpers.ts: the Claude Code stand-in running deep-hook and `deep mcp`
-// from the settings `deep setup` wrote, and the hub's record over its socket.
-//
-// A starved machine (README: A starved machine): "A hub that takes a request and doesn't acknowledge it within 50 ms
-// of the hook's start counts as down for that call", and deep-hook then fails open. A Stop let through that way says
-// nothing of the hold, so a try where deep-hook shows it failed open is no verdict: it is made again with a fresh home
-// and hub, and after TRIES such tries the test reads INCONCLUSIVE, unless a hook of another kind fired beside each of
-// the TRIES to the same hub (a control session's UserPromptSubmit) got through every time: the machine gave hooks their
-// time, and the hub failed the Stops, so it fails.
-
 import { readdirSync, readFileSync, watch, type FSWatcher } from 'node:fs';
 import { join } from 'node:path';
 import { expect, type TestContext } from 'vitest';
@@ -20,34 +6,19 @@ import {
   typedPrompt, waitFor, newSession, type Ev, type Fired, type HookRun, type Hub, type Line, type Option, type Session,
 } from '../25/routes/helpers.ts';
 
-/** Tries a starved machine gets before the test reads INCONCLUSIVE, and the time after which no new try starts. */
 export const TRIES = 5;
 const TRY_BUDGET_MS = 8 * 60_000;
 
-/**
- * deep-hook's own words when it acted as with the hub down and even its spool ran out of the hook's 50 ms
- * (crates/deep-hook/src/main.rs, spool_by): the machine didn't give the hook its time. "could not spool <id>: <error>"
- * is a broken spool, not a starved hook, and isn't counted.
- */
 const STARVED_STDERR = /deep-hook: (?:spooled \S+, but its sync didn't finish|could not spool \S+) within the hook's 50 ms/;
 
-/** One try: a fresh home, hub and Claude Code, every hook fired for its sessions, and the lines of deep-hook's spool seen. */
 export interface Try {
   hub: Hub; home: string; claude: Claude; control: Session;
   runs: { session: string; event: string; run: HookRun }[];
-  /** The spool's lines, by ID: deep-hook spools a hook only when it let it through as with the hub down. */
   spooled: Map<string, Line>;
-  /** Watches the hub's folder for the spool's writes while the try runs (watchSpool). */
   watcher?: FSWatcher | undefined;
 }
-/** A point in a try: what deep-hook had shown so far, so a later Stop's own fail-open is told from an earlier hook's. */
 interface Mark { runs: number; spooled: Set<string>; readings: Set<string> }
 
-/**
- * The spool's lines, read as soon as a hook returns: the hub replays and removes them every 2 s. deep-hook spools a
- * hook only on its way through with the hub counted down (main.rs: after `exchange` gave no reply, and the watchdog's
- * let-through at 50 ms); one marked `"late":true` reached the hub and had no acknowledgement in time.
- */
 function readSpool(t: Try): void {
   const dir = join(rootOf(t.home), 'spool');
   let names: string[] = [];
@@ -58,50 +29,27 @@ function readSpool(t: Try): void {
     for (const line of jsonLines(text)) if (typeof line.id === 'string') t.spooled.set(line.id, line);
   }
 }
-/**
- * Reads the spool as deep-hook writes it, not only when a hook's end is reported: the hub replays and removes a line
- * within about 2 s, and a hook let through before its request reached the hub leaves no other trace (no reading, as
- * the hub's lateAnswered runs only for a request it has). Each write to the spool folder (deep-hook's append, the
- * hub's move to replay-<ulid>.jsonl) wakes this; the file's events, not a timer.
- */
 function watchSpool(t: Try): FSWatcher | undefined {
   try {
     const watcher = watch(rootOf(t.home), { recursive: true }, (_event, name) => { if (!name || /(^|[\\/])spool([\\/]|$)/.test(String(name))) readSpool(t); });
-    // A watch that fails as it runs (Linux's recursive watch adds one per folder and file as it appears, and a file gone
-    // first, such as a SQLite journal or a replayed spool file the hub removed, or the inotify limit, fails the add)
-    // emits 'error'; unheard, that is an uncaught exception in the test's worker. The watch ends there; the reads after
-    // each hook still cover the spool.
     watcher.on('error', () => { watcher.close(); });
     return watcher;
   } catch {
     return undefined;
   }
 }
-/** Fires one hook for a session of the try, keeping its runs and the spool's lines. */
 export async function fire(t: Try, s: Session, event: string, body: Line): Promise<Fired> {
   const fired = await t.claude.hook(event, body);
   readSpool(t);
   for (const run of ours(fired)) t.runs.push({ session: s.id, event, run });
   return fired;
 }
-/** What a late reading names: the hub's lateAnswered writes `deep-hook let ${meta.event} ${meta.id} through as late, …`. */
 const LATE_READING = /^deep-hook let (\S+) (\S+) through as late/;
-/** The hub's readings that deep-hook let a hook through as late: every session's, or one's. */
 const lateReadings = async (t: Try, session?: string): Promise<Ev[]> => (await allEvents(t.hub))
   .filter((e) => e.kind === 'session.reading' && (session === undefined || e.session === session) && LATE_READING.test(String(e.data?.reading ?? '')));
-/** Every session's readings are marked: the control session's hook is judged from the same mark as the asking one's. */
 async function mark(t: Try): Promise<Mark> {
   return { runs: t.runs.length, spooled: new Set(t.spooled.keys()), readings: new Set((await lateReadings(t)).map((e) => e.id)) };
 }
-/**
- * deep-hook's own evidence that it failed open for one of the session's hooks: its stderr saying the spool ran out of
- * the hook's 50 ms, the hook's line in the spool, or the hub's reading that deep-hook let the hook through as late.
- * With `since` undefined, every hook of the try counts. With `since`, only an `event` hook fired after it: a stderr of
- * a run after the mark, an `event` spool line not seen at the mark, and a reading that names an `event` hook whose ID
- * wasn't spooled by the mark. The hub writes a reading only when it replays the spool, so one about an earlier hook (a PostToolUse let
- * through late) can land after the mark, when the Stops set off the replay; it names that hook's event and ID (its
- * request ID, the spool line's), so it isn't taken for the Stop's. Undefined when there is none.
- */
 async function failedOpen(t: Try, session: string, since?: Mark, event = 'Stop'): Promise<string | undefined> {
   const found: string[] = [];
   for (const { session: of, event: fired, run } of t.runs.slice(since?.runs ?? 0)) {
@@ -119,24 +67,14 @@ async function failedOpen(t: Try, session: string, since?: Mark, event = 'Stop')
   return found.length ? found.join('; ') : undefined;
 }
 
-/** A try the machine starved: no verdict. Says whether the hook fired beside it got through, and how it went. */
 export class Starved extends Error {
   constructor(readonly evidence: string, readonly besideThrough: boolean, readonly beside: string) { super(`starved: ${evidence}`); }
 }
 
-/**
- * Runs `body` in fresh tries until one isn't starved (its verdict is the test's), or reads INCONCLUSIVE after TRIES
- * starved ones (or TRY_BUDGET_MS), or fails when the hook beside each starved one got through every time.
- *
- * The hook beside is of another kind than the Stop: a hub that fails every Stop the same way (no acknowledgement in
- * time, a closed connection, a refusal, a reply deep-hook can't parse) fails the control's Stop too, so a control Stop
- * would read that hub as a starved machine. A hub that fails every hook alike, and a machine that starves every hook,
- * still read INCONCLUSIVE: this test can't tell them apart.
- */
 export async function untilFed(ctx: TestContext, ac: string, body: (t: Try) => Promise<void>): Promise<void> {
   const starved: Starved[] = [];
-  const until = Date.now() + TRY_BUDGET_MS; // deadline: no try starts past the budget, so the file stays inside its timeout
-  while (starved.length < TRIES && Date.now() < until) { // deadline: bounds the tries by time as by count
+  const until = Date.now() + TRY_BUDGET_MS;
+  while (starved.length < TRIES && Date.now() < until) {
     const { home } = makeHome();
     const hub = await startHub(home, { noAskWait: true });
     await setup(home);
@@ -165,7 +103,6 @@ export async function untilFed(ctx: TestContext, ac: string, body: (t: Try) => P
 
 export interface HeldAsk { s: Session; handle: string; id: string; question: string; blue: Option; green: Option; reply: Line; created: Line }
 
-/** Up to the agent's last words after its deep_ask call: the ask is open and the session is about to stop. */
 export async function heldAsk(t: Try): Promise<HeldAsk> {
   const { hub, home, claude } = t;
   const s = newSession(home);
@@ -177,15 +114,12 @@ export async function heldAsk(t: Try): Promise<HeldAsk> {
   const blue = { id: `blue${n}`, label: `Blue header ${n}` };
   const green = { id: `green${n}`, label: `Green header ${n}` };
   const question = `Which header colour do you want for ${n}?`;
-  // Every field of the tool's strict schema, the ones a choice doesn't use null; no recommended option.
   const args = { kind: 'choice', question, options: [blue, green], recommended: null, steps: null, where: null, why: null, check: null, thread: null, subject: null };
   const call = callId();
   appendTranscript(s, { type: 'assistant', message: { model: 'claude-haiku-5-5', id: `msg_${tag(12)}`, type: 'message', role: 'assistant', content: [{ type: 'tool_use', id: call, name: 'mcp__deep__deep_ask', input: args }], stop_reason: 'tool_use', usage: { input_tokens: 2, output_tokens: 10 } } });
   const pre = await fireBeside(t, s, 'PreToolUse', payload(s, 'PreToolUse', { tool_name: 'mcp__deep__deep_ask', tool_input: args, tool_use_id: call }));
   await pre.stopping;
   const reply = await claude.request('tools/call', { name: 'deep_ask', arguments: args }, 120_000);
-  // deep_ask binds to its session by the PreToolUse the hub stamped for it: one deep-hook let through as with the hub
-  // down leaves the call unbound, and the ask is never filed. That try is the machine's too, judged as a Stop's is.
   if (reply.result?.isError === true) {
     const evidence = await failedOpen(t, s.id, pre.since, 'PreToolUse');
     if (evidence) await starved(t, pre, `deep_ask was refused (${JSON.stringify(reply.result.content ?? '').slice(0, 300)}) and ${evidence}`);
@@ -199,10 +133,8 @@ export async function heldAsk(t: Try): Promise<HeldAsk> {
   return { s, handle: `ask:${created.id}`, id: created.id, question, blue, green, reply, created: created as unknown as Line };
 }
 
-/** What deep_ask told the agent: its reply's text, where it gave one. */
 export const replyText = (a: HeldAsk): string => JSON.stringify(a.reply.result?.content ?? a.reply.error ?? a.reply);
 
-/** A hook under way, the try's control session's UserPromptSubmit fired beside it to the same hub at the same time. */
 export interface Stopped { session: Session; stopping: Promise<Fired>; settled: () => boolean; beside: Promise<Fired>; besideSettled: () => boolean; since: Mark }
 export const stopBeside = (t: Try, s: Session, body: Line): Promise<Stopped> => fireBeside(t, s, 'Stop', body);
 async function fireBeside(t: Try, s: Session, event: string, body: Line): Promise<Stopped> {
@@ -216,17 +148,6 @@ async function fireBeside(t: Try, s: Session, event: string, body: Line): Promis
   void beside.then(() => { besideDone = true; }, () => { besideDone = true; });
   return { session: s, stopping, settled: () => done, beside, besideSettled: () => besideDone, since };
 }
-/**
- * Throws Starved when the Stop ended and deep-hook shows it failed open. `what` says when it's asked: 'held' once the
- * hub has the Stop on its record, before you answer; 'answered' once the Stop ended after your answer without it (a
- * Stop the hub recorded can still be let through, late, once the check before the answer passed); 'next' for the
- * continued turn's Stop. For 'held' any of the session's hooks in the try counts (one let through unseen may leave the
- * hub nothing to hold). For 'answered' only this Stop's own, from its mark on: it was held when you answered, so an
- * earlier hook's fail-open doesn't explain a missing answer, and counting it would let a hub that drops the answer
- * read INCONCLUSIVE on a busy machine. For 'next' only that Stop's. A Stop that ended without that evidence returns,
- * and its test's assertion judges it. Returns whether the Stop had ended, read once: the caller asserts on this same
- * reading, so a Stop that ends between two reads can't skip the check.
- */
 export async function starvedIf(t: Try, stop: Stopped, what: 'held' | 'answered' | 'next'): Promise<boolean> {
   if (!stop.settled()) return false;
   await stop.stopping;
@@ -236,7 +157,6 @@ export async function starvedIf(t: Try, stop: Stopped, what: 'held' | 'answered'
   const which = { held: 'the stop with the ask open ended unheld', answered: 'the stop with the ask open ended after your answer without it', next: "the continued turn's Stop ended unheld" }[what];
   return starved(t, stop, `${which} and ${evidence}`);
 }
-/** Throws Starved for a hook that failed open, saying whether the control's hook fired beside it got through. */
 async function starved(t: Try, stop: Stopped, evidence: string): Promise<never> {
   const beside = await waitFor(() => stop.besideSettled() || undefined, 60_000, 'the hook beside it').then(() => stop.beside, () => undefined);
   const besideOpen = beside ? await failedOpen(t, t.control.id, stop.since, 'UserPromptSubmit') : undefined;
@@ -246,10 +166,6 @@ async function starved(t: Try, stop: Stopped, evidence: string): Promise<never> 
 }
 
 export interface Stopping extends Stopped { waiter: HookRun & { event: string } }
-/**
- * The session stops with its ask open. Returns once the hub has the Stop on its record and the waiter Claude Code
- * started at that Stop is running: the two events that show the Stop hook is out and the hub is holding it.
- */
 export async function stopWithAskOpen(t: Try, a: HeldAsk): Promise<Stopping> {
   const stop = await stopBeside(t, a.s, payload(a.s, 'Stop', { last_assistant_message: 'I asked which header colour you want; I will wait for your answer.' }));
   await waitFor(async () => (await allEvents(t.hub)).some((e) => e.kind === 'agent.stop' && e.session === a.s.id) || undefined, 60_000, `the hub's record of ${a.s.id}'s Stop`)

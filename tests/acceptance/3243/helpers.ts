@@ -1,15 +1,3 @@
-// #3243's shared steps: run one of #25's route checks the way the lanes run a test file, and read its verdict back.
-//
-// A #25 criterion is decided by the file the issue names (tests/acceptance/25/routes/<file>), unless that file is run
-// by hand (`byHand` in scripts/lanes.mjs, a file or a folder ending in `/`) and the blind redraft that replaces it,
-// tests/acceptance/25-redraft-3243/, holds tests carrying the criterion's ID: then those tests decide it. The deciding
-// files run in a child Vitest from the checkout's root with the root config, filtered to the criterion's ID, and its
-// JSON report is read back. Every test there that carries the ID must pass. A test that reached no verdict (skipped,
-// BLOCKED, INCONCLUSIVE, or no report at all) is unrun, and the criterion is INCONCLUSIVE, never PASS.
-// The wrong program: for the named file, one of its passing tagged tests names it (#25's `(wrong program)` tests run
-// the scenario planted and require the planted failure). For a redraft, the redraft proves it through its own
-// twins.json and proof lane: the #25 ID must map to a twin named for the wrong program, whose folder exists and holds
-// only product source, nothing under tests/. Whether that twin really fails the redraft is the redraft's lane's call.
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -26,16 +14,13 @@ export interface Route { criterion: string; named: string; wrong: string }
 interface Assertion { title: string; fullName?: string; status: string; failureMessages?: string[] }
 interface FileResult { name: string; status: string; message?: string; assertionResults: Assertion[] }
 
-/** This process's environment for the child Vitest, less git's, npm's and this Vitest's own variables. */
 function childEnv(): NodeJS.ProcessEnv {
   return { ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^(?:GIT_|npm_|VITEST)/i.test(key))), NO_COLOR: '1' };
 }
 const git = (args: string[]) => spawnSync('git', args, { cwd: REPO, encoding: 'utf8', env: childEnv() });
 const tail = (text: string, lines = 20) => text.trimEnd().split('\n').slice(-lines).join('\n');
-/** A failure that is no verdict: the test said BLOCKED or INCONCLUSIVE, or a wrong-program test caught one. */
 const UNRUN = /^(?:\w*Error: )?(?:expected ['"`])?(?:BLOCKED|INCONCLUSIVE)\b/;
 
-/** The test files under a folder of the checkout, as checkout paths. */
 function testFiles(folder: string): string[] {
   const root = join(REPO, folder);
   if (!existsSync(root)) return [];
@@ -51,11 +36,9 @@ function testFiles(folder: string): string[] {
   return out.sort();
 }
 
-/** The files that decide a #25 criterion, and why. */
 async function deciding(route: Route, ctx: TestContext): Promise<{ files: string[]; by: string; redraft: boolean }> {
   const { byHand, listed } = (await import(pathToFileURL(join(REPO, 'scripts/lanes.mjs')).href)) as { byHand: string[]; listed: (list: string[], file: string) => boolean };
   if (!listed(byHand, route.named)) {
-    // The named file decides: it must be the one the merge base holds, unchanged.
     const base = git(['merge-base', 'HEAD', 'origin/main']);
     if (base.status !== 0) ctx.skip(`INCONCLUSIVE: git names no merge base with origin/main, so ${route.named} can't be read as unchanged: ${base.stderr.trim()}`);
     const diff = git(['diff', '--name-only', base.stdout.trim(), '--', route.named]);
@@ -68,7 +51,6 @@ async function deciding(route: Route, ctx: TestContext): Promise<{ files: string
   return { files, by: `${route.named} by hand, redraft ${files.join(', ')}`, redraft: true };
 }
 
-/** The redraft's wrong-program twin for a criterion: what's missing or wrong about it, or nothing. */
 function redraftTwin(route: Route): string[] {
   const file = join(REPO, REDRAFT, 'twins.json');
   if (!existsSync(file)) return [`${REDRAFT}twins.json doesn't exist`];
@@ -86,10 +68,6 @@ function redraftTwin(route: Route): string[] {
   return tests.length ? [`the twin ${folder}/ replaces files under tests/, not product source: ${tests.join(', ')}`] : [];
 }
 
-/**
- * Runs a #25 criterion's deciding tests and judges them: passes when every test carrying the ID passed and the wrong
- * program is proved (above); fails at an assertion when one failed; skips INCONCLUSIVE when any reached no verdict.
- */
 export async function judgeRoute(ctx: TestContext, route: Route, boundMs: number): Promise<void> {
   if (!existsSync(VITEST)) ctx.skip('INCONCLUSIVE: node_modules/vitest is not installed in this checkout (npm ci)');
   const { files, by, redraft } = await deciding(route, ctx);
