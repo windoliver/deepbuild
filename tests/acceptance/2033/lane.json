@@ -1,0 +1,1 @@
+{ "alone": true, "why": "binary: every file builds deep-gpu with cargo and draws its frames on the GPU, so a sibling building or drawing beside it would race the binary and the device" }
