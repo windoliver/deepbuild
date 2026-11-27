@@ -1677,3 +1677,5 @@ for (const entry of laneFolders.filter((folder) => !unread.includes(folder))) {
   for (const file of lists?.timed ?? []) if (!timed.includes(file)) timed.push(file), fromLaneFiles.timed.push(file);
   for (const file of lists?.slow ?? []) if (!slow.includes(file)) slow.push(file), fromLaneFiles.slow.push(file);
 }
+Object.assign(redrafted, { 'tests/acceptance/3066/same-failures.test.mjs': 'tests/acceptance/3066-redraft-3699/' });
+byHand.push('tests/acceptance/3066/same-failures.test.mjs');
