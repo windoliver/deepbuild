@@ -1,0 +1,684 @@
+# #3551 acceptance tests: the run on the base
+
+## The base (2edb19ff4, no work on #3551), in its own worktree, on the Mac (Darwin arm64, 18 cores, node v24.22.2)
+
+$ node --test tests/acceptance/3551/*.test.mjs
+(1-minute load 46.50 at its start and 47.73 at its end; node's internal stack-trace lines and its dump of each
+error object dropped; the checkout reads <checkout>, each test's temporary folder <sandbox>, home paths ~)
+
+Eleven tests fail, each at an assertion of the suite's own and for the expected reason; three pass.
+
+- #3551.8190b19e fails as the criterion says of the merge base: the window joins the line and drains, so the build
+  request made beside it waits behind the window's request, still in the table 30 s on. The message names both.
+- #3551.6d0f6876: the 7-minute test passes, since the base opens whenever the table is empty; the 5-minute test
+  fails, since the base opens there too.
+- #3551.aa2e13ce and #3551.9147d91b pass: the base drains whatever is held, opens when the last held grant ends and
+  starts no top-level grant meanwhile. Their proof is a planted program each (below, and the README).
+- #3551.84e18eb8 fails three times: the base's record holds no drain and no grants by class.
+- #3551.0d50f746 fails on every fact: neither section states a case or a span, and 12a's line asks at four hours.
+- The five untagged Scope tests fail: no `INCONCLUSIVE window:` line, `wait: 60` in a draining window's grant, a
+  window that opens on a log it can't read, and no trust given up for a window.
+
+Afterwards no process of a sandbox ran and no sandbox folder was left (ps and ls).
+
+✖ #3551.0d50f746 sections 6 and 12a of docs/parallel-proof.md state the three cases, the two drafted spans and the hourly schedule (2.852208ms)
+✖ Scope, Design and The schedule: sections 6 and 12a state the trust the three cases give up, and section 12a still says the schedule is installed by hand, on a reference Mac (1.043417ms)
+✔ #3551.6d0f6876 with no grant held and a window-close 7 minutes old, the window opens at once and the log holds window-open (1899.745708ms)
+✖ #3551.6d0f6876 with no grant held and a window-close 5 minutes old, the window leaves: it opens nothing, joins no line and reads INCONCLUSIVE (1380.62875ms)
+✖ #3551.84e18eb8 the record of a window that opened at once holds drain within 1 s of the time the test read from its request to its grant (1.054834ms)
+✖ Scope, When it closed: with a log that can't be read, the window's first line is BLOCKED throttle, it exits non-zero and opens nothing (1976.624209ms)
+✔ #3551.9147d91b with no window-close in the log, the window drains as the overdue one does: it opens when the last held grant ends, and no top-level grant starts between its request and its close (8348.479375ms)
+✖ #3551.84e18eb8 the record of a window that drained with no window-close in the log holds drain within 1 s of the time the test read from its request to its grant, and the grants it waited on, by class: two test (1.092667ms)
+✖ Scope, Overdue: with no window in the log the window waits with a wait of 720 minutes: the log's granted entry of its grant carries wait: 720 (0.739042ms)
+✖ #3551.8190b19e with the spans at 6 and 12 minutes, one test grant held and a window-close 7 minutes old in the log, a window leaves within 2 s, the table holds no request of its own, a build request made beside it is granted, and its first line is INCONCLUSIVE window:, naming 1 grant (31108.548875ms)
+✖ Scope, Not yet: the window prints `INCONCLUSIVE window: 1 grants held; the last window closed <h> h ago`, exits as a window with no grant does today, 3, and stops nothing: the held grant is still held and no window opened (0.827458ms)
+✔ #3551.aa2e13ce with a window-close 13 minutes old and two grants held that end 20 s and 40 s on, the window opens when the second ends, and no top-level grant starts between its request and its close (42024.878166ms)
+✖ #3551.84e18eb8 the record of a window that drained for 40 s holds drain within 1 s of the time the test read from its request to its grant, and the grants it waited on, by class: one build and one test (0.944625ms)
+✖ Scope, Overdue: the window that drains waits with a wait of 720 minutes: the log's granted entry of its grant carries wait: 720 (0.843083ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 3
+ℹ fail 11
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 43106.548416
+
+✖ failing tests:
+
+test at tests/acceptance/3551/design.test.mjs:57:1
+✖ #3551.0d50f746 sections 6 and 12a of docs/parallel-proof.md state the three cases, the two drafted spans and the hourly schedule (2.852208ms)
+  AssertionError [ERR_ASSERTION]: docs/parallel-proof.md doesn't state what criterion 6 names:
+  - section 6 doesn't state the empty case (a sentence that names a window, says "at once" and says no grant is held, as "no grant", "holds no", "nothing is held", "none is held" or "empty")
+  - section 6 doesn't state the not-yet case (a sentence that says "leaves at once", "joins no line", "stops no grant", "stops nothing" or `INCONCLUSIVE window`)
+  - section 6 doesn't state the overdue case (a sentence that says "overdue", or one that says "12 hours", "or more" and "waits" or "drains")
+  - section 12a doesn't state the empty case (a sentence that names a window, says "at once" and says no grant is held, as "no grant", "holds no", "nothing is held", "none is held" or "empty")
+  - section 12a doesn't state the not-yet case (a sentence that says "leaves at once", "joins no line", "stops no grant", "stops nothing" or `INCONCLUSIVE window`)
+  - section 12a doesn't state the overdue case (a sentence that says "overdue", or one that says "12 hours", "or more" and "waits" or "drains")
+  - neither section states the span of 6 hours as drafted (a paragraph or bullet that holds "6 hours" and "drafted")
+  - neither section states the span of 12 hours as drafted (a paragraph or bullet that holds "12 hours" and "drafted")
+  - section 12a holds no crontab line that asks `throttle.mjs window` each hour (a minute, then `* * * *`): it holds `0 3,9,15,21 * * * zsh -lc 'cd ~/doneright && node scripts/throttle.mjs window' >> ~/.deepbuild/budget-window.log 2>&1`
+  - a crontab line still asks the window at fixed hours: `0 3,9,15,21 * * * zsh -lc 'cd ~/doneright && node scripts/throttle.mjs window' >> ~/.deepbuild/budget-window.log 2>&1`
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3551/design.test.mjs:71:10)
+
+test at tests/acceptance/3551/design.test.mjs:74:1
+✖ Scope, Design and The schedule: sections 6 and 12a state the trust the three cases give up, and section 12a still says the schedule is installed by hand, on a reference Mac (1.043417ms)
+  AssertionError [ERR_ASSERTION]: neither section 6 nor section 12a states the trust given up: a paragraph or bullet that holds "trust", "given up" (or "gives up", "give up") and names a window
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3551/design.test.mjs:77:10)
+
+test at tests/acceptance/3551/empty.test.mjs:40:1
+✖ #3551.6d0f6876 with no grant held and a window-close 5 minutes old, the window leaves: it opens nothing, joins no line and reads INCONCLUSIVE (1380.62875ms)
+  AssertionError [ERR_ASSERTION]: with no grant held and the last window closed 5 minutes ago, the window is not yet due, but:
+  - the window opened 5 minutes after the last window closed, less than the 6 of DEEP_WINDOW_APART_MIN: the log holds a window-open for grant c9c8472c18dae437
+  - a window that left wrote a record of its own
+  - a window that didn't open exited 0
+  - the window's first line doesn't read INCONCLUSIVE: "PASS budget-window: the first window on this machine marks 52fb2cf3327c34962216b8cde2241a8d550a22ce; the commits after it are measured"
+  table: {"grants":[],"requests":[]}
+  log:
+  {"at":"2026-11-26T14:31:06.097Z","event":"granted","class":"timed","grant":"top-level","id":"0000000035510028","pid":35550,"index":1,"load":2,"cores":18,"wait":60}
+  {"at":"2026-11-26T14:31:06.097Z","event":"window-open","id":"0000000035510028","pid":35550}
+  {"at":"2026-11-26T14:33:06.097Z","event":"window-close","id":"0000000035510028","pid":35550}
+  {"at":"2026-11-26T14:33:06.097Z","event":"released","class":"timed","id":"0000000035510028","pid":35550}
+  {"at":"2026-11-26T15:06:06.098Z","event":"granted","class":"timed","grant":"top-level","id":"0000000035510005","pid":35515,"index":1,"load":2,"cores":18,"wait":60}
+  {"at":"2026-11-26T15:06:06.098Z","event":"window-open","id":"0000000035510005","pid":35515}
+  {"at":"2026-11-26T15:08:06.098Z","event":"window-close","id":"0000000035510005","pid":35515}
+  {"at":"2026-11-26T15:08:06.098Z","event":"released","class":"timed","id":"0000000035510005","pid":35515}
+  {"at":"2026-11-26T15:13:06.211Z","event":"granted","class":"timed","grant":"top-level","id":"c9c8472c18dae437","pid":43245,"index":1,"load":2,"cores":18,"wait":60}
+  {"at":"2026-11-26T15:13:06.213Z","event":"window-open","id":"c9c8472c18dae437","pid":43245}
+  {"at":"2026-11-26T15:13:07.012Z","event":"window-close","id":"c9c8472c18dae437","pid":43245}
+  {"at":"2026-11-26T15:13:07.014Z","event":"released","class":"timed","id":"c9c8472c18dae437","pid":43245}
+  notes:
+  {"kind":"throttle","event":"start","pid":43245,"args":["window"],"t":1795705986140}
+  {"kind":"throttle","event":"exit","pid":43245,"args":["window"],"t":1795705987015,"status":0}
+  window records:
+  {"lane":"budget-window","grant":"c9c8472c18dae437","start":"2026-11-26T15:13:06.545Z","machine":{"model":"Mac15,7","chip":"Apple M3 Pro","memoryBytes":38654705664,"power":"ac","lowPowerMode":false,"thermalState":"nominal","macosBuild":"25A3551"},"cores":18,"loadStart":2,"from":null,"tip":"52fb2cf3327c34962216b8cde2241a8d550a22ce","commits":[],"records":{},"state":"PASS","end":"2026-11-26T15:13:07.007Z","loadEnd":2,"ran":[],"notReached":[],"longest":null,"note":"the first window on this machine marks 52fb2cf3327c34962216b8cde2241a8d550a22ce"}
+  window: exit 0
+  stdout:
+  PASS budget-window: the first window on this machine marks 52fb2cf3327c34962216b8cde2241a8d550a22ce; the commits after it are measured
+  
+  stderr:
+  
+      at none (file://<checkout>/tests/acceptance/3551/helpers.mjs:500:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3551/empty.test.mjs:52:3)
+
+test at tests/acceptance/3551/empty.test.mjs:55:1
+✖ #3551.84e18eb8 the record of a window that opened at once holds drain within 1 s of the time the test read from its request to its grant (1.054834ms)
+  AssertionError [ERR_ASSERTION]: the record of the window that opened on an empty table doesn't hold what criterion 5 names:
+  - the record holds no drain, a number of milliseconds: its drain is undefined
+  table: {"grants":[],"requests":[]}
+  log:
+  {"at":"2026-11-26T14:31:04.414Z","event":"granted","class":"timed","grant":"top-level","id":"0000000035510028","pid":35550,"index":1,"load":2,"cores":18,"wait":60}
+  {"at":"2026-11-26T14:31:04.414Z","event":"window-open","id":"0000000035510028","pid":35550}
+  {"at":"2026-11-26T14:33:04.414Z","event":"window-close","id":"0000000035510028","pid":35550}
+  {"at":"2026-11-26T14:33:04.414Z","event":"released","class":"timed","id":"0000000035510028","pid":35550}
+  {"at":"2026-11-26T15:04:04.415Z","event":"granted","class":"timed","grant":"top-level","id":"0000000035510007","pid":35517,"index":1,"load":2,"cores":18,"wait":60}
+  {"at":"2026-11-26T15:04:04.415Z","event":"window-open","id":"0000000035510007","pid":35517}
+  {"at":"2026-11-26T15:06:04.415Z","event":"window-close","id":"0000000035510007","pid":35517}
+  {"at":"2026-11-26T15:06:04.415Z","event":"released","class":"timed","id":"0000000035510007","pid":35517}
+  {"at":"2026-11-26T15:13:04.625Z","event":"granted","class":"timed","grant":"top-level","id":"e279770fff2c7247","pid":42593,"index":1,"load":2,"cores":18,"wait":60}
+  {"at":"2026-11-26T15:13:04.626Z","event":"window-open","id":"e279770fff2c7247","pid":42593}
+  {"at":"2026-11-26T15:13:05.624Z","event":"window-close","id":"e279770fff2c7247","pid":42593}
+  {"at":"2026-11-26T15:13:05.625Z","event":"released","class":"timed","id":"e279770fff2c7247","pid":42593}
+  notes:
+  {"kind":"throttle","event":"start","pid":42593,"args":["window"],"t":1795705984462}
+  {"kind":"throttle","event":"exit","pid":42593,"args":["window"],"t":1795705985626,"status":0}
+  window records:
+  {"lane":"budget-window","grant":"e279770fff2c7247","start":"2026-11-26T15:13:05.104Z","machine":{"model":"Mac15,7","chip":"Apple M3 Pro","memoryBytes":38654705664,"power":"ac","lowPowerMode":false,"thermalState":"nominal","macosBuild":"25A3551"},"cores":18,"loadStart":2,"from":null,"tip":"766073917f95d6200dfbd9809974097c4d0997d0","commits":[],"records":{},"state":"PASS","end":"2026-11-26T15:13:05.617Z","loadEnd":2,"ran":[],"notReached":[],"longest":null,"note":"the first window on this machine marks 766073917f95d6200dfbd9809974097c4d0997d0"}
+  window: exit 0
+  stdout:
+  PASS budget-window: the first window on this machine marks 766073917f95d6200dfbd9809974097c4d0997d0; the commits after it are measured
+  
+  stderr:
+  
+      at none (file://<checkout>/tests/acceptance/3551/helpers.mjs:500:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3551/empty.test.mjs:57:3)
+
+test at tests/acceptance/3551/log.test.mjs:15:1
+✖ Scope, When it closed: with a log that can't be read, the window's first line is BLOCKED throttle, it exits non-zero and opens nothing (1976.624209ms)
+  AssertionError [ERR_ASSERTION]: with a log it can't read, the window's first line isn't `BLOCKED throttle`: "PASS budget-window: the first window on this machine marks 766073917f95d6200dfbd9809974097c4d0997d0; the commits after it are measured"
+  table: {"grants":[],"requests":[]}
+  log:
+  {"at":"2026-11-26T14:31:04.414Z","event":"granted","class":"timed","grant":"top-level","id":"0000000035510028","pid":35550,"index":1,"load":2,"cores":18,"wait":60}
+  {"at":"2026-11-26T14:31:04.414Z","event":"window-open","id":"0000000035510028","pid":35550}
+  {"at":"2026-11-26T14:33:04.414Z","event":"window-close","id":"0000000035510028","pid":35550}
+  {"at":"2026-11-26T14:33:04.414Z","event":"released","class":"timed","id":"0000000035510028","pid":35550}
+  {"at":"2026-11-26T15:04:04.415Z","event":"granted","class":"timed","grant":"top-level","id":"0000000035510007","pid":35517,"index":1,"load":2,"cores":18,"wait":60}
+  {"at":"2026-11-26T15:04:04.415Z","event":"window-open","id":"0000000035510007","pid":35517}
+  {"at":"2026-11-26T15:06:04.415Z","event":"window-close","id":"0000000035510007","pid":35517}
+  {"at":"2026-11-26T15:06:04.415Z","event":"released","class":"timed","id":"0000000035510007","pid":35517}
+  {"at":"2026-11-26T15:13:04.625Z","event":"granted","class":"timed","grant":"top-level","id":"e359f31552a96321","pid":42592,"index":1,"load":2,"cores":18,"wait":60}
+  {"at":"2026-11-26T15:13:04.626Z","event":"window-open","id":"e359f31552a96321","pid":42592}
+  {"at":"2026-11-26T15:13:05.624Z","event":"window-close","id":"e359f31552a96321","pid":42592}
+  {"at":"2026-11-26T15:13:05.625Z","event":"released","class":"timed","id":"e359f31552a96321","pid":42592}
+  notes:
+  {"kind":"throttle","event":"start","pid":42592,"args":["window"],"t":1795705984459}
+  {"kind":"throttle","event":"exit","pid":42592,"args":["window"],"t":1795705985626,"status":0}
+  window records:
+  {"lane":"budget-window","grant":"e359f31552a96321","start":"2026-11-26T15:13:05.113Z","machine":{"model":"Mac15,7","chip":"Apple M3 Pro","memoryBytes":38654705664,"power":"ac","lowPowerMode":false,"thermalState":"nominal","macosBuild":"25A3551"},"cores":18,"loadStart":2,"from":null,"tip":"766073917f95d6200dfbd9809974097c4d0997d0","commits":[],"records":{},"state":"PASS","end":"2026-11-26T15:13:05.617Z","loadEnd":2,"ran":[],"notReached":[],"longest":null,"note":"the first window on this machine marks 766073917f95d6200dfbd9809974097c4d0997d0"}
+  window: exit 0
+  stdout:
+  PASS budget-window: the first window on this machine marks 766073917f95d6200dfbd9809974097c4d0997d0; the commits after it are measured
+  
+  stderr:
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3551/log.test.mjs:27:10)
+
+test at tests/acceptance/3551/no-close.test.mjs:33:1
+✖ #3551.84e18eb8 the record of a window that drained with no window-close in the log holds drain within 1 s of the time the test read from its request to its grant, and the grants it waited on, by class: two test (1.092667ms)
+  AssertionError [ERR_ASSERTION]: the record of the window that waited on two test grants doesn't hold what criterion 5 names:
+  - the record holds no drain, a number of milliseconds: its drain is undefined
+  - the record doesn't hold the grants the window waited on, by class, {"test":2}: no key of it reads as grants by class
+  table: {"grants":[],"requests":[]}
+  log:
+  {"at":"2026-11-26T15:13:04.598Z","event":"granted","class":"test","grant":"top-level","id":"785190bcd43f0d0a","pid":42578,"index":1,"load":2,"cores":18,"wait":30,"readings":null}
+  {"at":"2026-11-26T15:13:04.616Z","event":"granted","class":"test","grant":"top-level","id":"85d96633f76842b8","pid":42579,"index":2,"load":2,"cores":18,"wait":30,"readings":null}
+  {"at":"2026-11-26T15:13:10.745Z","event":"released","class":"test","id":"785190bcd43f0d0a","pid":42578}
+  {"at":"2026-11-26T15:13:10.818Z","event":"released","class":"test","id":"85d96633f76842b8","pid":42579}
+  {"at":"2026-11-26T15:13:10.928Z","event":"granted","class":"timed","grant":"top-level","id":"576f1d69285e4f6f","pid":42758,"index":1,"load":2,"cores":18,"wait":60}
+  {"at":"2026-11-26T15:13:10.929Z","event":"window-open","id":"576f1d69285e4f6f","pid":42758}
+  {"at":"2026-11-26T15:13:11.961Z","event":"window-close","id":"576f1d69285e4f6f","pid":42758}
+  {"at":"2026-11-26T15:13:12.002Z","event":"released","class":"timed","id":"576f1d69285e4f6f","pid":42758}
+  {"at":"2026-11-26T15:13:12.032Z","event":"granted","class":"build","grant":"top-level","id":"509f509fcc6b3b22","pid":42838,"index":1,"load":2,"cores":18,"wait":30}
+  {"at":"2026-11-26T15:13:12.086Z","event":"released","class":"build","id":"509f509fcc6b3b22","pid":42838}
+  notes:
+  {"kind":"throttle","event":"start","pid":42579,"args":["test"],"t":1795705984433}
+  {"kind":"throttle","event":"start","pid":42578,"args":["test"],"t":1795705984436}
+  {"kind":"command","name":"held-test-1","event":"start","pid":42749,"grant":"test:785190bcd43f0d0a","t":1795705984644}
+  {"kind":"command","name":"held-test-2","event":"start","pid":42751,"grant":"test:85d96633f76842b8","t":1795705984662}
+  {"kind":"throttle","event":"start","pid":42758,"args":["window"],"t":1795705984709}
+  {"kind":"throttle","event":"start","pid":42838,"args":["build"],"t":1795705984882}
+  {"kind":"command","name":"held-test-1","event":"end","pid":42749,"grant":"test:785190bcd43f0d0a","t":1795705990708}
+  {"kind":"throttle","event":"exit","pid":42578,"args":["test"],"t":1795705990746,"status":0}
+  {"kind":"command","name":"held-test-2","event":"end","pid":42751,"grant":"test:85d96633f76842b8","t":1795705990773}
+  {"kind":"throttle","event":"exit","pid":42579,"args":["test"],"t":1795705990818,"status":0}
+  {"kind":"throttle","event":"exit","pid":42758,"args":["window"],"t":1795705992002,"status":0}
+  {"kind":"command","name":"queued-build","event":"start","pid":44606,"grant":"build:509f509fcc6b3b22","t":1795705992083}
+  {"kind":"throttle","event":"exit","pid":42838,"args":["build"],"t":1795705992087,"status":0}
+  window records:
+  {"lane":"budget-window","grant":"576f1d69285e4f6f","start":"2026-11-26T15:13:11.284Z","machine":{"model":"Mac15,7","chip":"Apple M3 Pro","memoryBytes":38654705664,"power":"ac","lowPowerMode":false,"thermalState":"nominal","macosBuild":"25A3551"},"cores":18,"loadStart":2,"from":null,"tip":"766073917f95d6200dfbd9809974097c4d0997d0","commits":[],"records":{},"state":"PASS","end":"2026-11-26T15:13:11.955Z","loadEnd":2,"ran":[],"notReached":[],"longest":null,"note":"the first window on this machine marks 766073917f95d6200dfbd9809974097c4d0997d0"}
+  window: exit 0
+  stdout:
+  PASS budget-window: the first window on this machine marks 766073917f95d6200dfbd9809974097c4d0997d0; the commits after it are measured
+  
+  stderr:
+  
+  held-test-1: exit 0
+  stdout:
+  
+  stderr:
+  
+  held-test-2: exit 0
+  stdout:
+  
+  stderr:
+  
+  queued-build: exit 0
+  stdout:
+  
+  stderr:
+  
+      at none (file://<checkout>/tests/acceptance/3551/helpers.mjs:500:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3551/no-close.test.mjs:35:3)
+
+test at tests/acceptance/3551/no-close.test.mjs:38:1
+✖ Scope, Overdue: with no window in the log the window waits with a wait of 720 minutes: the log's granted entry of its grant carries wait: 720 (0.739042ms)
+  AssertionError [ERR_ASSERTION]: the log's granted entry of the window's grant 576f1d69285e4f6f doesn't carry wait: 720, a held grant's own bound: {"at":"2026-11-26T15:13:10.928Z","event":"granted","class":"timed","grant":"top-level","id":"576f1d69285e4f6f","pid":42758,"index":1,"load":2,"cores":18,"wait":60}
+  table: {"grants":[],"requests":[]}
+  log:
+  {"at":"2026-11-26T15:13:04.598Z","event":"granted","class":"test","grant":"top-level","id":"785190bcd43f0d0a","pid":42578,"index":1,"load":2,"cores":18,"wait":30,"readings":null}
+  {"at":"2026-11-26T15:13:04.616Z","event":"granted","class":"test","grant":"top-level","id":"85d96633f76842b8","pid":42579,"index":2,"load":2,"cores":18,"wait":30,"readings":null}
+  {"at":"2026-11-26T15:13:10.745Z","event":"released","class":"test","id":"785190bcd43f0d0a","pid":42578}
+  {"at":"2026-11-26T15:13:10.818Z","event":"released","class":"test","id":"85d96633f76842b8","pid":42579}
+  {"at":"2026-11-26T15:13:10.928Z","event":"granted","class":"timed","grant":"top-level","id":"576f1d69285e4f6f","pid":42758,"index":1,"load":2,"cores":18,"wait":60}
+  {"at":"2026-11-26T15:13:10.929Z","event":"window-open","id":"576f1d69285e4f6f","pid":42758}
+  {"at":"2026-11-26T15:13:11.961Z","event":"window-close","id":"576f1d69285e4f6f","pid":42758}
+  {"at":"2026-11-26T15:13:12.002Z","event":"released","class":"timed","id":"576f1d69285e4f6f","pid":42758}
+  {"at":"2026-11-26T15:13:12.032Z","event":"granted","class":"build","grant":"top-level","id":"509f509fcc6b3b22","pid":42838,"index":1,"load":2,"cores":18,"wait":30}
+  {"at":"2026-11-26T15:13:12.086Z","event":"released","class":"build","id":"509f509fcc6b3b22","pid":42838}
+  notes:
+  {"kind":"throttle","event":"start","pid":42579,"args":["test"],"t":1795705984433}
+  {"kind":"throttle","event":"start","pid":42578,"args":["test"],"t":1795705984436}
+  {"kind":"command","name":"held-test-1","event":"start","pid":42749,"grant":"test:785190bcd43f0d0a","t":1795705984644}
+  {"kind":"command","name":"held-test-2","event":"start","pid":42751,"grant":"test:85d96633f76842b8","t":1795705984662}
+  {"kind":"throttle","event":"start","pid":42758,"args":["window"],"t":1795705984709}
+  {"kind":"throttle","event":"start","pid":42838,"args":["build"],"t":1795705984882}
+  {"kind":"command","name":"held-test-1","event":"end","pid":42749,"grant":"test:785190bcd43f0d0a","t":1795705990708}
+  {"kind":"throttle","event":"exit","pid":42578,"args":["test"],"t":1795705990746,"status":0}
+  {"kind":"command","name":"held-test-2","event":"end","pid":42751,"grant":"test:85d96633f76842b8","t":1795705990773}
+  {"kind":"throttle","event":"exit","pid":42579,"args":["test"],"t":1795705990818,"status":0}
+  {"kind":"throttle","event":"exit","pid":42758,"args":["window"],"t":1795705992002,"status":0}
+  {"kind":"command","name":"queued-build","event":"start","pid":44606,"grant":"build:509f509fcc6b3b22","t":1795705992083}
+  {"kind":"throttle","event":"exit","pid":42838,"args":["build"],"t":1795705992087,"status":0}
+  window records:
+  {"lane":"budget-window","grant":"576f1d69285e4f6f","start":"2026-11-26T15:13:11.284Z","machine":{"model":"Mac15,7","chip":"Apple M3 Pro","memoryBytes":38654705664,"power":"ac","lowPowerMode":false,"thermalState":"nominal","macosBuild":"25A3551"},"cores":18,"loadStart":2,"from":null,"tip":"766073917f95d6200dfbd9809974097c4d0997d0","commits":[],"records":{},"state":"PASS","end":"2026-11-26T15:13:11.955Z","loadEnd":2,"ran":[],"notReached":[],"longest":null,"note":"the first window on this machine marks 766073917f95d6200dfbd9809974097c4d0997d0"}
+  window: exit 0
+  stdout:
+  PASS budget-window: the first window on this machine marks 766073917f95d6200dfbd9809974097c4d0997d0; the commits after it are measured
+  
+  stderr:
+  
+  held-test-1: exit 0
+  stdout:
+  
+  stderr:
+  
+  held-test-2: exit 0
+  stdout:
+  
+  stderr:
+  
+  queued-build: exit 0
+  stdout:
+  
+  stderr:
+  
+  
+  60 !== 720
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3551/no-close.test.mjs:43:10)
+
+test at tests/acceptance/3551/not-yet.test.mjs:35:1
+✖ #3551.8190b19e with the spans at 6 and 12 minutes, one test grant held and a window-close 7 minutes old in the log, a window leaves within 2 s, the table holds no request of its own, a build request made beside it is granted, and its first line is INCONCLUSIVE window:, naming 1 grant (31108.548875ms)
+  AssertionError [ERR_ASSERTION]: with a test grant held and the last window closed 7 minutes ago, inside the 12 of DEEP_WINDOW_OVERDUE_MIN, the window is not yet due, but:
+  - the window didn't leave: it still waits 30.2 s after it was asked, its timed request b356a76db6a667e3 of pid 42760 in the table
+  - the table held a request of the window's own: the timed request b356a76db6a667e3 of pid 42760, first seen 0.2 s after the window was asked and still there
+  - the build request made beside it was not granted: 30.0 s after it was made its build request 13c03b30f572329c of pid 42839 still waits in the table, behind the window's timed request b356a76db6a667e3 of pid 42760
+  - the window's first line isn't `INCONCLUSIVE window:`: it has printed nothing
+  table: {"grants":[{"id":"f987efee541f17e3","class":"test","pid":42591,"start":"Thu Nov 26 15:13:04 2026","nested":false,"window":false,"index":1,"at":1795705984626}],"requests":[{"id":"b356a76db6a667e3","class":"timed","pid":42760,"start":"Thu Nov 26 15:13:04 2026","nested":false,"window":true,"limit":1,"seq":2},{"id":"13c03b30f572329c","class":"build","pid":42839,"start":"Thu Nov 26 15:13:04 2026","nested":false,"window":false,"limit":1,"seq":3}]}
+  log:
+  {"at":"2026-11-26T14:31:04.410Z","event":"granted","class":"timed","grant":"top-level","id":"0000000035510028","pid":35550,"index":1,"load":2,"cores":18,"wait":60}
+  {"at":"2026-11-26T14:31:04.410Z","event":"window-open","id":"0000000035510028","pid":35550}
+  {"at":"2026-11-26T14:33:04.410Z","event":"window-close","id":"0000000035510028","pid":35550}
+  {"at":"2026-11-26T14:33:04.410Z","event":"released","class":"timed","id":"0000000035510028","pid":35550}
+  {"at":"2026-11-26T15:04:04.411Z","event":"granted","class":"timed","grant":"top-level","id":"0000000035510007","pid":35517,"index":1,"load":2,"cores":18,"wait":60}
+  {"at":"2026-11-26T15:04:04.411Z","event":"window-open","id":"0000000035510007","pid":35517}
+  {"at":"2026-11-26T15:06:04.411Z","event":"window-close","id":"0000000035510007","pid":35517}
+  {"at":"2026-11-26T15:06:04.411Z","event":"released","class":"timed","id":"0000000035510007","pid":35517}
+  {"at":"2026-11-26T15:13:04.627Z","event":"granted","class":"test","grant":"top-level","id":"f987efee541f17e3","pid":42591,"index":1,"load":2,"cores":18,"wait":30,"readings":null}
+  notes:
+  {"kind":"throttle","event":"start","pid":42591,"args":["test"],"t":1795705984456}
+  {"kind":"command","name":"held-test","event":"start","pid":42755,"grant":"test:f987efee541f17e3","t":1795705984668}
+  {"kind":"throttle","event":"start","pid":42760,"args":["window"],"t":1795705984710}
+  {"kind":"throttle","event":"start","pid":42839,"args":["build"],"t":1795705984884}
+  window records:
+  
+  window: still running 30.2 s after it was asked
+  stdout:
+  
+  stderr:
+  
+  beside-build: still running 30.0 s after it was asked
+  stdout:
+  
+  stderr:
+  
+  held-test: still running 30.4 s after it was asked
+  stdout:
+  
+  stderr:
+  
+      at none (file://<checkout>/tests/acceptance/3551/helpers.mjs:500:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3551/not-yet.test.mjs:61:3)
+
+test at tests/acceptance/3551/not-yet.test.mjs:64:1
+✖ Scope, Not yet: the window prints `INCONCLUSIVE window: 1 grants held; the last window closed <h> h ago`, exits as a window with no grant does today, 3, and stops nothing: the held grant is still held and no window opened (0.827458ms)
+  AssertionError [ERR_ASSERTION]: the window didn't leave: it still waits 30.2 s after it was asked
+  table: {"grants":[{"id":"f987efee541f17e3","class":"test","pid":42591,"start":"Thu Nov 26 15:13:04 2026","nested":false,"window":false,"index":1,"at":1795705984626}],"requests":[{"id":"b356a76db6a667e3","class":"timed","pid":42760,"start":"Thu Nov 26 15:13:04 2026","nested":false,"window":true,"limit":1,"seq":2},{"id":"13c03b30f572329c","class":"build","pid":42839,"start":"Thu Nov 26 15:13:04 2026","nested":false,"window":false,"limit":1,"seq":3}]}
+  log:
+  {"at":"2026-11-26T14:31:04.410Z","event":"granted","class":"timed","grant":"top-level","id":"0000000035510028","pid":35550,"index":1,"load":2,"cores":18,"wait":60}
+  {"at":"2026-11-26T14:31:04.410Z","event":"window-open","id":"0000000035510028","pid":35550}
+  {"at":"2026-11-26T14:33:04.410Z","event":"window-close","id":"0000000035510028","pid":35550}
+  {"at":"2026-11-26T14:33:04.410Z","event":"released","class":"timed","id":"0000000035510028","pid":35550}
+  {"at":"2026-11-26T15:04:04.411Z","event":"granted","class":"timed","grant":"top-level","id":"0000000035510007","pid":35517,"index":1,"load":2,"cores":18,"wait":60}
+  {"at":"2026-11-26T15:04:04.411Z","event":"window-open","id":"0000000035510007","pid":35517}
+  {"at":"2026-11-26T15:06:04.411Z","event":"window-close","id":"0000000035510007","pid":35517}
+  {"at":"2026-11-26T15:06:04.411Z","event":"released","class":"timed","id":"0000000035510007","pid":35517}
+  {"at":"2026-11-26T15:13:04.627Z","event":"granted","class":"test","grant":"top-level","id":"f987efee541f17e3","pid":42591,"index":1,"load":2,"cores":18,"wait":30,"readings":null}
+  notes:
+  {"kind":"throttle","event":"start","pid":42591,"args":["test"],"t":1795705984456}
+  {"kind":"command","name":"held-test","event":"start","pid":42755,"grant":"test:f987efee541f17e3","t":1795705984668}
+  {"kind":"throttle","event":"start","pid":42760,"args":["window"],"t":1795705984710}
+  {"kind":"throttle","event":"start","pid":42839,"args":["build"],"t":1795705984884}
+  window records:
+  
+  window: still running 30.2 s after it was asked
+  stdout:
+  
+  stderr:
+  
+  beside-build: still running 30.0 s after it was asked
+  stdout:
+  
+  stderr:
+  
+  held-test: still running 30.4 s after it was asked
+  stdout:
+  
+  stderr:
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3551/not-yet.test.mjs:67:10)
+
+test at tests/acceptance/3551/overdue.test.mjs:31:1
+✖ #3551.84e18eb8 the record of a window that drained for 40 s holds drain within 1 s of the time the test read from its request to its grant, and the grants it waited on, by class: one build and one test (0.944625ms)
+  AssertionError [ERR_ASSERTION]: the record of the window that waited on a build and a test grant doesn't hold what criterion 5 names:
+  - the record holds no drain, a number of milliseconds: its drain is undefined
+  - the record doesn't hold the grants the window waited on, by class, {"build":1,"test":1}: no key of it reads as grants by class
+  table: {"grants":[],"requests":[]}
+  log:
+  {"at":"2026-11-26T14:21:04.395Z","event":"granted","class":"timed","grant":"top-level","id":"0000000035510032","pid":35560,"index":1,"load":2,"cores":18,"wait":60}
+  {"at":"2026-11-26T14:21:04.395Z","event":"window-open","id":"0000000035510032","pid":35560}
+  {"at":"2026-11-26T14:23:04.395Z","event":"window-close","id":"0000000035510032","pid":35560}
+  {"at":"2026-11-26T14:23:04.395Z","event":"released","class":"timed","id":"0000000035510032","pid":35560}
+  {"at":"2026-11-26T14:58:04.396Z","event":"granted","class":"timed","grant":"top-level","id":"000000003551000d","pid":35523,"index":1,"load":2,"cores":18,"wait":60}
+  {"at":"2026-11-26T14:58:04.396Z","event":"window-open","id":"000000003551000d","pid":35523}
+  {"at":"2026-11-26T15:00:04.396Z","event":"window-close","id":"000000003551000d","pid":35523}
+  {"at":"2026-11-26T15:00:04.396Z","event":"released","class":"timed","id":"000000003551000d","pid":35523}
+  {"at":"2026-11-26T15:13:04.610Z","event":"granted","class":"build","grant":"top-level","id":"0b71dabd0771e558","pid":42582,"index":1,"load":2,"cores":18,"wait":30}
+  {"at":"2026-11-26T15:13:04.619Z","event":"granted","class":"test","grant":"top-level","id":"c960c1bd643bcdbc","pid":42585,"index":1,"load":2,"cores":18,"wait":30,"readings":null}
+  {"at":"2026-11-26T15:13:24.732Z","event":"released","class":"build","id":"0b71dabd0771e558","pid":42582}
+  {"at":"2026-11-26T15:13:44.728Z","event":"released","class":"test","id":"c960c1bd643bcdbc","pid":42585}
+  {"at":"2026-11-26T15:13:44.751Z","event":"granted","class":"timed","grant":"top-level","id":"7c0b493d35caa476","pid":42761,"index":1,"load":2,"cores":18,"wait":60}
+  {"at":"2026-11-26T15:13:44.752Z","event":"window-open","id":"7c0b493d35caa476","pid":42761}
+  {"at":"2026-11-26T15:13:45.581Z","event":"window-close","id":"7c0b493d35caa476","pid":42761}
+  {"at":"2026-11-26T15:13:45.611Z","event":"released","class":"timed","id":"7c0b493d35caa476","pid":42761}
+  {"at":"2026-11-26T15:13:45.613Z","event":"granted","class":"build","grant":"top-level","id":"55e6078cd7f6b482","pid":42840,"index":1,"load":2,"cores":18,"wait":30}
+  {"at":"2026-11-26T15:13:45.656Z","event":"released","class":"build","id":"55e6078cd7f6b482","pid":42840}
+  {"at":"2026-11-26T15:13:45.730Z","event":"granted","class":"test","grant":"top-level","id":"5520ade9c91cdc1b","pid":42841,"index":1,"load":2,"cores":18,"wait":30,"readings":null}
+  {"at":"2026-11-26T15:13:45.770Z","event":"released","class":"test","id":"5520ade9c91cdc1b","pid":42841}
+  notes:
+  {"kind":"throttle","event":"start","pid":42582,"args":["build"],"t":1795705984442}
+  {"kind":"throttle","event":"start","pid":42585,"args":["test"],"t":1795705984445}
+  {"kind":"command","name":"held-build","event":"start","pid":42750,"grant":"build:0b71dabd0771e558","t":1795705984659}
+  {"kind":"command","name":"held-test","event":"start","pid":42752,"grant":"test:c960c1bd643bcdbc","t":1795705984663}
+  {"kind":"throttle","event":"start","pid":42761,"args":["window"],"t":1795705984716}
+  {"kind":"throttle","event":"start","pid":42841,"args":["test"],"t":1795705984888}
+  {"kind":"throttle","event":"start","pid":42840,"args":["build"],"t":1795705984891}
+  {"kind":"command","name":"held-build","event":"end","pid":42750,"grant":"build:0b71dabd0771e558","t":1795706004689}
+  {"kind":"throttle","event":"exit","pid":42582,"args":["build"],"t":1795706004733,"status":0}
+  {"kind":"command","name":"held-test","event":"end","pid":42752,"grant":"test:c960c1bd643bcdbc","t":1795706024687}
+  {"kind":"throttle","event":"exit","pid":42585,"args":["test"],"t":1795706024728,"status":0}
+  {"kind":"throttle","event":"exit","pid":42761,"args":["window"],"t":1795706025611,"status":0}
+  {"kind":"command","name":"queued-build","event":"start","pid":51688,"grant":"build:55e6078cd7f6b482","t":1795706025653}
+  {"kind":"throttle","event":"exit","pid":42840,"args":["build"],"t":1795706025656,"status":0}
+  {"kind":"command","name":"queued-test","event":"start","pid":51706,"grant":"test:5520ade9c91cdc1b","t":1795706025768}
+  {"kind":"throttle","event":"exit","pid":42841,"args":["test"],"t":1795706025770,"status":0}
+  window records:
+  {"lane":"budget-window","grant":"7c0b493d35caa476","start":"2026-11-26T15:13:45.117Z","machine":{"model":"Mac15,7","chip":"Apple M3 Pro","memoryBytes":38654705664,"power":"ac","lowPowerMode":false,"thermalState":"nominal","macosBuild":"25A3551"},"cores":18,"loadStart":2,"from":null,"tip":"766073917f95d6200dfbd9809974097c4d0997d0","commits":[],"records":{},"state":"PASS","end":"2026-11-26T15:13:45.576Z","loadEnd":2,"ran":[],"notReached":[],"longest":null,"note":"the first window on this machine marks 766073917f95d6200dfbd9809974097c4d0997d0"}
+  window: exit 0
+  stdout:
+  PASS budget-window: the first window on this machine marks 766073917f95d6200dfbd9809974097c4d0997d0; the commits after it are measured
+  
+  stderr:
+  
+  held-build: exit 0
+  stdout:
+  
+  stderr:
+  
+  held-test: exit 0
+  stdout:
+  
+  stderr:
+  
+  queued-build: exit 0
+  stdout:
+  
+  stderr:
+  
+  queued-test: exit 0
+  stdout:
+  
+  stderr:
+  
+      at none (file://<checkout>/tests/acceptance/3551/helpers.mjs:500:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3551/overdue.test.mjs:33:3)
+
+test at tests/acceptance/3551/overdue.test.mjs:36:1
+✖ Scope, Overdue: the window that drains waits with a wait of 720 minutes: the log's granted entry of its grant carries wait: 720 (0.843083ms)
+  AssertionError [ERR_ASSERTION]: the log's granted entry of the window's grant 7c0b493d35caa476 doesn't carry wait: 720, a held grant's own bound: {"at":"2026-11-26T15:13:44.751Z","event":"granted","class":"timed","grant":"top-level","id":"7c0b493d35caa476","pid":42761,"index":1,"load":2,"cores":18,"wait":60}
+  table: {"grants":[],"requests":[]}
+  log:
+  {"at":"2026-11-26T14:21:04.395Z","event":"granted","class":"timed","grant":"top-level","id":"0000000035510032","pid":35560,"index":1,"load":2,"cores":18,"wait":60}
+  {"at":"2026-11-26T14:21:04.395Z","event":"window-open","id":"0000000035510032","pid":35560}
+  {"at":"2026-11-26T14:23:04.395Z","event":"window-close","id":"0000000035510032","pid":35560}
+  {"at":"2026-11-26T14:23:04.395Z","event":"released","class":"timed","id":"0000000035510032","pid":35560}
+  {"at":"2026-11-26T14:58:04.396Z","event":"granted","class":"timed","grant":"top-level","id":"000000003551000d","pid":35523,"index":1,"load":2,"cores":18,"wait":60}
+  {"at":"2026-11-26T14:58:04.396Z","event":"window-open","id":"000000003551000d","pid":35523}
+  {"at":"2026-11-26T15:00:04.396Z","event":"window-close","id":"000000003551000d","pid":35523}
+  {"at":"2026-11-26T15:00:04.396Z","event":"released","class":"timed","id":"000000003551000d","pid":35523}
+  {"at":"2026-11-26T15:13:04.610Z","event":"granted","class":"build","grant":"top-level","id":"0b71dabd0771e558","pid":42582,"index":1,"load":2,"cores":18,"wait":30}
+  {"at":"2026-11-26T15:13:04.619Z","event":"granted","class":"test","grant":"top-level","id":"c960c1bd643bcdbc","pid":42585,"index":1,"load":2,"cores":18,"wait":30,"readings":null}
+  {"at":"2026-11-26T15:13:24.732Z","event":"released","class":"build","id":"0b71dabd0771e558","pid":42582}
+  {"at":"2026-11-26T15:13:44.728Z","event":"released","class":"test","id":"c960c1bd643bcdbc","pid":42585}
+  {"at":"2026-11-26T15:13:44.751Z","event":"granted","class":"timed","grant":"top-level","id":"7c0b493d35caa476","pid":42761,"index":1,"load":2,"cores":18,"wait":60}
+  {"at":"2026-11-26T15:13:44.752Z","event":"window-open","id":"7c0b493d35caa476","pid":42761}
+  {"at":"2026-11-26T15:13:45.581Z","event":"window-close","id":"7c0b493d35caa476","pid":42761}
+  {"at":"2026-11-26T15:13:45.611Z","event":"released","class":"timed","id":"7c0b493d35caa476","pid":42761}
+  {"at":"2026-11-26T15:13:45.613Z","event":"granted","class":"build","grant":"top-level","id":"55e6078cd7f6b482","pid":42840,"index":1,"load":2,"cores":18,"wait":30}
+  {"at":"2026-11-26T15:13:45.656Z","event":"released","class":"build","id":"55e6078cd7f6b482","pid":42840}
+  {"at":"2026-11-26T15:13:45.730Z","event":"granted","class":"test","grant":"top-level","id":"5520ade9c91cdc1b","pid":42841,"index":1,"load":2,"cores":18,"wait":30,"readings":null}
+  {"at":"2026-11-26T15:13:45.770Z","event":"released","class":"test","id":"5520ade9c91cdc1b","pid":42841}
+  notes:
+  {"kind":"throttle","event":"start","pid":42582,"args":["build"],"t":1795705984442}
+  {"kind":"throttle","event":"start","pid":42585,"args":["test"],"t":1795705984445}
+  {"kind":"command","name":"held-build","event":"start","pid":42750,"grant":"build:0b71dabd0771e558","t":1795705984659}
+  {"kind":"command","name":"held-test","event":"start","pid":42752,"grant":"test:c960c1bd643bcdbc","t":1795705984663}
+  {"kind":"throttle","event":"start","pid":42761,"args":["window"],"t":1795705984716}
+  {"kind":"throttle","event":"start","pid":42841,"args":["test"],"t":1795705984888}
+  {"kind":"throttle","event":"start","pid":42840,"args":["build"],"t":1795705984891}
+  {"kind":"command","name":"held-build","event":"end","pid":42750,"grant":"build:0b71dabd0771e558","t":1795706004689}
+  {"kind":"throttle","event":"exit","pid":42582,"args":["build"],"t":1795706004733,"status":0}
+  {"kind":"command","name":"held-test","event":"end","pid":42752,"grant":"test:c960c1bd643bcdbc","t":1795706024687}
+  {"kind":"throttle","event":"exit","pid":42585,"args":["test"],"t":1795706024728,"status":0}
+  {"kind":"throttle","event":"exit","pid":42761,"args":["window"],"t":1795706025611,"status":0}
+  {"kind":"command","name":"queued-build","event":"start","pid":51688,"grant":"build:55e6078cd7f6b482","t":1795706025653}
+  {"kind":"throttle","event":"exit","pid":42840,"args":["build"],"t":1795706025656,"status":0}
+  {"kind":"command","name":"queued-test","event":"start","pid":51706,"grant":"test:5520ade9c91cdc1b","t":1795706025768}
+  {"kind":"throttle","event":"exit","pid":42841,"args":["test"],"t":1795706025770,"status":0}
+  window records:
+  {"lane":"budget-window","grant":"7c0b493d35caa476","start":"2026-11-26T15:13:45.117Z","machine":{"model":"Mac15,7","chip":"Apple M3 Pro","memoryBytes":38654705664,"power":"ac","lowPowerMode":false,"thermalState":"nominal","macosBuild":"25A3551"},"cores":18,"loadStart":2,"from":null,"tip":"766073917f95d6200dfbd9809974097c4d0997d0","commits":[],"records":{},"state":"PASS","end":"2026-11-26T15:13:45.576Z","loadEnd":2,"ran":[],"notReached":[],"longest":null,"note":"the first window on this machine marks 766073917f95d6200dfbd9809974097c4d0997d0"}
+  window: exit 0
+  stdout:
+  PASS budget-window: the first window on this machine marks 766073917f95d6200dfbd9809974097c4d0997d0; the commits after it are measured
+  
+  stderr:
+  
+  held-build: exit 0
+  stdout:
+  
+  stderr:
+  
+  held-test: exit 0
+  stdout:
+  
+  stderr:
+  
+  queued-build: exit 0
+  stdout:
+  
+  stderr:
+  
+  queued-test: exit 0
+  stdout:
+  
+  stderr:
+  
+  
+  60 !== 720
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3551/overdue.test.mjs:41:10)
+
+
+## Wrong programs, each planted in a throwaway guess at the change (README: On the base), since deleted
+
+On the guess itself, with no fault, all 14 tests passed (44 s, files side by side). For each fault: the result lines
+of the files named, and under each failing test the sentences its message starts with. Ids, pids and times are
+each run's own.
+
+drains: a window asked while a grant is held always joins the line and waits for every held grant (not-yet.test.mjs)
+✖ #3551.8190b19e with the spans at 6 and 12 minutes, one test grant held and a window-close 7 minutes old in the log, a window leaves within 2 s, the table holds no request of its own, a build request made beside it is granted, and its first line is INCONCLUSIVE window:, naming 1 grant (31073.097959ms)
+    with a test grant held and the last window closed 7 minutes ago, inside the 12 of DEEP_WINDOW_OVERDUE_MIN, the window is not yet due, but:
+    - the window didn't leave: it still waits 30.2 s after it was asked, its timed request e1f0a659c52631c1 of pid 14486 in the table
+    - the table held a request of the window's own: the timed request e1f0a659c52631c1 of pid 14486, first seen 0.2 s after the window was asked and still there
+    - the build request made beside it was not granted: 30.0 s after it was made its build request 7af4ce07ad18d137 of pid 14605 still waits in the table, behind the window's timed request e1f0a659c52631c1 of pid 14486
+    - the window's first line isn't `INCONCLUSIVE window:`: it has printed nothing
+✖ Scope, Not yet: the window prints `INCONCLUSIVE window: 1 grants held; the last window closed <h> h ago`, exits as a window with no grant does today, 3, and stops nothing: the held grant is still held and no window opened (1.098791ms)
+    the window didn't leave: it still waits 30.2 s after it was asked
+
+opens-when-empty: the window opens whenever the table holds no grant, DEEP_WINDOW_APART_MIN never read (empty.test.mjs)
+✔ #3551.6d0f6876 with no grant held and a window-close 7 minutes old, the window opens at once and the log holds window-open (2415.861417ms)
+✖ #3551.6d0f6876 with no grant held and a window-close 5 minutes old, the window leaves: it opens nothing, joins no line and reads INCONCLUSIVE (2174.870291ms)
+    with no grant held and the last window closed 5 minutes ago, the window is not yet due, but:
+    - the window opened 5 minutes after the last window closed, less than the 6 of DEEP_WINDOW_APART_MIN: the log holds a window-open for grant cd453b19bf41ba53
+    - the window joined a line: the table held its timed request cd453b19bf41ba53 of pid 44590, first seen 0.1 s after it was asked
+    - a window that left wrote a record of its own
+    - a window that didn't open exited 0
+    - the window's first line doesn't read INCONCLUSIVE: "PASS budget-window: the first window on this machine marks c302f5277d486bc456e189294690caa795dbd89a; the commits after it are measured"
+✔ #3551.84e18eb8 the record of a window that opened at once holds drain within 1 s of the time the test read from its request to its grant (1.387417ms)
+
+leaves-until-overdue: on an empty table the window opens only once the last window closed the overdue span ago (empty.test.mjs)
+✖ #3551.6d0f6876 with no grant held and a window-close 7 minutes old, the window opens at once and the log holds window-open (1052.77825ms)
+    with no grant held and the last window closed 7 minutes ago, past the 6 of DEEP_WINDOW_APART_MIN, the window is due, but:
+    - the window didn't open: the log holds no window-open since it was asked (exit 3, its first line "INCONCLUSIVE window: 0 grants held; the last window closed 0.1 h ago")
+✔ #3551.6d0f6876 with no grant held and a window-close 5 minutes old, the window leaves: it opens nothing, joins no line and reads INCONCLUSIVE (907.682542ms)
+✖ #3551.84e18eb8 the record of a window that opened at once holds drain within 1 s of the time the test read from its request to its grant (0.573333ms)
+    the record of the window that opened on an empty table doesn't hold what criterion 5 names:
+    - the window never opened, so it left no record to read
+
+leaves-at-once: a window asked while a grant is held leaves, DEEP_WINDOW_OVERDUE_MIN never read (overdue.test.mjs)
+✖ #3551.aa2e13ce with a window-close 13 minutes old and two grants held that end 20 s and 40 s on, the window opens when the second ends, and no top-level grant starts between its request and its close (1113.962125ms)
+    the last window closed 13 minutes ago, past the 12 of DEEP_WINDOW_OVERDUE_MIN, so the window is overdue and drains, but:
+    - the window never opened: the log holds no window-open since it was asked; it ended 0.2 s after it was asked, exit 3, its first line "INCONCLUSIVE window: 2 grants held; the last window closed 0.2 h ago"
+✖ #3551.84e18eb8 the record of a window that drained for 40 s holds drain within 1 s of the time the test read from its request to its grant, and the grants it waited on, by class: one build and one test (0.942333ms)
+    the record of the window that waited on a build and a test grant doesn't hold what criterion 5 names:
+    - the window never opened, so it left no record to read
+✖ Scope, Overdue: the window that drains waits with a wait of 720 minutes: the log's granted entry of its grant carries wait: 720 (0.963666ms)
+    the overdue window never opened, so the log holds no grant of its own to read
+
+no-close-reads-as-now: a log that holds no window-close is read as a window that closed just now (no-close.test.mjs)
+✖ #3551.9147d91b with no window-close in the log, the window drains as the overdue one does: it opens when the last held grant ends, and no top-level grant starts between its request and its close (800.40725ms)
+    the log holds no window-close, so the window drains as an overdue one does, but:
+    - the window never opened: the log holds no window-open since it was asked; it ended 0.1 s after it was asked, exit 3, its first line "INCONCLUSIVE window: 2 grants held; the last window closed 0.0 h ago"
+✖ #3551.84e18eb8 the record of a window that drained with no window-close in the log holds drain within 1 s of the time the test read from its request to its grant, and the grants it waited on, by class: two test (0.85075ms)
+    the record of the window that waited on two test grants doesn't hold what criterion 5 names:
+    - the window never opened, so it left no record to read
+✖ Scope, Overdue: with no window in the log the window waits with a wait of 720 minutes: the log's granted entry of its grant carries wait: 720 (0.6185ms)
+    the window never opened, so the log holds no grant of its own to read
+
+drain-in-seconds: the record's drain is in whole seconds, not milliseconds (overdue.test.mjs, no-close.test.mjs, empty.test.mjs)
+✔ #3551.6d0f6876 with no grant held and a window-close 7 minutes old, the window opens at once and the log holds window-open (2669.367583ms)
+✔ #3551.6d0f6876 with no grant held and a window-close 5 minutes old, the window leaves: it opens nothing, joins no line and reads INCONCLUSIVE (728.934958ms)
+✔ #3551.84e18eb8 the record of a window that opened at once holds drain within 1 s of the time the test read from its request to its grant (1.707625ms)
+✔ #3551.9147d91b with no window-close in the log, the window drains as the overdue one does: it opens when the last held grant ends, and no top-level grant starts between its request and its close (8809.492375ms)
+✖ #3551.84e18eb8 the record of a window that drained with no window-close in the log holds drain within 1 s of the time the test read from its request to its grant, and the grants it waited on, by class: two test (2.229417ms)
+    the record of the window that waited on two test grants doesn't hold what criterion 5 names:
+    - the record's drain, 6 ms, isn't within 1 s of the time the test read from the window's request to its grant, 6084 to 6257 ms (its request joined the table between the two moments the test read; its grant is the log's window-open)
+✔ Scope, Overdue: with no window in the log the window waits with a wait of 720 minutes: the log's granted entry of its grant carries wait: 720 (0.690042ms)
+✔ #3551.aa2e13ce with a window-close 13 minutes old and two grants held that end 20 s and 40 s on, the window opens when the second ends, and no top-level grant starts between its request and its close (42877.856875ms)
+✖ #3551.84e18eb8 the record of a window that drained for 40 s holds drain within 1 s of the time the test read from its request to its grant, and the grants it waited on, by class: one build and one test (1.447833ms)
+    the record of the window that waited on a build and a test grant doesn't hold what criterion 5 names:
+    - the record's drain, 40 ms, isn't within 1 s of the time the test read from the window's request to its grant, 40200 to 40371 ms (its request joined the table between the two moments the test read; its grant is the log's window-open)
+✔ Scope, Overdue: the window that drains waits with a wait of 720 minutes: the log's granted entry of its grant carries wait: 720 (0.746417ms)
+
+count-not-by-class: the record holds how many grants the window waited on as one number (no-close.test.mjs)
+✔ #3551.9147d91b with no window-close in the log, the window drains as the overdue one does: it opens when the last held grant ends, and no top-level grant starts between its request and its close (9203.535709ms)
+✖ #3551.84e18eb8 the record of a window that drained with no window-close in the log holds drain within 1 s of the time the test read from its request to its grant, and the grants it waited on, by class: two test (1.360542ms)
+    the record of the window that waited on two test grants doesn't hold what criterion 5 names:
+    - the record doesn't hold the grants the window waited on, by class, {"test":2}: no key of it reads as grants by class
+✔ Scope, Overdue: with no window in the log the window waits with a wait of 720 minutes: the log's granted entry of its grant carries wait: 720 (1.153834ms)
+
+four-fixed-hours: the design page states the cases and spans but keeps section 12a's crontab line (design.test.mjs)
+✖ #3551.0d50f746 sections 6 and 12a of docs/parallel-proof.md state the three cases, the two drafted spans and the hourly schedule (3.413291ms)
+    docs/parallel-proof.md doesn't state what criterion 6 names:
+    - section 12a holds no crontab line that asks `throttle.mjs window` each hour (a minute, then `* * * *`): it holds `0 3,9,15,21 * * * zsh -lc 'cd ~/doneright && node scripts/throttle.mjs window' >> ~/.deepbuild/budget-window.log 2>&1`
+    - a crontab line still asks the window at fixed hours: `0 3,9,15,21 * * * zsh -lc 'cd ~/doneright && node scripts/throttle.mjs window' >> ~/.deepbuild/budget-window.log 2>&1`
+✔ Scope, Design and The schedule: sections 6 and 12a state the trust the three cases give up, and section 12a still says the schedule is installed by hand, on a reference Mac (0.853792ms)
+
+a window that waits for the held grants but stops no new one (overdue.test.mjs)
+✖ #3551.aa2e13ce with a window-close 13 minutes old and two grants held that end 20 s and 40 s on, the window opens when the second ends, and no top-level grant starts between its request and its close (42383.860292ms)
+    the last window closed 13 minutes ago, past the 12 of DEEP_WINDOW_OVERDUE_MIN, so the window is overdue and drains, but:
+    - a top-level grant started between the window's request and its close: test grant f039d4ac419a53ae of pid 49046 at 2026-11-26T14:38:17.204Z, build grant d8c647818ce591b1 of pid 49045 at 2026-11-26T14:38:37.089Z
+    - the build request made during the drain (pid 49045) ran under build:d8c647818ce591b1, which the log grants before the window-close
+    - the test request made during the drain (pid 49046) ran under test:f039d4ac419a53ae, which the log grants before the window-close
+✔ #3551.84e18eb8 the record of a window that drained for 40 s holds drain within 1 s of the time the test read from its request to its grant, and the grants it waited on, by class: one build and one test (1.606584ms)
+✔ Scope, Overdue: the window that drains waits with a wait of 720 minutes: the log's granted entry of its grant carries wait: 720 (0.743125ms)
+
+a window that reads the oldest window-close of its log (not-yet.test.mjs, empty.test.mjs)
+✔ #3551.6d0f6876 with no grant held and a window-close 7 minutes old, the window opens at once and the log holds window-open (1470.794833ms)
+✖ #3551.6d0f6876 with no grant held and a window-close 5 minutes old, the window leaves: it opens nothing, joins no line and reads INCONCLUSIVE (1407.665791ms)
+    with no grant held and the last window closed 5 minutes ago, the window is not yet due, but:
+    - the window opened 5 minutes after the last window closed, less than the 6 of DEEP_WINDOW_APART_MIN: the log holds a window-open for grant 8db54c5e5a0d2cbd
+    - a window that left wrote a record of its own
+    - a window that didn't open exited 0
+    - the window's first line doesn't read INCONCLUSIVE: "PASS budget-window: the first window on this machine marks 6dd81d642097ade960b53be9629ac8f4f66db5be; the commits after it are measured"
+✔ #3551.84e18eb8 the record of a window that opened at once holds drain within 1 s of the time the test read from its request to its grant (0.943959ms)
+✖ #3551.8190b19e with the spans at 6 and 12 minutes, one test grant held and a window-close 7 minutes old in the log, a window leaves within 2 s, the table holds no request of its own, a build request made beside it is granted, and its first line is INCONCLUSIVE window:, naming 1 grant (30845.275209ms)
+    with a test grant held and the last window closed 7 minutes ago, inside the 12 of DEEP_WINDOW_OVERDUE_MIN, the window is not yet due, but:
+    - the window didn't leave: it still waits 30.1 s after it was asked, its timed request b4eb99b6f24e4fa5 of pid 10113 in the table
+    - the table held a request of the window's own: the timed request b4eb99b6f24e4fa5 of pid 10113, first seen 0.1 s after the window was asked and still there
+    - the build request made beside it was not granted: 30.0 s after it was made its build request 1390a62496761a6d of pid 10157 still waits in the table, behind the window's timed request b4eb99b6f24e4fa5 of pid 10113
+    - the window's first line isn't `INCONCLUSIVE window:`: it has printed nothing
+✖ Scope, Not yet: the window prints `INCONCLUSIVE window: 1 grants held; the last window closed <h> h ago`, exits as a window with no grant does today, 3, and stops nothing: the held grant is still held and no window opened (0.759708ms)
+    the window didn't leave: it still waits 30.1 s after it was asked
+
+a record whose drain runs to the window's close (no-close.test.mjs)
+✔ #3551.9147d91b with no window-close in the log, the window drains as the overdue one does: it opens when the last held grant ends, and no top-level grant starts between its request and its close (8133.537042ms)
+✖ #3551.84e18eb8 the record of a window that drained with no window-close in the log holds drain within 1 s of the time the test read from its request to its grant, and the grants it waited on, by class: two test (1.310292ms)
+    the record of the window that waited on two test grants doesn't hold what criterion 5 names:
+    - the record's drain, 1795703968785 ms, isn't within 1 s of the time the test read from the window's request to its grant, 6185 to 6314 ms (its request joined the table between the two moments the test read; its grant is the log's window-open)
+✔ Scope, Overdue: with no window in the log the window waits with a wait of 720 minutes: the log's granted entry of its grant carries wait: 720 (1.2425ms)
+
+an overdue window whose wait stays at 60 minutes (no-close.test.mjs)
+✔ #3551.9147d91b with no window-close in the log, the window drains as the overdue one does: it opens when the last held grant ends, and no top-level grant starts between its request and its close (9193.218625ms)
+✔ #3551.84e18eb8 the record of a window that drained with no window-close in the log holds drain within 1 s of the time the test read from its request to its grant, and the grants it waited on, by class: two test (1.678792ms)
+✖ Scope, Overdue: with no window in the log the window waits with a wait of 720 minutes: the log's granted entry of its grant carries wait: 720 (1.741125ms)
+    the log's granted entry of the window's grant 93eee49ef8bbc438 doesn't carry wait: 720, a held grant's own bound: {"at":"2026-11-26T14:40:10.286Z","event":"granted","class":"timed","grant":"top-level","id":"93eee49ef8bbc438","pid":26056,"index":1,"load":2,"cores":18,"wait":60}
+
+a log that can't be read, read as a log that holds no window (log.test.mjs)
+✖ Scope, When it closed: with a log that can't be read, the window's first line is BLOCKED throttle, it exits non-zero and opens nothing (2348.27625ms)
+    with a log it can't read, the window's first line isn't `BLOCKED throttle`: "PASS budget-window: the first window on this machine marks 0f8a455b7237321be93ba468c63c44c90379bd8b; the commits after it are measured"
+
+a design page whose section 6 is the base's (design.test.mjs)
+✖ #3551.0d50f746 sections 6 and 12a of docs/parallel-proof.md state the three cases, the two drafted spans and the hourly schedule (4.364375ms)
+    docs/parallel-proof.md doesn't state what criterion 6 names:
+    - section 6 doesn't state the empty case (a sentence that names a window, says "at once" and says no grant is held, as "no grant", "holds no", "nothing is held", "none is held" or "empty")
+    - section 6 doesn't state the not-yet case (a sentence that says "leaves at once", "joins no line", "stops no grant", "stops nothing" or `INCONCLUSIVE window`)
+    - section 6 doesn't state the overdue case (a sentence that says "overdue", or one that says "12 hours", "or more" and "waits" or "drains")
+✔ Scope, Design and The schedule: sections 6 and 12a state the trust the three cases give up, and section 12a still says the schedule is installed by hand, on a reference Mac (1.175625ms)
+
+a `throttle.mjs window` that prints nothing and exits 0 (every file)
+✔ #3551.0d50f746 sections 6 and 12a of docs/parallel-proof.md state the three cases, the two drafted spans and the hourly schedule (3.564666ms)
+✔ Scope, Design and The schedule: sections 6 and 12a state the trust the three cases give up, and section 12a still says the schedule is installed by hand, on a reference Mac (0.437041ms)
+✖ #3551.6d0f6876 with no grant held and a window-close 7 minutes old, the window opens at once and the log holds window-open (1330.718291ms)
+    with no grant held and the last window closed 7 minutes ago, past the 6 of DEEP_WINDOW_APART_MIN, the window is due, but:
+    - the window didn't open: the log holds no window-open since it was asked (exit 0, having printed nothing)
+✖ #3551.6d0f6876 with no grant held and a window-close 5 minutes old, the window leaves: it opens nothing, joins no line and reads INCONCLUSIVE (830.279833ms)
+    with no grant held and the last window closed 5 minutes ago, the window is not yet due, but:
+    - a window that didn't open exited 0
+    - the window's first line doesn't read INCONCLUSIVE: it printed nothing
+✖ #3551.84e18eb8 the record of a window that opened at once holds drain within 1 s of the time the test read from its request to its grant (1.302375ms)
+    the record of the window that opened on an empty table doesn't hold what criterion 5 names:
+    - the window never opened, so it left no record to read
+✖ Scope, When it closed: with a log that can't be read, the window's first line is BLOCKED throttle, it exits non-zero and opens nothing (1257.098083ms)
+    with a log it can't read, the window's first line isn't `BLOCKED throttle`: it printed nothing
+✖ #3551.9147d91b with no window-close in the log, the window drains as the overdue one does: it opens when the last held grant ends, and no top-level grant starts between its request and its close (1637.914875ms)
+    the log holds no window-close, so the window drains as an overdue one does, but:
+    - the window never opened: the log holds no window-open since it was asked; it ended 0.1 s after it was asked, exit 0, having printed nothing
+✖ #3551.84e18eb8 the record of a window that drained with no window-close in the log holds drain within 1 s of the time the test read from its request to its grant, and the grants it waited on, by class: two test (0.983833ms)
+    the record of the window that waited on two test grants doesn't hold what criterion 5 names:
+    - the window never opened, so it left no record to read
+✖ Scope, Overdue: with no window in the log the window waits with a wait of 720 minutes: the log's granted entry of its grant carries wait: 720 (0.67275ms)
+    the window never opened, so the log holds no grant of its own to read
+✖ #3551.8190b19e with the spans at 6 and 12 minutes, one test grant held and a window-close 7 minutes old in the log, a window leaves within 2 s, the table holds no request of its own, a build request made beside it is granted, and its first line is INCONCLUSIVE window:, naming 1 grant (1779.818584ms)
+    with a test grant held and the last window closed 7 minutes ago, inside the 12 of DEEP_WINDOW_OVERDUE_MIN, the window is not yet due, but:
+    - the window's first line isn't `INCONCLUSIVE window:`: it has printed nothing
+✖ Scope, Not yet: the window prints `INCONCLUSIVE window: 1 grants held; the last window closed <h> h ago`, exits as a window with no grant does today, 3, and stops nothing: the held grant is still held and no window opened (1.553791ms)
+    the window's first line isn't `INCONCLUSIVE window: <n> grants held; the last window closed <h> h ago` with 1 grant: it printed nothing
+✖ #3551.aa2e13ce with a window-close 13 minutes old and two grants held that end 20 s and 40 s on, the window opens when the second ends, and no top-level grant starts between its request and its close (1529.8205ms)
+    the last window closed 13 minutes ago, past the 12 of DEEP_WINDOW_OVERDUE_MIN, so the window is overdue and drains, but:
+    - the window never opened: the log holds no window-open since it was asked; it ended 0.1 s after it was asked, exit 0, having printed nothing
+✖ #3551.84e18eb8 the record of a window that drained for 40 s holds drain within 1 s of the time the test read from its request to its grant, and the grants it waited on, by class: one build and one test (1.538ms)
+    the record of the window that waited on a build and a test grant doesn't hold what criterion 5 names:
+    - the window never opened, so it left no record to read
+✖ Scope, Overdue: the window that drains waits with a wait of 720 minutes: the log's granted entry of its grant carries wait: 720 (0.629791ms)
+    the overdue window never opened, so the log holds no grant of its own to read

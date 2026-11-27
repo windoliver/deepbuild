@@ -470,7 +470,7 @@ export class AskTasks {
     const raised = {
       // At its deadline it takes your settings' definition default, leave-out: what the outside text added stays out.
       // With no outside text the default locks it as drafted, so no requirement drops out unanswered.
-      kind: 'definition', question, recommended: 'keep', default: outside.length || waived ? 'leave-out' : 'keep', fallback: 'you', provisional: false, owner: 'you',
+      kind: 'definition', may_answer: 'trusted_path', question, recommended: 'keep', default: outside.length || waived ? 'leave-out' : 'keep', fallback: 'you', provisional: false, owner: 'you',
       options: outside.length || waived
         ? [{ id: 'keep', label: 'Lock it with the outside additions, marked with their author', decision: 'none' }, { id: 'leave-out', label: 'Lock it without them', decision: 'none' }]
         : [{ id: 'keep', label: 'Lock it as drafted: its check runs on the base with no stand-in', decision: 'none' }, { id: 'leave-out', label: `Lock it without ${formless.map((r) => r.id).join(', ')}`, decision: 'none' }],

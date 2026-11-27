@@ -442,7 +442,7 @@ export class Acceptance {
       { id: 'hold', label: 'Hold the issue out of its slot', decision: 'none' },
     ];
     d.ask = await this.o.asks().raise(this.o.core, 'acceptance.dispute', {
-      kind: 'exception', question, options, recommended: 'keep', default: 'keep', deadline: this.o.now() + 2 * 86_400_000, fallback: 'you', provisional: false, owner: 'you',
+      kind: 'exception', may_answer: 'trusted_path', question, options, recommended: 'keep', default: 'keep', deadline: this.o.now() + 2 * 86_400_000, fallback: 'you', provisional: false, owner: 'you',
       key: sha256(`acceptance.dispute ${e.issue} ${d.test}`), pinned_to: { kind: 'commit', ref: d.work },
     });
     e.slot = false;

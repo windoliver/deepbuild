@@ -32,7 +32,7 @@ export default class {
 
   onTestCaseResult(test) {
     const { state, errors, note } = test.result();
-    this.write({ type: { passed: 'pass', failed: 'fail' }[state] ?? 'skip', file: test.module.moduleId, name: nameOf(test), note, error: shown(errors?.[0]) });
+    this.write({ type: { passed: 'pass', failed: 'fail' }[state] ?? 'skip', ms: test.diagnostic()?.duration, file: test.module.moduleId, name: nameOf(test), note, error: shown(errors?.[0]) });
   }
 
   // A file that failed on its imports, or a suite on a hook, fails outside its tests, whose rows read only as skipped.

@@ -1,0 +1,354 @@
+# #3033's tests run against the base, commit c7dc0edc3690706adb84d678806301c3d14456ca, before any implementation
+#
+# Run in this checkout at the base (git status lists only tests/acceptance/3033/), deep-gpu built by
+# CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked --bin deep-gpu (toolchain 1.99.1), one file at a
+# time, each as
+#   node scripts/throttle.mjs test --wait 120 -- node node_modules/vitest/vitest.mjs run --root tests/acceptance/3033 --no-file-parallelism --testTimeout=1800000 <file>
+# on a Mac17,10 (Apple M5 Max), macOS build 26B8119, on its Metal GPU, with a one-minute load of 140 to 200 on its 18
+# cores. Every file loads, and every test ends at an assertion, none at import, at start-up or at a timeout:
+# - height.test.ts, speed.test.ts, repeat.test.ts (--backend noop): the base answers each sea's view3d with the maps'
+#   receipt alone, {"decoded_bytes":0,"maps":[]}, so receipt.water.waves is missing; each planted name is unknown
+#   (bad_input, exit 2).
+# - vertex.test.ts: the base draws both films (the sea object as a wind's four waves) and its receipt lists no table.
+# - unchanged.test.ts, run twice. The first run, with no reading kept, drew the 59 frames, kept its 61 hashes as
+#   target/acceptance/3033/unchanged.json and ended INCONCLUSIVE; that file was copied, byte for byte, to
+#   fixtures/base/unchanged.json (sha256 6cb0e57dc05bc6b40145026de74b21451b9bded0c9452462d5f600e053ef48cb). The second
+#   run, a fresh process, passed: all 61 hashes repeated, and the file it kept has the same sha256. This criterion
+#   holds at the base by construction.
+# - budgets.test.ts: the lane's validator accepts the base's budgets.json against itself and the task isn't there; the
+#   timing fails at its first run's check that the timed side is a sea, before the machine is read (at this load the
+#   machine would have read INCONCLUSIVE).
+# - taste.test.ts: fails at its check that the still is of a sea, before any file is kept or a call is read.
+# The type-check passes:
+#   npx tsc -p tests/acceptance/3033/tsconfig.json
+#
+# Probes at the base, not kept (README: At the base):
+# - deep-gpu run --backend noop answers view3d for the wide plate, as a sea and with waves: wind, with frames (their
+#   pixel_hash null), passes, status, surface, render_targets, layers and receipt {"decoded_bytes":0,"maps":[]}.
+# - the 400 m film with waves: {sea: {wind: 10, direction: 90, spread: 30, seed: 3033}} and with waves: {wind: {speed:
+#   3, direction: 0}} have one pixel hash at frame 20 (22adc373be91…): the base reads the sea object as the default wind.
+# - the same film with waves: wind at 10 m/s, 200 frames at 10 fps: 200 different pixel hashes.
+# - straight down from 150 m at fov 110° (512 × 512), waves: wind at 10 m/s: the depth target is finite over 87.2% and
+#   87.7% of the pixels at frames 7 and 30 and +∞ over the rest, none NaN; the surface stands from −1.067 to +1.066 m
+#   (the four waves' amplitudes sum to 1.070 m) and reaches at most 0.66 m outside the plate at rest (a pixel is 0.84 m).
+# - the half-frame camera (far: 5000) over the 1 km plate with waves: wind at 10 m/s: 48.08% of the 1080p frame drawn.
+# - the still's camera (far: 5000) over the 1 km plate of 1,024 × 1,024 cells: the tower stands at the frame's centre,
+#   the water fills the frame below the horizon.
+
+--- height.test.ts against the base ---
+
+RUN  v5.0.5 <checkout>/tests/acceptance/3033
+
+ ❯ height.test.ts (2 tests | 2 failed) 12031ms
+   ❯ #3033.b7819eb1 a sea stands as high as its wind makes it (2)
+     × #3033.b7819eb1 at 10 m/s the sea's significant height, four times the standard deviation of its height at 4,096 seeded points over 600 s, is 2.14 m within 5%, and at 5 m/s 0.54 m 7587ms
+     × #3033.b7819eb1 a planted table with every amplitude halved (--planted water_sea_amplitudes_halved) reads 1.07 m and fails, naming the wind 30ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  height.test.ts > #3033.b7819eb1 a sea stands as high as its wind makes it > #3033.b7819eb1 at 10 m/s the sea's significant height, four times the standard deviation of its height at 4,096 seeded points over 600 s, is 2.14 m within 5%, and at 5 m/s 0.54 m
+AssertionError: the receipt of a sea from a wind of 10 m/s lists its wave table, receipt.water.waves: expected null not to be null
+ ❯ height.test.ts:31:109
+     29|   it(`${AC[1]} at 10 m/s the sea's significant height, four times the …
+     30|     const [ten, five] = tablesOf(bin(), out(), [['sea-10', sea(10)], […
+     31|     expect(ten, 'the receipt of a sea from a wind of 10 m/s lists its …
+       |                                                                                                             ^
+     32|     expect(five, 'the receipt of a sea from a wind of 5 m/s lists its …
+     33|     const a = heightProblems(10, ten!, 2.14); const b = heightProblems…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  height.test.ts > #3033.b7819eb1 a sea stands as high as its wind makes it > #3033.b7819eb1 a planted table with every amplitude halved (--planted water_sea_amplitudes_halved) reads 1.07 m and fails, naming the wind
+AssertionError: deep-gpu run --backend noop --planted water_sea_amplitudes_halved exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu helpers.ts:204:155
+    202|   // A machine with no GPU device to draw on: the binary says so and e…
+    203|   if (!start.backend && /"code":"(no_device|missing_feature)"/.test(r.…
+    204|   expect(r.status, `${label} exits 0 (${r.signal ?? 'no signal'}); std…
+       |                                                                                                                                                           ^
+    205|   const lines = (r.stdout ?? '').split('\n').filter((l) => l !== '');
+    206|   expect(lines.length, `${label}: one output line`).toBe(1);
+ ❯ tablesOf helpers.ts:464:19
+ ❯ height.test.ts:40:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  22:12:54
+   Duration  12.20s (tests 100%)
+
+exit 1
+
+--- speed.test.ts against the base ---
+
+RUN  v5.0.5 <checkout>/tests/acceptance/3033
+
+ ❯ speed.test.ts (2 tests | 2 failed) 6713ms
+   ❯ #3033.dbde0e46 every wave travels at the deep-water speed for its length (2)
+     × #3033.dbde0e46 every row of the wave table of a sea from 10 m/s, and of one from 5 m/s, has speed √(g × length ÷ 2π) within 1e-9, by which a 100 m wave moves about 12.5 m in a second and a 25 m wave half that 3430ms
+     × #3033.dbde0e46 a planted table that gives every wave the longest one's speed (--planted water_sea_speed_of_longest) fails, naming the row 28ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  speed.test.ts > #3033.dbde0e46 every wave travels at the deep-water speed for its length > #3033.dbde0e46 every row of the wave table of a sea from 10 m/s, and of one from 5 m/s, has speed √(g × length ÷ 2π) within 1e-9, by which a 100 m wave moves about 12.5 m in a second and a 25 m wave half that
+AssertionError: the receipt of a sea from a wind of 10 m/s lists its wave table, receipt.water.waves: expected null not to be null
+ ❯ speed.test.ts:28:109
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  speed.test.ts > #3033.dbde0e46 every wave travels at the deep-water speed for its length > #3033.dbde0e46 a planted table that gives every wave the longest one's speed (--planted water_sea_speed_of_longest) fails, naming the row
+AssertionError: deep-gpu run --backend noop --planted water_sea_speed_of_longest exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu helpers.ts:204:155
+    202|   // A machine with no GPU device to draw on: the binary says so and e…
+    203|   if (!start.backend && /"code":"(no_device|missing_feature)"/.test(r.…
+    204|   expect(r.status, `${label} exits 0 (${r.signal ?? 'no signal'}); std…
+       |                                                                                                                                                           ^
+    205|   const lines = (r.stdout ?? '').split('\n').filter((l) => l !== '');
+    206|   expect(lines.length, `${label}: one output line`).toBe(1);
+ ❯ tablesOf helpers.ts:464:19
+ ❯ speed.test.ts:41:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  22:13:07
+   Duration  7.13s (tests 98%, import 2%)
+
+exit 1
+
+--- repeat.test.ts against the base ---
+
+RUN  v5.0.5 <checkout>/tests/acceptance/3033
+
+ ❯ repeat.test.ts (2 tests | 2 failed) 8021ms
+   ❯ #3033.2b265ebd a sea doesn't repeat along the wind, as four waves do (2)
+     × #3033.2b265ebd along the wind the 10 m/s sea's height correlates under 0.3 with itself at every lag from 200 m to 1 km, and the same plate with waves: wind passes 0.9 inside that range 3974ms
+     × #3033.2b265ebd a planted sea that draws only its four longest waves (--planted water_sea_draws_four_longest) fails, naming the lag 30ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  repeat.test.ts > #3033.2b265ebd a sea doesn't repeat along the wind, as four waves do > #3033.2b265ebd along the wind the 10 m/s sea's height correlates under 0.3 with itself at every lag from 200 m to 1 km, and the same plate with waves: wind passes 0.9 inside that range
+AssertionError: the receipt of a sea from a wind of 10 m/s lists its wave table, receipt.water.waves: expected null not to be null
+ ❯ repeat.test.ts:32:111
+     30|   it(`${AC[3]} along the wind the 10 m/s sea's height correlates under…
+     31|     const [swell, four] = tablesOf(bin(), out(), [['sea-10', sea(10)],…
+     32|     expect(swell, 'the receipt of a sea from a wind of 10 m/s lists it…
+       |                                                                                                               ^
+     33|     expect(four, 'the receipt of the same plate with waves: wind lists…
+     34|     const { curve, failures } = repeatProblems(swell!);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  repeat.test.ts > #3033.2b265ebd a sea doesn't repeat along the wind, as four waves do > #3033.2b265ebd a planted sea that draws only its four longest waves (--planted water_sea_draws_four_longest) fails, naming the lag
+AssertionError: deep-gpu run --backend noop --planted water_sea_draws_four_longest exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu helpers.ts:204:155
+    202|   // A machine with no GPU device to draw on: the binary says so and e…
+    203|   if (!start.backend && /"code":"(no_device|missing_feature)"/.test(r.…
+    204|   expect(r.status, `${label} exits 0 (${r.signal ?? 'no signal'}); std…
+       |                                                                                                                                                           ^
+    205|   const lines = (r.stdout ?? '').split('\n').filter((l) => l !== '');
+    206|   expect(lines.length, `${label}: one output line`).toBe(1);
+ ❯ tablesOf helpers.ts:464:19
+ ❯ repeat.test.ts:45:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  22:13:16
+   Duration  8.41s (tests 97%, transform 2%, import 1%)
+
+exit 1
+
+--- vertex.test.ts against the base ---
+
+RUN  v5.0.5 <checkout>/tests/acceptance/3033
+
+ ❯ vertex.test.ts (2 tests | 2 failed) 190010ms
+   ❯ #3033.485e37d6 the sea's vertices stay within their waves' summed amplitude, and the sea is a closed form of t (2)
+     × #3033.485e37d6 no vertex moves further than the summed amplitude of the waves the vertex stage draws: at 20 sampled times no point of the drawn surface stands outside it 108702ms
+     × #3033.485e37d6 20 sampled times hash the same seeked and played 77963ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  vertex.test.ts > #3033.485e37d6 the sea's vertices stay within their waves' summed amplitude, and the sea is a closed form of t > #3033.485e37d6 no vertex moves further than the summed amplitude of the waves the vertex stage draws: at 20 sampled times no point of the drawn surface stands outside it
+AssertionError: the receipt lists the sea's wave table, receipt.water.waves: expected null not to be null
+ ❯ vertex.test.ts:54:86
+     52|     const [film] = runGpu(bin(), dir, [view3d({ doc, look: LOOK, size:…
+     53|     const rows = waveTable(film!, 'the sea seen from above');
+     54|     expect(rows, 'the receipt lists the sea\'s wave table, receipt.wat…
+       |                                                                                      ^
+     55|     expect(rows!.filter((w) => w.vertex === null).length, 'every row o…
+     56|     const bound = rows!.filter((w) => w.vertex).reduce((a, w) => a + w…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  vertex.test.ts > #3033.485e37d6 the sea's vertices stay within their waves' summed amplitude, and the sea is a closed form of t > #3033.485e37d6 20 sampled times hash the same seeked and played
+AssertionError: the film is of a sea: its receipt lists the sea's wave table, receipt.water.waves: expected null not to be null
+ ❯ vertex.test.ts:92:138
+     90|       ...TIMES.map((n) => view3d({ doc, look: LOOK, size: SIZE, from: …
+     91|     ]);
+     92|     expect(waveTable(played!, 'the sea film'), 'the film is of a sea: …
+       |                                                                                                                                          ^
+     93|     const p = TIMES.map((n) => hashAt(played!, n, 'the played film'));
+     94|     const failures = TIMES.flatMap((n, k) => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  22:13:40
+   Duration  190.44s (tests 100%)
+
+exit 1
+
+--- unchanged.test.ts against the base, first run: no reading of the merge base kept yet ---
+
+RUN  v5.0.5 <checkout>/tests/acceptance/3033
+
+stdout | unchanged.test.ts > #3033.88aca207 water whose waves are left as they are draws as on the merge base > #3033.88aca207 with waves left as it is, every water document #166's and #968's suites hash has the merge base's hash at every frame they hash
+#3033.88aca207: 61 hashes of 59 frames of 21 documents; kept as target/acceptance/3033/unchanged.json
+
+ ❯ unchanged.test.ts (1 test | 1 failed) 27123ms
+   ❯ #3033.88aca207 water whose waves are left as they are draws as on the merge base (1)
+     × #3033.88aca207 with waves left as it is, every water document #166's and #968's suites hash has the merge base's hash at every frame they hash 24911ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  unchanged.test.ts > #3033.88aca207 water whose waves are left as they are draws as on the merge base > #3033.88aca207 with waves left as it is, every water document #166's and #968's suites hash has the merge base's hash at every frame they hash
+AssertionError: INCONCLUSIVE: no reading of the merge base is kept as tests/acceptance/3033/fixtures/base/unchanged.json; this is not a pass
+ ❯ inconclusive helpers.ts:71:10
+     69| /** A test that can't be judged here fails with this, never passes. */
+     70| export function inconclusive(reason: string): never {
+     71|   expect.fail(`INCONCLUSIVE: ${reason}; this is not a pass`);
+       |          ^
+     72| }
+     73| /** A test whose GPU isn't there fails with this, never passes: the is…
+ ❯ mergeBase helpers.ts:579:26
+ ❯ unchanged.test.ts:46:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  22:17:03
+   Duration  27.37s (tests 100%)
+
+exit 1
+
+--- unchanged.test.ts against the base, second run: against the reading the first run kept ---
+
+RUN  v5.0.5 <checkout>/tests/acceptance/3033
+
+stdout | unchanged.test.ts > #3033.88aca207 water whose waves are left as they are draws as on the merge base > #3033.88aca207 with waves left as it is, every water document #166's and #968's suites hash has the merge base's hash at every frame they hash
+#3033.88aca207: 61 hashes of 59 frames of 21 documents; kept as target/acceptance/3033/unchanged.json
+
+ ✓ unchanged.test.ts (1 test) 26395ms
+   ✓ #3033.88aca207 water whose waves are left as they are draws as on the merge base (1)
+     ✓ #3033.88aca207 with waves left as it is, every water document #166's and #968's suites hash has the merge base's hash at every frame they hash 25139ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  22:18:08
+   Duration  26.54s (tests 100%)
+
+exit 0
+
+--- budgets.test.ts against the base ---
+
+RUN  v5.0.5 <checkout>/tests/acceptance/3033
+
+ ❯ budgets.test.ts (2 tests | 2 failed) 6533ms
+   ❯ #3033.49bf9e99 the sea's budget (2)
+     × #3033.49bf9e99 budgets.json holds the task canvas-water-sea with the issue's number, compared with the merge base at the lane's margin, and passes the lane's validator 284ms
+     × #3033.49bf9e99 a sea filling half of a 1080p frame adds under 0.6 ms of GPU time over the same plate with waves: wind, in five runs 3907ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  budgets.test.ts > #3033.49bf9e99 the sea's budget > #3033.49bf9e99 budgets.json holds the task canvas-water-sea with the issue's number, compared with the merge base at the lane's margin, and passes the lane's validator
+AssertionError: budgets.json has the task canvas-water-sea: expected undefined to be defined
+ ❯ budgets.test.ts:57:59
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  budgets.test.ts > #3033.49bf9e99 the sea's budget > #3033.49bf9e99 a sea filling half of a 1080p frame adds under 0.6 ms of GPU time over the same plate with waves: wind, in five runs
+AssertionError: the side that is timed is a sea: its receipt lists the sea's wave table, receipt.water.waves: expected null not to be null
+ ❯ budgets.test.ts:73:141
+     71|       const dir = out();
+     72|       const [a, b] = runGpu(bin(), dir, sides(dir).map((doc) => view3d…
+     73|       expect(waveTable(a!, 'the sea'), 'the side that is timed is a se…
+       |                                                                                                                                             ^
+     74|       const [fa, fb] = [frameAt(framesOf(a!, 'the sea'), SHOWN, 'the s…
+     75|       for (const [what, f] of [['the sea', fa], ['the same plate with …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  22:18:35
+   Duration  6.67s (tests 99%)
+
+exit 1
+
+--- taste.test.ts against the base ---
+
+RUN  v5.0.5 <checkout>/tests/acceptance/3033
+
+ ❯ taste.test.ts (1 test | 1 failed) 16720ms
+   ❯ #3033.5c2dc7ad one taste call on the check run's still (1)
+     × #3033.5c2dc7ad the check run takes one still of a 1 km sea at 10 m/s beside the same plate with four waves, and the recorded taste call says it reads as open water 14344ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  taste.test.ts > #3033.5c2dc7ad one taste call on the check run's still > #3033.5c2dc7ad the check run takes one still of a 1 km sea at 10 m/s beside the same plate with four waves, and the recorded taste call says it reads as open water
+AssertionError: the still is of a sea: its receipt lists the sea's wave table, receipt.water.waves: expected null not to be null
+ ❯ taste.test.ts:44:150
+     42|     });
+     43|     const [seaShot, fourShot] = runGpu(bin(), dir, [shot('sea-1km', se…
+     44|     expect(waveTable(seaShot!, 'the 1 km sea at 10 m/s'), 'the still i…
+       |                                                                                                                                                      ^
+     45|     const final = (r: typeof seaShot, what: string) => finalOf(dir, fr…
+     46|     const [swell, four] = [final(seaShot, 'the 1 km sea at 10 m/s'), f…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  22:18:42
+   Duration  17.05s (tests 99%)
+
+exit 1
