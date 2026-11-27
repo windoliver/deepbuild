@@ -28,7 +28,7 @@ run of its own, and the three planted cores the criteria name.
 | `hub.mjs` | | `deep hub run`, `deep mcp`, their binaries |
 | `twins.json` | | `{}`: no twin folder (The planted cores, below) |
 | `lane.json` | | the folder runs alone |
-| `BASE-FAILURE.txt` | | each file run at the base (phase 2 of this job; What was run, below) |
+| `BASE-FAILURE.txt` | | each file run once at the base: every test's failing assertion, how long each file took, and the probes' readings |
 
 ## What was read
 
@@ -79,19 +79,23 @@ the core from there. `ac4-hub` builds `deep-show` and `deep-hook` the same way, 
 `CARGO_TARGET_DIR` dropped, since a hub finds both only there; under a proof run it builds nothing and finds the copies
 the run put there for a test that names the CLI's package.
 
-| File | Needs | Takes |
-|---|---|---|
-| `ac1-second-core` | `deep-show` | one core through the release's 21 packs' checks, then a second that runs none; each also pages the whole `deep_kinds` listing. On the merge base one core, then it fails |
-| `ac2-changed` | `deep-show` | 21 short-lived cores of test packs (seven a test) |
-| `ac3-damaged` | `deep-show` | 9 short-lived cores, three of them with one shipped pack that carries a library |
-| `ac4-beside` | `deep-show` | 2 short-lived cores and one node process |
-| `ac4-hub` | `packages/*/dist`, `target/{release,debug}/deep-show` and `deep-hook` | one hub whose core checks the release's 21 packs once, and one node process |
-| `ac5-refused` | `deep-show` | 4 short-lived cores |
-| `ac6-task` | `git`, `origin/main` | under a second where it fails; a few seconds with the lane's validator |
-| `ac6-first-reply` | `deep-show`; `target/release/deep-show` of the same sources for a result that counts | 1 short-lived core (3 where a release build is there), one core through the 21 packs' checks, then 6 that run none. On the merge base it fails after the first short-lived core |
+| File | Needs | What it starts | At the base |
+|---|---|---|---|
+| `ac1-second-core` | `deep-show` | one core through the release's 21 packs' checks, then a second that runs none; each also pages the whole `deep_kinds` listing | 16.5 s: one core, then it fails |
+| `ac2-changed` | `deep-show` | 21 short-lived cores of test packs (seven a test) | 17.4 s: one core a test |
+| `ac3-damaged` | `deep-show` | 9 short-lived cores, three of them with one shipped pack that carries a library | 19.8 s: 5 cores |
+| `ac4-beside` | `deep-show` | 2 short-lived cores and one node process | 5.9 s: one core |
+| `ac4-hub` | `packages/*/dist`, `target/{release,debug}/deep-show` and `deep-hook` | one hub whose core checks the release's 21 packs once, and one node process | 17.9 s: the whole test, to its last line |
+| `ac5-refused` | `deep-show` | 4 short-lived cores | 6.2 s: 2 cores |
+| `ac6-task` | `git`, `origin/main` | nothing where it fails; `git` twice and the lane's validator once where the task is there | 0.1 s |
+| `ac6-first-reply` | `deep-show`; `target/release/deep-show` of the same sources for a result that counts | 1 short-lived core (3 where a release build is there), one core through the 21 packs' checks, then 6 that run none | 5.7 s: one core |
 
-The times of each file at the base go in `BASE-FAILURE.txt` once phase 2 of this job has run them (What was run); none
-was run on the real binary yet. A core's answer has 12 minutes and a file 18, inside the
+At the base the eight files took 89.5 s together, one at a time, on a debug build at a one-minute load of 52 to 88
+(`BASE-FAILURE.txt`). On the change the short-lived cores are more (37 against 12) and the 21 packs are checked three
+times (the first core of `ac1-second-core`, the hub's core, and the core that fills `ac6-first-reply`'s store): at
+the base a debug core checked them in 9 to 11 s and paged the 19 pages of its listing in a little over 2 s, and a core
+given a test pack answered in 0.2 s. So the suite should end within a few minutes there at such a load; no file was
+run on the change. A core's answer has 12 minutes and a file 18, inside the
 20 the proof lanes give a file; past either the test ends `INCONCLUSIVE`, naming the answer it waited for. Temporary
 folders are `/tmp/dh3611-*` (a hub's socket path must fit in 104 bytes), each removed by its test; every process is
 stopped by its PID (a core, the hub, `deep mcp`, the process that is not the hub). The hub runs with `HOME` in such a
@@ -130,13 +134,15 @@ changed bytes or a row the test wrote. `ac4-hub` is the one file with a real hub
   the `fingerprint` call's `fingerprint.build`; `outcome`, `installed` or `refused`; `issues`, a list; `left`; and
   `left_sha256`, 64 hex digits. They are top-level members of the first line's one object: a test changes `build`,
   `left_sha256`, `outcome` or `issues` in place and leaves every other byte of the line as the core wrote it.
-- The `packs` call: a row's `checks` is 0 for a result this core took from the store and 1 for a check it ran.
+- The `packs` call: a row's `checks` is 0 for a result this core took from the store and 1 for a check it ran. A row
+  holds what the base's holds (`pack`, `version`, `state`, `checks`, `issues`, `layouts`, `named_by`), and the tests
+  read the first six.
 
 **Names that are this suite's own**, which the implementer provides as the tests spell them:
 
 | Name | What it is | Example |
 |---|---|---|
-| `counts` beside `packs` | The design step gives the `packs` call `counts: {kits, fields, rewrites, runs, compiles}` and doesn't say where. The tests read it as a member of the call's reply, beside `packs`: five whole numbers, what this process's pack checks have run since it started | `{"packs": [{"pack": "test/kept3611whole", "version": "1.0.0", "state": "installed", "checks": 0, "issues": [], "layouts": []}], "counts": {"kits": 0, "fields": 0, "rewrites": 0, "runs": 0, "compiles": 0}}` |
+| `counts` beside `packs` | The design step gives the `packs` call `counts: {kits, fields, rewrites, runs, compiles}` and doesn't say where. The tests read it as a member of the call's reply, beside `packs`: five whole numbers, what this process's pack checks have run since it started | `{"packs": [{"pack": "test/kept3611whole", "version": "1.0.0", "state": "installed", "checks": 0, "issues": [], "layouts": [], "named_by": 0}], "counts": {"kits": 0, "fields": 0, "rewrites": 0, "runs": 0, "compiles": 0}}` |
 | `takes_row_of_another_digest`, `takes_row_of_another_build`, `admits_on_unreadable_row` | The three planted cores, each a value of a world's `planted` (The planted cores) | `{"world": {…, "planted": "takes_row_of_another_digest"}}` |
 | `targets.first_reply_ms` | The issue's 500 ms in the budget task that names criterion 6 (What the implementer adds) | `"targets": {"first_reply_ms": 500}` |
 
@@ -330,7 +336,7 @@ Every test of criteria 1 to 5 fails on the merge base at an assertion of this su
 
 ## What was run
 
-Phase 1 of this job, before the base was built: no cargo, no `deep-show` and no hub ran.
+**Phase 1**, before the base was built: no cargo, no `deep-show` and no hub ran.
 
 - Every file passes `node --check`.
 - Each judge of `judge.mjs`, the files of `store.mjs` and the forger's search and writes were run on planted inputs as
@@ -343,9 +349,29 @@ Phase 1 of this job, before the base was built: no cargo, no `deep-show` and no 
   no mark, compares no kept hash, no required digest, no build, no planted programs, looks for no evidence, keeps no
   refusal, takes a refusal without its issues, writes a row it took again, counts nothing, lists a taken pack
   otherwise, or writes its key to a file. A stand-in that knows no store and no planted core, as the merge base, failed
-  every test at its assertion. The stand-in was deleted; it is no part of the suite.
-- `ac4-hub` was not run, and no file ran on the real binary: the fixtures' behaviour on the base's own check (a test
-  pack installing, one refused, one requiring another), `esc_to_root` on a canvas world, the shipped library pack's
-  evidence and the hub's start are read from the base's code and its suites, not from a run.
+  every test at its assertion. The stand-in was deleted; it is no part of the suite, and it is the only place a test
+  of this suite was seen to pass.
 
-`BASE-FAILURE.txt` holds each file's run at the base once phase 2 has run them.
+**Phase 2**, at the base, on the caller's debug build of `deep-show` and `deep-hook` (`BASE-FAILURE.txt` has every
+run and reading):
+
+- Probes first, each a node script driving the base's core through `core.mjs`, or its hub through `hub.mjs`. What
+  phase 1 had only read from the base's code held on its program: a test pack installs; with its input's default 0 it
+  is refused with one `out_of_range` issue; a pack that lists another in `requires.packs` and uses nothing of it
+  installs; bytes changed under the same folder are read by the next fresh core; a world that plants `esc_to_root` is
+  taken and its rows are a shipped core's; `fingerprint` answers in canvas mode; the shipped library pack's check puts
+  10 objects in an evidence store a core with no pack leaves empty; the listing with the 21 packs is 19 pages; two
+  fresh cores give the same listing, page for page, and the same rows; the hub starts and answers `deep_kinds list`
+  through a `deep mcp` started by hand within the 55 s that gives a call; and the forger's search of a real hub's root
+  (310 files) takes a tenth of a second, finds no key there, and finds one the probe wrote into a file there.
+- No probe showed a fixture or a helper to be wrong: no test file, helper or judge changed after phase 1. This README
+  and `BASE-FAILURE.txt` are what phase 2 wrote.
+- Each file ran once, one at a time, by its own command above. The machine's throttle was asked once and gave no grant
+  in its five minutes, so the files ran directly. All twelve tests fail at the base, each at an assertion of this
+  suite's, none at load and none `BLOCKED` or `INCONCLUSIVE`: the ten of criteria 1 to 5 because the base keeps and
+  takes no check's result (the three planted cores' because the base has no such core), the two of criterion 6
+  because it has no budget task and no filled store. No run compiled a workspace crate.
+- Not run, since the base fails before them: any test's steps past its first failing assertion; the three planted
+  cores against the judges; `ac6-first-reply`'s timing, its memory reader and its choice of a release build;
+  `ac6-task`'s two `git` commands (its validator step was probed on the base's own file with the example task above
+  added, and answered `valid`).
