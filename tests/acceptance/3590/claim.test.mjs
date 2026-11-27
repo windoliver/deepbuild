@@ -1,5 +1,3 @@
-// #3590, criteria 1 and 2: a proof's claimPair, from a worktree of the fixture repository, asks for its bay pair on a
-// stall of 720 minutes by default, and keeps its place behind a line whose grants change hands.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { asking, claim, claimOf, fixture, movingLine, PAIRS, show, showLog, STALL, tableLog, until, WAVES, within } from './helpers.mjs';
@@ -26,7 +24,6 @@ test('#3590.e0489985 with DEEP_TEST_GRANT_STALL at 0.05, a claim behind a line o
   const run = claim(box, repo.bays, repo.worktree, { DEEP_TEST_GRANT_STALL: STALL });
   let ended = false;
   run.done.then(() => { ended = true; });
-  // The claim joins behind the whole line before it moves.
   assert.ok(await until(() => ended || asking(box, run.pid), 180_000), `the claim never asked for a bay pair within 3 min\n${run.output()}`);
   line.go();
   const result = await within(run.done, 5);
@@ -35,8 +32,6 @@ test('#3590.e0489985 with DEEP_TEST_GRANT_STALL at 0.05, a claim behind a line o
   assert.ok(seen, `the claim printed no CLAIM line\n${show(result)}`);
   assert.equal(seen.blocked, null, `claimPair returned { blocked: ${JSON.stringify(seen.blocked)} } behind a line whose grants changed hands every 2 s\n${show(result)}\n${showLog(box)}`);
   assert.equal(seen.pair, true, `claimPair returned no pair behind the moving line: ${JSON.stringify(seen)}\n${show(result)}`);
-  // It kept its place: it was granted after every holder that was ahead of it, (WAVES + 1) * PAIRS of them, so after
-  // WAVES waves of hand-overs.
   const log = tableLog(box);
   const mine = log.findIndex((entry) => entry.event === 'granted' && entry.class === 'bay-pair' && entry.pid === seen.pid);
   assert.ok(mine >= 0, `the log holds no bay-pair grant of the claim's process (pid ${seen.pid})\n${showLog(box)}`);

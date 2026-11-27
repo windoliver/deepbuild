@@ -46,7 +46,8 @@ Reused by import, not edited:
   fixture, with a worktree at `<HOME>/deepbuild/.claude/worktrees/w` made by `git worktree add`. Its
   `scripts/bays.mjs` is the one claimed through, so its refusal sees the fixture's worktrees.
 - **A copy of the repository** (criterion 4): the worktree copied beside itself, to `.claude/worktrees/copy`, and
-  claimed through the copy's own `scripts/bays.mjs`, as `tests/bays.test.mjs`'s refusal does.
+  claimed through the copy's own `scripts/bays.mjs`, as `tests/bays.test.mjs`'s refusal does. It sits beside the
+  worktree so node finds the scripts' packages from it as it does from the worktree.
 - **`bays()`, `finished()`, `probe()`** from `../1117/helpers.mjs` for the CLI run: `node scripts/bays.mjs change --
   node probe.mjs <spec>` from the worktree; the probe writes a file once it starts, so "the command never ran" is that
   file's absence.
