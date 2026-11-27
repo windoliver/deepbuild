@@ -44,7 +44,7 @@ import { canonicalize, checkManifest, extensionApi, frozenDigests, hubSlots, reg
 import { contentFree, toJson, ulid, type Connection, type Event, type EventInput, type Receipt, type RecordStore } from '@deepbuild/record';
 import type { LeaseKind, LeaseResult, LeaseTable } from '@deepbuild/leases';
 import type { Runner } from '@deepbuild/runner';
-import { badDeadline, checkHost, type Host as RunHost, type Supervisor } from '@deepbuild/supervisor';
+import { badDeadline, checkHost, type Host as RunHost, type Supervisor, type Used } from '@deepbuild/supervisor';
 import { API, extensionSide, peer } from '../runtime/deep.mjs';
 import { cycleThrough, dependents, graph, refusal, resolve, servedAt, type Piece, type UseRow } from './compose.js';
 import { packageDigest } from './digest.js';
@@ -448,8 +448,8 @@ class Host implements ExtensionHost {
   jobParams(kind: string, value: unknown): Record<string, JsonValue> {
     return this.jobTools.jobParams(kind, value);
   }
-  async runJobTool(tool: string, kind: string, params: Record<string, JsonValue>, inputs: JobBytes, call?: Omit<JobCall, 'provider'>, stop?: AbortSignal, watch?: (counter: JobCounter) => void): Promise<Record<string, Uint8Array>> {
-    return this.jobTools.runJobTool(tool, kind, params, inputs, call, stop, watch);
+  async runJobTool(tool: string, kind: string, params: Record<string, JsonValue>, inputs: JobBytes, call?: Omit<JobCall, 'provider'>, stop?: AbortSignal, watch?: (counter: JobCounter) => void, usage?: (used: Used) => void): Promise<Record<string, Uint8Array>> {
+    return this.jobTools.runJobTool(tool, kind, params, inputs, call, stop, watch, usage);
   }
   async jobHostReport(tool: string, kind: string): Promise<{ weights: Weight[]; capabilities: string[] }> {
     return this.jobTools.jobHostReport(tool, kind);

@@ -5,6 +5,7 @@ import type { Delivery } from '@deepbuild/asks';
 import type { StateSource } from '@deepbuild/conformance';
 import type { ChannelCtx, ChannelDelivered, ChannelItem, ChannelReceived, CheckResult, CheckSpec, EnvironmentHandle, EnvironmentLease, EnvironmentSpec } from '@deepbuild/conformance';
 import type { JoinedHookReply, JsonValue } from '@deepbuild/contracts';
+import type { Used } from '@deepbuild/supervisor';
 import type { Connection, Event } from '@deepbuild/record';
 import type { JobBytes, JobCall, JobCounter, Weight } from './job-kinds.js';
 import type { JobListing } from './jobs.js';
@@ -223,7 +224,7 @@ export interface ExtensionHost {
    * that calls a provider is given `call`, its submission key and journal, and may reach that provider; `stop` ends its run (#1923).
    * `watch` hears each counter the tool reports as it runs (#1925).
    */
-  runJobTool(tool: string, kind: string, params: Record<string, JsonValue>, inputs: JobBytes, call?: Omit<JobCall, 'provider'>, stop?: AbortSignal, watch?: (counter: JobCounter) => void): Promise<Record<string, Uint8Array>>;
+  runJobTool(tool: string, kind: string, params: Record<string, JsonValue>, inputs: JobBytes, call?: Omit<JobCall, 'provider'>, stop?: AbortSignal, watch?: (counter: JobCounter) => void, usage?: (used: Used) => void): Promise<Record<string, Uint8Array>>;
   /** What a tool off the machine's host reports before a call (#1924): the weight files it holds, by hash, and its capabilities. */
   jobHostReport(tool: string, kind: string): Promise<{ weights: Weight[]; capabilities: string[] }>;
   /** One search or fetch of a loaded library source (#1731), its calls the hub's; `noAnswer` when one got none. */
