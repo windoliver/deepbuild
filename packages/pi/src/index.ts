@@ -459,9 +459,8 @@ export default function deepbuild(pi: Pi): void {
       ...call, tool_use_id: String(event.toolCallId),
       ...(event.parentToolCallId ? { parent_tool_use_id: String(event.parentToolCallId) } : {}),
     }, typeof ruling === 'string' ? undefined : ruling);
-    // A call deep-hook didn't read, or read against rules it couldn't read (#2568), never passes for one that matched
-    // nothing, whatever the hub says. pi fires no result for a call it blocks here, so this one's end is said, or the hub
-    // keeps it as running.
+    // A call deep-hook didn't read never passes for one that matched nothing, whatever the hub says. pi fires no result
+    // for a call it blocks here, so this one's end is said, or the hub keeps it as running.
     if (ruling === 'unread' || ruling === 'unparsed' || (typeof ruling === 'object' && ruling.rules_unread)) {
       const reason = typeof ruling === 'object' ? ruling.denials.join('\n') : ruling === 'unread' ? 'DeepBuild blocked this: deep-hook didn\'t answer, so this call wasn\'t read against your guards. Retry; if it repeats, run `deep setup`.' : 'DeepBuild blocked this: deep-hook can\'t parse this call, so it wasn\'t read against your guards. Send it again without what can\'t be encoded.';
       void hook('tool_result', { ...call, tool_use_id: String(event.toolCallId), outcome: 'failed', error: reason });

@@ -216,21 +216,15 @@ describe('guards on a pi call', () => {
     expect(existsSync(join(w.cwd, 'ran.txt'))).toBe(false);
   }, 90_000);
 
-  // A rules.json deep-hook can't read holds the call with the hub answering too, as with it away (#2568), and the call's
-  // end is said, as an unread call's is. A hub that read the file writes it again before it answers anything (#2204,
-  // #1856), so `spoil` runs with the hub stopped and the hub started after it never read the file. The bracket keeps
-  // `pkill -f` from matching the shell that runs it.
   async function heldForRules(spoil: (file: string) => void, why: string, removed = false): Promise<void> {
     const w = await world([bash(`pkill -f '[d]eepbuild-no-such-${word()}'; touch ran.txt`)]);
     w.hub.child.kill();
     await new Promise((done) => w.hub.child.once('exit', done));
     spoil(join(w.home, '.deepbuild/rules.json'));
-    // Starting a hub writes config.json afresh, so setup's is kept.
     const config = join(w.home, '.deepbuild/config.json');
     const set = readFileSync(config);
     const hub = await startHub(w.home);
     writeFileSync(config, set);
-    // A hub that finds no rules.json writes one of its product-store entry alone (products.ts): that goes too.
     const file = join(w.home, '.deepbuild/rules.json');
     if (removed) {
       await waitFor(() => existsSync(file), 10_000, 'the product-store entry');
@@ -238,7 +232,6 @@ describe('guards on a pi call', () => {
     }
     const client = await Client.open(hub);
     const end = await run(w.pi);
-    // A hub that read that file before it went writes it back at the call's connection: then nothing here was tested.
     if (removed && existsSync(file)) throw Error('INCONCLUSIVE: the hub read its product-store rules.json before it was removed and put it back; rerun');
     expect(end.isError, said(end)).toBe(true);
     expect(said(end)).toContain(`rules.json ${why}`);

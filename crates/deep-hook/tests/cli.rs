@@ -647,7 +647,6 @@ fn a_hub_that_never_says_hello_holds_a_call_for_a_removed_rules_json_no_longer_t
     );
 }
 
-/// What `deep-hook match` answers `home`'s one call of `pkill -f node`, with only `home` in its environment.
 fn match_pkill(home: &std::path::Path) -> String {
     let mut child = Command::new(env!("CARGO_BIN_EXE_deep-hook"))
         .arg("match")
@@ -665,12 +664,9 @@ fn match_pkill(home: &std::path::Path) -> String {
     String::from_utf8(out.stdout).unwrap()
 }
 
-/// `deep-hook match` says which of its denials is for rules it couldn't read (#2568), so pi holds that call with the
-/// hub answering too, and tells it from a fail_closed entry's denial, which is the hub's to decide when it answers.
 #[test]
 fn match_says_its_denial_is_for_rules_it_could_not_read() {
     let unread = r#""rules_unread":true"#;
-    // Cut to 40 bytes: denied, naming the file and why, and said to be unread rules.
     let home = short_home("m-cut");
     std::fs::write(home.join(".deepbuild/rules.json"), &RULES[..40]).unwrap();
     let out = match_pkill(&home);
@@ -679,7 +675,6 @@ fn match_says_its_denial_is_for_rules_it_could_not_read() {
         "cut to 40 bytes: {out}"
     );
 
-    // Removed after setup with no hub there: the same.
     std::fs::remove_file(home.join(".deepbuild/rules.json")).unwrap();
     std::fs::write(home.join(".deepbuild/setup-finished.json"), "{}\n").unwrap();
     let out = match_pkill(&home);
@@ -688,7 +683,6 @@ fn match_says_its_denial_is_for_rules_it_could_not_read() {
         "removed after setup, no hub: {out}"
     );
 
-    // A hub that puts the file back before its hello: the call is matched against it, as `forward` does (#1856).
     use std::io::Write;
     let listener =
         std::os::unix::net::UnixListener::bind(home.join(".deepbuild/hub.sock")).unwrap();
@@ -700,8 +694,6 @@ fn match_says_its_denial_is_for_rules_it_could_not_read() {
         let _ = stream.write_all(HELLO);
     });
     let out = match_pkill(&home);
-    // A `match` that never connected leaves the hub waiting: this connection ends its wait, and the assertion below
-    // then says so. One that did has closed the listener, and this connection is refused.
     let _ = std::os::unix::net::UnixStream::connect(&socket);
     hub.join().unwrap();
     std::fs::remove_dir_all(&home).unwrap();
@@ -710,7 +702,6 @@ fn match_says_its_denial_is_for_rules_it_could_not_read() {
         "rules.json put back by the hub: {out}"
     );
 
-    // Readable rules: the fail_closed entry's denial is there for the hub away, and isn't said to be unread rules.
     let home = short_home("m-ok");
     let out = match_pkill(&home);
     std::fs::remove_dir_all(&home).unwrap();
