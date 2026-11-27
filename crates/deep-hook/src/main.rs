@@ -29,6 +29,7 @@ mod cow;
 mod heavy;
 mod heavy_entry;
 mod remote;
+mod session_start;
 mod spool_file;
 mod tool_paths;
 
@@ -38,16 +39,6 @@ use heavy_entry::heavy_entry;
 /// How long the hub has to acknowledge a request, from the hook's start: the 20 ms the hub has to acknowledge
 /// once it reads it. The rest of the design's 50 ms is for the process to start, decide, spool and exit.
 const ACK_BUDGET: Duration = Duration::from_millis(20);
-
-/// The environment variables that make an agent bill an API account instead of your plan. SessionStart
-/// reports whether each is set, never its value.
-const BILLING_KEYS: &[&str] = &[
-    "ANTHROPIC_API_KEY",
-    "ANTHROPIC_AUTH_TOKEN",
-    "CLAUDE_CODE_USE_BEDROCK",
-    "CLAUDE_CODE_USE_VERTEX",
-    "OPENAI_API_KEY",
-];
 
 // A release build refuses the planted programs' feature (#1408).
 #[cfg(all(feature = "env-plants", not(debug_assertions)))]
@@ -1268,26 +1259,7 @@ fn forward(agent: &str, event: &str) -> ExitCode {
             )
         })
         .unwrap_or_default();
-    // At SessionStart, whether each billing key is set in the environment the agent gave this process.
-    let billing = if event == "SessionStart" {
-        let keys = BILLING_KEYS
-            .iter()
-            .map(|key| {
-                // A key counts when set; a CLAUDE_CODE_USE_ switch only when on, as Claude Code reads it.
-                let value = env::var(key).unwrap_or_default().to_ascii_lowercase();
-                let set = if key.starts_with("CLAUDE_CODE_USE_") {
-                    matches!(value.as_str(), "1" | "true" | "yes" | "on")
-                } else {
-                    !value.is_empty()
-                };
-                format!("\"{key}\":{set}")
-            })
-            .collect::<Vec<_>>()
-            .join(",");
-        format!(",\"billing\":{{{keys}}}")
-    } else {
-        String::new()
-    };
+    let billing = session_start::session_start_fields(event);
     let force =
         cfg!(feature = "plant-f-test") && env::var("DEEP_HOOK_FORCE_F_TEST").as_deref() == Ok("1");
     let line = |on: &[&str]| {

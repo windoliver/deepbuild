@@ -1,0 +1,1 @@
+{ "alone": true, "why": "shared: the GPU; each file draws on Metal under the machine's GPU lease, and the ac3 hash files each run another suite whole" }

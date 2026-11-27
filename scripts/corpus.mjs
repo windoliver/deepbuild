@@ -259,12 +259,16 @@ async function checkCommand(options) {
 // request with allow, so a scripted session never waits on a dialog, unless the scenario records the dialog itself.
 function hookCommand(dir) {
   const raw = readFileSync(0, 'utf8');
-  appendFileSync(join(dir, 'payloads.jsonl'), `${JSON.stringify({ at: Date.now(), raw })}\n`);
+  const inbox = process.env.CLAUDE_CODE_MESSAGING_SOCKET;
+  appendFileSync(join(dir, 'payloads.jsonl'), `${JSON.stringify({ at: Date.now(), raw, ...(inbox ? { env: { CLAUDE_CODE_MESSAGING_SOCKET: inbox } } : {}) })}\n`);
   let payload = {};
   try { payload = JSON.parse(raw); } catch {}
-  if (payload.hook_event_name === 'PermissionRequest' && !existsSync(join(dir, 'dialog'))) process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'allow' } } }));
+  const allowTo = existsSync(join(dir, 'allow-to')) ? readFileSync(join(dir, 'allow-to'), 'utf8').trim() : undefined;
+  if (payload.hook_event_name === 'PreToolUse' && payload.tool_name === 'SendMessage' && payload.tool_input?.to !== allowTo) process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: 'a recorded session messages only the session it is recorded with' } }));
+  else if (payload.hook_event_name === 'PermissionRequest' && !existsSync(join(dir, 'dialog'))) process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'allow' } } }));
   return 0;
 }
+const recordedCalls = (dir) => lines(join(dir, 'payloads.jsonl')).flatMap(({ at, raw, env }) => { try { return [{ at, payload: JSON.parse(raw), ...(env ? { env } : {}) }]; } catch { return []; } });
 
 const allowed = ['HOME', 'USER', 'LOGNAME', 'SHELL', 'PATH', 'TMPDIR', 'LANG', 'LC_ALL', 'LC_CTYPE', 'CLAUDE_CONFIG_DIR', 'CODEX_HOME'];
 const cleanEnv = () => Object.fromEntries(allowed.filter((name) => name in process.env).map((name) => [name, process.env[name]]));
@@ -329,6 +333,11 @@ async function session({ argv, cwd, dir, terminal, steps, startAfter, env = {} }
           if (/❯Yes,Itrustthisfolder/.test(dialog)) { child.stdin.write('\r'); trust.done = true; }
           else if (Date.now() - (trust.moved ?? 0) > 800) { child.stdin.write('\x1b[B'); trust.moved = Date.now(); }
         }
+        const channels = text.slice(text.lastIndexOf('localchanneldevelopmentonly'));
+        if (!trust.channels && text.includes('localchanneldevelopmentonly') && /Entertoconfirm/.test(channels) && Date.now() - (trust.channelsSeen ??= Date.now()) > 800) {
+          if (/❯(?:\d+\.)?(?!Exit)[A-Za-z]/.test(channels)) { child.stdin.write('\r'); trust.channels = true; }
+          else if (Date.now() - (trust.channelsMoved ?? 0) > 800) { child.stdin.write('\x1b[A'); trust.channelsMoved = Date.now(); }
+        }
         // Claude Code's notice of the Claude in Chrome extension, before the session starts: keep browser tools off.
         const chrome = text.slice(text.lastIndexOf('ClaudeinChromeextensiondetected'));
         if (!recorded().some(({ hook_event_name: hook }) => hook === 'SessionStart') && text.includes('ClaudeinChromeextensiondetected') && /❯No,keepbrowsertoolsoff/.test(chrome) && /Entertoconfirm/.test(chrome)) {
@@ -356,6 +365,7 @@ async function session({ argv, cwd, dir, terminal, steps, startAfter, env = {} }
         for (const { pid } of step.signal ? targets.slice(0, 1) : targets) try { process.kill(pid, step.signal ?? 'SIGKILL'); } catch {}
         await sleep(2000);
       }
+      if (step.write) writeFileSync(step.write[0], step.write[1]);
       if (step.wait) await sleep(step.wait);
     }
     if (terminal && !blocked && !steps.some((step) => step.killOn || step.kill)) { await type(steps.exit ?? '/exit'); await sleep(4000); }
@@ -445,7 +455,38 @@ const CLAUDE_SCENARIOS = [
   // A file the session watches changes on disk (#3136): FileChanged's matcher names a file in the session's folder, as
   // #120's ticker is named, and a shell call appends to it.
   { name: 'file-changed', watch: 'ticker.txt', steps: [{ type: 'Use the Bash tool to run: echo tick >> ticker.txt' }, { wait: 5000 }] },
+  { name: 'peer-message-terminal', peer: true },
+  { name: 'channel-event', mcp: (dir) => ({ 'corpus-channel': { type: 'stdio', command: process.execPath, args: [join(root, 'scripts/corpus-channel.mjs'), dir] } }),
+    args: ['--dangerously-load-development-channels', 'server:corpus-channel'],
+    steps: (dir) => [{ type: 'Reply with only the word ready.' }, { write: [join(dir, 'fire'), 'Reply with only the word ok-channel.'] }, { stops: 1, ms: 180_000 }, { wait: 3000 }] },
 ];
+
+async function peerSessions(dir, bin, hooks) {
+  const started = (_, payloads) => payloads.some(({ hook_event_name: hook }) => hook === 'SessionStart');
+  const setup = (sub) => {
+    mkdirSync(join(sub, 'work'), { recursive: true });
+    const command = [process.execPath, join(root, 'scripts/corpus.mjs'), 'hook', sub].map(quote).join(' ');
+    writeFileSync(join(sub, 'settings.json'), JSON.stringify({ env: { DISABLE_AUTOUPDATER: '1' }, hooks: Object.fromEntries(hooks.map((hook) => [hook, [{ hooks: [{ type: 'command', command }] }]])) }));
+    return [bin, '--model', 'haiku', '--setting-sources', 'project', '--strict-mcp-config', '--settings', join(sub, 'settings.json')];
+  };
+  const to = join(dir, 'to'), from = join(dir, 'from');
+  const [toArgv, fromArgv] = [setup(to), setup(from)];
+  const receiver = session({ argv: toArgv, cwd: realpathSync(join(to, 'work')), dir: to, terminal: true, steps: [{ type: 'Reply with only the word ready.' }, { stops: 1, ms: 300_000 }, { wait: 3000 }], startAfter: started });
+  let address;
+  for (const end = Date.now() + 240_000; !address && Date.now() < end; await sleep(500)) {
+    const calls = recordedCalls(to);
+    if (calls.some(({ payload }) => payload.hook_event_name === 'Stop')) address = calls.find(({ env }) => env?.CLAUDE_CODE_MESSAGING_SOCKET)?.env.CLAUDE_CODE_MESSAGING_SOCKET;
+  }
+  let sent = { blocked: 'the receiving session gave its hooks no inbox address' };
+  if (address) {
+    writeFileSync(join(from, 'allow-to'), `uds:${address}`);
+    sent = await session({ argv: fromArgv, cwd: realpathSync(join(from, 'work')), dir: from, terminal: true, startAfter: started,
+      steps: [{ type: `Use the SendMessage tool once, with "to" set to exactly uds:${address} and the message set to exactly: Reply with only the word ok-peer. Then reply with only the word sent.` }, { wait: 3000 }] });
+  }
+  const got = await receiver;
+  const calls = [...recordedCalls(from), ...recordedCalls(to)].sort((a, b) => a.at - b.at);
+  return { blocked: sent.blocked ?? got.blocked, payloads: calls.map(({ payload }) => payload), calls };
+}
 
 async function recordClaude(out, bin, facts, only, version) {
   // A version the facts list is recorded on its own hooks, so a hook its list doesn't name never lands in its set.
@@ -455,6 +496,7 @@ async function recordClaude(out, bin, facts, only, version) {
   for (const scenario of CLAUDE_SCENARIOS.filter(({ name }) => !only || only.includes(name))) {
     const dir = join(out, scenario.name), work = join(dir, 'work');
     mkdirSync(work, { recursive: true });
+    if (scenario.peer) { results.push({ scenario: scenario.name, dir, ...(await peerSessions(dir, bin, hooks)) }); continue; }
     if (scenario.dialog) writeFileSync(join(dir, 'dialog'), '');
     if (scenario.watch) writeFileSync(join(work, scenario.watch), '');
     const command = [process.execPath, join(root, 'scripts/corpus.mjs'), 'hook', dir].map(quote).join(' ');
@@ -464,7 +506,7 @@ async function recordClaude(out, bin, facts, only, version) {
     writeFileSync(join(dir, 'settings.json'), JSON.stringify({ env: { DISABLE_AUTOUPDATER: '1' }, hooks: Object.fromEntries(hooks.map((hook) => [hook, [entry(hook)]])) }));
     if (scenario.mcp) writeFileSync(join(dir, 'mcp.json'), JSON.stringify({ mcpServers: scenario.mcp === true ? { corpus: { type: 'stdio', command: process.execPath, args: [join(root, 'scripts/corpus-elicit.mjs')] } } : scenario.mcp(dir) }));
     const args = ['--model', scenario.model ?? 'haiku', '--setting-sources', 'project', '--strict-mcp-config', ...(scenario.mcp ? ['--mcp-config', join(dir, 'mcp.json')] : []), '--settings', join(dir, 'settings.json'), ...(scenario.args ?? [])];
-    const steps = scenario.steps.map((step) => ({ ...step, binary: bin }));
+    const steps = (typeof scenario.steps === 'function' ? scenario.steps(dir) : scenario.steps).map((step) => ({ ...step, binary: bin }));
     results.push({ scenario: scenario.name, dir, ...(await session({ argv: [bin, ...args], cwd: realpathSync(work), dir, terminal: true, steps, startAfter: (_, payloads) => payloads.some(({ hook_event_name: hook }) => hook === 'SessionStart') })) });
     // A resume of the first session: the same session ID, a new process, SessionStart from "resume".
     if (scenario.name === 'tools') {
@@ -591,7 +633,7 @@ async function recordCommand(options) {
   const only = options.scenarios?.split(',');
   const results = agent === 'codex' ? await recordCodex(scratch, bin, facts, only, version) : await recordClaude(scratch, bin, facts, only, version);
   const redact = redactor();
-  for (const { scenario, blocked, payloads } of results) {
+  for (const { scenario, blocked, payloads, calls = payloads.map((payload) => ({ payload })) } of results) {
     if (!payloads.length) { say({ type: 'session', scenario, blocked: blocked ?? 'no payload was recorded' }); continue; }
     const target = join(out, agent, version, scenario);
     mkdirSync(target, { recursive: true });
@@ -599,7 +641,7 @@ async function recordCommand(options) {
     const paths = [...new Set(payloads.map((payload) => payload.transcript_path).filter((path) => path && existsSync(path)))];
     const transcript = paths.flatMap((path) => lines(path)).filter((entry) => keepEntry(agent, entry)).map((entry) => redact(strip(entry)));
     writeFileSync(join(target, 'transcript.jsonl'), transcript.map((entry) => JSON.stringify(entry)).join('\n') + (transcript.length ? '\n' : ''));
-    writeFileSync(join(target, 'events.jsonl'), payloads.map((payload) => JSON.stringify({ payload: redact(payload) })).join('\n') + '\n');
+    writeFileSync(join(target, 'events.jsonl'), calls.map(({ payload, env }) => JSON.stringify({ payload: redact(payload), ...(env ? { env } : {}) })).join('\n') + '\n');
     writeFileSync(join(target, 'session.json'), `${JSON.stringify({ schema: 'corpus.session@1', agent, version, surface: 'terminal', recorded: new Date().toISOString().slice(0, 10), scenario }, null, 2)}\n`);
     say({ type: 'session', scenario, version, payloads: payloads.length, transcriptEntries: transcript.length, ...(blocked ? { blocked } : {}) });
   }

@@ -1,4 +1,4 @@
-# 0006: A pack check's result, kept
+# 0007: A pack check's result, kept
 
 Status: accepted (#3611). The design states the rule under Pack: a check's result, kept (`docs/canvas-primitives.md`); the decisions below are the ones written nowhere else.
 

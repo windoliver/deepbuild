@@ -20,7 +20,7 @@ Comments are found by token: the TypeScript parser for scripts, `scripts/rust-so
 - A license notice: a comment that holds `Copyright` and its holder or year, `Licensed under the`, or `SPDX-License-Identifier:` (AGENTS.md: ported code keeps its notice in the receiving file).
 - With either, the comment-only lines next to it.
 
-Out of scope: generated files (a `@generated`, "auto-generated" or "do not edit" marker in their first five lines), `vendor/`, and `tests/acceptance/`, which no change may edit.
+Out of scope: generated files (a `@generated`, "auto-generated" or "do not edit" marker in their first five lines), `vendor/`, a file under a `twins/` folder in `tests/acceptance/`, which copies our own code at a base, and a suite's file the merge base holds, which no change may edit (#3455). A new suite's own file is judged in the change that adds it, from zero like any new file, and never gets a ceiling, so a drafted suite holds no comments.
 
 ## Where a comment's content goes
 
@@ -45,7 +45,8 @@ One page per module topic. Each decision names the file and the symbol it govern
 - [0003](0003-gate-checkouts-and-base-runs.md): the gate's temporary checkouts and base runs
 - [0004](0004-gate-lanes-holds-and-slots.md): the gate's lanes, holds and slots
 - [0005](0005-gate-floor-verdict-and-measures.md): the gate's floor, a claim's verdict record, price and size
-- [0006](0006-kept-pack-checks.md): a pack check's result kept in the store, what a taken row gives a core, and its counts
+- [0006](0006-web-export-set-ceilings.md): the web-export task's set ceilings
+- [0007](0007-kept-pack-checks.md): a pack check's result kept in the store, what a taken row gives a core, and its counts
 
 ## Open
 
