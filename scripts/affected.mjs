@@ -43,7 +43,7 @@ import { alone, aloneCommand, byHand, cargoResults, changedPaths, checks, crates
 import { isTestFile, listFiles, named, testImports, underTestPaths } from './proof-change.mjs';
 import { namedByConfig } from './proof-guard.mjs';
 import { childEnv } from './proof-runs.mjs';
-import { binaryNames, binaryPlan, buildBinaries, buildInPlace, builtIn, commandFiles, watchBinaries } from './proof-binaries.mjs';
+import { binaryNames, binaryPlan, buildBinaries, buildInPlace, builtIn, commandFiles, placeHubBinaries, selectBinaries, watchBinaries } from './proof-binaries.mjs';
 import { claimShards, cloneBuilds, roomy, shardsRoom } from './shards.mjs';
 import { acquire, asking, descendants, killTree, release } from './throttle.mjs';
 
@@ -661,12 +661,14 @@ async function prepare(untimed, timedFiles, alone, listedFiles, started) {
     for (const cwd of [root, ...shards.map(({ dir }) => dir)]) {
       await tick();
       if (stopped) break;
-      const at = performance.now(), { names, builds } = cwd === root ? plan : binaryPlan(cwd, groups.shared.flat().filter((file) => untimed.includes(file)));
+      const at = performance.now(), { bin: names, builds, target } = cwd === root ? { bin: plan.names, builds: plan.builds, target: [] } : selectBinaries(cwd, groups.shared.flat().filter((file) => untimed.includes(file)), true, true);
       buildInPlace(cwd, builds);
       built.push([cwd, { names, builds }]);
       // No time limit before the test grant: a cold build holds no test slot, and at 2 jobs one ran past 20 minutes.
-      binaries.push([cwd, buildBinaries(cwd, join(binRoot, String(binaries.length), 'bin'), names, undefined, { timeout: 0 })]);
-      if (names.length || builds.length) console.log(`BINARIES ${cwd}: ${[...names.map((name) => `${name} (DEEP_BIN_DIR)`), ...builds.map(({ args }) => `cargo build ${args.join(' ')}`)].join(', ')}; built in ${((performance.now() - at) / 1000).toFixed(0)} s, before the test grant`);
+      const bin = buildBinaries(cwd, join(binRoot, String(binaries.length), 'bin'), [...new Set([...names, ...target])], undefined, { timeout: 0 });
+      if (target.length) placeHubBinaries(cwd, bin, target);
+      binaries.push([cwd, bin]);
+      if (names.length || builds.length || target.length) console.log(`BINARIES ${cwd}: ${[...names.map((name) => `${name} (DEEP_BIN_DIR)`), ...target.map((name) => `${name} (target/debug)`), ...builds.map(({ args }) => `cargo build ${args.join(' ')}`)].join(', ')}; built in ${((performance.now() - at) / 1000).toFixed(0)} s, before the test grant`);
     }
     await tick();
     if (stopped) {
