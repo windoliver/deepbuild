@@ -90,5 +90,13 @@ for (const { at, term, text, avoid } of entries) {
 const pointers = readFileSync('AGENTS.md', 'utf8').split(/\r?\n/).filter((line) => line.includes(FILE)).length;
 if (pointers !== 1) fail('AGENTS.md', `names ${FILE} in ${pointers} lines, not one`, `Point to ${FILE} from AGENTS.md in one line.`);
 
-if (!findings.length) console.log(`PASS glossary: ${FILE} lists ${entries.length} terms in ${groups.length} groups, its links land, and AGENTS.md points to it`);
+const GUIDE = 'docs/extension-guide.md';
+for (const doc of ['docs/technical-design.md', 'docs/canvas-primitives.md', GUIDE]) {
+  for (const { number, line } of prose(readFileSync(doc, 'utf8'))) {
+    const said = line.replace(/(`+).+?\1/g, '').replace(/<[^>]*>/g, '').replace(/\]\([^)]*\)/g, ']').match(/\bplug-ins?\b/i);
+    if (said) fail(`${doc}:${number}`, `says "${said[0]}"`, `Say extension, the word ${FILE} gives it${doc === GUIDE ? '; the guide is written by scripts/guide.mjs, so change it there and run node scripts/guide.mjs' : ''}.`);
+  }
+}
+
+if (!findings.length) console.log(`PASS glossary: ${FILE} lists ${entries.length} terms in ${groups.length} groups, its links land, AGENTS.md points to it, and the docs say extension, never plug-in`);
 finish();
