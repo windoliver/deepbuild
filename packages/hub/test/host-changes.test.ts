@@ -1,5 +1,3 @@
-// What a claim on a host changed (#3511), with the SSH link as the boundary: the script host-sessions.ts sends is run
-// here by `sh -s` in a real repo, as the host's shell runs it there, and the gate runner judges the claim on its read.
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
@@ -16,7 +14,6 @@ const EMPTY = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
 const dirs: string[] = [];
 afterEach(() => { for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true }); });
 
-/** The link's one call: the script on a shell's stdin with its arguments, as hosts.ts's sshScript gives it to the host's, whose environment adds `env`. */
 const shell = (env: NodeJS.ProcessEnv = {}) => (_host: string, args: string[], script: string): Promise<{ code: number | null; stdout: string; stderr: string }> => new Promise((done) => {
   const child = spawn('sh', ['-s', '--', ...args], { stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, ...env } });
   let stdout = '';
@@ -27,12 +24,6 @@ const shell = (env: NodeJS.ProcessEnv = {}) => (_host: string, args: string[], s
   child.stdin.end(`{\n${script}\n}\n`);
 });
 
-/**
- * A claim of a session on the host `gpu-box`: its folder there, alone in a temporary folder, holds `base` committed
- * (with `before` done first, at a fixed time), then `head` written over it and `there` done in it, `broken` making its
- * index no index; the host's shell runs with `env` added. Its one approved check ran there and exited 0, recording no read files, as a
- * run on a host does. Returns the claim's verdict.
- */
 async function claimed(o: { base: Record<string, string>; head: Record<string, string>; broken?: boolean; before?: (git: (...args: string[]) => string, dir: string) => void; there?: (git: (...args: string[]) => string, dir: string) => void; link?: ReturnType<typeof shell>; env?: NodeJS.ProcessEnv }) {
   const root = mkdtempSync(join(tmpdir(), 'host-changes-'));
   dirs.push(root);
@@ -103,7 +94,6 @@ describe('what a claim on a host changed (#3511)', () => {
     expect(v?.reasons).toContainEqual(expect.stringMatching(/price-approved counts as the agent's own: what the claim changed couldn't be read \(on gpu-box, git ls-files --cached --others --exclude-standard exited \d+/));
   }, 60_000);
 
-  // Each a way the folder's own git could take an edited test file for the base's: the read compares bytes, so none does.
   const GUTTED = '[ "$(cat price.txt)" = 17.00 ] || exit 2\n';
   const hides: [string, (git: (...args: string[]) => string, dir: string) => void][] = [
     ['the index told to assume it unchanged', (git, dir) => { git('update-index', '--assume-unchanged', 'tests/price_test.sh'); writeFileSync(join(dir, 'tests/price_test.sh'), GUTTED); }],
@@ -126,7 +116,6 @@ describe('what a claim on a host changed (#3511)', () => {
       writeFileSync(join(dir, 'tests/price_test.sh'), 'c+AG8-mpare\n');
     }],
     ['a second, older pack in its store holding the test folder forged beside a tree of the base the newer one lacks', (git, dir) => {
-      // Each git process searches the pack it last found an object in first, so a walk in path order and one in id order can find two copies of one id.
       const [src, tests, file] = ['HEAD:src', 'HEAD:tests', 'HEAD:tests/price_test.sh'].map((at) => git('rev-parse', at));
       const tree = (oid: string) => execFileSync('git', ['cat-file', 'tree', oid], { cwd: dir });
       const gutted = execFileSync('git', ['hash-object', '-w', '--stdin'], { cwd: dir, input: GUTTED }).toString().trim();
@@ -138,12 +127,10 @@ describe('what a claim on a host changed (#3511)', () => {
       writeFileSync(join(dir, 'tests/price_test.sh'), GUTTED);
       rmSync(join(dir, '.git', 'index'));
       git('update-index', '--add', ...Object.keys(BASE));
-      // The scene holds only if git finds the two copies by its two orders: by path the forged one, by id the genuine.
       expect(git('ls-tree', '-r', 'HEAD')).toContain(`${gutted}\ttests/price_test.sh`);
       expect(git('rev-parse', 'HEAD:tests/price_test.sh')).toBe(file);
     }],
     ['an edit of the same size with its file times put back, ctime not trusted', (git, dir) => {
-      // An hour back, with the index written after it, so git takes the entry's times for the file's and reads no bytes.
       git('config', 'core.trustctime', 'false');
       const file = join(dir, 'tests/price_test.sh');
       const then = new Date(Date.now() - 3_600_000);
@@ -178,7 +165,6 @@ describe('what a claim on a host changed (#3511)', () => {
     expect(v?.reasons).toContainEqual(expect.stringMatching(/price-approved counts as the agent's own: the claim changed tests\/new_test\.sh, which it may load/));
   }, 60_000);
 
-  // A step that fails there, as one does when the host's disk fills: the tool, run in its place, fails as it can.
   const fails: [string, string][] = [['awk', `case "$*" in *'ENVIRON["RE"]'*) exit 2 ;; esac`], ['base64', 'exit 1']];
   it.each(fails)('a step of the read that fails there ends it with no change set, though git is set to hide the edit: a failing %s', async (tool, fail) => {
     const bin = mkdtempSync(join(tmpdir(), 'host-bin-'));
@@ -195,13 +181,10 @@ describe('what a claim on a host changed (#3511)', () => {
     expect(v?.reasons).toContainEqual(expect.stringMatching(/price-approved counts as the agent's own: what the claim changed couldn't be read \(on gpu-box, git there takes .* for the work tree, not the folder/));
   }, 60_000);
 
-  // Each a way to make the folder's git show another tree than the one in it, or keep from looking in a folder: then
-  // nothing is known of what changed.
   const loose = (dir: string, oid: string) => join(dir, '.git', 'objects', oid.slice(0, 2), oid.slice(2));
   const forge = (dir: string, oid: string, kind: string, body: Buffer) => { chmodSync(loose(dir, oid), 0o644); writeFileSync(loose(dir, oid), deflateSync(Buffer.concat([Buffer.from(`${kind} ${body.length}\0`), body]))); };
   const u32 = (n: number) => { const b = Buffer.alloc(4); b.writeUInt32BE(n); return b; };
   const sha1 = (b: Buffer) => createHash('sha1').update(b).digest();
-  /** A pack in the folder's store, older than its others, holding each of `trees` under the id given: its index can name any bytes by any id. */
   const packed = (dir: string, trees: [string, Buffer][]) => {
     const parts = [Buffer.from('PACK'), u32(2), u32(trees.length)];
     const entries = trees.map(([oid, body]) => {
@@ -250,7 +233,6 @@ describe('what a claim on a host changed (#3511)', () => {
       rmSync(join(dir, '.git'), { recursive: true });
       for (const [key, value] of [['core.bare', 'false'], ['core.worktree', up]]) execFileSync('git', ['--git-dir', up, 'config', key!, value!]);
       for (const [path, text] of Object.entries(BASE)) { mkdirSync(join(up, path, '..'), { recursive: true }); writeFileSync(join(up, path), text); }
-      // And the folder itself kept from that work tree's listing, so only the copy above is read.
       writeFileSync(join(up, 'info', 'exclude'), '/repo/\n');
       writeFileSync(join(dir, 'tests/price_test.sh'), GUTTED);
     }, /git there finds no work tree holding a \.git for the folder/],
@@ -282,7 +264,6 @@ describe('what a claim on a host changed (#3511)', () => {
   }, 60_000);
 
   it('a test file added beside one whose name differs only in case is named, though the folder\'s git ignores case', async () => {
-    // Where the temporary folder folds case, the new name overwrites the old file: then that one is named.
     const probe = mkdtempSync(join(tmpdir(), 'host-case-'));
     dirs.push(probe);
     writeFileSync(join(probe, 'a'), '');

@@ -10,7 +10,6 @@ interface Runner {
   definition(claim: Claim, definition: DefinitionState, snapshot: string): void;
   cantStart(e: Entry, error: unknown): void;
   o: Pick<GateOptions, 'start' | 'ended' | 'judged' | 'now' | 'hold_ms' | 'changesOn'>;
-  /** How long the read of what the claim changed is given (#1869). */
   readMs: number;
 }
 
@@ -18,8 +17,7 @@ interface Runner {
  * A claim made at a stop of a session on a host: its checks run there as remote runs, in the session's folder at the
  * commit its HEAD held at the claim. A remote machine has no copy-on-write staging, so there is no snapshot, no
  * checkout and no run on the merge base, and each check gets one run, whose exit status is its result. The hold waits
- * for them, and no longer than the hold. What the claim changed is read there too (#3511), before any check of it
- * runs: whose checks count turns on it as it does here, and a read that failed, or a hub with none, is no change set.
+ * for them, and no longer than the hold.
  */
 export async function stopOnHost(g: Runner, r: Parameters<GateRunner['stop']>[0] & { host: string }): Promise<{ fast: string[]; slow: string[]; snapshot: string; readyAt: number; budgetCost: string[]; changed: boolean }> {
   const older = (g.claims.get(r.session) ?? []).filter((c) => c.claim !== r.claim);
@@ -35,8 +33,6 @@ export async function stopOnHost(g: Runner, r: Parameters<GateRunner['stop']>[0]
     for (const o of older) { const was = o.entries.get(c.check); if (was) Object.assign(was, { stale: true, newer: was.newer ?? r.claim }); }
     const e: Entry = { check: c, claim: r.claim, commit: r.base, lane: 'fast', runs: [], base: null, outcome: null, running: true, stale: false };
     claim.entries.set(c.check, e);
-    // Read before its run starts: the run is in the same folder, and what it writes there is not the claim's change.
-    // Until then the check stands as running, so no verdict reads the claim as having changed nothing.
     await changed;
     try {
       const run = await g.o.start({ claim: r.claim, check: c.check, approved: c.approved, command: c.command, commit: r.base, cwd: r.cwd, lane: 'fast', expected_ms: null, deadline_ms: c.deadline_ms ?? null, host: r.host });

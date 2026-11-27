@@ -23,7 +23,6 @@ export interface GateOptions {
   core: Connection;
   /** Starts one run of a claim's check in `cwd`, in its lane with its expected time; resolves with its run handle. */
   start(r: { claim: string; check: string; approved: string | null; command: string; commit: string; cwd: string; lane: 'fast' | 'slow'; expected_ms: number | null; deadline_ms: number | null; env?: Record<string, string>; hosts?: string[]; standIns?: string[]; references?: { path: string; sha256: string }[]; overlay?: Record<string, string>; variant?: Variant; key?: RunKey; stack?: StackWant; memory?: Admission; /** The host the run is on, in `cwd` there (#999). */ host?: string }): Promise<string>;
-  /** What a claim changed in its session's folder on a host against `base`, read there within `ms` (#3511); a failed read is its `unread`, never no change. */
   changesOn?(host: string, cwd: string, base: string, ms: number): Promise<Changes>;
   /** The call that spent a task's held-out variant, by its files (#3229); a runner without it knows of none. */
   spent?(task: string, files: Record<string, string>): Spent | undefined;

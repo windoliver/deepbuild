@@ -68,17 +68,6 @@ printf 'oid\t%s\ntext\t%s\n' "$o" "$(GIT_NO_REPLACE_OBJECTS=1 git -C "$1" -c cor
  */
 const FILES = String.raw`r=$(realpath -e -- "$1" 2>/dev/null) || { echo read; exit 0; }; max=$2; shift 2; i=0
 for p; do f=$(realpath -e -- "$r/$p" 2>/dev/null) && case "$f" in "$r"/*) [ -f "$f" ] && printf 'file\t%s\t%s\n' "$i" "$(head -c "$max" < "$f" | base64 -w0)" ;; esac; i=$((i + 1)); done; echo read`;
-/**
- * What a folder there changed against a commit (#3511). The files whose path can make them a check's own (`$4`, an
- * extended regular expression) are compared by their bytes: each the commit holds is hashed as it lies in the folder,
- * with no filter, attribute, index or file time between, against the commit's trees, each named again first, so
- * nothing in the folder's own git can stand in for one. The rest are git's own diff. Files the folder lists that the
- * commit doesn't hold are added; one git lists as a folder it didn't look in is a failed read. It prints, each in
- * base64: the repo's top, the changed files, the added ones, every file either names, and package.json as the commit
- * and the folder hold it, paths from the top. Each git call ends within `$3` seconds, and one that fails, a repo
- * whose top isn't the folder's, or a `.git` between the two, says so on a line of its own: then nothing is known of
- * what changed; so does any step that fails, as the script then ends with no `read` line.
- */
 const CHANGES = String.raw`set -e
 say() { printf 'unread\t%s\n' "$(printf "$@" | base64 -w0)"; }
 cd -- "$1"
@@ -95,16 +84,12 @@ case "$here/" in "$top"/*) ;; *) say 'git there takes %s for the work tree, not 
 p=$here; while [ "$p" != "$top" ] && [ "$p" != / ]; do [ -e "$p/.git" ] && { say 'git there takes %s for the work tree, though %s holds a .git of its own' "$top" "$p"; echo read; exit 0; }; p=$(dirname -- "$p"); done
 [ -n "$top" ] && [ -e "$top/.git" ] || { say 'git there finds no work tree holding a .git for the folder (it takes "%s")' "$top"; echo read; exit 0; }
 export GIT_DIR="$gd" GIT_WORK_TREE="$top"; cd -- "$top" || exit 0
-# The commit and every tree the read walks, packed and named again from their bytes: an object the folder's own store
-# forged has another name, and the read's trees are read from that pack alone, so no other copy git finds can stand in.
 ok=n; { echo "$B"; g rev-parse "$B^{tree}"; g ls-tree -r -t -d "$B" | awk '$2 == "tree" { print $3 }'; } | sort -u > "$d/objs" && [ "$(wc -l < "$d/objs")" -ge 2 ] && mkdir -p "$d/o/pack" && g pack-objects --stdout -q < "$d/objs" > "$d/o/pack/p.pack" && g index-pack -o "$d/o/pack/p.idx" "$d/o/pack/p.pack" > /dev/null && g show-index < "$d/o/pack/p.idx" | cut -d' ' -f2 | sort > "$d/named" && cmp -s "$d/objs" "$d/named" && ok=y
 if [ $ok = n ]; then say 'the commit %s or a tree it holds there is not the object its id names' "$B"
 elif (export GIT_OBJECT_DIRECTORY="$d/o"; run "$d/tree" ls-tree -r "$B") && run "$d/listed" ls-files --cached --others --exclude-standard && run "$d/diffed" diff --name-only --no-renames "$B"; then
   if grep -q "$T\"" "$d/tree" || grep -q '^"' "$d/listed"; then say "git names a path it can't list plainly"
   else
     cut -f2 "$d/tree" > "$d/paths"
-    # Each own-by-name file the commit holds, by what lies at its path now: a file of the same kind and execute bit is
-    # hashed, a link's text is hashed, and anything else is changed.
     RE=$RE awk -F "$T" 'BEGIN { re = ENVIRON["RE"] } $2 ~ re' "$d/tree" > "$d/own"
     cut -f2 "$d/own" | LC_ALL=C xargs -r -d '\n' stat --printf '%F\t%a\t%n\n' -- > "$d/stat" 2> /dev/null || :
     : > "$d/hash"; : > "$d/oids"; : > "$d/links"; : > "$d/changed"
@@ -315,11 +300,6 @@ export class HostSessions {
     if (r.code !== 0 || !r.stdout.endsWith('read\n')) throw Error(`the session's folder on ${host} couldn't be read over SSH: ${r.stderr.trim().slice(-300)}`);
     return new Map(r.stdout.split('\n').map((l) => l.split('\t')).filter((l) => l[0] === 'file' && asked[Number(l[1])] !== undefined).map((l) => [asked[Number(l[1])]!, Buffer.from(l[2] ?? '', 'base64')]));
   }
-  /**
-   * What a claim changed in its session's folder on its host against `base`, as changesOf reads one here (#3511), all
-   * of it within `ms`. A read that failed there, a link that didn't answer and a read past `ms` are its `unread`,
-   * naming which: then nothing is known of what it changed.
-   */
   async changes(host: string, cwd: string, base: string, ms: number): Promise<Changes> {
     const unread = (why: string): Changes => ({ changed: [], configs: new Map(), scripts: false, unread: `on ${host}, ${why}` });
     let timer: NodeJS.Timeout | undefined;
