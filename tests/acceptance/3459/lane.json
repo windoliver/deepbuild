@@ -1,0 +1,1 @@
+{ "alone": true, "why": "binary: every file starts a real hub (deep hub run), which takes deep-hook from this checkout's target/, and authority.test.ts runs deep-hook from there when no DEEP_BIN_DIR is given" }
