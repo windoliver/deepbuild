@@ -225,8 +225,7 @@ export function measureOnce(command, cwd, stream = false, timeoutMs = 300_000, f
     const loadStart = loadavg()[0];
     const started = performance.now();
     // The run leads its own process group: spawnSync stops only /usr/bin/time at the timeout or maxBuffer, so the
-    // group is stopped with it, or the measured command and its children run on (#1322), a streamed one too, holding
-    // whatever grant its caller took for it.
+    // group is stopped with it, or the measured command and its children, a streamed run's too, run on (#1322).
     const result = spawnSync('/usr/bin/time', [...flags, '-o', timing, ...argv], stream
       ? { cwd, env, stdio: ['ignore', 'inherit', 'inherit'], timeout: timeoutMs, detached: true }
       : { cwd, env, encoding: 'utf8', timeout: timeoutMs, maxBuffer: 32 * 1024 * 1024, detached: true });

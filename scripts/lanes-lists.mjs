@@ -1619,10 +1619,6 @@ timed.push('tests/acceptance/2750/budgets.test.ts');
 // only; its blind redraft, which runs the merge base's program beside the checkout's, runs in its place.
 Object.assign(redrafted, { 'tests/acceptance/3461/once.test.ts': 'tests/acceptance/3461-redraft-once/' });
 byHand.push('tests/acceptance/3461/once.test.ts');
-// #3587's first draft fails the wait ratchet on seven fixed waits, which no ceiling can lift for a suite judged from zero,
-// so it is kept byte for byte as evidence (docs/evidence/3587/draft-7c2bc0351/, code renamed .txt) and its blind redraft
-// runs in its place, alone: each criterion times a preflight against a budget of seconds and a 30 s stop bound
-// (tests/acceptance/3587-redraft-waits/DISPUTE.md).
 alone.push('tests/acceptance/3587-redraft-waits/');
 
 // #3467's folder (blind) runs alone by its lane.json: each file draws on Metal and decodes on the hardware decoder.
