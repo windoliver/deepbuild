@@ -59,7 +59,6 @@ pub(crate) fn time_remaps(
 
 /// The compares a frame at `t` applies first: each logic item's steps after the one its last
 /// frame here applied (`seen`, updated), up to the frame's own; a first frame applies its own.
-/// Each array's are those `kept` under the key its `compares` holds.
 pub(crate) fn compares(
     doc: &Value,
     kept: &BTreeMap<String, Vec<Value>>,

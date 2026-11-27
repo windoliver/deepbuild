@@ -159,8 +159,6 @@ pub fn column_view(sealed: &Sealed, form: &mut Value, t: i64) -> Vec<Issue> {
 /// Each logic item of `piece` (`form`'s, checked) stepped on `track` over the transport's span,
 /// and its rows written to `occurrences.<logic ID>.occurrences`:
 /// `{t, step, kind, a, b}` and its declared fields by name, as Spawn and motion read a row.
-/// Returns the bake's #538 `compares`, `[step, bytes, ms]` by item, under the key each item's
-/// first array holds as `compares`: the form holds them only by key (#3278).
 #[cfg(feature = "logic")]
 pub fn inline_logic(
     form: &mut Value,
@@ -283,9 +281,6 @@ pub fn inline_logic(
         }
     }
     // #538: each item's comparisons after its steps, on its first array, for `frames`' timings.
-    // They are clock readings, which would move the key of everything that reads the form
-    // (#3278), so the array holds only a key of what the bake ran (the item, its bake key and its
-    // steps), and the readings go back to the caller under it.
     let mut compares = BTreeMap::new();
     for (id, list) in &rec.compares {
         let Some(i) = piece.items.iter().position(|i| &i.id == id) else {
