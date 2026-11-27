@@ -1,0 +1,1 @@
+{ "alone": true, "why": "binary: its files build deep-show (the full set, and with test-kit-formula) with cargo into target/debug, as ../138/ does" }
