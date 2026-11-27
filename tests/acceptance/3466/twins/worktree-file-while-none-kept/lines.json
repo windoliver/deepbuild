@@ -1,0 +1,22 @@
+{
+  "packages/hub/src/approved-spec.ts": [
+    {
+      "find": [
+        "import { lstatSync } from 'node:fs';"
+      ],
+      "wrong": [
+        "import { lstatSync, readFileSync } from 'node:fs';"
+      ]
+    },
+    {
+      "find": [
+        "  const revision = await keptSpec(record, folder) ?? await specAt(folder, base);"
+      ],
+      "wrong": [
+        "  const held = await specAt(folder, base);",
+        "  const onDisk = (() => { try { return readFileSync(join(folder, SPEC), 'utf8'); } catch { return undefined; } })();",
+        "  const revision = await keptSpec(record, folder) ?? (onDisk === undefined ? undefined : { text: onDisk, oid: held?.oid ?? 'none' });"
+      ]
+    }
+  ]
+}

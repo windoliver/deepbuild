@@ -342,6 +342,18 @@
     "other": "{0} open"
   },
   "rules.text_only": "text only",
+  "said.can_be_undone": "it can be undone",
+  "said.changes": {
+    "one": "{0} change",
+    "other": "{0} changes"
+  },
+  "said.hub_back": "The hub is answering again",
+  "said.new": {
+    "one": "{0} new",
+    "other": "{0} new"
+  },
+  "said.question_changed": "the question changed",
+  "said.withdrawn": "Withdrawn before it started",
   "setup.adds": "Adds hooks to {0}. A hook is {1}.",
   "setup.adds_reads": "Adds hooks to {0} and reads their history into the wiki, read by your own agent, on your plan. A hook is {1}.",
   "setup.couldnt_run_deep": "Set up couldn't run DeepBuild's deep command. Press Set up to try again.",

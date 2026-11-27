@@ -1,0 +1,13 @@
+#3552, the step. Reference Mac: 18 cores, macOS 27.2. The home folder is written ~. Times are UTC.
+System Settings, Spotlight, Search Privacy: "Prevent Spotlight from searching these locations."
+Each folder went in through the pane's own "+" and its file dialog. The list was read back from the pane after each: privacy-list.png.
+
+2026-11-26T14:17Z     the list held no location ("No Locations Added", 0 rows)
+2026-11-26T23:23:56Z  added ~/deepbuild-shards       the list: deepbuild-shards
+2026-11-27T00:14:53Z  added ~/deepbuild-bays         the list: deepbuild-bays, deepbuild-shards
+2026-11-27T00:36:47Z  added ~/dev/claude-worktrees   the list: claude-worktrees, deepbuild-bays, deepbuild-shards
+2026-11-27T00:51:51Z  added ~/dev/devin-worktrees    the list: claude-worktrees, deepbuild-bays, deepbuild-shards, devin-worktrees
+2026-11-27T00:52:06Z  Done pressed, and the sheet closed
+
+Nothing turned indexing off: mdutil -s /System/Volumes/Data printed "Indexing enabled." at 13:31:46Z on 2026-11-26, and mac-after.txt finds a file on the desktop.
+The system's own copy of the list (mdutil -P) needs root and was not read.

@@ -1,0 +1,66 @@
+The suite's run on the base commit 4d8baa118 (origin/main), which has no implementation of #3421.
+November 25, 2026, on a Mac with 8 cores, Node 24.22.0, Rust 1.99.1, with other sessions' work running beside it; the
+one-minute load is printed before and after, and inside each message that reads it. Home folders are written as ~.
+
+  node node_modules/vitest/vitest.mjs run --no-file-parallelism --reporter=verbose tests/acceptance/3421
+
+What it shows:
+- AC3 (#3421.bd1a37c9, scratch.test.ts) FAILS at its last assertion, for the reason the criterion gives ("On the merge
+  base the hook still takes that reply"): with exit's maximum lowered to 100 and the Rust regenerated, the scratch
+  checkout's deep-hook still takes a reply with exit of 200 and prints both its streams. Every assertion before it
+  passed: the generator ran and changed generated.rs, nothing under crates/deep-hook/src differs, the scratch hook
+  builds, and it takes a reply with exit of 100.
+- AC1 (#3421.8b9bca28, recorded.test.ts) PASSES: the base's deep-hook against itself, built twice. It needs a planted
+  twin (README, Wrong programs).
+- AC2 (#3421.7b68a484, lines.test.ts) PASSES: the base's hand checks refuse all six lines. It needs planted twins.
+- AC4 (#3421.ceafdcd9) has no test here (README, AC4).
+
+An earlier run of the same command the same day, at a load of 76 to 116, gave the same three results: scratch.test.ts
+86 s, the whole run 102 s. With the builds cold at a load of 9 to 13, scratch.test.ts alone took 42 s.
+
+load before: 90.32 77.41 47.69
+
+ RUN  v5.0.5 <the base checkout, 4d8baa118>
+
+ × tests/acceptance/3421/scratch.test.ts > #3421 AC3 the schema's bound reaches the hook by regenerating, with no edit to the hook > #3421.bd1a37c9 with exit's maximum lowered to 100 in a scratch checkout and the Rust regenerated, the hook refuses a reply with exit of 200, with no edit under crates/deep-hook/src 77073ms
+   → the scratch hook refuses a reply with exit of 200: it reads as the hub away (the exit code and stdout it gives with no hub, the request spooled with no late mark) and none of the reply's bytes is printed (1 tries, load 61.3 72.5 48.6): exit 200, stdout "out-n342192a2e9ada10e0aede4", stderr "err-n342192a2e9ada10e0aede4": expected { told: true, …(4) } to deeply equal { told: true, how: 'refused', …(3) }
+#3421 AC1: 49 calls, each made by both binaries with the hub stopped and with it up; 32 replies with the hub up are the hub's own, not the hub-stopped reply; 5 rounds made again; load 57.2 71.0 48.4
+ ✓ tests/acceptance/3421/recorded.test.ts > #3421 AC1 deep-hook's replies for #316's recorded calls > #3421.8b9bca28 deep-hook's replies for #316's recorded calls are byte for byte the merge base's, with the hub stopped and with it up 13820ms
+ ✓ tests/acceptance/3421/lines.test.ts > #3421 AC2 lines from a stand-in hub that do not hold to hook.ack@2 or hook.reply@2 > #3421.7b68a484 each of the six lines reads as the hub away, and the hook prints none of its bytes 962ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/3421/scratch.test.ts > #3421 AC3 the schema's bound reaches the hook by regenerating, with no edit to the hook > #3421.bd1a37c9 with exit's maximum lowered to 100 in a scratch checkout and the Rust regenerated, the hook refuses a reply with exit of 200, with no edit under crates/deep-hook/src
+AssertionError: the scratch hook refuses a reply with exit of 200: it reads as the hub away (the exit code and stdout it gives with no hub, the request spooled with no late mark) and none of the reply's bytes is printed (1 tries, load 61.3 72.5 48.6): exit 200, stdout "out-n342192a2e9ada10e0aede4", stderr "err-n342192a2e9ada10e0aede4": expected { told: true, …(4) } to deeply equal { told: true, how: 'refused', …(3) }
+
+- Expected
++ Received
+
+  {
+-   "exit": 0,
+-   "how": "refused",
+-   "printed": [],
+-   "stdout": "",
++   "exit": 200,
++   "how": "none spooled",
++   "printed": [
++     "out-n342192a2e9ada10e0aede4",
++     "err-n342192a2e9ada10e0aede4",
++   ],
++   "stdout": "out-n342192a2e9ada10e0aede4",
+    "told": true,
+  }
+
+ ❯ tests/acceptance/3421/scratch.test.ts:48:7
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 2 passed (3)
+      Tests  1 failed | 2 passed (3)
+   Start at  12:18:36
+   Duration  93.03s (tests 100%)
+
+vitest exit 1
+load after: 57.17 71.00 48.45

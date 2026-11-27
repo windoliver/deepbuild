@@ -1,0 +1,396 @@
+{
+ "main": "c4b1785966dbfad4bbc0e4b4007acab03d7bebe5",
+ "runs": [
+  {
+   "others": 0,
+   "pool": 2,
+   "script": "scripts/alone-pool-2.json",
+   "sha256": "b21114890c583f7f8005e2d24c6b5ac3422ed32981dd436a7b65f40f49e36cdc",
+   "today": {"out":"out/alone-pool-2.today.json","sha256":"9bde22b3bf3c7701868b086b64755a57478f23e89696ece94b03fe8d97e36269"},
+   "person-first": {"out":"out/alone-pool-2.person-first.json","sha256":"2a5c55e569576a2aaf01eaa89865f8a0839b7560f5d0ec85496966dc12dc2b80"}
+  },
+  {
+   "others": 1,
+   "pool": 2,
+   "script": "scripts/beside-1-pool-2.json",
+   "sha256": "b6449aabc5bbd73a3d13e1bb45268255f25e60189abc8a10a2ade5ab6364d842",
+   "today": {"out":"out/beside-1-pool-2.today.json","sha256":"e3bb2d093dcff284d6de5f5d1f732de220534a818096c95b1f17c60af1d7cf3f"},
+   "person-first": {"out":"out/beside-1-pool-2.person-first.json","sha256":"537ed3d0eb71066676e640d44db7e366f5f69f3a17f084bc604a822f8d099fef"}
+  },
+  {
+   "others": 3,
+   "pool": 2,
+   "script": "scripts/beside-3-pool-2.json",
+   "sha256": "834f611012f59b9ab568f8538581563283ccd4b862a69eef4bf8f7d7afd2f628",
+   "today": {"out":"out/beside-3-pool-2.today.json","sha256":"745a28e2c762b7582733f409164f00c1b485b2fdcf8eefc93e1487f6bdb51e92"},
+   "person-first": {"out":"out/beside-3-pool-2.person-first.json","sha256":"40f7dabedca31731dcb4240cc1fdb5f3dd2886b67cf23240f9e0f40810618418"}
+  },
+  {
+   "others": 6,
+   "pool": 2,
+   "script": "scripts/beside-6-pool-2.json",
+   "sha256": "e3ab9e06ab407302de60bc2b007aa8ba430d70847c25eb500b4331c00b683b0d",
+   "today": {"out":"out/beside-6-pool-2.today.json","sha256":"66e8f60e06252bcbee12c6589aa290ec4c4bd271d6eafae91e9e6f1830ace6ef"},
+   "person-first": {"out":"out/beside-6-pool-2.person-first.json","sha256":"31ff3e009a1c4c8632d76fca590d1aeb9c6310e2b36ab52a0859977de5b5b435"}
+  },
+  {
+   "others": 0,
+   "pool": 4,
+   "script": "scripts/alone-pool-4.json",
+   "sha256": "5b375a6a5e90ddd280b0872395d8d409e12e4ff905c92a83c124fe97a922c2a6",
+   "today": {"out":"out/alone-pool-4.today.json","sha256":"76470d5dd3ebf6b66ed973eb62fbc06ccdccc5dc49754be47fde615ff8eed396"},
+   "person-first": {"out":"out/alone-pool-4.person-first.json","sha256":"b0802daa6f7d96e5c7f0584192c4df4fd92210b978443dae93d91a6393b32bb4"}
+  },
+  {
+   "others": 1,
+   "pool": 4,
+   "script": "scripts/beside-1-pool-4.json",
+   "sha256": "454889c21d316ab54d2eafaf2a38186dc4e555104602eaa3ebb7408134c625a5",
+   "today": {"out":"out/beside-1-pool-4.today.json","sha256":"2d5e0ed492f68a89ca007877c79cf0849d1e92a6d1ea3d3809ae762e6b7acf11"},
+   "person-first": {"out":"out/beside-1-pool-4.person-first.json","sha256":"32540c079ff7b89d0bda20f6c389b503c6cd09aacbec1ee5b722c0617bce3797"}
+  },
+  {
+   "others": 3,
+   "pool": 4,
+   "script": "scripts/beside-3-pool-4.json",
+   "sha256": "4899078103148d8408d68ee4499a97fb2d20ce765722637b1395f9d22bf99141",
+   "today": {"out":"out/beside-3-pool-4.today.json","sha256":"c93cd6165f5a0361d9300b9aca799e3cdae8b3fb2613b0a12db738afaaf4902b"},
+   "person-first": {"out":"out/beside-3-pool-4.person-first.json","sha256":"cfbb51549b3b6765ac428030812edb85d2c257487ac452445cdd16b124383026"}
+  },
+  {
+   "others": 6,
+   "pool": 4,
+   "script": "scripts/beside-6-pool-4.json",
+   "sha256": "17768bb89e18f199f1c6903a648e6785757b6880ea473f0466c74b1e161e752a",
+   "today": {"out":"out/beside-6-pool-4.today.json","sha256":"aaae3dc92af300b142841f3283b1ab472a222bb43327186eae605c8df999b94a"},
+   "person-first": {"out":"out/beside-6-pool-4.person-first.json","sha256":"61d193bfdd502f3196576fe19c938d5c3b8273ac2435696228df1512ae0b90de"}
+  },
+  {
+   "others": 0,
+   "pool": 9,
+   "script": "scripts/alone-pool-9.json",
+   "sha256": "b1d3522cff481750c6775e0419b23e364b31f824000e4304c7a6321c9dd1f2e6",
+   "today": {"out":"out/alone-pool-9.today.json","sha256":"8c0f2d98824a346683e0e55531bd97f5cbff8a161f863d4602f7a23ae01a1e92"},
+   "person-first": {"out":"out/alone-pool-9.person-first.json","sha256":"917b865ea2476d2763c9a9964478ef9b704a29fd3faa6b5be074e9f8399d8ff1"}
+  },
+  {
+   "others": 1,
+   "pool": 9,
+   "script": "scripts/beside-1-pool-9.json",
+   "sha256": "c0cb2d7c7e5aed40c9a35429633cc1465a891b7df8cca2f3a19959d16ae2ffbe",
+   "today": {"out":"out/beside-1-pool-9.today.json","sha256":"b365ee5c6ab67e15be221029066baf846f5374c7097a5111421d265d920a1df4"},
+   "person-first": {"out":"out/beside-1-pool-9.person-first.json","sha256":"de14f2455edf380ca42b70c2c53eb927dcfa9fe885498b5cac86824084bb130c"}
+  },
+  {
+   "others": 3,
+   "pool": 9,
+   "script": "scripts/beside-3-pool-9.json",
+   "sha256": "c7acd915744e73fe9baacb7ffd3c290647decbbd8e3b62046de29371a43ff952",
+   "today": {"out":"out/beside-3-pool-9.today.json","sha256":"b85d8e3c090fc5a798b6cf9887777912bd7d40eefe5cee06e55f29bf5d239029"},
+   "person-first": {"out":"out/beside-3-pool-9.person-first.json","sha256":"be04fd37eedd5e8e03904cfe329117a8499eaca2b7c6f31b2f5fc1a7f42d0202"}
+  },
+  {
+   "others": 6,
+   "pool": 9,
+   "script": "scripts/beside-6-pool-9.json",
+   "sha256": "4779b614a78599f4cddb8f48f4e78cbb21462679ac8a79feac8dbb810fc02ac0",
+   "today": {"out":"out/beside-6-pool-9.today.json","sha256":"308f9f2a8f49d4633c0de94c94215c8a967649697eaab07783308a7b0460c1d7"},
+   "person-first": {"out":"out/beside-6-pool-9.person-first.json","sha256":"969c6ebe31e507522de5b856d543ebb19819feabf0cc05664f5fceedddc90958"}
+  }
+ ],
+ "table": [
+  {
+   "others": 1,
+   "pool": 2,
+   "today": {
+    "alone": {
+     "wait": {"n":69,"unstarted":0,"p50":0,"p95":60000},
+     "verdict": {"n":23,"none":0,"p50":1260000,"p95":1260000}
+    },
+    "beside": {
+     "wait": {"n":69,"unstarted":0,"p50":60000,"p95":360000},
+     "verdict": {"n":23,"none":0,"p50":1260000,"p95":1782000}
+    },
+    "others": {"n":60,"unstarted":0,"p50":60000,"p95":475000},
+    "longest": {"session":"person","check":"check-20m","snapshot":"person-10","wait":635000}
+   },
+   "person-first": {
+    "alone": {
+     "wait": {"n":69,"unstarted":0,"p50":0,"p95":60000},
+     "verdict": {"n":23,"none":0,"p50":1260000,"p95":1260000}
+    },
+    "beside": {
+     "wait": {"n":69,"unstarted":0,"p50":35000,"p95":360000},
+     "verdict": {"n":23,"none":0,"p50":1260000,"p95":1560000}
+    },
+    "others": {"n":60,"unstarted":0,"p50":60000,"p95":475000},
+    "longest": {"session":"person","check":"check-20m","snapshot":"person-13","wait":582000}
+   }
+  },
+  {
+   "others": 1,
+   "pool": 4,
+   "today": {
+    "alone": {
+     "wait": {"n":69,"unstarted":0,"p50":0,"p95":0},
+     "verdict": {"n":23,"none":0,"p50":1200000,"p95":1200000}
+    },
+    "beside": {
+     "wait": {"n":69,"unstarted":0,"p50":0,"p95":0},
+     "verdict": {"n":23,"none":0,"p50":1200000,"p95":1260000}
+    },
+    "others": {"n":60,"unstarted":0,"p50":0,"p95":60000},
+    "longest": {"session":"other-1","check":"check-20m","snapshot":"other-1-03","wait":60000}
+   },
+   "person-first": {
+    "alone": {
+     "wait": {"n":69,"unstarted":0,"p50":0,"p95":0},
+     "verdict": {"n":23,"none":0,"p50":1200000,"p95":1200000}
+    },
+    "beside": {
+     "wait": {"n":69,"unstarted":0,"p50":0,"p95":0},
+     "verdict": {"n":23,"none":0,"p50":1200000,"p95":1260000}
+    },
+    "others": {"n":60,"unstarted":0,"p50":0,"p95":60000},
+    "longest": {"session":"other-1","check":"check-20m","snapshot":"other-1-03","wait":60000}
+   }
+  },
+  {
+   "others": 1,
+   "pool": 9,
+   "today": {
+    "alone": {
+     "wait": {"n":69,"unstarted":0,"p50":0,"p95":0},
+     "verdict": {"n":23,"none":0,"p50":1200000,"p95":1200000}
+    },
+    "beside": {
+     "wait": {"n":69,"unstarted":0,"p50":0,"p95":0},
+     "verdict": {"n":23,"none":0,"p50":1200000,"p95":1200000}
+    },
+    "others": {"n":60,"unstarted":0,"p50":0,"p95":0},
+    "longest": {"session":"other-1","check":"check-1m","snapshot":"other-1-01","wait":0}
+   },
+   "person-first": {
+    "alone": {
+     "wait": {"n":69,"unstarted":0,"p50":0,"p95":0},
+     "verdict": {"n":23,"none":0,"p50":1200000,"p95":1200000}
+    },
+    "beside": {
+     "wait": {"n":69,"unstarted":0,"p50":0,"p95":0},
+     "verdict": {"n":23,"none":0,"p50":1200000,"p95":1200000}
+    },
+    "others": {"n":60,"unstarted":0,"p50":0,"p95":0},
+    "longest": {"session":"other-1","check":"check-1m","snapshot":"other-1-01","wait":0}
+   }
+  },
+  {
+   "others": 3,
+   "pool": 2,
+   "today": {
+    "alone": {
+     "wait": {"n":69,"unstarted":0,"p50":0,"p95":60000},
+     "verdict": {"n":23,"none":0,"p50":1260000,"p95":1260000}
+    },
+    "beside": {
+     "wait": {"n":60,"unstarted":9,"p50":1531000,"p95":2461000},
+     "verdict": {"n":20,"none":3,"p50":2889000,"p95":3748000}
+    },
+    "others": {"n":175,"unstarted":5,"p50":1734000,"p95":2624000},
+    "longest": {"session":"other-2","check":"check-20m","snapshot":"other-2-09","wait":2946000}
+   },
+   "person-first": {
+    "alone": {
+     "wait": {"n":69,"unstarted":0,"p50":0,"p95":60000},
+     "verdict": {"n":23,"none":0,"p50":1260000,"p95":1260000}
+    },
+    "beside": {
+     "wait": {"n":69,"unstarted":0,"p50":317000,"p95":861000},
+     "verdict": {"n":23,"none":0,"p50":1717000,"p95":2102000}
+    },
+    "others": {"n":173,"unstarted":7,"p50":1717000,"p95":2751000},
+    "longest": {"session":"other-1","check":"check-5m","snapshot":"other-1-06","wait":3130000}
+   }
+  },
+  {
+   "others": 3,
+   "pool": 4,
+   "today": {
+    "alone": {
+     "wait": {"n":69,"unstarted":0,"p50":0,"p95":0},
+     "verdict": {"n":23,"none":0,"p50":1200000,"p95":1200000}
+    },
+    "beside": {
+     "wait": {"n":69,"unstarted":0,"p50":0,"p95":206000},
+     "verdict": {"n":23,"none":0,"p50":1200000,"p95":1428000}
+    },
+    "others": {"n":180,"unstarted":0,"p50":0,"p95":115000},
+    "longest": {"session":"other-2","check":"check-20m","snapshot":"other-2-20","wait":363000}
+   },
+   "person-first": {
+    "alone": {
+     "wait": {"n":69,"unstarted":0,"p50":0,"p95":0},
+     "verdict": {"n":23,"none":0,"p50":1200000,"p95":1200000}
+    },
+    "beside": {
+     "wait": {"n":69,"unstarted":0,"p50":0,"p95":206000},
+     "verdict": {"n":23,"none":0,"p50":1200000,"p95":1428000}
+    },
+    "others": {"n":180,"unstarted":0,"p50":0,"p95":115000},
+    "longest": {"session":"other-2","check":"check-20m","snapshot":"other-2-20","wait":363000}
+   }
+  },
+  {
+   "others": 3,
+   "pool": 9,
+   "today": {
+    "alone": {
+     "wait": {"n":69,"unstarted":0,"p50":0,"p95":0},
+     "verdict": {"n":23,"none":0,"p50":1200000,"p95":1200000}
+    },
+    "beside": {
+     "wait": {"n":69,"unstarted":0,"p50":0,"p95":0},
+     "verdict": {"n":23,"none":0,"p50":1200000,"p95":1200000}
+    },
+    "others": {"n":180,"unstarted":0,"p50":0,"p95":0},
+    "longest": {"session":"other-1","check":"check-1m","snapshot":"other-1-01","wait":0}
+   },
+   "person-first": {
+    "alone": {
+     "wait": {"n":69,"unstarted":0,"p50":0,"p95":0},
+     "verdict": {"n":23,"none":0,"p50":1200000,"p95":1200000}
+    },
+    "beside": {
+     "wait": {"n":69,"unstarted":0,"p50":0,"p95":0},
+     "verdict": {"n":23,"none":0,"p50":1200000,"p95":1200000}
+    },
+    "others": {"n":180,"unstarted":0,"p50":0,"p95":0},
+    "longest": {"session":"other-1","check":"check-1m","snapshot":"other-1-01","wait":0}
+   }
+  },
+  {
+   "others": 6,
+   "pool": 2,
+   "today": {
+    "alone": {
+     "wait": {"n":69,"unstarted":0,"p50":0,"p95":60000},
+     "verdict": {"n":23,"none":0,"p50":1260000,"p95":1260000}
+    },
+    "beside": {
+     "wait": {"n":21,"unstarted":48,"p50":2589000,"p95":3241000},
+     "verdict": {"n":5,"none":18,"p50":3662000,"p95":4741000}
+    },
+    "others": {"n":248,"unstarted":112,"p50":2510000,"p95":3290000},
+    "longest": {"session":"other-2","check":"check-20m","snapshot":"other-2-20","wait":4685000}
+   },
+   "person-first": {
+    "alone": {
+     "wait": {"n":69,"unstarted":0,"p50":0,"p95":60000},
+     "verdict": {"n":23,"none":0,"p50":1260000,"p95":1260000}
+    },
+    "beside": {
+     "wait": {"n":69,"unstarted":0,"p50":306000,"p95":760000},
+     "verdict": {"n":23,"none":0,"p50":1771000,"p95":2102000}
+    },
+    "others": {"n":189,"unstarted":171,"p50":2623000,"p95":3474000},
+    "longest": {"session":"other-2","check":"check-20m","snapshot":"other-2-20","wait":4565000}
+   }
+  },
+  {
+   "others": 6,
+   "pool": 4,
+   "today": {
+    "alone": {
+     "wait": {"n":69,"unstarted":0,"p50":0,"p95":0},
+     "verdict": {"n":23,"none":0,"p50":1200000,"p95":1200000}
+    },
+    "beside": {
+     "wait": {"n":69,"unstarted":0,"p50":307000,"p95":903000},
+     "verdict": {"n":23,"none":0,"p50":1621000,"p95":2130000}
+    },
+    "others": {"n":360,"unstarted":0,"p50":278000,"p95":758000},
+    "longest": {"session":"other-6","check":"check-20m","snapshot":"other-6-02","wait":1071000}
+   },
+   "person-first": {
+    "alone": {
+     "wait": {"n":69,"unstarted":0,"p50":0,"p95":0},
+     "verdict": {"n":23,"none":0,"p50":1200000,"p95":1200000}
+    },
+    "beside": {
+     "wait": {"n":69,"unstarted":0,"p50":149000,"p95":381000},
+     "verdict": {"n":23,"none":0,"p50":1455000,"p95":1698000}
+    },
+    "others": {"n":360,"unstarted":0,"p50":296000,"p95":847000},
+    "longest": {"session":"other-4","check":"check-20m","snapshot":"other-4-19","wait":1216000}
+   }
+  },
+  {
+   "others": 6,
+   "pool": 9,
+   "today": {
+    "alone": {
+     "wait": {"n":69,"unstarted":0,"p50":0,"p95":0},
+     "verdict": {"n":23,"none":0,"p50":1200000,"p95":1200000}
+    },
+    "beside": {
+     "wait": {"n":69,"unstarted":0,"p50":0,"p95":0},
+     "verdict": {"n":23,"none":0,"p50":1200000,"p95":1200000}
+    },
+    "others": {"n":360,"unstarted":0,"p50":0,"p95":0},
+    "longest": {"session":"other-4","check":"check-20m","snapshot":"other-4-17","wait":33000}
+   },
+   "person-first": {
+    "alone": {
+     "wait": {"n":69,"unstarted":0,"p50":0,"p95":0},
+     "verdict": {"n":23,"none":0,"p50":1200000,"p95":1200000}
+    },
+    "beside": {
+     "wait": {"n":69,"unstarted":0,"p50":0,"p95":0},
+     "verdict": {"n":23,"none":0,"p50":1200000,"p95":1200000}
+    },
+    "others": {"n":360,"unstarted":0,"p50":0,"p95":0},
+    "longest": {"session":"other-4","check":"check-20m","snapshot":"other-4-17","wait":33000}
+   }
+  }
+ ],
+ "neverStops": {
+  "script": "scripts/never-stops.json",
+  "sha256": "d4c57fe99cdd1fbec4f9643e1ee78cb9af493dd4914b4dbe92b148c852d29304",
+  "today": {"out":"out/never-stops.today.json","sha256":"13645584b8e44999d9ddf20df7c2f587a269e6a84a9b40d181909646be2415e9"},
+  "person-first": {"out":"out/never-stops.person-first.json","sha256":"af99795764f44a5f80f2cda7ddd1422656bf896bc05326765a57aaed94780ed5"},
+  "same": true,
+  "places": 360,
+  "waited": 259,
+  "stops": 120
+ },
+ "orders": {
+  "script": "scripts/orders.json",
+  "sha256": "05c365b492af18fbf8fd1ced71b4aca9edfb306ae593b8924a22c8bc21ee7281",
+  "package": {"out":"out/orders.today.json","sha256":"8a9bc06ba431dae88dddcde17d55b15517677e56cb9532544721cd076814caca"},
+  "hub": {"out":"out/orders.hub.json","sha256":"94bfcc8cb5059927394efa0c62b2693021380c3191f1ae5aa37f32970f70c172"},
+  "differs": [
+   {"session":"person","check":"check-1m","snapshot":"person-01","package":45000,"hub":65000},
+   {"session":"person","check":"check-5m","snapshot":"person-01","package":105000,"hub":125000},
+   {"session":"person","check":"check-20m","snapshot":"person-01","package":null,"hub":305000},
+   {"session":"other-3","check":"check-1m","snapshot":"other-3-01","package":405000,"hub":1205000},
+   {"session":"other-3","check":"check-5m","snapshot":"other-3-01","package":365000,"hub":1265000},
+   {"session":"other-3","check":"check-20m","snapshot":"other-3-01","package":305000,"hub":1505000},
+   {"session":"other-2","check":"check-5m","snapshot":"other-2-01","package":65000,"hub":425000},
+   {"session":"other-2","check":"check-1m","snapshot":"other-2-01","package":465000,"hub":725000},
+   {"session":"other-2","check":"check-20m","snapshot":"other-2-01","package":525000,"hub":785000},
+   {"session":"person","check":"check-1m","snapshot":"person-02","package":665000,"hub":1565000},
+   {"session":"person","check":"check-5m","snapshot":"person-02","package":725000,"hub":1625000},
+   {"session":"person","check":"check-20m","snapshot":"person-02","package":1025000,"hub":1985000}
+  ],
+  "stops": [
+   {"session":"other-1","stop":"other-1#1","opened_by":"scheduled","at":5000,"turn_end_returned_at":5000},
+   {"session":"person","stop":"person#1","opened_by":"human","at":45000,"turn_end_returned_at":125000},
+   {"session":"other-3","stop":"other-3#1","opened_by":"continuation","at":50000,"turn_end_returned_at":305000},
+   {"session":"other-2","stop":"other-2#1","opened_by":"scheduled","at":60000,"turn_end_returned_at":425000},
+   {"session":"person","stop":"person#2","opened_by":"human","at":200000,"turn_end_returned_at":1505000}
+  ]
+ },
+ "followUp": {"issue":3563,"title":"The slow lane starts a place whose turn a person opened before the others: on 4 slots beside 6 sessions nobody types in, a person's median wait falls from 307 s to 149 s","criteria":["- [ ] `simulate` on each of #3539's twelve scripts (`docs/spikes/3539/scripts/`) gives the rows of its kept `person-first` output, place for place. A scheduler with today's order fails, naming the first place that starts at another time","- [ ] `simulate` on `docs/spikes/3539/scripts/never-stops.json` gives the trace the merge base gives. A scheduler that takes a session for a person's whoever opened its turns fails, naming the script","- [ ] A person's place queued while every slot runs a check nobody waits for starts when the first of them ends, and none of them is stopped. A scheduler that stops a run for it fails, naming the run","- [ ] Through a hub's hook socket on a controlled clock, with two check slots: a session nobody types in has a slow check queued behind a running journey, and a person's session then stops green with one. The person's starts first. A hub that walks its queue in the order it was set fails, naming the check","- [ ] In the same hub, a turn opened from the app and one opened by a delivered answer are taken first too, and a turn opened by a `scheduled` prompt is not","- [ ] The readings give a slow check's wait for a slot at p50 and p95, split by who opened its turn. A reading that gives one number for both fails this test"]},
+ "alsoFiled": [
+  {"issue":3562,"title":"A green stop's reply waits for a slot: `turnEnded` returns only once the checks its pump took have started, so a session's stop is held while other sessions' slow checks run"}
+ ]
+}

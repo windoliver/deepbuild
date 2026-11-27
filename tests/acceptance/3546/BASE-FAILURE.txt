@@ -1,0 +1,269 @@
+Acceptance tests for #3546 on the base 2edb19ff4369bb7b3370d9f66e32324b8db478e9 ("Merge pull request #3561 …", main,
+no implementation), run on 2026-11-26 by the blind test job in its git worktree of that commit, on macOS (arm64),
+Node v24.22.2, with the checkout's node_modules (gpt-tokenizer 4.0.0) and nothing built:
+
+  node --test 'tests/acceptance/3546/*.test.mjs'
+
+Exit 1: all eight tests fail at a node:assert assertion under the test paths (helpers.mjs's `none`, or the
+test's own first assertion), each on what the base lacks: no closing line on standard error, the text printed past the
+limit, no `--all`, no line from the lane, no sentence that names the limit. Nothing fails by a crash of the helpers or a
+missing file. Trimmed: node's own stack frames and the assertion's fields are dropped. The checkout is written
+<checkout>, a test's scratch copy <scratch> and the home folder ~. Timings on this shared machine are not evidence.
+
+✖ #3546.05239cdb AC1 an issue linking three sections, one inside another, ends with one line on standard error whose sections, bytes and tokens equal those of the text printed; a planted counter that counts the inner section twice fails, naming both totals (612.495417ms)
+✖ #3546.a6d8d944 AC2 an issue whose sections total one token over the limit prints only headings, one line each with an anchor that prints with the anchor command and its own tokens, which add up to the total; a planted script that prints the text past the limit fails, naming the count (497.943417ms)
+✖ #3546.a6d8d944 AC2 with --all the same issue prints its text, byte-equal to the merge base's, and the closing line counts it: one token over the limit (300.352834ms)
+✖ #3546.bf38895d AC3 an issue whose sections total exactly the limit prints its text, byte-equal to the merge base's, and its closing line counts 25,000 tokens; a planted script that prints the outline from the limit on fails, naming the count (560.096625ms)
+✖ #3546.9cf18941 AC4 on this checkout's docs #89 prints an outline, one line for each heading of its four sections, where the merge base prints their text with its ==> lines (918.302708ms)
+ℹ the merge base's script prints 443,887 bytes for #89 on these docs, 443,644 without its ==> lines: 111,667 tokens under 184 headings
+✖ #3546.b80552ec AC5 the design links lane prints one line giving the issues read, the median, the 90th percentile, the largest with its issue and how many pass the limit, and still passes; a planted lane that counts a section linked twice by one issue twice fails, naming the issue (844.701375ms)
+✖ #3546.c49452fc AC6 AGENTS.md and CONTRIBUTING.md each hold one sentence that names the limit, 25,000, in the same words, and the lint lane's text check passes on this checkout (1.3575ms)
+✖ #3546.c49452fc AC6 the text check fails when the limit's sentence is edited in AGENTS.md or CONTRIBUTING.md alone, naming both lines, as it still does for the reading rule's sentence; a planted check that holds the reading rule's sentence alone fails this test (222.118917ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 0
+ℹ fail 8
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1248.161125
+
+✖ failing tests:
+
+test at tests/acceptance/3546/ac1-closing-line.test.mjs:10:1
+✖ #3546.05239cdb AC1 an issue linking three sections, one inside another, ends with one line on standard error whose sections, bytes and tokens equal those of the text printed; a planted counter that counts the inner section twice fails, naming both totals (612.495417ms)
+  AssertionError [ERR_ASSERTION]: scripts/design-section.mjs --issue doesn't end with a line on standard error that counts the text it printed:
+  #9546, which links the outer section before the inner one:
+  scripts/design-section.mjs --issue 9546 ends with no line on standard error, so nothing counts the 2 sections, 2,465 bytes and 458 tokens it printed
+
+  scripts/design-section.mjs --issue 9546 exited 0
+  stdout, 2,547 bytes:
+  ==> docs/technical-design.md#outer <==
+  ## Outer
+
+  world group river house sound value north table bread night gamma light field story alpha stone
+  plant point order south water chair money delta green glass music beta paper cloud world group
+  river house sound value north table bread night gamma light field story alpha stone plant point
+  order south water chair money delta green glass music beta paper cloud world group river house
+  sound value north table bread night gamma light field story alpha stone plant point order south
+  water chair money delta green glass music beta paper cloud world group river house sound value
+  north table bread night gamma light field story alpha stone plant point order south
+
+  ### Inner
+
+  A café — naïve ✓ line, so this text has more bytes than characters.
+  delta green glass music beta paper cloud world group river house sound value north table bread
+  night gamma light f
+  … 1,341 characters cut …
+  value north table bread night gamma light field
+  story alpha stone plant point order south water chair money delta green glass music beta paper
+  cloud world group river house sound value north table bread night gamma light field story alpha
+  stone plant point order south water chair money delta green
+
+  stderr:
+  (empty)
+  recorded gh calls: (none)
+
+  #9547, which links the inner section before the outer one:
+  scripts/design-section.mjs --issue 9547 ends with no line on standard error, so nothing counts the 3 sections, 4,261 bytes and 780 tokens it printed
+
+  scripts/design-section.mjs --issue 9547 exited 0
+  stdout, 4,377 bytes:
+  ==> docs/technical-design.md#inner <==
+  ### Inner
+
+  A café — naïve ✓ line, so this text has more bytes than characters.
+  delta green glass music beta paper cloud world group river house sound value north table bread
+  night gamma light field story alpha stone plant point order south water chair money delta green
+  glass music beta paper cloud world group river house sound value north table bread night gamma
+  light field story alpha stone plant point order
+
+  ==> docs/technical-design.md#outer <==
+  ## Outer
+
+  world group river house sound value north table bread night gamma light field story alpha stone
+  plant point order south water chair money delta green glass music beta paper cloud world group
+  river house sound value north table bread night gamma light field story alpha stone plant point
+  order south water chair money delta green glass music beta paper cloud world group river house
+  sound value nort
+  … 3,165 characters cut …
+   order south water chair money delta green glass music beta paper cloud world
+  group river house sound value north table bread night gamma light field story alpha stone plant
+  point order south water chair money delta green glass music beta paper cloud world group river
+  house sound value north table
+
+  stderr:
+  (empty)
+  recorded gh calls: (none)
+      at none (<checkout>/tests/acceptance/3546/helpers.mjs:42:51)
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/3546/ac1-closing-line.test.mjs:23:3)
+
+test at tests/acceptance/3546/ac2-outline.test.mjs:12:1
+✖ #3546.a6d8d944 AC2 an issue whose sections total one token over the limit prints only headings, one line each with an anchor that prints with the anchor command and its own tokens, which add up to the total; a planted script that prints the text past the limit fails, naming the count (497.943417ms)
+  AssertionError [ERR_ASSERTION]: scripts/design-section.mjs --issue 9548 doesn't print #9548's outline, though its sections total 25,001 tokens, one over the limit of 25,000:
+  scripts/design-section.mjs --issue 9548 printed the sections' text (1,475 of its lines), 3 sections and 25,001 tokens by the pinned tokenizer, 1 past the limit of 25,000, where only headings were due
+  standard output holds 0 heading lines (a line with a heading's `#<anchor>` and its own `<n> tokens`), not one for each of the 6 headings of #9548's sections
+  the closing line on standard error doesn't give the total, 25,001 tokens: (standard error holds no line)
+  the output names no command that prints one section, `node scripts/design-section.mjs <doc>#<anchor>`
+
+  scripts/design-section.mjs --issue 9548 exited 0
+  stdout, 140,409 bytes:
+  ==> docs/technical-design.md#outer <==
+  ## Outer
+
+  world group river house sound value north table bread night gamma light field story alpha stone
+  plant point order south water chair money delta green glass music beta paper cloud world group
+  river house sound value north table bread night gamma light field story alpha stone plant point
+  order south water chair money delta green glass music beta paper cloud world group river house
+  sound value north table bread night gamma light field story alpha stone plant point order south
+  water chair money delta green glass music beta paper cloud world group river house sound value
+  north table bread night gamma light field story alpha stone plant point order south
+
+  ### Inner
+
+  A café — naïve ✓ line, so this text has more bytes than characters.
+  delta green glass music beta paper cloud world group river house sound value north table bread
+  night gamma light f
+  … 139,203 characters cut …
+   gamma light field story alpha stone plant point order south water chair money delta
+  green glass music beta paper cloud world group river house sound value north table bread night
+  gamma light field story alpha stone plant point order south water chair money delta green glass
+  music beta paper cloud
+
+  stderr:
+  (empty)
+  recorded gh calls: (none)
+      at none (<checkout>/tests/acceptance/3546/helpers.mjs:42:51)
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/3546/ac2-outline.test.mjs:19:3)
+
+test at tests/acceptance/3546/ac2-outline.test.mjs:31:1
+✖ #3546.a6d8d944 AC2 with --all the same issue prints its text, byte-equal to the merge base's, and the closing line counts it: one token over the limit (300.352834ms)
+  AssertionError [ERR_ASSERTION]: scripts/design-section.mjs --issue 9548 --all doesn't print #9548's text as the merge base does, counted:
+  scripts/design-section.mjs --issue 9548 --all exited 2, not 0
+  scripts/design-section.mjs --issue 9548 --all printed 0 bytes, not the 140,409 bytes the merge base prints; they differ from byte 0: printed "", the merge base "==> docs/technical-design.md#outer <==\n## Outer\n\nworld group river house sound v"
+  the closing line gives no `<n> sections`: usage: node scripts/design-section.mjs <doc>#<anchor> | --issue <n>
+  the closing line gives no `<n> bytes`: usage: node scripts/design-section.mjs <doc>#<anchor> | --issue <n>
+  the closing line gives no `<n> tokens`: usage: node scripts/design-section.mjs <doc>#<anchor> | --issue <n>
+
+  scripts/design-section.mjs --issue 9548 --all exited 2
+  stdout, 0 bytes:
+  (empty)
+  stderr:
+  usage: node scripts/design-section.mjs <doc>#<anchor> | --issue <n>
+
+  recorded gh calls: (none)
+      at none (<checkout>/tests/acceptance/3546/helpers.mjs:42:51)
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/3546/ac2-outline.test.mjs:40:3)
+
+test at tests/acceptance/3546/ac3-at-the-limit.test.mjs:11:1
+✖ #3546.bf38895d AC3 an issue whose sections total exactly the limit prints its text, byte-equal to the merge base's, and its closing line counts 25,000 tokens; a planted script that prints the outline from the limit on fails, naming the count (560.096625ms)
+  AssertionError [ERR_ASSERTION]: scripts/design-section.mjs --issue 9549 doesn't print #9549's text as the merge base does and count it at the limit:
+  scripts/design-section.mjs --issue 9549 ends with no line on standard error, so nothing counts the 3 sections, 140,284 bytes and 25,000 tokens it printed
+
+  scripts/design-section.mjs --issue 9549 exited 0
+  stdout, 140,399 bytes:
+  ==> docs/technical-design.md#outer <==
+  ## Outer
+
+  world group river house sound value north table bread night gamma light field story alpha stone
+  plant point order south water chair money delta green glass music beta paper cloud world group
+  river house sound value north table bread night gamma light field story alpha stone plant point
+  order south water chair money delta green glass music beta paper cloud world group river house
+  sound value north table bread night gamma light field story alpha stone plant point order south
+  water chair money delta green glass music beta paper cloud world group river house sound value
+  north table bread night gamma light field story alpha stone plant point order south
+
+  ### Inner
+
+  A café — naïve ✓ line, so this text has more bytes than characters.
+  delta green glass music beta paper cloud world group river house sound value north table bread
+  night gamma light f
+  … 139,193 characters cut …
+   order south water chair money delta green glass music beta paper cloud world
+  group river house sound value north table bread night gamma light field story alpha stone plant
+  point order south water chair money delta green glass music beta paper cloud world group river
+  house sound value north table
+
+  stderr:
+  (empty)
+  recorded gh calls: (none)
+      at none (<checkout>/tests/acceptance/3546/helpers.mjs:42:51)
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/3546/ac3-at-the-limit.test.mjs:21:3)
+
+test at tests/acceptance/3546/ac4-issue-89.test.mjs:14:1
+✖ #3546.9cf18941 AC4 on this checkout's docs #89 prints an outline, one line for each heading of its four sections, where the merge base prints their text with its ==> lines (918.302708ms)
+  AssertionError [ERR_ASSERTION]: scripts/design-section.mjs --issue 89 doesn't print #89's outline, though its sections total 111,667 tokens, past the limit of 25,000, and the merge base prints 443,887 bytes:
+  scripts/design-section.mjs --issue 89 printed the sections' text (1,582 of its lines), 4 sections and 111,667 tokens by the pinned tokenizer, 86,667 past the limit of 25,000, where only headings were due
+  standard output holds 0 heading lines (a line with a heading's `#<anchor>` and its own `<n> tokens`), not one for each of the 184 headings of #89's sections
+  the closing line on standard error doesn't give the total, 111,667 tokens: (standard error holds no line)
+  the output names no command that prints one section, `node scripts/design-section.mjs <doc>#<anchor>`
+
+  scripts/design-section.mjs --issue 89 exited 0
+  stdout, 443,887 bytes:
+  ==> docs/technical-design.md#the-canvas-core <==
+  ### The canvas core
+
+  **Where it sits.** The canvas core is part of the trusted ring. The kernel holds the document contract: kinds with versions, stable IDs, and patches recorded with their writer. The canvas core is the only part that draws or touches the GPU. Plug-ins and agents are its clients: they hand it documents and patches, never pixels, and code only as a document's logic, which runs sandboxed in the logic module. A client never draws its own pixels, which is what lets the canvas check a picture before it shows, replay it exactly, and keep its numbers and status colors honest. The trust model has one owner of the screen and input, input only to the focused panel, and privileged surfaces nothing can cover. Clients send descriptions and one process draws for all of them, so the canvas core keeps an account per writer, one revision
+  … 441,904 characters cut …
+  one machine, and across machines the check uses evaluated data, as the decisions on architecture say. The reading rates (1.5 s plus 4.5 CJK and 15 other graphemes a second, and 4 s for a title card) follow recalled reading norms, unverified; the flicker thresholds come from WCAG.
+
+  <a id="gpu"></a>
+
+  stderr:
+  (empty)
+  recorded gh calls: (none)
+      at none (<checkout>/tests/acceptance/3546/helpers.mjs:42:51)
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/3546/ac4-issue-89.test.mjs:25:3)
+
+test at tests/acceptance/3546/ac5-lane-line.test.mjs:11:1
+✖ #3546.b80552ec AC5 the design links lane prints one line giving the issues read, the median, the 90th percentile, the largest with its issue and how many pass the limit, and still passes; a planted lane that counts a section linked twice by one issue twice fails, naming the issue (844.701375ms)
+  AssertionError [ERR_ASSERTION]: the lane "design links and names" doesn't print its one line: 11 issues read, the median 24,300, the 90th percentile 25,150, the largest 25,551 with #9560, and 4 past the limit:
+  the lane's output holds 0 lines with the word "median", not the one line of its reading
+
+  the lane "design links and names" exited 0
+  stdout, 310 bytes:
+  design links and names: 210 links checked from 2 docs and 13 open issues, each landing on a heading or an <a id>; 0 `deep` commands and agent tools named, each in the design or planned (0 planned); the design's principles hold; the design states what main holds in each place scripts/design-drift.mjs compares
+
+  stderr:
+  (empty)
+  recorded gh calls: (none)
+      at none (<checkout>/tests/acceptance/3546/helpers.mjs:42:51)
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/3546/ac5-lane-line.test.mjs:22:3)
+
+test at tests/acceptance/3546/ac6-same-words.test.mjs:18:1
+✖ #3546.c49452fc AC6 AGENTS.md and CONTRIBUTING.md each hold one sentence that names the limit, 25,000, in the same words, and the lint lane's text check passes on this checkout (1.3575ms)
+  AssertionError [ERR_ASSERTION]: AGENTS.md holds no sentence that names the limit, 25,000: it doesn't say that an issue's sections past 25,000 tokens print as an outline
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/3546/ac6-same-words.test.mjs:20:10)
+
+test at tests/acceptance/3546/ac6-same-words.test.mjs:31:1
+✖ #3546.c49452fc AC6 the text check fails when the limit's sentence is edited in AGENTS.md or CONTRIBUTING.md alone, naming both lines, as it still does for the reading rule's sentence; a planted check that holds the reading rule's sentence alone fails this test (222.118917ms)
+  AssertionError [ERR_ASSERTION]: AGENTS.md and CONTRIBUTING.md hold no one sentence that names the limit, 25,000, so no edit of it can be planted
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/3546/ac6-same-words.test.mjs:36:10)
+
+----------------------------------------------------------------------------------------------------------------------
+The same suite on a throwaway guess at the change (README: How I checked the tests can pass and fail), written by this
+job outside the checkout and deleted afterwards; <guess> is its folder. Exit 0: all eight pass, each planted program
+failing with the words its criterion asks for.
+
+✔ #3546.05239cdb AC1 an issue linking three sections, one inside another, ends with one line on standard error whose sections, bytes and tokens equal those of the text printed; a planted counter that counts the inner section twice fails, naming both totals (1778.791792ms)
+ℹ planted counts-inner-twice.mjs fails: the closing line says 3 sections, 2,885 bytes and 538 tokens; the text printed is 2 sections, 2,465 bytes and 458 tokens
+✔ #3546.a6d8d944 AC2 an issue whose sections total one token over the limit prints only headings, one line each with an anchor that prints with the anchor command and its own tokens, which add up to the total; a planted script that prints the text past the limit fails, naming the count (3780.373709ms)
+ℹ planted text-past-limit.mjs fails: the planted text-past-limit.mjs --issue 9548 printed the sections' text (1,475 of its lines), 3 sections and 25,001 tokens by the pinned tokenizer, 1 past the limit of 25,000, where only headings were due; standard output holds 0 heading lines (a line with a heading's `#<anchor>` and its own `<n> tokens`), not one for each of the 6 headings of #9548's sections; the output names no command that prints one section, `node scripts/design-section.mjs <doc>#<anchor>`
+✔ #3546.a6d8d944 AC2 with --all the same issue prints its text, byte-equal to the merge base's, and the closing line counts it: one token over the limit (679.418125ms)
+✔ #3546.bf38895d AC3 an issue whose sections total exactly the limit prints its text, byte-equal to the merge base's, and its closing line counts 25,000 tokens; a planted script that prints the outline from the limit on fails, naming the count (1263.912042ms)
+ℹ planted outline-at-limit.mjs fails: the planted outline-at-limit.mjs --issue 9549 printed 452 bytes, not the 140,399 bytes the merge base prints; they differ from byte 47: printed "  docs/technical-design.md#outer  120 tokens\n### Inner  docs/technical-design.md", the merge base "\n\nworld group river house sound value north table bread night gamma light field "; the planted outline-at-limit.mjs --issue 9549 printed none of the sections' text, where the text was due: #9549's sections total 25,000 tokens, which is the limit of 25,000 and not past it
+✔ #3546.9cf18941 AC4 on this checkout's docs #89 prints an outline, one line for each heading of its four sections, where the merge base prints their text with its ==> lines (2450.885542ms)
+ℹ the merge base's script prints 443,887 bytes for #89 on these docs, 443,644 without its ==> lines: 111,667 tokens under 184 headings
+✔ #3546.b80552ec AC5 the design links lane prints one line giving the issues read, the median, the 90th percentile, the largest with its issue and how many pass the limit, and still passes; a planted lane that counts a section linked twice by one issue twice fails, naming the issue (2009.402584ms)
+ℹ planted lane-per-link.mjs fails: the line doesn't give the median, 24,300; the line doesn't give the 90th percentile, 25,150; the line doesn't give the count past the limit of 25,000 tokens, 4; the line doesn't name the largest's issue, #9560, whose sections total 25,551 tokens; the line names #9555, whose sections total 24,300 tokens counted once each and 48,600 with a section counted for each link to it; the largest is #9560 with 25,551; the line: first reads: 11 issues read; median 25,000 tokens, 90th percentile 25,551, largest 48,600 (#9555); 5 past 25,000 tokens
+✔ #3546.c49452fc AC6 AGENTS.md and CONTRIBUTING.md each hold one sentence that names the limit, 25,000, in the same words, and the lint lane's text check passes on this checkout (147.86075ms)
+✔ #3546.c49452fc AC6 the text check fails when the limit's sentence is edited in AGENTS.md or CONTRIBUTING.md alone, naming both lines, as it still does for the reading rule's sentence; a planted check that holds the reading rule's sentence alone fails this test (542.129417ms)
+ℹ planted first-sentence-only.mjs fails: the planted first-sentence-only.mjs exited 0 though the two files' words differ; the planted first-sentence-only.mjs printed no line starting FAIL
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4717.198459
