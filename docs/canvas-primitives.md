@@ -301,11 +301,11 @@ Every table below uses these words and no others for these ideas. Where a refere
 
 <a id="kernel"></a>
 
-## What the core holds
+## What the core holds for the canvas
 
 <a id="what-the-kernel-holds"></a>
 
-The core holds only this contract: document shapes, kinds with versions, stable IDs, patches stamped with their writer, leases, and the events and projections the canvas reads. It never draws. Everything in later sections is the canvas core's, built on this.
+For the canvas, the core holds only this contract: document shapes, kinds with versions, stable IDs, patches stamped with their writer, leases, and the events and projections the canvas reads. It never draws. Everything in later sections is the canvas core's, built on this.
 
 ### Document primitives
 

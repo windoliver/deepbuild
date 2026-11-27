@@ -101,7 +101,7 @@ const OTHER_KERNELS = [
   { file: 'docs/parallel-proof.md', words: "the kernel's percentage of memory free", why: "macOS's kernel, the operating system's" },
   { file: 'docs/parallel-proof.md', words: "the kernel's CPU times", why: "the operating system's kernel" },
 ];
-const unworded = (line) => line.replace(/(\x60+)[^\x60]*?\1|<[^>]*>|\]\([^)]*\)/g, (piece) => ' '.repeat(piece.length));
+const unworded = (line) => line.toLowerCase().replace(/(\x60+)[^\x60]*?\1|<\/?[A-Za-z][^>]*>|\]\([^)]*\)/g, (piece) => ' '.repeat(piece.length));
 const used = new Set();
 let unlisted = 0;
 for (const { file, words, why } of OTHER_KERNELS) {
@@ -111,20 +111,21 @@ for (const doc of WORDED) {
   for (const { number, line } of prose(readFileSync(doc, 'utf8'))) {
     const bare = unworded(line);
     for (const { index } of bare.matchAll(/\bkernels?\b/gi)) {
-      const listed = OTHER_KERNELS.findIndex(({ file, words, why }) => {
-        if (file !== doc || !why?.trim()) return false;
-        for (let at = bare.indexOf(words); at >= 0; at = bare.indexOf(words, at + 1)) if (index >= at && index < at + words.length) return true;
+      const listed = OTHER_KERNELS.findIndex(({ file, words, why }, i) => {
+        if (file !== doc || !why?.trim() || used.has(i)) return false;
+        const phrase = words.toLowerCase();
+        for (let at = bare.indexOf(phrase); at >= 0; at = bare.indexOf(phrase, at + 1)) if (index >= at && index < at + phrase.length) return true;
         return false;
       });
       if (listed >= 0) used.add(listed);
       else {
         unlisted++;
-        fail(`${doc}:${number}`, `says kernel: "${line.slice(Math.max(0, index - 40), index + 40).trim()}"`, 'Say the core, or the contract where the sentence is about the shapes and rules it publishes (GLOSSARY.md, Layers); a kernel of another kind goes on OTHER_KERNELS in scripts/glossary-lint.mjs with its reason.');
+        fail(`${doc}:${number}`, `says kernel: "${line.slice(Math.max(0, index - 40), index + 40).trim()}"`, 'Say the core, or the contract where the sentence is about the shapes and rules it publishes (GLOSSARY.md, Layers); a kernel of another kind goes on OTHER_KERNELS in scripts/glossary-lint.mjs with its reason, one entry for each place.');
       }
     }
   }
 }
-if (unlisted) fail('docs', `${unlisted} places in the prose of ${WORDED.join(', ')} say kernel where they mean the core`, 'Follow the Fix line under each of them above.');
+if (unlisted) fail('docs', `${unlisted} ${unlisted === 1 ? 'place' : 'places'} in the prose of ${WORDED.join(', ')} ${unlisted === 1 ? 'says' : 'say'} kernel for the core`, 'Follow the Fix line under each of them above.');
 OTHER_KERNELS.forEach(({ file, words, why }, i) => {
   if (why?.trim() && !used.has(i)) fail(`scripts/glossary-lint.mjs: ${file}: "${words}"`, 'is listed as another kind of kernel, but no line of the file says it', 'Take it off OTHER_KERNELS.');
 });
@@ -150,13 +151,13 @@ const places = [
   return undefined;
 });
 if (places.every(Boolean)) {
-  const key = (place) => [...new Set(place.parts)].sort().join('\n');
+  const key = (place) => [...place.parts].sort().join('\n');
   for (const place of places) {
     const others = places.filter((other) => other !== place);
     if (key(others[0]) !== key(others[1]) || key(place) === key(others[0])) continue;
     const added = place.parts.filter((part) => !others[0].parts.includes(part));
     const lacking = others[0].parts.filter((part) => !place.parts.includes(part));
-    const says = [added.length && `it adds ${added.map((part) => `"${part}"`).join(', ')}`, lacking.length && `it lacks ${lacking.map((part) => `"${part}"`).join(', ')}`].filter(Boolean).join(' and ');
+    const says = [added.length && `it adds ${added.map((part) => `"${part}"`).join(', ')}`, lacking.length && `it lacks ${lacking.map((part) => `"${part}"`).join(', ')}`].filter(Boolean).join(' and ') || `it names ${[...new Set(place.parts.filter((part, i) => place.parts.indexOf(part) !== i))].map((part) => `"${part}"`).join(', ')} more than once`;
     fail(place.at, `${place.name} names the core's parts differently from the other two places: ${says}`, 'Name the same parts of the core in the scope section, Building blocks and the diagram.');
   }
   if (new Set(places.map(key)).size === 3) {
