@@ -12,5 +12,6 @@
     "lights_cameras.png": "8a37858c8df4ff91e926880d191f7b63d5a0251a855bcb626d346b6380c8ae02",
     "uv_checker.png": "45243ab3f2e5eb76f8f26d623cbd28cb18e8b325a7f9e327b96a0c14e7103215"
   },
-  "note": "The owner asked Claude to validate the six screenshots in their place. Claude checked each against the issue and the renderer code: lighting_only, overdraw, cascade_splits, bounds and uv_checker were right as drawn; lights_cameras lacked point-light centre marks and drew the sun as a stub on the spot axis, fixed in 94a9ec05 and re-rendered."
+  "note": "The owner asked Claude to validate the six screenshots in their place. Claude checked each against the issue and the renderer code: lighting_only, overdraw, cascade_splits, bounds and uv_checker were right as drawn; lights_cameras lacked point-light centre marks and drew the sun as a stub on the spot axis, fixed in 94a9ec05 and re-rendered.",
+  "maker": {"agent":{"model":null,"session":null}}
 }

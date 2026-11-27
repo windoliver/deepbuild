@@ -1,6 +1,5 @@
 {
  "criterion": "#464.d22bf5b7",
- "by": "you",
  "who": "Claude, delegated by the owner in the session (\"validate for me\")",
  "when": "2026-11-07T23:30:11Z",
  "screenshots": [
@@ -18,5 +17,6 @@
   "vignette-grain": "b746e576d82ffcece4b49e5f687df4ede63654256b7984353e7a9787e90e093b"
  },
  "call": "looks_right",
- "note": "Viewed whole and cropped up close. Separations: multiply overlap clean, 3 px registration. Print wear: rounded soft gate, a scratch, dust; the hair's 20% chance didn't land on frame 24, and the tone curve is subtle at contrast 1.15. CRT: barrel, aperture stripes and scanlines read as a lit tube; the brightness gain clips saturated colours toward teal and olive. Vignette and grain: fine 1 px grain, a strong vignette as specified. Indexed puff: 50% ordered dither, protected shield untouched, nearest upscale."
+ "note": "Viewed whole and cropped up close. Separations: multiply overlap clean, 3 px registration. Print wear: rounded soft gate, a scratch, dust; the hair's 20% chance didn't land on frame 24, and the tone curve is subtle at contrast 1.15. CRT: barrel, aperture stripes and scanlines read as a lit tube; the brightness gain clips saturated colours toward teal and olive. Vignette and grain: fine 1 px grain, a strong vignette as specified. Indexed puff: 50% ordered dither, protected shield untouched, nearest upscale.",
+ "maker": {"agent":{"model":null,"session":null}}
 }

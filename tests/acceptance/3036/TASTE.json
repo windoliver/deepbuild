@@ -7,5 +7,6 @@
   "screenshots": {
     "wheel-tracks.png": "ea87b174ddbff25660d128391ccfbf65b0a253e93c515c47c30766fc2c9f4571"
   },
-  "note": "Checked the still whole and its lower left part at twice the size, the same frame drawn without tracks, the difference of the two, and the film's frames at 1, 4, 7 and 10 s. Two dark grooves run from the cart's start to its wheels, each with a lit rim on its far side; they grow as the cart moves and end at the wheels, and the field without tracks shows none. Every pixel that differs by more than 16 of 255 lies where the grooves are. They read as wheel tracks. One weakness: up close the grooves' edges are beaded, where the path runs at an angle to the plate's 5 cm samples."
+  "note": "Checked the still whole and its lower left part at twice the size, the same frame drawn without tracks, the difference of the two, and the film's frames at 1, 4, 7 and 10 s. Two dark grooves run from the cart's start to its wheels, each with a lit rim on its far side; they grow as the cart moves and end at the wheels, and the field without tracks shows none. Every pixel that differs by more than 16 of 255 lies where the grooves are. They read as wheel tracks. One weakness: up close the grooves' edges are beaded, where the path runs at an angle to the plate's 5 cm samples.",
+  "maker": {"agent":{"model":null,"session":null}}
 }

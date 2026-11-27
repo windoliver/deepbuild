@@ -12,5 +12,6 @@
     "trees-in-wind.png": "fab70ae52ebf08f86e38707f140adb0f3c9f9ed8cd5169fbb1c18b6759c718b2",
     "wind-rolling.apng": "c977b41a612b6004c0d68433965e6a9575cca2a7313c63b44bafd62b05648d17"
   },
-  "note": "The plate at 1080p and 4K reads as one smooth rolling field: no seam, crack or step at a tile edge (no sky-coloured pixel lies under the horizon in either picture), and the light rolls with the hills at both sizes. The garden's bushes and flowers stand apart with no overlap; the vase sits on the tilted top with its contact shadow; the 36 trees lean together downwind, and across the 49-frame recording the lean changes from tree to tree as gusts pass (frames 0 and 24 differ on 6.6% of pixels). The fixtures' plain boxes, cones and floating table top are the suite's stand-ins, not something this change draws."
+  "note": "The plate at 1080p and 4K reads as one smooth rolling field: no seam, crack or step at a tile edge (no sky-coloured pixel lies under the horizon in either picture), and the light rolls with the hills at both sizes. The garden's bushes and flowers stand apart with no overlap; the vase sits on the tilted top with its contact shadow; the 36 trees lean together downwind, and across the 49-frame recording the lean changes from tree to tree as gusts pass (frames 0 and 24 differ on 6.6% of pixels). The fixtures' plain boxes, cones and floating table top are the suite's stand-ins, not something this change draws.",
+  "maker": {"agent":{"model":null,"session":null}}
 }

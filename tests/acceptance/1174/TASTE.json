@@ -11,5 +11,6 @@
     "shard-scale-0.5.png": "925ed5c99b72ce6ccb60e88c1a10ae540d493da11916947a6e0f741e3fed7ce6",
     "shard-label-x4.png": "af59941f5090a9b9aab4a04775b4e81c600a79b5d7748cc875ed1e06ebce7b0e"
   },
-  "note": "2D and 3D labels read as the same text: same stroke weight, full ink at their darkest pixels. All 48 shard labels are crisp and evenly dark; scale 0.5 is byte-identical to scale 1."
+  "note": "2D and 3D labels read as the same text: same stroke weight, full ink at their darkest pixels. All 48 shard labels are crisp and evenly dark; scale 0.5 is byte-identical to scale 1.",
+  "maker": {"agent":{"model":"claude-opus-5-5","session":null}}
 }

@@ -10,5 +10,6 @@
     "win.png": "e7f0e57c3a6f6a30a4cc6bf44719b7fff7c5836901fd2c9f63ec26aeb871933b",
     "game-keys.mp4": "03b1426114e807ba0428ae411868da1dbdaf590b775ef9060ec937e476ca8ca9"
   },
-  "note": "The board places X and O where the presses put them: after O's press on the taken cell 1 the board still holds the one X; after O 4, X on cell 1 and O on cell 4; after X 3, X across the top row with O on 4 and 5. The recording plays the game from an empty board through the win and holds it past O's press of 9. The board is centred in the window and fills its height."
+  "note": "The board places X and O where the presses put them: after O's press on the taken cell 1 the board still holds the one X; after O 4, X on cell 1 and O on cell 4; after X 3, X across the top row with O on 4 and 5. The recording plays the game from an empty board through the win and holds it past O's press of 9. The board is centred in the window and fills its height.",
+  "maker": {"agent":{"model":"claude-opus-5-5","session":null}}
 }

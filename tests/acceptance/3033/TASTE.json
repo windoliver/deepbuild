@@ -7,5 +7,6 @@
   ],
   "call": "looks_right",
   "when": "2026-11-23T20:35:00Z",
-  "note": "The owner was shown the still's two pictures in the session, the sea on the left and the same plate with four waves on the right, in a browser preview and as docs/evidence/3033/sea-beside-four-waves-85cf1427b1f0fd9f9afbe046292f1ae2eeffa5e4dc0beb0e25ab48b84a15c109.png, and answered \"Looks right\". The implementing agent typed this file from that answer; an earlier \"validate for me\" was not taken as a call."
+  "note": "The owner was shown the still's two pictures in the session, the sea on the left and the same plate with four waves on the right, in a browser preview and as docs/evidence/3033/sea-beside-four-waves-85cf1427b1f0fd9f9afbe046292f1ae2eeffa5e4dc0beb0e25ab48b84a15c109.png, and answered \"Looks right\". The implementing agent typed this file from that answer; an earlier \"validate for me\" was not taken as a call.",
+  "maker": {"person":"the owner, unnamed in the record"}
 }

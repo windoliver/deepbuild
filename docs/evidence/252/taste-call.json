@@ -1,6 +1,5 @@
 {
   "criterion": "#252.b3fac129",
-  "by": "you",
   "delegated": "On 2026-11-07 the owner asked Claude, in session, to close the gaps it could and open the PR. Claude checked each picture against its fixture and frames rendered at other steps: the flock of 262,144 boids turns from uniform noise (step 0) into streaming clusters by steps 600 and 1,800; the soft blob dents where it was pushed (step 30), sends a ring ripple out by step 60 and settles by step 300; the fire rises from a floor that spreads from the middle and grows into a flame, smooth, with little visible flicker from step to step. The owner may overturn this call.",
   "screenshots": [
     "d82ae604cae298ebf87080d84492dea68748121ae0bd979740d6a4a9d34d43a8",
@@ -12,5 +11,6 @@
     "0e51cb9b39678f075b785226637cdaf40f02bd350e88d2b0a747684a6f0ed426",
     "12e1f03cdd8eb8c0947c8d656b63c662aabe0965293a38627f88e29d6dad351e"
   ],
-  "call": "looks_right"
+  "call": "looks_right",
+  "maker": {"agent":{"model":null,"session":null}}
 }

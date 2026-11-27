@@ -10,5 +10,6 @@
     "warehouse-90min.png": "a8736fbbf031a14f97c52c371c806166061d2f710a21e0740d01b6deb3e74263",
     "warehouse-running.apng": "9f945757f3ec30bff383dd6ad7dad7a890ed920bfdf8d0ff404b5e073e541648"
   },
-  "note": "The owner was shown the three screenshots and the recording in the session and in PR #3055, and answered \"Looks right\". The 30-minute readout shows an unrounded rate extrapolated from a partial first hour that runs off the frame's right edge; it was pointed out before the call."
+  "note": "The owner was shown the three screenshots and the recording in the session and in PR #3055, and answered \"Looks right\". The 30-minute readout shows an unrounded rate extrapolated from a partial first hour that runs off the frame's right edge; it was pointed out before the call.",
+  "maker": {"person":"the owner, unnamed in the record"}
 }

@@ -12,5 +12,6 @@
     "flip-group.png": "7e23e7df9e136417430364e7138e3199a4473326145b6660ef52d06976799abc",
     "flip-group.apng": "6454e014032216385dcbc0c5ad999f89f2da006a61a7d940eb5f2bdef7b8bd40"
   },
-  "note": "Checked by pixel values, not by eye alone. Echo: 9 bars (the item and 8 copies) 16 px apart at opacities 1, 0.5 … 0.004; the newest bar is in frame on all 48 recorded frames. Matte: coverage 55/255 (0.216) linear and 128/255 (0.502) encoded. Flip: one child or none on every frame, c0, c2, none, c1 for 12 frames each, as its keys say. The owner can overturn this by setting verdict to looks_wrong."
+  "note": "Checked by pixel values, not by eye alone. Echo: 9 bars (the item and 8 copies) 16 px apart at opacities 1, 0.5 … 0.004; the newest bar is in frame on all 48 recorded frames. Matte: coverage 55/255 (0.216) linear and 128/255 (0.502) encoded. Flip: one child or none on every frame, c0, c2, none, c1 for 12 frames each, as its keys say. The owner can overturn this by setting verdict to looks_wrong.",
+  "maker": {"agent":{"model":"claude-opus-5-5","session":null}}
 }

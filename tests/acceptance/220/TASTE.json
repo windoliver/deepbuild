@@ -9,5 +9,6 @@
     "match-morph.png": "ddd59a0c0ecde5dc94d2ccba7d1f08059a574c9a97deda41fc6c42122ec35333",
     "match-morph.apng": "dfcd591befd325aa61a60b58c8212eeab4fd989c2982f462b43a30a449e12f5a"
   },
-  "note": "five-parts.png: a^2 + b^2 = c^2 in dark_math, outlines crisp with the counters of a and b open, and each of the five accent boxes tight on its part as the job's probe places it. match-morph.png: halfway, = midway from 4th to 2nd place, b^2 and c^2 crossing, + and - each at half opacity. match-morph.apng (49 frames, 24 fps): frames 0-12 identical (A still, and the window opens on A with no pop), frames 36-48 identical (B still), and 2.9k-4.3k pixels change per frame inside the window with no jump; a^2 stays put, the shared terms slide to their new places, + fades out and - fades in, nothing else moves."
+  "note": "five-parts.png: a^2 + b^2 = c^2 in dark_math, outlines crisp with the counters of a and b open, and each of the five accent boxes tight on its part as the job's probe places it. match-morph.png: halfway, = midway from 4th to 2nd place, b^2 and c^2 crossing, + and - each at half opacity. match-morph.apng (49 frames, 24 fps): frames 0-12 identical (A still, and the window opens on A with no pop), frames 36-48 identical (B still), and 2.9k-4.3k pixels change per frame inside the window with no jump; a^2 stays put, the shared terms slide to their new places, + fades out and - fades in, nothing else moves.",
+  "maker": {"agent":{"model":"claude-opus-5-5","session":null}}
 }

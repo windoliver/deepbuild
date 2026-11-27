@@ -10,5 +10,6 @@
     "cloaked-unit-revealed.png": "e985442b6a18a4edca8aaab81ee2b09006589e2f2c705599d0aae752f1654189",
     "fog-changing.apng": "6bb5e6640aae01ffbd34e4a1fa6de54e5214be170d86f980f361b44b31ffeb76"
   },
-  "note": "The four files as the check run wrote them on 6893cccd8, the branch merged with main 5f5791e2d; every run of the suite since the first has written the same bytes."
+  "note": "The four files as the check run wrote them on 6893cccd8, the branch merged with main 5f5791e2d; every run of the suite since the first has written the same bytes.",
+  "maker": {"person":"windoliver"}
 }

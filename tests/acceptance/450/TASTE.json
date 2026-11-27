@@ -12,5 +12,6 @@
     "traces-24fps.apng": "7cdadd9e5d8bfd89574fba4269435cffb2ed10355e2a1589d4fe4ebf98e72483",
     "traces-60fps.apng": "68eb5076f1443dd1cc9917168b26dad86bbc4438e13da72e52a9bebdb6ac99d4"
   },
-  "note": "Checked the stills and recording frames at 0, 1, 2 (the second cue), 3, 4, 5 and 6 s at 24 and 60 fps: each throw leaves its own arc, the newest ending at the ball and brightest, an older trace ending where the next begins, the third kept and the first fading toward its start; the wheel's whole trail is a cycloid with its cusp on the floor at x = pi. The fixture's camera (horizontal fov 50 at 28 m, x about 1 to 27 m) crops the first throw's start, the ball at 0 s and 6 s (x = 0 and 27.85 m) and the wheel's rim at 3.75 s (x = 6.24 m); that framing is the test's own, not the trails'."
+  "note": "Checked the stills and recording frames at 0, 1, 2 (the second cue), 3, 4, 5 and 6 s at 24 and 60 fps: each throw leaves its own arc, the newest ending at the ball and brightest, an older trace ending where the next begins, the third kept and the first fading toward its start; the wheel's whole trail is a cycloid with its cusp on the floor at x = pi. The fixture's camera (horizontal fov 50 at 28 m, x about 1 to 27 m) crops the first throw's start, the ball at 0 s and 6 s (x = 0 and 27.85 m) and the wheel's rim at 3.75 s (x = 6.24 m); that framing is the test's own, not the trails'.",
+  "maker": {"agent":{"model":null,"session":null}}
 }

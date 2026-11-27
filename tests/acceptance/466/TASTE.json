@@ -11,5 +11,6 @@
     "caption.png": "1c42b4224bb4121f3397357b98b3f144eb4b622bab377d4d660bdc7ca64372db",
     "transitions-boil.apng": "2597be28b709d422044dc83a843812cfdbed603087138331e73d6568c76f5b27"
   },
-  "note": "Looked at every still and every frame of the recording. Mosaic: the outgoing world breaks into cells as the incoming one shows through, half covered at the reveal. Iris: the circle closes on the walker as it moves, over the incoming world, and ends on it; an earlier draft flipped the circle to the incoming side at the cut, flashing the outgoing scene back for two frames and reopening from off screen, fixed before this call. Dip: both worlds sink into ink, hold it, and the incoming one rises out. Caption: a card that unfolds, ink on ground, centred above the safe edge. Boil: three drawings cycling at 12 Hz, the line holding its shape."
+  "note": "Looked at every still and every frame of the recording. Mosaic: the outgoing world breaks into cells as the incoming one shows through, half covered at the reveal. Iris: the circle closes on the walker as it moves, over the incoming world, and ends on it; an earlier draft flipped the circle to the incoming side at the cut, flashing the outgoing scene back for two frames and reopening from off screen, fixed before this call. Dip: both worlds sink into ink, hold it, and the incoming one rises out. Caption: a card that unfolds, ink on ground, centred above the safe edge. Boil: three drawings cycling at 12 Hz, the line holding its shape.",
+  "maker": {"agent":{"model":"claude-opus-5-5","session":null}}
 }

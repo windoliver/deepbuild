@@ -10,5 +10,6 @@
     "rolling-counter.png": "3c5c5f1ea26d7550e1b60b898477e0e10125e804096b3a7f81486584ef728300",
     "text-animators.apng": "768b105bbe041f483b6321cf90bd2c75f0184dfe4236e7c45c70372a23fbc81e"
   },
-  "note": "Read the three stills and four frames of the recording (0.55 s, 1.15 s, 2.35 s, 3.5 s); all 94 recorded frames differ from the one before. MOTION: thin at weight 100, heavy at 900, with no snap to a static face. Circle: three copies of the run close the ring and slide evenly, each glyph upright to the tangent. Counter: only the changed digits roll; the old glyph leaves upward and the new one enters from below, each clipped to its cell, while the other digits hold. These are plain glyphs on a white ground: this judges motion and placement, not finish."
+  "note": "Read the three stills and four frames of the recording (0.55 s, 1.15 s, 2.35 s, 3.5 s); all 94 recorded frames differ from the one before. MOTION: thin at weight 100, heavy at 900, with no snap to a static face. Circle: three copies of the run close the ring and slide evenly, each glyph upright to the tangent. Counter: only the changed digits roll; the old glyph leaves upward and the new one enters from below, each clipped to its cell, while the other digits hold. These are plain glyphs on a white ground: this judges motion and placement, not finish.",
+  "maker": {"agent":{"model":"claude-opus-5-5","session":null}}
 }

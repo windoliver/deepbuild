@@ -1,6 +1,5 @@
 {
  "criterion": "#166.ad7d1fa8",
- "by": "you",
  "who": "Claude, delegated by the owner in the session (\"validate for me\", then \"create pr that can clse the isseu?\")",
  "when": "2026-11-08T23:07:47Z",
  "screenshots": [
@@ -16,5 +15,6 @@
   "rain-wake": "838c20a13e893f67b7e3df88b308fd3c8dea873a47138a3743022fe0356561fd"
  },
  "call": "looks_right",
- "note": "An earlier set was called looks_wrong (wake a grey haze, solid foam blobs, a stray bright pixel, jagged crest edges, items ghosting through crests); this set is after the fixes. Lake: waves and ripples to the horizon, the post and crates mirrored and broken by the ripples. Rain: ring outlines across the near and middle water, flattening with distance, none far off. Foam and wake: crest foam in ragged patches with holes; the wake's foam streaks fan out behind the boat and ride the waves; the post below a crest reads as refracted. Recording: rain throughout, the wake's streaks trailing the boat across the frame. Left over: about forty single bright pixels on distant crest edges, the right crate's submerged half a darker tinted box, and from this low camera much of the wake hides behind crests."
+ "note": "An earlier set was called looks_wrong (wake a grey haze, solid foam blobs, a stray bright pixel, jagged crest edges, items ghosting through crests); this set is after the fixes. Lake: waves and ripples to the horizon, the post and crates mirrored and broken by the ripples. Rain: ring outlines across the near and middle water, flattening with distance, none far off. Foam and wake: crest foam in ragged patches with holes; the wake's foam streaks fan out behind the boat and ride the waves; the post below a crest reads as refracted. Recording: rain throughout, the wake's streaks trailing the boat across the frame. Left over: about forty single bright pixels on distant crest edges, the right crate's submerged half a darker tinted box, and from this low camera much of the wake hides behind crests.",
+ "maker": {"agent":{"model":null,"session":null}}
 }
