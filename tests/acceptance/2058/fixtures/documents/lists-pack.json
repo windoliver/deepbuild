@@ -1,0 +1,18 @@
+{
+  "format": 1,
+  "profile": "board",
+  "title": "A board that lists a pack",
+  "description": "One tile from a listed pack on a board; a fixture of the #2058 acceptance suite.",
+  "size": [640, 400],
+  "packs": ["acme/ahead@1.0.0"],
+  "items": {
+    "t1": {
+      "id": "t1",
+      "kind": "ahead.tile@1",
+      "name": "t1",
+      "order": "a0",
+      "params": {},
+      "at": { "pos": [20, 20, 0] }
+    }
+  }
+}

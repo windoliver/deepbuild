@@ -1,0 +1,2 @@
+# node scripts/twins-lint.mjs --root <fresh clone of main 35956a44a>, lines naming 1333 (exit of the lint: 1)
+FAIL twins: tests/acceptance/1333/twins.json: must map each criterion tag to a list of twin folder names

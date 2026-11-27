@@ -1,7 +1,3 @@
-// Size and scope's measure (#324): a change read from git with no model, on a real repository. What the acceptance
-// suite (tests/acceptance/324) doesn't reach: a committed range, a binary file, a nested manifest's dev dependency,
-// a median over an even count, a document's items compared by value rather than key order, a session in a subfolder,
-// the services and cloud resources a change adds, and the lines it adds in duplicated blocks.
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -30,7 +26,6 @@ describe('#324 measure', () => {
     r.put('pkg/package.json', '{"dependencies":{"dayjs":"1"},"devDependencies":{"left-pad":"1"}}\n');
     r.put('assets/logo.bin', Buffer.from([0, 1, 2, 0, 3]));
     const head = r.commit();
-    // The working tree moves on after the commit: a range reads the commit, never the folder.
     r.put('src/later.js', 'x\n');
     const m = await measure(r.dir, base, head);
     expect(m.files).toEqual([{ path: 'assets/logo.bin', added: 0, removed: 0 }, { path: 'pkg/package.json', added: 1, removed: 1 }, { path: 'src/a.js', added: 2, removed: 1 }]);
@@ -71,7 +66,6 @@ describe('#324 services, cloud resources and duplicated blocks', () => {
     r.put('src/c.js', `${block('a')}\nconst other = 1;\n`);
     r.put('src/a.js', `// moved below\n${block('a')}\n`);
     r.put('src/b.js', `const first = 0;\n${block('b')}\n`.replace(block('b'), `${block('b').split('\n').slice(3).join('\n')}\n${block('b').split('\n').slice(0, 3).join('\n')}`));
-    // c.js copies a's block (6 added lines in a duplicate); a.js gains a comment; b.js only reorders its own lines.
     expect((await measure(r.dir, r.base)).duplicated).toBe(6);
   });
 });

@@ -618,15 +618,10 @@ impl crate::Logic {
         })?;
         let started = std::time::Instant::now();
         let outer = self.under_test.replace(under.hash.to_string());
-        let bake = self.bake(&line);
-        let det = bake.as_ref().ok().map(|_| {
-            let mut line = line.clone();
-            line["at_times"] = json!([0.0]);
-            self.determinism(&line)
-        });
+        let ran = self.fixture_runs(line);
         self.under_test = outer;
         let ns = started.elapsed().as_nanos() as u64;
-        let bake = bake.map_err(|r| {
+        let (bake, det) = ran.map_err(|r| {
             let refusals = r["refusals"]
                 .as_array()
                 .cloned()
@@ -637,8 +632,8 @@ impl crate::Logic {
             return Err((vec![r], true));
         }
         match det {
-            Some(Ok(d)) if d["verdict"] == json!("PASS") => {}
-            Some(Ok(d)) => {
+            Ok(d) if d["verdict"] == json!("PASS") => {}
+            Ok(d) => {
                 return Err((
                     vec![
                         json!({"rule": "interface", "interface": iface.name, "library": under.label, "fixture": id,
@@ -648,8 +643,7 @@ impl crate::Logic {
                     true,
                 ))
             }
-            Some(Err(r)) => return Err((vec![r], false)),
-            None => {}
+            Err(r) => return Err((vec![r], false)),
         }
         let deep: Map<String, Value> = bake["checkpoints"]["fixture"]
             .as_array()

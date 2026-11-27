@@ -1,0 +1,21 @@
+{
+  "id": "ahead.tile",
+  "version": "1.0",
+  "title": "Tile",
+  "license": "MIT",
+  "author": "the #2058 acceptance suite",
+  "description": "A tile from the front: one 2D rect.",
+  "steps": {
+    "face": {
+      "op": "mark",
+      "kind": "rect@1",
+      "params": {
+        "box": [0, 0, 40, 40],
+        "paint": { "fill": { "role": "muted" } }
+      }
+    }
+  },
+  "outputs": {
+    "parts": ["face"]
+  }
+}

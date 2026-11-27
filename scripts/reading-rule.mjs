@@ -1,8 +1,11 @@
 // The reading rule, held in two places (#2338), run by the lint lane: AGENTS.md's first rule, the first sentence of
 // its first line after the title, and CONTRIBUTING.md's line marked `<!-- reading rule -->` state it in the same words,
-// so neither file is edited alone. One PASS line, or one FAIL line naming both lines; exit 1 on a finding.
+// so neither file is edited alone. So do the two lines' sentences on the limit (#3546): the one of each that names the
+// tokens past which an issue's sections print as outlines. One PASS line, or one FAIL line naming both lines; exit 1 on
+// a finding.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { LIMIT } from './linked-sections.mjs';
 
 process.chdir(fileURLToPath(new URL('../', import.meta.url)));
 const MARK = '<!-- reading rule -->';
@@ -23,4 +26,12 @@ if (!rule || !sentences.includes(rule)) {
   console.log(`  Fix: Edit both lines together, so CONTRIBUTING.md's marked line holds AGENTS.md's first sentence word for word.`);
   process.exit(1);
 }
-console.log(`PASS reading rule: ${agentsAt} and ${contributingAt} both say "${rule}"`);
+// The limit's sentence is found by the limit it names, as scripts/design-section.mjs holds it, not by its wording.
+const number = LIMIT.toLocaleString('en-US');
+const limit = agents[first].trim().split(/(?<=\.)\s+/).find((sentence) => sentence.includes(number));
+if (!limit || !sentences.includes(limit)) {
+  console.log(`FAIL reading rule: ${agentsAt} and ${contributingAt} don't say in the same words what an issue's sections print as past ${number} tokens; AGENTS.md says "${limit ?? ''}"`);
+  console.log(`  Fix: Edit both lines together, so each holds one sentence that names the limit, ${number}, word for word the other's.`);
+  process.exit(1);
+}
+console.log(`PASS reading rule: ${agentsAt} and ${contributingAt} both say "${rule}" and "${limit}"`);
