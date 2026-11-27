@@ -404,6 +404,9 @@ export class TrustedActions {
    */
   async job(args: Obj, caller: string | undefined): Promise<Obj> {
     if (!this.options.services.jobKinds) throw refuse('unavailable', '', 'The hub has no extension host yet; try again once it is ready.', 'deep_job', true);
+    // The fetch's fields (#3525) belong to op fetch alone; a list or run that gives one is refused, as on a schema without them.
+    const stray = ['library', 'id', 'pack', 'asset'].find((k) => args[k] !== null && args[k] !== undefined);
+    if (stray) throw refuse('unlisted_field', `/params/arguments/${stray}`, `Leave out ${stray}: it is op fetch's, and ${String(args.op)} takes only kind, tool, params and inputs.`, stray);
     return args.op === 'list' ? this.options.services.jobKinds.list() : this.options.services.jobKinds.run(args, caller);
   }
 
