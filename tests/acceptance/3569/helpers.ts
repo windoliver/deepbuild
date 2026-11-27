@@ -1,24 +1,3 @@
-// Test-side tools for the #3569 acceptance tests (README: The surface under test). A world is #1922's: a real hub
-// (`deep hub run`) in a temp home with the first-party plug-in `packages/jobs/asset-tools` installed by `deep install`,
-// and a `deep mcp` spoken to as an agent's MCP client does, which runs `deep_job {op: run, kind: table.derive}`. The
-// input tables reach the hub's evidence store through the base's only table import, `deep-show run`'s `table_import`
-// (#397), by URL from a server on 127.0.0.1 in this process, or by path from an agent's session. The derived table is
-// read back from that store by its SHA-256, and honest numbers through `deep-canvas-render check` over the same store
-// (#397, #406). The planted programs are plug-ins made here at test time, each one tool for the kind that runs the
-// right tool and rewrites cells of its table (fixtures/planted).
-//
-// The world helpers are adapted from tests/acceptance/1922/helpers.ts and the planted plug-in from
-// tests/acceptance/3035/helpers.ts (same repository, same license), kept here so a redraft of those suites never moves
-// these tests, and so a missing plug-in fails a test before anything is built or started.
-//
-// No function here asserts. What a program answers, and what is missing, come back as values or as text, so each
-// test's failing assertion is in its own file. A hub or a build that can't start says `BLOCKED:`, a timing that can't
-// be judged `INCONCLUSIVE`: nothing missing or unrun passes.
-//
-// Safety: every folder is under /tmp/dh3569-* and removed after its file; HOME is the world's temp home for every hub,
-// `deep` command, `deep mcp` and `deep-show`; DEEP_*, CLAUDE*, CODEX* and NODE_OPTIONS are left out of their
-// environment; nothing leaves 127.0.0.1; no model is called; every process is one this file started, stopped by its
-// PID. Cargo builds go through the machine's build throttle (scripts/throttle.mjs build, scripts/lease).
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
@@ -32,7 +11,6 @@ import { parseCsv, spoil, type Edit, type Plan } from './fixtures/planted/spoil.
 
 export { parseCsv, spoil, type Edit, type Plan };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type Line = { [key: string]: any };
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 export type JsonObject = { [key: string]: Json };
@@ -42,16 +20,14 @@ export const CLI = join(REPO, 'packages/cli/dist/main.js');
 export const NODE = process.execPath;
 const HERE = fileURLToPath(new URL('./', import.meta.url));
 const FIXTURES = join(HERE, 'fixtures');
-/** Every test's timeout: hubs, imports and first builds on a shared, loaded machine. */
+
 export const TIMEOUT = 3_600_000;
 
-/** Each criterion's tag: `AC<n> #3569.<id>`, the id the first 8 hex of SHA-256 of its text (scripts/proof-change.mjs). */
 export const AC = {
   1: 'AC1 #3569.a88c0771', 2: 'AC2 #3569.22f062d8', 3: 'AC3 #3569.9a78233f', 4: 'AC4 #3569.becbb065', 5: 'AC5 #3569.5963e451',
   6: 'AC6 #3569.eb306d67', 7: 'AC7 #3569.f14e11fa', 8: 'AC8 #3569.d0a835ea', 9: 'AC9 #3569.070ae844', 10: 'AC10 #3569.1d1485e8',
 } as const;
 
-/** The issue's names: the kind, its output check and the plug-in that holds both (README: The surface under test). */
 export const KIND = 'table.derive';
 export const CHECK = 'data.derived';
 export const PLUGIN = join(REPO, 'packages', 'jobs', 'asset-tools');
@@ -64,11 +40,7 @@ const first = (text: string): string => text.split('\n')[0] ?? '';
 export const isObject = (v: unknown): v is Line => typeof v === 'object' && v !== null && !Array.isArray(v);
 const parse = (text: string): Line | undefined => { try { const v: unknown = JSON.parse(text); return isObject(v) ? v : undefined; } catch { return undefined; } };
 
-/** A fixture table's bytes. */
 export const fixture = (name: string): Buffer => readFileSync(join(FIXTURES, name));
-
-// ---------------------------------------------------------------------------------------------------
-// Temp folders and processes, all gone after the file
 
 const made: string[] = [];
 export function tempDir(): string {
@@ -81,10 +53,10 @@ function alive(pid: number): boolean {
   try { process.kill(pid, 0); return true; } catch (error) { return (error as NodeJS.ErrnoException).code === 'EPERM'; }
 }
 afterAll(async () => {
-  for (const pid of owned) try { process.kill(pid, 'SIGTERM'); } catch { /* gone */ }
+  for (const pid of owned) try { process.kill(pid, 'SIGTERM'); } catch {  }
   const deadline = Date.now() + 5000;
   while ([...owned].some(alive) && Date.now() < deadline) await sleep(50);
-  for (const pid of owned) if (alive(pid)) try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ }
+  for (const pid of owned) if (alive(pid)) try { process.kill(pid, 'SIGKILL'); } catch {  }
   owned.clear();
   for (const dir of made.splice(0)) rmSync(dir, { recursive: true, force: true });
 }, 60_000);
@@ -99,7 +71,7 @@ function childEnv(home: string, extra: Record<string, string> = {}): NodeJS.Proc
 }
 export interface Ran { code: number | null; stdout: string; stderr: string }
 export const shown = (r: Ran) => `exit ${r.code}, stdout ${JSON.stringify(r.stdout.slice(-1500))}, stderr ${JSON.stringify(r.stderr.slice(-1500))}`;
-/** Runs a program to its end, owned by this file: its exit, both streams; stdin is `input` when given. */
+
 function runProgram(cmd: string, args: readonly string[], o: { cwd: string; env: NodeJS.ProcessEnv; input?: string; timeoutMs?: number }): Promise<Ran> {
   return new Promise((resolve) => {
     const child = spawn(cmd, args, { cwd: o.cwd, env: o.env, stdio: [o.input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'] });
@@ -115,12 +87,9 @@ function runProgram(cmd: string, args: readonly string[], o: { cwd: string; env:
   });
 }
 
-// ---------------------------------------------------------------------------------------------------
-// Builds: each binary once a file, through the machine's build throttle; '' when built, else why not
-
 const built = new Map<string, Promise<string>>();
 const targetDir = (): string => process.env.CARGO_TARGET_DIR ?? join(REPO, 'target');
-/** The debug binary `bin` of this checkout, brought up to date once; or, as text starting BLOCKED:, why it isn't. */
+
 export async function binary(bin: 'deep-show' | 'deep-canvas-render' | 'deep-hook'): Promise<{ path: string } | string> {
   if (!built.has(bin)) {
     const pick = bin === 'deep-hook' ? ['-p', 'deep-hook'] : ['--bin', bin];
@@ -135,9 +104,6 @@ export async function binary(bin: 'deep-show' | 'deep-canvas-render' | 'deep-hoo
   const path = join(targetDir(), 'debug', bin);
   return existsSync(path) ? { path } : `BLOCKED: cargo built ${bin} and ${path} isn't there; this is not a pass`;
 }
-
-// ---------------------------------------------------------------------------------------------------
-// The hub, its control socket and deep mcp (#1922's world)
 
 interface HubProcess { pid: number; socket: string; root: string; child: ChildProcess }
 async function startHub(home: string, env: Record<string, string>): Promise<HubProcess> {
@@ -155,13 +121,12 @@ async function startHub(home: string, env: Record<string, string>): Promise<HubP
     child.on('exit', () => { clearTimeout(timer); resolve(undefined); });
   });
   if (ready?.ready !== true) {
-    try { if (child.pid) process.kill(child.pid, 'SIGKILL'); } catch { /* gone */ }
+    try { if (child.pid) process.kill(child.pid, 'SIGKILL'); } catch {  }
     throw Error(`BLOCKED: the hub didn't start (deep hub run): ${out.slice(0, 500)} ${err.slice(-1500)}`);
   }
   return { pid: child.pid!, socket: typeof ready.socket === 'string' ? ready.socket : join(home, '.deepbuild', 'hub.sock'), root: join(home, '.deepbuild'), child };
 }
 
-/** One call on the hub's socket as the cli role, with the control token and this process for the peer check. */
 async function control(w: World, method: string, params: Line, timeoutMs = 120_000): Promise<Line> {
   const token = readFileSync(join(w.hub.root, 'control.token'), 'utf8').trim();
   const start = execFileSync('ps', ['-o', 'lstart=', '-p', String(process.pid)], { env: { ...process.env, LC_ALL: 'C' }, encoding: 'utf8' }).trim();
@@ -184,7 +149,7 @@ async function control(w: World, method: string, params: Line, timeoutMs = 120_0
     });
   });
 }
-/** The hub's record after log position `after`, through events.read on the cli role. */
+
 async function events(w: World, after = 0): Promise<Line[]> {
   const all: Line[] = [];
   for (let from = after; ;) {
@@ -242,7 +207,7 @@ async function startMcp(home: string, cwd: string, env: Record<string, string>):
 }
 
 export interface World { tmp: string; home: string; project: string; hub: HubProcess; mcp: Mcp; env: Record<string, string> }
-/** A hub and a deep mcp in a fresh temp home; `env` is added to theirs (AC7's second machine). */
+
 async function openWorld(env: Record<string, string>): Promise<World | string> {
   if (!existsSync(CLI)) return `BLOCKED: ${CLI} is missing; build it with \`npm run build --workspaces\` first; this is not a pass`;
   const hook = await binary('deep-hook');
@@ -263,10 +228,9 @@ async function openWorld(env: Record<string, string>): Promise<World | string> {
   }
   return `${why.startsWith('BLOCKED:') ? '' : 'BLOCKED: '}${why}; this is not a pass`;
 }
-/** `deep install <folder>`, as you, confirmed by the stubbed OS. */
+
 export const install = (w: World, folder: string): Promise<Ran> => runProgram(NODE, [CLI, 'install', folder], { cwd: w.project, env: childEnv(w.home, w.env), timeoutMs: 1_800_000 });
 
-/** One deep_job call through deep mcp. */
 export async function job(w: World, args: Line): Promise<Outcome> {
   const reply = await w.mcp.request('tools/call', { name: 'deep_job', arguments: args });
   if (reply.error) return { isError: true, value: reply.error as Line, text: JSON.stringify(reply.error) };
@@ -275,7 +239,7 @@ export async function job(w: World, args: Line): Promise<Outcome> {
   const value = (result.structuredContent ?? parse(text) ?? {}) as Line;
   return { isError: result.isError === true, value, text: text || JSON.stringify(value) };
 }
-/** deep_job's list of a kind's tools, `{tool, plugin, build}` each; or, as text, why there is none. */
+
 export async function toolsOf(w: World, kind = KIND): Promise<Line[] | string> {
   let listed: Outcome;
   try { listed = await job(w, { op: 'list' }); } catch (e) { return `BLOCKED: deep_job {op: list} gave no reply: ${first(message(e))}; this is not a pass`; }
@@ -285,7 +249,6 @@ export async function toolsOf(w: World, kind = KIND): Promise<Line[] | string> {
   return Array.isArray(k.tools) ? (k.tools as Line[]) : [];
 }
 
-/** A run and the processes it started: the record's process.starting events from just before the call to 500 ms after its reply. */
 export interface Run { outcome: Outcome; started: number; ms: number }
 export async function counted(w: World, call: () => Promise<Outcome>): Promise<Run> {
   const before = await lastPos(w);
@@ -297,15 +260,8 @@ export async function counted(w: World, call: () => Promise<Outcome>): Promise<R
   return { outcome, started, ms };
 }
 
-// ---------------------------------------------------------------------------------------------------
-// The hub with packages/jobs/asset-tools installed
-
 export interface Hub { w: World; tool: string; plugin: string; evidence: string }
-/**
- * A hub with `packages/jobs/asset-tools` installed and the one tool its manifest lists for table.derive qualified and
- * listed; or, as text, what is missing. The plug-in's folder is looked for first, so a checkout without it fails
- * here before anything is built or started.
- */
+
 export async function openHub(env: Record<string, string> = {}): Promise<Hub | string> {
   const file = join(PLUGIN, 'deepbuild.json');
   if (!existsSync(file)) return `the asset-tools plug-in isn't at packages/jobs/asset-tools (no deepbuild.json there), so no package registers the job kind ${KIND} or its output check ${CHECK} (README: The surface under test)`;
@@ -325,26 +281,19 @@ export async function openHub(env: Record<string, string> = {}): Promise<Hub | s
   return { w, tool, plugin: String(manifest.id), evidence: join(w.home, '.deepbuild', 'evidence') };
 }
 
-// ---------------------------------------------------------------------------------------------------
-// Input tables: `deep-show run`'s `table_import` (#397) into the hub's evidence store
-
 export interface TableSpec {
-  /** The fixture file, or the bytes to import under `name`. */
+
   name: string; bytes?: Buffer;
-  /** The table's key column, and each column's unit as the import states it (README: units). */
+
   key: string; units?: Record<string, string>;
-  /** Fetched by URL (the source the hub writes) or written by an agent (source `agent`). */
+
   by?: 'url' | 'agent';
 }
 export interface Imported { sha: Record<string, string>; assets: Record<string, Line>; replies: Line[] }
 const SESSION = 'sess-3569';
 const SESSIONS = { [SESSION]: { thread: 'thread-3569', name: 'Agent', process: { pid: 4100, start: 1000 } } };
 const DOC = '01JB3569D00000000000000001';
-/**
- * Every table imported into the hub's evidence store in one `deep-show run`, in order: its bytes kept there by hash
- * and its record (probe, cells, source) beside them as `tables/<sha256>.json`. Each reply must be the table asset of
- * the bytes sent, with the source its way of arriving writes. Or, as text, what went wrong.
- */
+
 export async function importTables(hub: Hub | string, specs: TableSpec[]): Promise<Imported | string> {
   if (typeof hub === 'string') return hub;
   const show_ = await binary('deep-show');
@@ -395,21 +344,12 @@ export async function importTables(hub: Hub | string, specs: TableSpec[]): Promi
   return imported;
 }
 
-// ---------------------------------------------------------------------------------------------------
-// The job: deep_job {op: run, kind: table.derive} and what it answers
-
-/** The kind's params (Fields: `table.derive {inputs, steps, key}`), each input a table asset by its SHA-256. */
 export interface DeriveParams { inputs: Record<string, string>; steps: Line[]; key: string }
 
-/** The county tables' units: manufacturing (and construction, mining) in workers, payroll in dollars. */
 export const COUNTY_UNITS = { manufacturing: 'workers' };
-/** The metro tables: which metro area each county is in; `link` is their key, so a county may come twice. */
+
 export const METRO = { key: 'link' };
-/**
- * AC1's job: the county table joined by county to the table that names each county's metro (inner, many to one),
- * then grouped by metro: `workers` the sum of manufacturing, `counties` the count, unless `agg` says otherwise; then
- * any further steps. The output is keyed by metro.
- */
+
 export function byMetro(sha: { county: string; metro: string }, opts: { agg?: Record<string, string>; skip_missing?: boolean; after?: Line[] } = {}): DeriveParams {
   return {
     inputs: { county: sha.county, metro: sha.metro },
@@ -421,7 +361,7 @@ export function byMetro(sha: { county: string; metro: string }, opts: { agg?: Re
     key: 'metro',
   };
 }
-/** One run of table.derive on a tool (the hub's own by default), with the processes it started. */
+
 export async function derive(hub: Hub, params: DeriveParams, tool = hub.tool): Promise<Run | string> {
   try {
     return await counted(hub.w, () => job(hub.w, { op: 'run', kind: KIND, tool, params: JSON.stringify(params), inputs: null }));
@@ -430,7 +370,7 @@ export async function derive(hub: Hub, params: DeriveParams, tool = hub.tool): P
   }
 }
 export const statusOf = (o: Outcome): string => String(o.value.status ?? (o.isError ? 'error' : ''));
-/** A reply's outputs, each by its SHA-256. */
+
 export function outputsOf(o: Outcome): Record<string, string> {
   const outputs = isObject(o.value.outputs) ? (o.value.outputs as Line) : {};
   return Object.fromEntries(Object.entries(outputs).map(([n, v]) => [n, isObject(v) && typeof v.sha256 === 'string' ? (v.sha256 as string) : '']));
@@ -438,25 +378,23 @@ export function outputsOf(o: Outcome): Record<string, string> {
 export const receiptOf = (o: Outcome): Line => (isObject(o.value.receipt) ? (o.value.receipt as Line) : {});
 export const brief = (r: Run): string => `${r.started} process${r.started === 1 ? '' : 'es'} started; reply ${r.outcome.text.slice(0, 1200)}`;
 
-/** Bytes the hub's evidence store holds under a SHA-256 (`<2 hex>/<62 hex>`), or null. */
 export function stored(hub: Hub, sha: string): Buffer | null {
   if (!/^[0-9a-f]{64}$/.test(sha)) return null;
   const path = join(hub.evidence, sha.slice(0, 2), sha.slice(2));
   return existsSync(path) ? readFileSync(path) : null;
 }
-/** The table record the store keeps beside a table's bytes, `tables/<sha256>.json` (#397's form), or null. */
+
 export function tableRecord(hub: Hub, sha: string): Line | null {
   const path = join(hub.evidence, 'tables', `${sha}.json`);
   return existsSync(path) ? parse(readFileSync(path, 'utf8')) ?? null : null;
 }
 
-/** A CSV read as a header and rows of cells. */
 export interface Table { header: string[]; rows: string[][]; text: string }
 export function tableOf(text: string): Table {
   const rows = parseCsv(text);
   return { header: rows[0] ?? [], rows: rows.slice(1), text };
 }
-/** The cell of the row whose `keyColumn` reads `key`, in `column`; undefined when there is no such row or column. */
+
 export function cell(t: Table, keyColumn: string, key: string, column: string): string | undefined {
   const k = t.header.indexOf(keyColumn);
   const c = t.header.indexOf(column);
@@ -464,16 +402,11 @@ export function cell(t: Table, keyColumn: string, key: string, column: string): 
   const found = t.rows.filter((r) => r[k] === key);
   return found.length === 1 ? found[0]![c] ?? '' : undefined;
 }
-/** Each row's key in order. */
+
 export const keysOf = (t: Table, keyColumn: string): string[] => t.rows.map((r) => r[t.header.indexOf(keyColumn)] ?? '');
 
-/** A derived table that is done: its run, outputs, the table (a CSV), the kind's receipt and the table's record. */
 export interface Derived { run: Run; outputs: Record<string, string>; table: Table; receipt: Line; record: Line | null; lineage: Line | null }
-/**
- * A run read as a derived table that is done; or, as text, what it answered instead. The kind's receipt
- * (`{rows_in, rows_out, dropped, skipped, nonfinite}`) is read from the reply's receipt where it holds those fields,
- * else from an output named `receipt`, a JSON object in the store (README: the receipt).
- */
+
 export function derivedOf(hub: Hub, run: Run | string, what: string): Derived | string {
   if (typeof run === 'string') return run;
   const o = run.outcome;
@@ -490,25 +423,19 @@ export function derivedOf(hub: Hub, run: Run | string, what: string): Derived | 
   const lineage = outputs.lineage ? parse(stored(hub, outputs.lineage)?.toString('utf8') ?? '') ?? null : null;
   return { run, outputs, table: tableOf(bytes.toString('utf8')), receipt, record: tableRecord(hub, outputs.table!), lineage };
 }
-/** A refused run's words: refused, or a tool error; '' when it wasn't refused. */
+
 export function refusalOf(o: Outcome): string {
   if (o.isError) return o.text || 'refused';
   return statusOf(o) === 'refused' ? String(o.value.reason ?? o.text) : '';
 }
-/**
- * Whether a text names `token` (a key such as `A` or `3`, a unit, a column) as a word of its own: not inside another
- * word, number or hash. 64-hex hashes and absolute paths are left out first, so a hash's digits never name a county.
- */
+
 export function names(text: string, token: string): boolean {
   const plain = text.replace(/[0-9a-f]{64}/g, ' ').replace(/(?:\/[\w.@+-]+){2,}/g, ' ');
   const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp(`(^|[^A-Za-z0-9_.])${escaped}($|[^A-Za-z0-9_])`).test(plain);
 }
-/** A number cell as a value: an integer cell must be written as one. */
-export const int = (text: string | undefined): number | string => (text !== undefined && /^-?\d+$/.test(text) ? Number(text) : `not an integer: ${JSON.stringify(text)}`);
 
-// ---------------------------------------------------------------------------------------------------
-// The planted programs: a plug-in made at test time, one tool for table.derive (README: The planted programs)
+export const int = (text: string | undefined): number | string => (text !== undefined && /^-?\d+$/.test(text) ? Number(text) : `not an integer: ${JSON.stringify(text)}`);
 
 export type PlantedName = 'reads_missing_as_zero' | 'sums_in_f32' | 'counts_row_twice' | 'as_is';
 export const PLANTED_TOOL: Record<PlantedName, string> = {
@@ -518,10 +445,7 @@ export const PLANTED_TOOL: Record<PlantedName, string> = {
   as_is: 'runs-as-is@1.0.0',
 };
 interface Registered { kind: string; descriptor: Line }
-/**
- * The right tool, as packages/jobs/asset-tools hands it to `deep.registerJobTool`: the plug-in's default export
- * called with a `deep` that only records, no hub involved; or, as text, why there is none.
- */
+
 async function rightTool(tool: string): Promise<Registered | string> {
   const tools: Registered[] = [];
   const deep = new Proxy({}, {
@@ -544,7 +468,7 @@ async function rightTool(tool: string): Promise<Registered | string> {
   if (!isObject(run) || typeof run.dir !== 'string' || typeof run.entry !== 'string') return `${tool} doesn't run as its own files (run {dir, entry}), so no planted tool can run it: ${show(run, 200)}`;
   return right;
 }
-/** The planted plug-in's folder: the right tool's files with the planted entry, its plan and the spoil module beside them. */
+
 async function plantedPlugin(dir: string, right: Registered, name: PlantedName, plan: Plan): Promise<void> {
   const { packageDigest } = await import(new URL('../../../packages/extension-host/src/index.ts', import.meta.url).href) as { packageDigest: (dir: string) => string };
   const run = right.descriptor.run as Line;
@@ -565,11 +489,7 @@ async function plantedPlugin(dir: string, right: Registered, name: PlantedName, 
   manifest.digest = packageDigest(dir);
   writeFileSync(join(dir, 'deepbuild.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 }
-/**
- * A planted tool installed into the hub by `deep install`, which runs the kind's qualification on it with no person:
- * it must join, since it is right on every input but its test's. Its name@version once deep_job lists it; or, as text,
- * why it doesn't.
- */
+
 export async function installPlanted(hub: Hub, name: PlantedName, plan: Plan): Promise<string | { tool: string }> {
   const right = await rightTool(hub.tool);
   if (typeof right === 'string') return right;
@@ -582,7 +502,7 @@ export async function installPlanted(hub: Hub, name: PlantedName, plan: Plan): P
   if (!tools.some((t) => t.tool === PLANTED_TOOL[name])) return `deep install of ${PLANTED_TOOL[name]} exits 0 and deep_job doesn't list it for ${KIND}: ${tools.map((t) => String(t.tool)).join(', ')}`;
   return { tool: PLANTED_TOOL[name] };
 }
-/** A run whose output failed an output check: the check it names and its words; or, as text, what it answered instead. */
+
 export function failedCheck(r: Run | string): { check: string; reason: string; outputs: Record<string, string> } | string {
   if (typeof r === 'string') return r;
   const o = r.outcome;
@@ -590,11 +510,8 @@ export function failedCheck(r: Run | string): { check: string; reason: string; o
   return { check: String(o.value.check ?? ''), reason: String(o.value.reason ?? o.text), outputs: outputsOf(o) };
 }
 
-// ---------------------------------------------------------------------------------------------------
-// Honest numbers: `deep-canvas-render check` over the hub's evidence store (#397, #406)
-
 export interface Checked { ok: boolean; errors: Line[]; numbers: Line[]; raw: Line }
-/** One check of a document, the clean look, the hub's evidence store; or, as text, why it gave no answer. */
+
 export async function honest(hub: Hub, doc: Line): Promise<Checked | string> {
   const render = await binary('deep-canvas-render');
   if (typeof render === 'string') return render;
@@ -607,10 +524,7 @@ export async function honest(hub: Hub, doc: Line): Promise<Checked | string> {
 }
 export const shownErrors = (c: Checked): string => show(c.errors.map((e) => ({ code: e.code, ids: e.ids, path: e.path, actual: e.actual })), 2500);
 const license = { id: 'CC0-1.0', terms: 'Public domain dedication.', shareable: true, credit: 'Test fixture.' };
-/**
- * A chart of the derived table (#397's form): a text mark set `labels` whose rows are the table's rows, keyed by
- * its `key` column, showing `column`; with `reading`, a reading is bound into a text of its own (#406's form).
- */
+
 export function labelsDoc(sha: string, key: string, column: string, rows: number, reading: boolean): Line {
   const from = (c: string): Line => ({ from: 'derived', column: c });
   const x = Buffer.alloc(rows * 4);
@@ -636,7 +550,7 @@ export function labelsDoc(sha: string, key: string, column: string, rows: number
   }
   return doc;
 }
-/** Every list in a value, at any depth, whose items are all strings or integers, as sorted strings (key lists). */
+
 export function keyLists(value: unknown, out: string[][] = []): string[][] {
   if (Array.isArray(value)) {
     if (value.length && value.every((v) => typeof v === 'string' || Number.isInteger(v))) out.push(value.map(String).sort());
@@ -646,7 +560,7 @@ export function keyLists(value: unknown, out: string[][] = []): string[][] {
   }
   return out;
 }
-/** Whether a value holds a string, at any depth. */
+
 export function holds(value: unknown, s: string): boolean {
   if (value === s) return true;
   if (Array.isArray(value)) return value.some((v) => holds(v, s));
@@ -654,24 +568,18 @@ export function holds(value: unknown, s: string): boolean {
   return false;
 }
 
-// ---------------------------------------------------------------------------------------------------
-// The proof, rewritten each run under $TMPDIR/deep-3569-proof/ (the issue's Proof line)
-
 export const PROOF_DIR = join(tmpdir(), 'deep-3569-proof');
 export function proof(name: string, value: unknown): void {
   mkdirSync(PROOF_DIR, { recursive: true });
   writeFileSync(join(PROOF_DIR, name), `${JSON.stringify(value, null, 2)}\n`);
 }
 
-// ---------------------------------------------------------------------------------------------------
-// Timing: the reference-Mac gate and the design's judge (#397's and #855's; mains power never gates)
-
 const REFERENCE_MACS = [
   { model: 'Mac15,7', chip: 'Apple M3 Pro', gib: 36 },
   { model: 'Mac15,12', chip: 'Apple M3', gib: 16 },
 ];
 const sh = (cmd: string, ...args: string[]): string => { try { return execFileSync(cmd, args, { encoding: 'utf8' }).trim(); } catch { return ''; } };
-/** Why a timing reading here can't pass or fail, or null on a reference Mac that is fit and idle enough. */
+
 export function environmentProblem(): string | null {
   if (process.platform !== 'darwin') return `platform ${process.platform}`;
   const model = sh('sysctl', '-n', 'hw.model');
@@ -688,7 +596,7 @@ export function environmentProblem(): string | null {
   if (load > cpus().length / 2) return `loaded: a 1-minute load average of ${load.toFixed(1)} on ${cpus().length} cores`;
   return null;
 }
-/** PASS when every run is within the limit; FAIL when every run is over it by more than the margin; else INCONCLUSIVE (a skip). */
+
 export function judge(ctx: TestContext, name: string, runs: number[], limit: number): void {
   const spread = (Math.max(...runs) - Math.min(...runs)) / Math.max(Math.min(...runs), 1e-9);
   const margin = Math.max(0.05, spread);

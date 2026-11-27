@@ -1,13 +1,3 @@
-// #3569.22f062d8: "A `derive` of `manufacturing + construction + mining` over one row holding 120, 30 and 0 writes 150
-// with the unit of its columns. The same expression over a column of workers and a column of dollars is refused,
-// naming both units"
-//
-// fixtures/one-row.csv holds county 1 with 120, 30 and 0, each column imported in workers. fixtures/one-row-dollars.csv
-// is the same row for county 2 (so its bytes, and its hash, differ), its mining column imported in dollars. The job is
-// one derive step, `total: {expr: "manufacturing + construction + mining", unit: "workers"}`, keyed by county. The unit
-// of the derived column is read from the derived table's record in the store (`probe.table.columns`, #397's form).
-// Wrong programs it fails on: the merge base; a derive that reads a 0 cell as missing or drops a term; one that writes
-// the column with no unit or another one; one that adds across units, or refuses naming only one unit.
 import { describe, expect, it } from 'vitest';
 import { AC, TIMEOUT, brief, cell, derive, derivedOf, importTables, int, names, openHub, outputsOf, proof, refusalOf, show, type DeriveParams } from './helpers.ts';
 

@@ -1,11 +1,3 @@
-// #3569.eb306d67: "`rank` by the sum, descending, writes 1 for B and 2 for A. Two groups with equal sums rank by their key"
-//
-// AC1's job with a rank step after the group: `rank {by: workers, desc: true, into: rank}`. On the AC1 fixtures B (307)
-// ranks 1 and A (250) 2. fixtures/counties-tie.csv with fixtures/metros-tie.csv gives A and B 250 each and C 400; the
-// file meets metro B first (counties 1 and 2), so a rank that breaks the tie by the order rows arrive in, or by the
-// key reversed, puts B before A. Ranked by the key, C is 1, A 2 and B 3.
-// Wrong programs it fails on: the merge base; a rank ascending; one that ties A and B at 2, breaks the tie by first
-// appearance or reversed key, or numbers from 0.
 import { describe, expect, it } from 'vitest';
 import { AC, COUNTY_UNITS, METRO, TIMEOUT, brief, byMetro, cell, derive, derivedOf, importTables, int, openHub, proof, show } from './helpers.ts';
 

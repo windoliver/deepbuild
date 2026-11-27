@@ -1,22 +1,9 @@
-// #3569.f14e11fa: "The job run on two machines writes byte-identical outputs. Changing one byte of one input changes
-// the job's key and the output's hash. A rerun with the output present runs nothing"
-//
-// No second machine is at hand, so the second machine is a second hub with nothing shared: its own home, evidence
-// store, cache and record, its processes under another time zone and locale (TZ=Pacific/Chatham, LC_ALL
-// fr_FR.UTF-8), its tables imported in the other order (README: Readings, two machines). AC1's job runs in each, a miss
-// that starts a process in each, and every output (the table, the lineage and any other) is the same SHA-256 in both,
-// and each store holds those bytes under it. fixtures/counties-changed.csv is counties.csv with one byte changed
-// (county 6's 7 becomes 8): its run has another key and another table hash. The same run again in the first hub is a
-// cache hit under the first key, with the same outputs, and starts no process (#1922's `counted`).
-// Wrong programs it fails on: the merge base; a tool whose output holds a time, a locale's number form, a path, a
-// random or a hash-map order; a key that leaves out the input's hash; a rerun that runs the tool again.
 import { describe, expect, it } from 'vitest';
 import { AC, COUNTY_UNITS, METRO, TIMEOUT, brief, byMetro, derive, derivedOf, importTables, openHub, proof, receiptOf, sha256, stored, type Derived, type Hub } from './helpers.ts';
 
 const ID = AC[7];
 const OTHER = { TZ: 'Pacific/Chatham', LC_ALL: 'fr_FR.UTF-8', LANG: 'fr_FR.UTF-8' };
 
-/** Each output's bytes in a hub's store, hashed again. */
 const held = (hub: Hub, outputs: Record<string, string>): Record<string, string> =>
   Object.fromEntries(Object.entries(outputs).map(([n, sha]) => { const bytes = stored(hub, sha); return [n, bytes ? sha256(bytes) : 'not in the store']; }));
 

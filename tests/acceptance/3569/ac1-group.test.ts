@@ -1,13 +1,3 @@
-// #3569.a88c0771: "A fixture of six county rows in two metro areas, with a second table that names each county's
-// metro. Counties 1 to 4 hold 120, 80, 40 and 10 manufacturing workers and belong to metro A, and counties 5 and 6
-// hold 300 and 7 and belong to metro B. `join` then `group by metro` with `sum` writes 250 for A and 307 for B, and
-// `count` writes 4 and 2"
-//
-// fixtures/counties.csv (county, manufacturing) and fixtures/metros.csv (link, county, metro) are fetched by URL into
-// the hub's evidence store; the job joins the metro table onto the county table by county and groups by metro, with
-// `workers: sum(manufacturing)` and `counties: count`. The derived table is read back from the store by its hash.
-// Wrong programs it fails on: the merge base (no kind table.derive); a join that drops or repeats a county; a sum that
-// leaves out a county or counts rows instead of summing; a count that counts groups or values.
 import { describe, expect, it } from 'vitest';
 import { AC, COUNTY_UNITS, METRO, TIMEOUT, brief, byMetro, cell, derive, derivedOf, importTables, int, openHub, proof, show } from './helpers.ts';
 

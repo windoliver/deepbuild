@@ -1,11 +1,3 @@
-// #3569.9a78233f: "The second table names county 3 twice with `expect: many_to_one`: the job is refused, naming
-// county 3. A county the second table doesn't name is dropped under `inner` and the receipt's `dropped` reads 1"
-//
-// fixtures/metros-twice.csv is metros.csv with a seventh row that names county 3 again (metro A); its key is `link`, so
-// the import keeps both rows and only the join can see the repeat. fixtures/metros-short.csv names counties 1 to 5,
-// so county 6 has no match. Both run AC1's job (README: the jobs). The control is the same job on metros.csv, done.
-// Wrong programs it fails on: the merge base; a join that keeps the first or last match, or sums county 3 twice; a
-// refusal that names another county or none; an inner join that keeps county 6, or drops it and counts nothing.
 import { describe, expect, it } from 'vitest';
 import { AC, COUNTY_UNITS, METRO, TIMEOUT, brief, byMetro, cell, derive, derivedOf, importTables, int, names, openHub, outputsOf, proof, refusalOf, show } from './helpers.ts';
 

@@ -1,9 +1,3 @@
-// #3569.5963e451: "A `derive` of `a / b` where b is 0 writes a missing cell and counts it. It never writes infinity or 0"
-//
-// fixtures/ratios.csv: row 1 holds a 6 and b 3, row 2 a 5 and b 0, both columns in workers. The job is one derive step,
-// `q: {expr: "a / b", unit: "share"}`, keyed by id. A missing cell is an empty cell in the derived CSV (README).
-// Wrong programs it fails on: the merge base; a derive that writes inf, Infinity, NaN or 0 for 5 / 0, or leaves the
-// receipt's nonfinite uncounted; one that writes every q missing.
 import { describe, expect, it } from 'vitest';
 import { AC, TIMEOUT, brief, cell, derive, derivedOf, importTables, openHub, proof, show } from './helpers.ts';
 
