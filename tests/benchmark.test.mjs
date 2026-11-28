@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { compare, judgeLimit, judgeTask, measure, measureOnce, parseCpuMs, parsePeakRss, summarize, validateBudgets } from '../scripts/benchmark.mjs';
+import { judgeWork } from '../scripts/benchmark.mjs';
 
 const budget = { id: 'startup', command: ['binary'], margin: 0.5, limits: { peakBytes: 10_000_000 }, initialReason: 'First measured executable in issue #12.' };
 const config = { tasks: [budget] };
@@ -264,4 +265,26 @@ test('a budget whose sides ran at different QoS reads INCONCLUSIVE, never PASS',
   const { instructions } = judgeTask(task, { ...task, command: ['/usr/sbin/taskpolicy', '-t', '0', '-l', '0', ...awk] }, process.cwd(), process.cwd());
   assert.equal(instructions.status, 'INCONCLUSIVE', JSON.stringify(instructions));
   assert.match(instructions.reason, /utility QoS and the merge base \d+% at legacy.*the counts alone read PASS/, instructions.reason);
+});
+
+test('a benchmark\'s first report is compared as before, and one that stops reporting, or reports a count on one side only, reads INCONCLUSIVE (#3537)', () => {
+  assert.equal(judgeWork('first', { records: 3000 }, undefined), null);
+  const stopped = judgeWork('stopped', undefined, { records: 3000 });
+  assert.equal(stopped?.status, 'INCONCLUSIVE', JSON.stringify(stopped));
+  assert.match(stopped.reason, /the change's runs report no work and the merge base's records 3000/);
+  const added = judgeWork('added', { records: 3000, bytes: 5 }, { records: 3000 });
+  assert.equal(added?.status, 'INCONCLUSIVE', JSON.stringify(added));
+  assert.match(added.reason, /bytes is 5 on the change and none on the merge base/);
+  assert.equal(judgeWork('added', { records: 3000, bytes: 5 }, { records: 3000 }, ['benchmarks/budgets.json › added › work.bytes none → 5'])?.status, 'PASS');
+});
+
+test('sides that report unlike work are not compared, a rise included (#3537)', () => {
+  const counting = (rounds, records) => ['/bin/sh', '-c', `i=0; while [ $i -lt ${rounds} ]; do i=$((i+1)); done; echo '{"work":{"records":${records}}}'`];
+  const task = (command) => ({ id: 'grown', command, margin: 0.5, limits: {}, initialReason: 'A test.' });
+  const base = task(counting(2_000, 3));
+  const like = judgeTask(task(counting(30_000, 3)), base, process.cwd(), process.cwd());
+  assert.match(String(like.regression), /regressed beyond base/, JSON.stringify(like.work));
+  const unlike = judgeTask(task(counting(30_000, 45)), base, process.cwd(), process.cwd());
+  assert.equal(unlike.work?.status, 'INCONCLUSIVE', JSON.stringify(unlike.work));
+  assert.deepEqual([unlike.regression, unlike.instructions, unlike.outcome?.status], [null, null, 'INCONCLUSIVE']);
 });

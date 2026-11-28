@@ -20,11 +20,6 @@ const TOOL = 'lottie-import@1.0.0';
 const URDF_TOOL = 'urdf-import@1.0.0';
 const TABLE_TOOL = 'table-import@1.0.0';
 
-/**
- * A published table's cut (#3570), beside `from: table`: the file is the job's input `file`, by its hash, and its
- * defaults (csv, comma, header row 1, utf-8, no `where`, 2 GiB) are the tool's. A column comes from a header text
- * (`from`) or an index (`index`), since a field of the params schema holds one type.
- */
 const TABLE_FIELDS = {
   member: { type: 'string', minLength: 1 },
   format: { enum: ['csv', 'jsonl', 'xlsx'] },
@@ -48,15 +43,11 @@ const TABLE_FIELDS = {
   max_bytes: { type: 'integer', minimum: 1 },
 };
 const LOOK = { type: 'string', pattern: '^(generated|[a-z0-9][a-z0-9_-]*@[0-9]+)$', default: 'generated' };
-/** import's params, as the design's Fields name them. */
 const PARAMS = { type: 'object', properties: { from: { enum: ['lottie', 'urdf', 'table'], default: 'lottie' }, look: LOOK, ...TABLE_FIELDS }, additionalProperties: false };
-/** The params each tool takes: the kind's for its own format; a robot description and a table name the look the job writes. */
 const LOTTIE_PARAMS = { ...PARAMS, properties: { from: { enum: ['lottie'], default: 'lottie' }, look: LOOK } };
 const URDF_PARAMS = { ...PARAMS, properties: { from: { enum: ['urdf'] }, look: { enum: ['generated'], default: 'generated' } }, required: ['from'] };
 const TABLE_PARAMS = { ...PARAMS, properties: { from: { enum: ['table'] }, look: { enum: ['generated'], default: 'generated' }, ...TABLE_FIELDS }, required: ['from', 'columns'] };
-/** The file, and a look to map a Lottie file's colors to, which a `many` input lets the job leave out. */
 const INPUTS = { file: { media: 'application/octet-stream' }, look: { media: 'application/json', many: true } };
-/** A document's outputs, and a table's: the table and its receipt as the report. */
 const OUTPUTS = ['document', 'report', 'look'];
 const TABLE_OUTPUTS = ['table', 'report'];
 
@@ -70,11 +61,6 @@ const fixture = (name: string, file: string, params: Record<string, string>, loo
 });
 /** A robot description's fixture (#3035): its look is the shipped clean look, one file for the three. */
 const robot = (name: string) => fixture(name, `${name}.urdf`, { from: 'urdf' }, 'robot');
-/**
- * A published table's fixture (#3570), one for each form, each with a planted defect a wrong reader falls into: the
- * pipe file's withheld `(D)`, the zip whose named member is its second, the workbook whose stored total is 250 where
- * its cells sum to 260 (the acceptance suite's `sum.xlsx`, byte for byte), and the Latin-1 file's é and grouped digits.
- */
 const table = (name: string, file: string, params: Record<string, unknown>) => ({
   name,
   params: { from: 'table', ...params },
@@ -112,7 +98,6 @@ function checked(document: string, look: string): ReturnType<typeof check> {
   return last.found;
 }
 
-/** One of the three checks, each reading its own finding off one run of the module's checks; a table import writes no document for them. */
 function outputCheck(name: string, finding: (found: ReturnType<typeof check>) => unknown, more?: (document: string) => unknown) {
   return async (spec: Spec) => {
     if (spec?.outputs?.document === undefined && spec?.outputs?.table !== undefined) return result(name);
@@ -128,7 +113,6 @@ export default async function (deep: any): Promise<void> {
   await deep.registerCheck('import.document', outputCheck('import.document', (f) => f.document, (document) => { const w = worlds(document); return w.length ? w : null; }));
   await deep.registerCheck('import.colors_mapped', outputCheck('import.colors_mapped', (f) => f.colors_mapped));
   await deep.registerCheck('import.no_expression', outputCheck('import.no_expression', (f) => f.no_expression));
-  // A table is held to the table probe (Asset: tables) before an item can name it; a document import writes none.
   await deep.registerCheck('import.table', async (spec: Spec) => (spec?.outputs?.table === undefined ? result('import.table') : result('import.table', tableProbe(Buffer.from(spec.outputs.table, 'base64')))));
   await deep.registerJob('import', {
     schema: { params: PARAMS, inputs: INPUTS },

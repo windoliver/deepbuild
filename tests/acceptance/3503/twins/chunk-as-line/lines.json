@@ -1,0 +1,12 @@
+{
+  "crates/deep-hook/src/actions.rs": [
+    {
+      "find": [
+        "            if newline.is_some() {"
+      ],
+      "wrong": [
+        "            if newline.is_some() || !line.is_empty() {"
+      ]
+    }
+  ]
+}

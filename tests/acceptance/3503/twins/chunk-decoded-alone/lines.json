@@ -1,0 +1,12 @@
+{
+  "crates/deep-hook/src/actions.rs": [
+    {
+      "find": [
+        "                line.extend_from_slice(part);"
+      ],
+      "wrong": [
+        "                line.extend_from_slice(String::from_utf8_lossy(part).as_bytes());"
+      ]
+    }
+  ]
+}
