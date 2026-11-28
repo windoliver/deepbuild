@@ -694,7 +694,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
             return Some(Call::Kinds(Value::Object(args)));
         }
         "sandbox" => return Some(Call::Sandbox),
-        "piece_checks" => return Some(Call::PieceChecks),
+        "piece_checks" | "compiles" => return Some(Call::Count(name.into())),
         "provided" => return Some(Call::Provided(c.get("doc")?.as_str()?.to_string())),
         "validate" => {
             return Some(Call::Validate {
@@ -1323,7 +1323,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || deep_canvas_loop::PLANTED.contains(p)
                 || deep_canvas_media::PLANTED.contains(p)
                 // #1732's wrong programs live in the motion module's arrangement solve.
-                || deep_canvas_motion::arrange::PLANTED.contains(p)
+                || deep_canvas_motion::arrange::PLANTED.contains(p) || deep_canvas_motion::relations::PLANTED.contains(p)
                 || *p == deep_canvas_motion::module::UNDECLARED_KIND_ACCEPTED
                 || deep_canvas_motion::module::PLANTED.contains(p)
                 || deep_canvas_motion::cues::planted(p)
