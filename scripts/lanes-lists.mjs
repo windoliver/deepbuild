@@ -957,3 +957,10 @@ for (const entry of laneFolders.filter((folder) => !unread.includes(folder))) {
   for (const file of lists?.timed ?? []) if (!timed.includes(file)) timed.push(file), fromLaneFiles.timed.push(file);
   for (const file of lists?.slow ?? []) if (!slow.includes(file)) slow.push(file), fromLaneFiles.slow.push(file);
 }
+
+Object.assign(redrafted, Object.fromEntries([
+  ['1098', 'criteria'], ['1098', 'plants'], ['112', 'widen'], ['20', 'growth'], ['2365', 'tail'], ['2365', 'rewrite'], ['355', 'outside'], ['355', 'pages'], ['355', 'scope'],
+  ...['base', 'budgets', 'drafting', 'evidence', 'proof-redraft', 'rollback', 'scope'].map((file) => ['62', file]), ['62-sweep-2047', 'rebuild'],
+  ['63', 'install'], ['63', 'quotes'], ['63', 'outside'], ['723', 'load'], ['723', 'loosening'], ['723', 'proof'],
+].map(([suite, file]) => [`tests/acceptance/${suite}/${file}.test.ts`, `tests/acceptance/${suite}-redraft-1894/`])));
+byHand.push(...Object.keys(redrafted).filter((path) => redrafted[path].endsWith('-redraft-1894/') && !byHand.includes(path)));
