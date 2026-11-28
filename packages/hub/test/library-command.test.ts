@@ -5,7 +5,8 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
-import { asks, fetchArgs, fetchUntilDone, kinds, LIB, libraryRows, openWorld, refusal, search } from '../../../tests/acceptance/1731/helpers.ts';
+import { asks, fetchArgs, LIB, libraryRows, openWorld, refusal, search } from '../../../tests/acceptance/1731/helpers.ts';
+import { fetchUntilDone, job } from '../../../tests/acceptance/1731-redraft-3525/helpers.ts';
 import { deep } from './hub.js';
 
 it('deep library on puts an installed library in the search, rule fetches its license with no ask, and off takes it out, naming the command that turns it on', async () => {
@@ -37,7 +38,7 @@ it('deep library on puts an installed library in the search, rule fetches its li
   const off = await deep(w.home, w.work, ['library', 'off', LIB]);
   expect(off.code, off.stderr).toBe(0);
   expect(libraryRows((await search(w)).rows), 'turned off, the library leaves the search').toEqual([]);
-  expect(refusal(await kinds(w, fetchArgs('oak-chair'))), 'the refused fetch names the command that turns it on').toContain(`deep library on ${LIB}`);
+  expect(refusal(await job(w, fetchArgs('oak-chair'))), 'the refused fetch names the command that turns it on').toContain(`deep library on ${LIB}`);
 }, 900_000);
 
 it('deep library with arguments it cannot read prints its usage, exits 2 and reaches no hub', async () => {

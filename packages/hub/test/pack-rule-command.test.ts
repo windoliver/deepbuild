@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
-import { asks, fetchA, readyWorld, until } from '../../../tests/acceptance/1820/helpers.ts';
+import { asks, fetchA, readyWorld, until } from '../../../tests/acceptance/1820-redraft-3525/helpers.ts';
 import { A, PACK_A } from '../../../tests/acceptance/1820/pack.ts';
 import { deep } from './hub.js';
 

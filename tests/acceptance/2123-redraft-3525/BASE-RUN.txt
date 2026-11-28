@@ -1,0 +1,7 @@
+$ NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/2123-redraft-3525/
+# base b134dd38f (origin/main) + d9b9015ff (tests only); macOS, node v24.22.0; 1-minute load 268 at start (uptime: 268.10 275.36 202.53)
+# started 2026-11-27T07:20:56Z, load { 259.65 272.32 203.52 }, commit d9b9015ff, node v24.22.0
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/festive-dijkstra-c49494
+
+

@@ -282,7 +282,7 @@ impl Hub<'_> {
         if let Some((pack, paths)) = missing.into_iter().next() {
             return json!({
                 "state": "BLOCKED", "pack": pack, "assets": paths,
-                "reason": format!("the library {pack}'s takes aren't fetched yet: open a document that lists {pack} in its packs, or fetch them with deep_kinds, then plan again"),
+                "reason": format!("the library {pack}'s takes aren't fetched yet: open a document that lists {pack} in its packs, or fetch them with deep_job op fetch, then plan again"),
             });
         }
         let note_on: Vec<Value> = s
