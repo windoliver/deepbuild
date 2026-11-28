@@ -570,3 +570,22 @@ impl Kept {
         self.levels.clear();
     }
 }
+
+pub fn vertical_plant(name: &str) -> Option<deep_text::vertical::Planted> {
+    let none = deep_text::vertical::Planted::default();
+    Some(match name {
+        "vertical_laid_horizontal" => deep_text::vertical::Planted {
+            horizontal: true,
+            ..none
+        },
+        "never_turns" => deep_text::vertical::Planted {
+            never_turns: true,
+            ..none
+        },
+        "skips_vert" => deep_text::vertical::Planted {
+            skips_vert: true,
+            ..none
+        },
+        _ => return None,
+    })
+}
