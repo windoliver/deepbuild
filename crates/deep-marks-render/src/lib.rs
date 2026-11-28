@@ -428,7 +428,7 @@ fn drawn_here(kind: &Value) -> bool {
     let name = kind.as_str().and_then(|k| k.split('@').next());
     matches!(
         name,
-        Some("vector" | "marks" | "axis" | "scale" | "tiles.terrain" | "graph")
+        Some("vector" | "marks" | "axis" | "scale" | "tiles.terrain" | "graph" | "sources")
     )
 }
 
@@ -908,6 +908,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             && !((square || parity) && command == "geometry")
             && !(sides && command == "check")
             && formula_plant.is_none()
+            && !deep_canvas_marks::sources::planted(input)
         {
             return None;
         }
@@ -922,9 +923,8 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
         let timing = input.get("timing") == Some(&Value::Bool(true));
         if command == "check" {
             let mut checked = checked;
-            if let Some(through) = through {
-                accepts(&mut checked, through);
-            }
+            through.inspect(|through| accepts(&mut checked, *through));
+            deep_canvas_marks::sources::judge(&mut checked, &doc, input);
             if timing {
                 match raster::rank_ms(&doc) {
                     Ok(rank_ms) => checked["timing"] = json!({"rank_ms": rank_ms}),

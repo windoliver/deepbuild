@@ -1,0 +1,19 @@
+{
+  "scripts/preflight.mjs": [
+    {
+      "find": ["  const grant = acquire('timed', { wait: 60 });"],
+      "wrong": [
+        "  const asked = Date.now();",
+        "  const grant = acquire('timed', { wait: 60 });"
+      ]
+    },
+    {
+      "find": ["  const code = await child(WORK, { DEEP_THROTTLE: grant.token });"],
+      "wrong": ["  const code = await child(WORK, { DEEP_THROTTLE: grant.token, PREFLIGHT_ASKED: String(asked) });"]
+    },
+    {
+      "find": ["  const kept = keptOf(args), started = performance.now();"],
+      "wrong": ["  const kept = keptOf(args), started = performance.now() - (Date.now() - Number(process.env.PREFLIGHT_ASKED ?? Date.now()));"]
+    }
+  ]
+}

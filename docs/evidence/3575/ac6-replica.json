@@ -1,0 +1,36 @@
+{
+  "rows": [
+    {
+      "role": "row",
+      "text": "County employment · Tarn Vale Census Office · 2019 · https://127.0.0.1:59264/fixture/tables1/a-counties.csv",
+      "bounds": [
+        1095,
+        640,
+        1096,
+        29
+      ]
+    },
+    {
+      "role": "row",
+      "text": "County to metro area crosswalk · Tarn Vale Mapping Board · 2020 · https://127.0.0.1:59264/fixture/tables1/b-crosswalk.csv",
+      "bounds": [
+        1095,
+        669,
+        1247,
+        29
+      ]
+    },
+    {
+      "role": "row",
+      "text": "Metro area population · Tarn Vale Residents Register · 2022 · https://127.0.0.1:59264/fixture/tables1/c-population.csv",
+      "bounds": [
+        1095,
+        698,
+        1184,
+        29
+      ]
+    }
+  ],
+  "copied": "County employment · Tarn Vale Census Office · 2019 · https://127.0.0.1:59264/fixture/tables1/a-counties.csv",
+  "record_url": "https://127.0.0.1:59264/fixture/tables1/a-counties.csv"
+}
