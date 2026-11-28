@@ -29,6 +29,7 @@ const STEP_MS = 10;
 const ASK_MS = 1000;
 /** The file limit the login service raises the hub's to: a connection per hook in flight, the record, evidence and runs. */
 const FILES = 8192;
+export const PROCESS_TYPE = 'Interactive';
 type Obj = Record<string, unknown>;
 
 interface Connection {
@@ -262,6 +263,8 @@ function definition(program: string[], logs: string): { file: string; text: stri
     <key>NumberOfFiles</key>
     <integer>${FILES}</integer>
   </dict>
+  <key>ProcessType</key>
+  <string>${PROCESS_TYPE}</string>
   <key>EnvironmentVariables</key>
   <dict>
     ${Object.entries(env).map(([k, v]) => `<key>${xml(k)}</key>\n    <string>${xml(v)}</string>`).join('\n    ')}

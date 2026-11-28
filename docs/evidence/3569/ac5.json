@@ -1,0 +1,21 @@
+{
+  "inputs": {
+    "ratios.csv": "5091f37a3a03c7fe2565a42a8a802f48aaaa1b2fd7cdb73df7667099b7f53094"
+  },
+  "outputs": {
+    "table": "ff45226b0f7dab58c4d244c46781409a32f2b9582f43500635b30463019dd50d",
+    "lineage": "3e83dd854f5f3c207af052bb8449445e9d4fb9b55f83d34a15433f3859a3ca5d",
+    "receipt": "5d4805927a860a9f82982bd47547b86d54c92c46cf3e5e850b847c6ab9918356",
+    "record": "2bdefb2a5c600e9c728113ddef08f5c2b435724e236ef58451859438702a4eb4"
+  },
+  "table": "id,a,b,q\n1,6,3,2\n2,5,0,\n",
+  "receipt": {
+    "rows_in": 2,
+    "rows_out": 2,
+    "dropped": 0,
+    "skipped": {},
+    "nonfinite": {
+      "q": 1
+    }
+  }
+}

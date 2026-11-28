@@ -2098,6 +2098,16 @@
         },
         "from": {
           "$ref": "#/$defs/text"
+        },
+        "data": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z_]*$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/text"
+          },
+          "description": "Fields the event carries beside its origin, each read from the joined entry that matched, at the path given (#3405): a channel's event names its server. A minor of adapter.facts@9."
         }
       },
       "required": [

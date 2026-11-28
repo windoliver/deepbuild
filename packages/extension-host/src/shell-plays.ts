@@ -2,7 +2,7 @@
 // device and size must be ones the input gives, and its level policy, pause and budget the input's own.
 
 /** A shell.journeys input's journeys, devices and sizes, and the level policy, pause and budget each run takes. */
-export interface ShellInput { journeys?: unknown; devices?: unknown; sizes?: unknown; level?: unknown; pause?: unknown; budget?: unknown }
+export interface ShellInput { journeys?: unknown; devices?: unknown; sizes?: unknown; level?: unknown; pause?: unknown; budget?: unknown; moves?: unknown }
 
 import { canonicalize, type JsonValue } from '@deepbuild/contracts';
 
@@ -20,9 +20,16 @@ const SHELL_ALL = {
 export function shellRefusal(input: ShellInput, shell: unknown): string | undefined {
   const s = (isPlain(shell) ? shell : {}) as Record<string, unknown>;
   const list = (v: unknown, all: unknown[]): string[] => (Array.isArray(v) ? v : all).map(canonical);
-  if (!list(input.journeys, SHELL_ALL.journeys).includes(canonical(s.journey))) return `the journey ${String(s.journey)} isn't one it gives`;
+  const journeys = list(input.journeys, SHELL_ALL.journeys);
+  const replay = s.journey === 'replay' && journeys.includes(canonical('moves'));
+  if (!replay && !journeys.includes(canonical(s.journey))) return `the journey ${String(s.journey)} isn't one it gives`;
   if (!list(input.devices, SHELL_ALL.devices).includes(canonical(s.device))) return `the device ${String(s.device)} isn't one it gives`;
   if (!list(input.sizes, SHELL_ALL.sizes).includes(canonical(s.size))) return `the size ${canonical(s.size)} isn't one it gives`;
-  for (const k of ['level', 'pause', 'budget'] as const) if (s[k] !== undefined && canonical(s[k]) !== canonical(input[k])) return `its ${k} isn't the one it gives`;
+  for (const k of ['level', 'pause', 'budget', 'moves'] as const) if (s[k] !== undefined && canonical(s[k]) !== canonical(input[k])) return `its ${k} isn't the one it gives`;
   return undefined;
+}
+
+export function levelTracks(reply: Record<string, unknown>): unknown[] {
+  const shell = (isPlain(reply.shell) ? reply.shell : {}) as { level_tracks?: unknown };
+  return Array.isArray(shell.level_tracks) ? shell.level_tracks.map((t) => (isPlain(t) ? t.entries : undefined)) : [];
 }

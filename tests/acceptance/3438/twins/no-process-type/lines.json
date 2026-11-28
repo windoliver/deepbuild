@@ -1,0 +1,11 @@
+{
+  "packages/hub/src/service.ts": [
+    {
+      "find": [
+        "  <key>ProcessType</key>",
+        "  <string>${PROCESS_TYPE}</string>"
+      ],
+      "wrong": []
+    }
+  ]
+}

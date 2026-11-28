@@ -1259,6 +1259,53 @@ fn an_export_target_read_by_its_own_writer_is_refused_by_name() {
 }
 
 #[test]
+fn a_loop_check_kind_names_the_loop_module_in_a_build_without_it() {
+    let sealed = core();
+    for kind in [
+        "scene.scale",
+        "camera.framing",
+        "render.exposure",
+        "render.contrast",
+        "render.noise",
+        "geometry.shading",
+        "animation.contacts",
+        "animation.loop",
+        "animation.limits",
+        "render.review",
+    ] {
+        assert_eq!(
+            sealed.module_of_check(kind).as_deref(),
+            Some("loop"),
+            "{kind}"
+        );
+    }
+    assert_eq!(
+        sealed.module_of_check("effects.audit").as_deref(),
+        Some("effects")
+    );
+}
+
+#[test]
+fn an_entry_with_no_canonical_form_is_refused_at_the_seal_by_name() {
+    let err = seal_core([module("x", &[], |r| {
+        r.entry(
+            "export.target@1",
+            "test.raw",
+            json!({"writer": "x", "fidelity": ["export.fidelity"], "reader": "y",
+                   "hidden": "listed", "bytes": 9007199254740993u64}),
+            "R6",
+        );
+    })])
+    .unwrap_err();
+    assert_eq!(err.code, "entry_refused");
+    assert_eq!(err.modules, ["x"]);
+    let at = err.registry.as_ref().expect("a registry refusal");
+    assert_eq!(at.name, "export.target@1");
+    assert_eq!(at.entries, [json!("test.raw")]);
+    assert!(err.what.contains("9007199254740993"), "{}", err.what);
+}
+
+#[test]
 fn export_targets_declared_in_media_refuse_a_build_without_it_naming_media() {
     let err = Registry::new(BuildSet::Core)
         .with(raw_target())

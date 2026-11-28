@@ -1,0 +1,199 @@
+{
+  "name": "dimmer",
+  "item": {
+    "kind": "logic@1",
+    "params": {
+      "program": "c3f0ddcc7bbbf0c8e2b5f4230ab71e7962ff3843df0597605afac3927ea7fb8d",
+      "step_rate": 1000,
+      "reads": [
+        "knob"
+      ],
+      "writes": {
+        "v": {
+          "type": "f64",
+          "count": 3
+        },
+        "i_rms": {
+          "type": "f64",
+          "count": 3
+        },
+        "i": {
+          "type": "f64",
+          "count": 3
+        },
+        "p": {
+          "type": "f64",
+          "count": 3
+        },
+        "r": {
+          "type": "f64",
+          "count": 3
+        },
+        "on": {
+          "type": "i32",
+          "count": 3
+        },
+        "energy": {
+          "type": "f64",
+          "count": 3
+        },
+        "kwh": {
+          "type": "f64",
+          "count": 3
+        },
+        "drift": {
+          "type": "f64",
+          "count": 3
+        },
+        "drift_x": {
+          "type": "f64",
+          "count": 3
+        },
+        "heat": {
+          "type": "f64",
+          "count": 3
+        },
+        "residual": {
+          "type": "f64",
+          "count": 3
+        },
+        "i2_rms": {
+          "type": "f64",
+          "count": 3
+        },
+        "i2": {
+          "type": "f64",
+          "count": 3
+        }
+      },
+      "circuit": {
+        "nodes": [
+          "neutral",
+          "live",
+          "lamp"
+        ],
+        "parts": [
+          {
+            "id": "mains",
+            "kind": "source_ac",
+            "from": "neutral",
+            "to": "live",
+            "v_rms": 230,
+            "f": 50
+          },
+          {
+            "id": "knob_r",
+            "kind": "resistor",
+            "from": "live",
+            "to": "lamp",
+            "r": {
+              "set_by": "knob",
+              "range": [
+                0,
+                2000
+              ]
+            }
+          },
+          {
+            "id": "lamp",
+            "kind": "load",
+            "from": "lamp",
+            "to": "neutral",
+            "p_rated": 60,
+            "v_rated": 230
+          }
+        ]
+      },
+      "budget": {
+        "fuel": 10000000
+      }
+    }
+  },
+  "controls": {
+    "knob": {
+      "kind": "slider"
+    }
+  },
+  "track": [
+    {
+      "t": 0,
+      "seq": 1,
+      "control": "knob",
+      "value": 0,
+      "writer": "you",
+      "player": 1
+    },
+    {
+      "t": 1411200,
+      "seq": 2,
+      "control": "knob",
+      "value": 881.6666666666666,
+      "writer": "you",
+      "player": 1
+    },
+    {
+      "t": 2822400,
+      "seq": 3,
+      "control": "knob",
+      "value": 2000,
+      "writer": "you",
+      "player": 1
+    }
+  ],
+  "steps": 5,
+  "expect": {
+    "arrays": {
+      "1": {
+        "r": [
+          0,
+          0,
+          881.6666666666666
+        ],
+        "i_rms": [
+          0.2608695652173913,
+          0.2608695652173913,
+          0.2608695652173913
+        ],
+        "p": [
+          60,
+          0,
+          60
+        ]
+      },
+      "2": {
+        "r": [
+          0,
+          881.6666666666666,
+          881.6666666666666
+        ],
+        "i_rms": [
+          0.13043478260869565,
+          0.13043478260869565,
+          0.13043478260869565
+        ],
+        "p": [
+          30,
+          15,
+          15
+        ]
+      },
+      "4": {
+        "r": [
+          0,
+          2000,
+          881.6666666666666
+        ],
+        "i_rms": [
+          0.07981492192018508,
+          0.07981492192018508,
+          0.07981492192018508
+        ]
+      }
+    },
+    "tolerance": {
+      "abs": 1e-12,
+      "rel": 1e-9
+    }
+  },
+  "answer": "The lamp is 230² ÷ 60 = 881.67 Ω. With the knob at 0 Ω it takes 60 W at 0.26087 A. With the knob at the lamp's own 881.67 Ω the loop is 1,763.3 Ω: 0.13043 A, and the lamp and the resistor take 0.13043² × 881.67 = 15 W each, 30 W from the source. At 2,000 Ω, the top of its range, 230 ÷ 2,881.67 = 0.079815 A. A library that read the knob a step late would still be at 0 Ω at step 2."
+}
