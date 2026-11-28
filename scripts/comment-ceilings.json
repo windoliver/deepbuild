@@ -2723,7 +2723,7 @@
   "packages/paseo/server/hub.ts": 13,
   "packages/paseo/server/plant.ts": 1,
   "packages/paseo/server/plugin.ts": 39,
-  "packages/pi/src/index.ts": 82,
+  "packages/pi/src/index.ts": 80,
   "packages/pi/test/guards.test.ts": 6,
   "packages/pi/test/lifecycle.test.ts": 7,
   "packages/pi/tools.mjs": 3,
