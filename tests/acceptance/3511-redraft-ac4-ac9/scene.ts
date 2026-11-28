@@ -14,9 +14,9 @@ export const standardFiles = (body: string) => ({ folder }: { repo: string; fold
 
 export async function openScene(o: {
   files: (at: { repo: string; folder: string }) => Record<string, string>;
-  beforeCommit?: string;
+  beforeCommit?: string | undefined;
   sub?: string;
-  tools?: string[];
+  tools?: string[] | undefined;
 }): Promise<Scene> {
   const w = await openWorld();
   for (const tool of o.tools ?? []) {

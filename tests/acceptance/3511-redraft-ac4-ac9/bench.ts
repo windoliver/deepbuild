@@ -43,11 +43,11 @@ export function plainGitListing(r: Repo): string[] {
 
 export async function judgeClaim(o: {
   base: Record<string, string>;
-  beforeCommit?: (r: Omit<Repo, 'base'>) => void;
+  beforeCommit?: ((r: Omit<Repo, 'base'>) => void) | undefined;
   claim: (r: Repo) => void;
   read: string[];
   command: string;
-  hides?: string;
+  hides?: string | undefined;
 }): Promise<Judged> {
   const dir = mkdtempSync(join(tmpdir(), 'dh3511-'));
   const outside = mkdtempSync(join(tmpdir(), 'dh3511o-'));

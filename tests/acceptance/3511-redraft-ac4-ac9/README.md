@@ -203,3 +203,4 @@ held run of criterion 4 fits the stop hold; that `make` and `just` are on the VM
   a sandboxed run's read list, which the scenes would need to plant by hand anyway.
 - The issue asks each test to fail on the base for its criterion's reason; the local quoted-name case, the control and
   criteria 8 and 9 don't, for the reasons in the table above.
+- **Two type errors, fixed by the redraft.** By the owner's decision, a redraft widened `openScene`'s and `judgeClaim`'s optional fields to take `undefined`, so the folder's `tsc` passes under `exactOptionalPropertyTypes`; no test changed.
