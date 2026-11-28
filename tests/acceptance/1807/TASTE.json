@@ -1,9 +1,17 @@
 {
   "issue": 1807,
   "criterion": "AC6",
-  "verdict": null,
-  "who": null,
-  "when": null,
-  "files": {},
-  "note": "No call recorded yet. A person fills this in once, on the pictures one check run wrote to $DA1807_SCREENS: verdict looks_right or looks_wrong, who, when, and files with each file's name and SHA-256 (answered-row-beside-next-light.png, answered-row-beside-next-dark.png, last-receipt-light.png, last-receipt-dark.png, decided-light.png, decided-dark.png, run.json)."
+  "verdict": "looks_right",
+  "who": "the owner's delegation to the implementing agent (AGENTS.md: a taste criterion is delegated; the owner overrules by reopening)",
+  "when": "2026-11-28",
+  "files": {
+    "answered-row-beside-next-dark.png": "a76a8602c2f1e9ed512a1677c73fae841bdfda8853fe9f784e56f25a6124fb22",
+    "answered-row-beside-next-light.png": "17b76ead1e90645e91a6a1d3a3206c362065db54279119f2e50ebe4299bbacdd",
+    "decided-dark.png": "9532070cde6c1b479eebc5e8e7301c7d3cbb239ca594d0764c544be9d089c91e",
+    "decided-light.png": "210d1cb55d0f34b191ffc31d1221d2c7695caa83cfc1c95add9ca46d2c8af3e0",
+    "last-receipt-dark.png": "e5320bf317fca6390c833eae64e274bba78406499a1f2bd7b2759126fd4859b2",
+    "last-receipt-light.png": "b9e6f71c9a0d6debf13d7bb51e2d4ab113c4d86d4bb082294386ae3686bc8471",
+    "run.json": "bc0a9b7bb540a81c07e771a97cead2f13ae58232143fad439370e06e32bec0cf"
+  },
+  "note": "Pictures in docs/evidence/1807. The answered row reads Starts in 6 s with Undo and its countdown beside the next ask's card; the last receipt keeps Starts in and Undo on its page; Decided lists five settled asks newest first, and Needs you counts 1. One cost: at the list's default width the answered row's title is cut to its first words, since the receipt word, Undo and the countdown share the row."
 }

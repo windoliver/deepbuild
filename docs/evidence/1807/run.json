@@ -1,0 +1,11 @@
+{
+  "issue": 1807,
+  "files": [
+    "answered-row-beside-next-dark.png",
+    "answered-row-beside-next-light.png",
+    "decided-dark.png",
+    "decided-light.png",
+    "last-receipt-dark.png",
+    "last-receipt-light.png"
+  ]
+}
