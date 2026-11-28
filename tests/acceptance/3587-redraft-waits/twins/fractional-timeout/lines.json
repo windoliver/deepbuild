@@ -1,0 +1,13 @@
+{
+  "scripts/preflight.mjs": [
+    {
+      "find": [
+        "  const allowanceMs = Math.ceil(budgetMs * (1 + budgets.preflight.margin));"
+      ],
+      "wrong": [
+        "  // The planted wrong program: the allowance goes to the measured run as its timeout as it is, fractional.",
+        "  const allowanceMs = budgetMs * (1 + budgets.preflight.margin);"
+      ]
+    }
+  ]
+}

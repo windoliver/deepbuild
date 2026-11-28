@@ -1,0 +1,1 @@
+{ "alone": true, "why": "timing: each file times a preflight against a budget of seconds and a 30 s stop bound, which a loaded neighbour would push past" }

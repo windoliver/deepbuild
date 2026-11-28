@@ -68,7 +68,7 @@ async function supervise() {
   const onStop = (signal) => { stop ??= { signal, gone: stopTree() }; };
   const listen = (on) => { for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP']) process[on ? 'on' : 'off'](signal, onStop); };
   const child = async (mode, env = {}) => {
-    const started = spawn(process.execPath, [fileURLToPath(import.meta.url), mode, ...keptArgs(kept)], { cwd: root, stdio: 'inherit', env: { ...process.env, ...env } });
+    const started = spawn(process.execPath, [fileURLToPath(import.meta.url), mode, ...keptArgs(kept)], { cwd: root, stdio: 'inherit', env: { ...process.env, ...env }, detached: true });
     const code = await new Promise((done) => started.on('close', (status) => done(status ?? 1)));
     if (stop) await stop.gone;
     return code;
@@ -118,37 +118,50 @@ function fill(args) {
 }
 
 function work(args) {
-  const kept = keptOf(args), started = performance.now();
-  let observation = {}, checkStatus = 1;
+  const kept = keptOf(args);
+  // The checks and their builds share one budget; perf's merge-base run is extra.
+  const budgets = JSON.parse(readFileSync(new URL('../benchmarks/budgets.json', import.meta.url), 'utf8'));
+  const budgetMs = budgets.preflight.limits.elapsedMs;
+  const allowanceMs = Math.ceil(budgetMs * (1 + budgets.preflight.margin));
+  const parent = process.ppid;
+  const orphaned = () => {
+    if (process.ppid === parent) return;
+    console.log('BLOCKED preflight: the preflight that started this work is gone, so nothing more runs');
+    process.exit(1);
+  };
+  const started = performance.now();
+  let observation = {}, checkStatus = 1, stopped = false;
   console.log('Warming builds (not timed)');
   warm(root);
+  orphaned();
   try {
     // Lane output streams as it runs, so a measurement that breaks never hides what ran.
-    const { elapsedMs, cpuMs, peakBytes, instructions, status } = measureOnce([process.execPath, 'scripts/checks.mjs', ...args], root, true, undefined, false);
+    const { elapsedMs, cpuMs, peakBytes, instructions, status } = measureOnce([process.execPath, 'scripts/checks.mjs', ...args], root, true, allowanceMs, false);
     observation = { elapsedMs, cpuMs, peakBytes, instructions, status };
     // How much of the workload was read from kept results, for perf's comparison of like with like (#3297).
     if (kept) try { observation.kept = JSON.parse(readFileSync(join(lanesFolder(), `${kept.tree}-unit.json`), 'utf8')).kept; observation.key = kept; } catch {}
     checkStatus = status === 0 ? 0 : 1;
   } catch (error) {
-    console.log(`BLOCKED check workload: ${error.message}\n  Fix: Install /usr/bin/time (GNU time on Linux) and restore the check runner.`);
+    if ((stopped = error.code === 'ETIMEDOUT')) console.log(`FAIL preflight budget: the checks ran past ${(allowanceMs / 1000).toFixed(2)} s, the budget with its margin, and were stopped\n  Fix: Find the check that didn't end (a hung test, a leaked child) or reduce local check time below the budget in benchmarks/budgets.json.`);
+    else console.log(`BLOCKED check workload: ${error.message}\n  Fix: Install /usr/bin/time (GNU time on Linux) and restore the check runner.`);
   }
   const checksMs = performance.now() - started;
+  orphaned();
   let perfStatus = 1;
   if (checkStatus) console.log('RUN perf\nBLOCKED perf: the check lanes did not pass, so their workload was not measured\n  Fix: Repair the failing lanes above; perf runs once they pass.');
   // The perf lane's builds and runs hold a cpu.slot of the calling session's through scripts/lease (#1015).
   else perfStatus = spawnSync(join(root, 'scripts/lease'), [process.execPath, 'scripts/perf.mjs', JSON.stringify(observation)], { cwd: root, stdio: 'inherit' }).status ?? 1;
-  // The checks and their builds share one budget; perf's merge-base run is extra.
-  const budgets = JSON.parse(readFileSync(new URL('../benchmarks/budgets.json', import.meta.url), 'utf8'));
-  const budgetMs = budgets.preflight.limits.elapsedMs;
   // The harness budgets lane runs real agents for minutes, so it stays out of the checks' budget and
   // perf. It runs wherever a harness budget is declared; perf freezes that budget once it is on main.
   let laneStatus = 0;
+  orphaned();
   if (budgets.harness && checkStatus) {
     console.log('RUN harness budgets\nBLOCKED harness budgets: the check lanes did not pass, so no agent session was started\n  Fix: Repair the failing lanes above; the lane runs once they pass.');
     laneStatus = 1;
   } else if (budgets.harness) laneStatus = spawnSync(process.execPath, ['scripts/agent-harness.mjs', 'budgets'], { cwd: root, stdio: 'inherit' }).status ?? 1;
   // The release lanes spend plan usage too, so they run once, at release, and only after the checks pass.
   let releaseStatus = 0;
+  orphaned();
   if (process.env.DEEP_PREFLIGHT !== 'release') for (const { name } of releaseLanes) console.log(`SKIP ${name}: it spends plan usage, so only the release preflight runs it`);
   else if (checkStatus) {
     for (const { name } of releaseLanes) console.log(`RUN ${name}\nBLOCKED ${name}: the check lanes did not pass, so no agent session was started\n  Fix: Repair the failing lanes above; the lane runs once they pass.`);
@@ -160,7 +173,7 @@ function work(args) {
     const { jobs, ms, runs } = keptTime(kept);
     console.log(`Kept: ${jobs} jobs, ${(ms / 1000).toFixed(0)} s of machine time, from ${runs} runs`);
   }
-  if (checksMs >= budgetMs) {
+  if (checksMs >= budgetMs && !stopped) {
     console.log(`FAIL preflight budget: checks took ${(checksMs / 1000).toFixed(2)} s\n  Fix: Reduce local check time below the budget in benchmarks/budgets.json.`);
     process.exitCode = 1;
   }

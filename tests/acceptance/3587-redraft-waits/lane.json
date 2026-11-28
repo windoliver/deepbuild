@@ -1,0 +1,1 @@
+{ "alone": true, "why": "timing: each test runs a scratch preflight against a budget of seconds (a 6.00 s allowance, a 3.2 s check under a 3 s budget with a 6 s allowance) and bounds its stops at 30 s, which a parallel block's load can push past" }

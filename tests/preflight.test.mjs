@@ -15,7 +15,7 @@ function entry(t, { checks, perf = '', limit = 300_000 }) {
   const cwd = realpathSync(mkdtempSync(join(tmpdir(), 'deep-preflight-entry-')));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
   for (const directory of ['scripts', 'benchmarks']) mkdirSync(join(cwd, directory));
-  for (const file of readdirSync(scripts)) copyFileSync(new URL(file, scripts), join(cwd, 'scripts', file));
+  for (const file of readdirSync(scripts, { withFileTypes: true })) if (file.isFile()) copyFileSync(new URL(file.name, scripts), join(cwd, 'scripts', file.name));
   writeFileSync(join(cwd, 'scripts/checks.mjs'), checks);
   writeFileSync(join(cwd, 'scripts/perf.mjs'), perf);
   writeFileSync(join(cwd, 'benchmarks/budgets.json'), JSON.stringify({ preflight: { margin: 0.5, limits: { elapsedMs: limit }, initialReason: 'Fixture.' }, tasks: [] }));
@@ -131,6 +131,76 @@ test('the check budget comes from budgets.json and excludes the perf comparison'
   assert.match(slowChecks.stdout, /FAIL preflight budget/);
   const slowPerf = preflight(entry(t, { checks: '', perf: sleep, limit: 2000 }));
   assert.equal(slowPerf.status, 0, slowPerf.stdout);
+});
+
+test('hung checks are stopped at the budget with its margin, their children too', async (t) => {
+  const cwd = entry(t, { limit: 4000, checks: `
+    import { spawn } from 'node:child_process';
+    import { writeFileSync } from 'node:fs';
+    const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+    writeFileSync('pids', JSON.stringify([process.pid, child.pid]));
+    setInterval(() => {}, 1000);
+  ` });
+  const alive = (pid) => {
+    try {
+      return process.kill(pid, 0);
+    } catch {
+      return false;
+    }
+  };
+  const file = join(cwd, 'pids');
+  let pids = [];
+  t.after(() => { for (const pid of pids) if (alive(pid)) process.kill(pid, 'SIGKILL'); });
+  const result = spawnSync(process.execPath, [join(cwd, 'scripts/preflight.mjs')], { encoding: 'utf8', timeout: 30_000, killSignal: 'SIGKILL' });
+  if (existsSync(file)) pids = JSON.parse(readFileSync(file, 'utf8'));
+  // deadline: a stopped process stays a zombie until its new parent reaps it; 10 s bounds that, never a wait for it.
+  for (const by = Date.now() + 10_000; pids.some(alive) && Date.now() < by;) await new Promise((next) => setTimeout(next, 100));
+  assert.equal(result.error, undefined, `preflight never ended: ${result.stdout}`);
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /FAIL preflight budget: the checks ran past 6\.00 s, the budget with its margin, and were stopped\n\s+Fix: .+/);
+  assert.doesNotMatch(result.stdout, /FAIL preflight budget: checks took/, 'one cause, one FAIL line');
+  assert.match(result.stdout, /BLOCKED perf: /);
+  assert.equal(pids.length, 2, 'the checks started their child');
+  assert.deepEqual(pids.filter(alive), [], 'the checks and their child were stopped');
+});
+
+test('a Ctrl-C to preflight stops the measured checks and their children', async (t) => {
+  const cwd = entry(t, { checks: `
+    import { spawn } from 'node:child_process';
+    import { writeFileSync } from 'node:fs';
+    const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+    writeFileSync('pids', JSON.stringify([process.pid, child.pid]));
+    console.log('checks hung');
+    setInterval(() => {}, 1000);
+  ` });
+  const alive = (pid) => {
+    try {
+      return process.kill(pid, 0);
+    } catch {
+      return false;
+    }
+  };
+  let pids = [];
+  t.after(() => { for (const pid of pids) if (alive(pid)) process.kill(pid, 'SIGKILL'); });
+  const child = spawn(process.execPath, [join(cwd, 'scripts/preflight.mjs')], { detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  t.after(() => { try { process.kill(-child.pid, 'SIGKILL'); } catch {} });
+  let stdout = '';
+  const exited = once(child, 'exit');
+  const hung = new Promise((started) => child.stdout.setEncoding('utf8').on('data', (chunk) => {
+    stdout += chunk;
+    if (stdout.includes('checks hung')) started();
+  }));
+  // deadline: a preflight that ends, or never starts its checks, fails here instead of waiting for ever.
+  const late = new Promise((next) => setTimeout(next, 60_000).unref());
+  assert.equal(await Promise.race([hung.then(() => 'hung'), exited.then(() => 'exited'), late.then(() => 'late')]), 'hung', stdout);
+  pids = JSON.parse(readFileSync(join(cwd, 'pids'), 'utf8'));
+  process.kill(-child.pid, 'SIGINT');
+  // deadline: preflight's stop takes at most 25 s; a preflight that ignores the Ctrl-C fails here instead.
+  const stuck = new Promise((next) => setTimeout(next, 60_000).unref());
+  assert.equal(await Promise.race([exited.then(() => 'exited'), stuck.then(() => 'stuck')]), 'exited', `preflight outlived its Ctrl-C:\n${stdout}`);
+  // deadline: a stopped process stays a zombie until its new parent reaps it; 10 s bounds that, never a wait for it.
+  for (const by = Date.now() + 10_000; pids.some(alive) && Date.now() < by;) await new Promise((next) => setTimeout(next, 100));
+  assert.deepEqual(pids.filter(alive), [], `the checks or their child outlived preflight's stop:\n${stdout}`);
 });
 
 test('the unit lane runs every tooling test file', (t) => {
