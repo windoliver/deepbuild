@@ -438,10 +438,9 @@ const lintLabel = (rest) => {
   const at = rest.findIndex((arg) => arg.startsWith('scripts/'));
   return `lint ${at < 0 ? rest[0] : rest.slice(at, /^\w+$/.test(rest[at + 1] ?? '') ? at + 2 : at + 1).join(' ')}`;
 };
-// The jobs running now, so a run stopped by its PID stops them too (main): they pass through on its one grant, which is
-// free once it has ended, so a job left running would run beside the next run uncounted. Once stopped, the run starts
-// no job: each reads as run by none.
-const live = new Set();
+// A run stopped by its PID stops its jobs too (main), each through its stopper below: they pass through on its one
+// grant, which is free once it has ended, so a job left running would run beside the next run uncounted. Once stopped,
+// the run starts no job: each reads as run by none.
 let stopped = null;
 // The run's bound (#3567): 60 minutes from its start, its waits for a grant included. At it the run starts nothing
 // more, stops each job still running with its tree, and reads INCONCLUSIVE, naming each file that didn't finish and
@@ -494,7 +493,6 @@ function run(logs, label, command, args, env = {}, cwd = root) {
   const leased = [join(root, 'scripts/lease'), command, ...args], began = performance.now();
   return new Promise((done) => {
     const child = spawn(LIGHT.test(label) ? leased[0] : process.execPath, LIGHT.test(label) ? leased.slice(1) : [join(root, 'scripts/throttle.mjs'), cls, '--wait', '30', '--', ...leased], { cwd, stdio: ['ignore', descriptor, descriptor], env: childEnv(env) });
-    live.add(child);
     let idle = null, watch = null;
     // At the run's bound the job is stopped as one that stood still is, sooner, so the run ends within seconds of it.
     const stop = () => {
@@ -535,12 +533,11 @@ function run(logs, label, command, args, env = {}, cwd = root) {
         }
       }, Math.min(10_000, IDLE_MIN * 10_000));
     }
-    child.on('error', (error) => { clearInterval(watch); stoppers.delete(stop); live.delete(child); closeSync(descriptor); done({ label, log, status: null, output: String(error) }); });
+    child.on('error', (error) => { clearInterval(watch); stoppers.delete(stop); closeSync(descriptor); done({ label, log, status: null, output: String(error) }); });
     child.on('close', async (status) => {
       clearInterval(watch);
       stoppers.delete(stop);
       await idle?.killed;
-      live.delete(child);
       closeSync(descriptor);
       done({ label, log, status, output: readFileSync(log, 'utf8'), idle, ms: performance.now() - began });
     });
@@ -782,12 +779,12 @@ async function main(args) {
       rmSync(prep.binRoot, { recursive: true, force: true });
     }
   }
-  // Stopped, the run passes the stop to its jobs, starts none, and ends once they have, through its own clean-up (its
-  // shards' locks too, which a shard still being made keeps till it is), so none runs on once its grant is given back.
+  // Stopped, the run stops each job with its whole tree as its bound does (#3433), starts none, and ends once they have,
+  // through its own clean-up (its shards' locks too), so nothing a job started runs on once its grant is given back.
   // A stop that comes before the test grant, during the binary builds, is seen when they end (prepare).
   for (const signal of ['SIGTERM', 'SIGHUP', 'SIGINT']) process.on(signal, () => {
     stopped ??= signal;
-    for (const child of live) child.kill(signal === 'SIGINT' ? 'SIGTERM' : signal);
+    for (const stop of stoppers) stop();
   });
 
   // deadline: the run's bound; at it no job starts and each one running is stopped.

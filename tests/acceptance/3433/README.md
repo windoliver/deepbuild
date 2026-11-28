@@ -2,7 +2,9 @@
 
 I drafted these tests blind from these sources:
 
-- issue #3433, as `gh issue view 3433` printed it on 2026-11-24
+- issue #3433, as `gh issue view 3433` printed it on 2026-11-24, and again on 2026-11-28 after it was reopened for a
+  sixth criterion, `#3433.7e03e656` (its body and its latest comment: an `affected.mjs` run stopped by SIGTERM leaves its
+  jobs' children running)
 - `docs/parallel-proof.md`, section 6 (Scheduling: the throttle table, a table of a test's own, `DEEP_THROTTLE_TABLE`)
 - the Dogfooding part of `docs/technical-design.md`
 - AGENTS.md
@@ -15,7 +17,14 @@ I drafted these tests blind from these sources:
 At the base I also read `scripts/throttle.mjs` (`descendants`, `killTree`, the table folder inside a test run),
 `scripts/lease`, the #1322 stop test in `tests/benchmark.test.mjs`, the `repository()` fixture and the allowance tests
 in `tests/perf.test.mjs`, `tests/cargo-no-grant-lane.test.mjs` (a `runLanes` run in a child process of a fixture
-repository), and `tests/acceptance/3350/` and `3336/` for the suite's shape. Per AGENTS.md the implementing agent
+repository), and `tests/acceptance/3350/` and `3336/` for the suite's shape.
+
+For `#3433.7e03e656` (drafted 2026-11-28 by a second blind job) I read the base commit `9bbe0f24c` (origin/main):
+`scripts/affected.mjs` (`queued`, which runs the run again under `throttle.mjs test` and passes a SIGTERM to it; `run`,
+whose bound's stop lists a job's tree with `descendants` and `killTree`s it; and `main`'s signal handler, which passes the
+signal to each job's direct child alone and prints `BLOCKED affected: stopped by <signal>`), `scripts/throttle.mjs`
+(signals passed to its command; the table inside a test run), `scripts/lease`, `crates` and `checks` in
+`scripts/lanes.mjs`, `listFiles` in `scripts/proof-change.mjs`, and this suite's files. Per AGENTS.md the implementing agent
 doesn't edit these tests; a dispute goes to a blind redraft by this job.
 
 Run them with Node 24:
@@ -25,11 +34,13 @@ npm ci                                   # once, if node_modules is missing: lan
 node --test 'tests/acceptance/3433/*.test.mjs'
 ```
 
-There are 6 tests in five files. On the base the suite takes about 40 s (`BASE-FAILURE.txt`). Each file stays well
+There are 7 tests in six files. On the base the suite takes about 40 s (`BASE-FAILURE.txt`); `affected-term.test.mjs`
+took 23 s there. Each file stays well
 under 20 minutes even when every bound in it runs out: `lane-term.test.mjs` and `lane-group-kill.test.mjs` at most
 about 3 minutes (2 to see the grandchild start, 6 s, 15 s for the stop, 30 s for the record), `lane-ends.test.mjs` at
 most about 4 minutes, `perf-line.test.mjs` at most 4 (its perf run is bounded at 240 s), `measure-stop.test.mjs` under
-a minute. No test needs an idle machine and none holds a port or a shared resource, so there is no `lane.json`: every
+a minute, `affected-term.test.mjs` at most about 4 minutes (3 to see the grandchild start, 6 s, 15 s for the stop, 30 s
+for the verdict). No test needs an idle machine and none holds a port or a shared resource, so there is no `lane.json`: every
 test has its own sandbox folder, HOME and throttle table, and starts and stops only its own processes.
 
 ## Criteria to tests
@@ -43,6 +54,7 @@ Each test's name starts with its criterion's tag.
 | `#3433.46eec7ed` A lanes.mjs lane run whose command starts a grandchild in a process group of its own, stopped by SIGTERM to the lanes.mjs process alone, leaves nothing its command started alive 15 s later; the record reads `INCONCLUSIVE` with a finding naming each process stopped | `lane-term.test.mjs` | The lane (see The lane run) has started: its `node --test` runner, its test file's process and the grandchild are alive, and the grandchild has run 6 s. SIGTERM to the lanes.mjs process alone. Within 15 s none of the three is alive. Within 30 s of the signal one record of the lane is under the run's HOME; its `state` is `INCONCLUSIVE`; it has a finding whose `note` matches `/\bstop/i`, and those notes have, for the test file's process and for the grandchild, one line holding its PID and its script's name (`fixture-3433.test.mjs`, `grandchild-3433.mjs`) | Twin `lanes-as-main`; the base fails the same way: all three run on and no record is written |
 | `#3433.d424696d` The same lane run stopped by SIGKILL to the lanes.mjs process's whole group leaves nothing its command started alive 15 s later, and the record reads `INCONCLUSIVE` naming them | `lane-group-kill.test.mjs` | As above, but the stop is `process.kill(-pid, 'SIGKILL')` on the group the test made the lanes.mjs process lead. Within 15 s none of the three is alive; within 30 s one record reads `INCONCLUSIVE` with a stop finding; its notes have a line holding the grandchild's PID and `grandchild-3433.mjs` (the processes in lanes.mjs's group were ended by the group kill itself, so only the grandchild is required to be named) | Twin `stop-in-lane-group`; the base fails: the grandchild runs on, no record |
 | `#3433.cd15df63` A lane run that ends by itself writes its record by its tests, with no stop finding, and leaves no process of the stop running | `lane-ends.test.mjs` | The lane's one test records its PIDs, waits 2 s and passes. While lanes.mjs runs the test lists every process under it every 100 ms (by PID and start). lanes.mjs exits 0; one record, `lane` `stop-3433`, `state` `PASS`, holds the test's row `tests/fixture-3433.test.mjs › …` as `PASS`, and no finding matching `/\bstop/i`; the listing saw the lane's `node --test` runner; 5 s after the run's end none of the processes seen under lanes.mjs is alive | Twin `stop-outlives-run`. The base passes this test: it is today's behavior |
+| `#3433.7e03e656` An `affected.mjs` run stopped by SIGTERM to the `affected.mjs` process alone, while a job's command has started a grandchild in a process group of its own, prints `BLOCKED affected: stopped by SIGTERM` and leaves no process the job started alive 15 s later | `affected-term.test.mjs` | `node scripts/affected.mjs tests/fixture-3433.test.mjs` in a fixture repository (see The affected run) selects the file and runs it as a `node --test` job. The job's runner, its test file's process and the grandchild are alive, and the grandchild has run 6 s. SIGTERM to that affected.mjs process's PID alone. Within 15 s none of the three is alive; within 30 s of the signal the run's output holds a line starting `BLOCKED affected: stopped by SIGTERM` | Twin `affected-as-main` (the merge base's `scripts/affected.mjs`); the base fails the same way: it prints the line, but the grandchild runs on |
 
 `twins.json` names each twin, and `twins/README.md` says exactly what each must plant. The implementing job writes the
 twin files.
@@ -71,6 +83,17 @@ everything else runs as a process and is read by its output and its files.
   test run), `DEEP_LEASE_WAIT=1`, and a PATH of node's folder and the system's (`/usr/bin:/bin:/usr/sbin:/sbin`), so
   `scripts/lease` finds no `deep` of the machine's. No caller's `DEEP_THROTTLE`, report, lock or `NODE_TEST_CONTEXT`
   passes on.
+- **The affected run**: `node scripts/affected.mjs tests/fixture-3433.test.mjs`, started `detached: true` (a group of its
+  own, so no signal of the test reaches the test's group) in a fixture git repository with one commit: the test file
+  (the lane tests' hanging one), an empty Cargo workspace, and, left out of git so the run selects only that file, a copy
+  of the checkout's `scripts/` (so a twin's `affected.mjs` is the one that runs) and a link to its `node_modules`
+  (`affected.mjs` loads typescript). Its environment: a HOME, TMPDIR and `DEEP_THROTTLE_TABLE` of the test's own,
+  `DEEP_LEASE_WAIT=1`, `DEEP_TEST_GRANT_WAIT=1`, and a PATH of a fixture bin folder, node's folder and the system's. The
+  fixture bin holds only a `cargo` that answers `cargo metadata` with no package (the run reads the workspace's crates
+  with it; cargo is a boundary the test doesn't own, and nothing is built). The run asks its own test grant and runs
+  again under `throttle.mjs test` (section 6), so the job is that inner run's; the SIGTERM goes to the outer process,
+  the one a person or a watchdog stops. The run's lint jobs run beside the test job, as on any run. Read: its output
+  (stdout and stderr). Every process seen under it, listed every 200 ms, joins the cleanup list.
 - **The processes**: each fixture process appends `<role> <pid>` to a pid file of the test's own (`lead`, `runner` = the
   test file's `process.ppid`, `file`, `grandchild`). A process is alive while `ps -o lstart= -p <pid>` gives the start it
   had when the test first read it. The test's cleanup SIGKILLs only those PIDs, and the processes its own listing saw
@@ -102,9 +125,16 @@ everything else runs as a process and is read by its output and its files.
    under the lanes.mjs process while it runs, so the stop must have been a descendant of lanes.mjs at some moment of a
    100 ms listing (a stop started `detached` by lanes.mjs is; one started by a parent that exits at once is not seen).
    It must be gone 5 s after lanes.mjs exits.
+8. **"The affected.mjs process" and "the job started"** (`#3433.7e03e656`): the process the test starts with
+   `node scripts/affected.mjs`, the one a person or a watchdog stops, not the run it starts again under its test grant.
+   The processes required gone are the ones the fixture recorded, the job's `node --test` runner, its test file's
+   process and the grandchild; the job's throttle and lease, and the run's lint jobs, aren't checked by PID. The run
+   prints its verdict within 30 s of the signal: the criterion names no window for it.
 
 ## What stays unproven here
 
+- **SIGHUP and SIGINT to an affected.mjs run**: the issue's scope names them, its criterion only SIGTERM; no test sends
+  them.
 - **The Spark**: the issue's Proof asks for the fixture runs on the Mac and the Spark; this suite ran on the Mac only
   (`BASE-FAILURE.txt`). The tests have no platform gate and should run as they are on Linux.
 - **A process that ignores SIGTERM** (the SIGKILL to what is left): the fixtures end on SIGTERM; no test plants one that
@@ -124,7 +154,9 @@ All 6 tests passed on it. Then I planted, one at a time: the watcher started wit
 `#3433.d424696d`), the watcher ignoring the run's end (fails `#3433.cd15df63`), and the message left as spawnSync's
 (fails both `#3433.0ced7c1d` tests; `#3433.bf4b249a` passes). The merge base is `stop-lead-only`'s and
 `lanes-as-main`'s behavior. `BASE-FAILURE.txt` is the suite's run on the merge base, then a summary of those runs. The
-throwaway isn't kept and proves nothing about the real change.
+throwaway isn't kept and proves nothing about the real change. For `#3433.7e03e656`, a throwaway in a scratch copy of
+`scripts/` and this suite (main's signal handler also listing each job's tree with `descendants` before it passes the
+signal, and `killTree`ing that listing 3 s later) passed `affected-term.test.mjs` in 12 s; the merge base fails it.
 
 ## Files
 
@@ -134,6 +166,7 @@ throwaway isn't kept and proves nothing about the real change.
 - `perf-line.test.mjs`: perf's `BLOCKED perf` line (`#3433.0ced7c1d`).
 - `lane-term.test.mjs`, `lane-group-kill.test.mjs`, `lane-ends.test.mjs`: the lane runs (`#3433.46eec7ed`,
   `#3433.d424696d`, `#3433.cd15df63`).
+- `affected-term.test.mjs`: an affected.mjs run's stop, with its own fixture repository (`#3433.7e03e656`).
 - `twins.json`, `twins/README.md`: the planted wrong programs.
 - `BASE-FAILURE.txt`: the run on the base, home paths written as `~`.
 
