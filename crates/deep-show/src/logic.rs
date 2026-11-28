@@ -163,7 +163,9 @@ impl Hub<'_> {
             let read = self.world_reads(form, &track, p)?;
             track.extend(read);
         }
-        deep_play::logic::inline_logic(form, piece, &track, drops)
+        let compares = deep_play::logic::inline_logic(form, piece, &track, drops)?;
+        self.compares.borrow_mut().extend(compares);
+        Ok(())
     }
 
     /// `form`'s logic items as one piece, checked by the logic module, each program read from the

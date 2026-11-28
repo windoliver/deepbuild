@@ -1438,7 +1438,7 @@
   "crates/deep-show/src/golden.rs": 15,
   "crates/deep-show/src/heard.rs": 38,
   "crates/deep-show/src/host.rs": 15,
-  "crates/deep-show/src/hub.rs": 502,
+  "crates/deep-show/src/hub.rs": 500,
   "crates/deep-show/src/hub/call.rs": 178,
   "crates/deep-show/src/hub/planted.rs": 9,
   "crates/deep-show/src/hub/presented.rs": 13,

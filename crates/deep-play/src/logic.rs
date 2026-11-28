@@ -5,10 +5,14 @@
 //! too, which a set without logic (#1490) runs as well.
 
 #[cfg(feature = "logic")]
+use std::collections::BTreeMap;
+#[cfg(feature = "logic")]
 use std::rc::Rc;
 
 use deep_canvas::document::Issue;
 use deep_canvas::registry::Sealed;
+#[cfg(feature = "logic")]
+use deep_canvas::schedule::sha256_hex;
 #[cfg(feature = "logic")]
 use deep_logic::piece::{check_in, History, Piece};
 #[cfg(feature = "logic")]
@@ -161,9 +165,9 @@ pub fn inline_logic(
     piece: Option<Piece>,
     track: &[Value],
     drops_last_range: bool,
-) -> Result<(), Box<Issue>> {
+) -> Result<BTreeMap<String, Vec<Value>>, Box<Issue>> {
     let Some(piece) = piece else {
-        return Ok(());
+        return Ok(BTreeMap::new());
     };
     let entries: Vec<Entry> = track
         .iter()
@@ -218,7 +222,7 @@ pub fn inline_logic(
         });
     }
     let Some(doc) = form.as_object_mut() else {
-        return Ok(());
+        return Ok(BTreeMap::new());
     };
     // And for a host whose own track the form takes later, the entries closed; for the canvas's
     // logic module, which steps the current branch afresh, the seen values it carries in.
@@ -277,18 +281,21 @@ pub fn inline_logic(
         }
     }
     // #538: each item's comparisons after its steps, on its first array, for `frames`' timings.
-    for (id, compares) in &rec.compares {
-        let first = piece
-            .items
-            .iter()
-            .find(|i| &i.id == id)
-            .and_then(|i| i.writes.first())
+    let mut compares = BTreeMap::new();
+    for (id, list) in &rec.compares {
+        let Some(i) = piece.items.iter().position(|i| &i.id == id) else {
+            continue;
+        };
+        let first = piece.items[i]
+            .writes
+            .first()
             .map(|w| format!("{id}.{}", w.name));
         if let Some(a) = first.and_then(|f| arrays.get_mut(&f)) {
-            a["compares"] = json!(compares
-                .iter()
-                .map(|(k, bytes, ms)| json!([k, bytes, ms]))
-                .collect::<Vec<_>>());
+            let ran = deep_logic::bake_key(&piece, i, &entries);
+            let of = sha256_hex(format!("{id} {ran} {steps}").as_bytes());
+            a["compares"] = json!(of);
+            let list = list.iter().map(|(k, bytes, ms)| json!([k, bytes, ms]));
+            compares.insert(of, list.collect());
         }
     }
     // #1918: beside the readings of the worlds the document lists.
@@ -300,7 +307,7 @@ pub fn inline_logic(
         all.extend(arrays);
     }
     gate_fog(doc);
-    Ok(())
+    Ok(compares)
 }
 
 /// #552: the occurrences this copy's player doesn't see (its `match.me`, 1 for a piece played

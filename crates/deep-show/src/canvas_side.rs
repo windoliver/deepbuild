@@ -366,6 +366,7 @@ impl hub::Hub<'_> {
             session_state: self.session_state,
             tracks: self.tracks,
             forms: self.forms,
+            compares: self.compares,
             sessions: self.sessions,
             clips: self.clips,
             panels_shown: self.panels_shown,

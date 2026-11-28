@@ -298,6 +298,7 @@ alone.push('tests/acceptance/503/', 'tests/acceptance/503-oracle/', 'tests/accep
 byHand.push('tests/acceptance/503-redraft-ac4/');
 alone.push('tests/acceptance/935/', 'tests/acceptance/935-oracle/');
 byHand.push('tests/acceptance/408/machines.test.ts');
+byHand.push('tests/acceptance/3278/opening.test.ts');
 alone.push('tests/acceptance/405/broken-fixture.test.ts', 'tests/acceptance/405/floating-exception.test.ts', 'tests/acceptance/405/lid-sweep.test.ts');
 alone.push('tests/acceptance/405-redraft-ac4/');
 timed.push('tests/acceptance/405-redraft-ac4/budgets.test.ts');

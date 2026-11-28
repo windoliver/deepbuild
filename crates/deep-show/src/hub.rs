@@ -791,7 +791,6 @@ pub struct Hub<'a> {
     /// its last `deep_show`, before the track and the session's picks (crate::played).
     pub tracks: BTreeMap<String, deep_canvas_input::track::Track>,
     pub forms: BTreeMap<String, Value>,
-    /// Each document's session.
     pub sessions: BTreeMap<String, DocSession>,
     /// #1250: each piece's live play as the app keeps it for clips, and each panel's cards.
     pub(crate) clips: crate::clip::Clips,
@@ -810,7 +809,6 @@ pub struct Hub<'a> {
     pub pending_light: Option<Value>,
     /// Each panel's interaction scope (#383).
     pub scopes: BTreeMap<String, crate::input::PanelScope>,
-    /// The input router's last serial.
     pub serial: u64,
     /// The plug-ins' panels in the trusted ring (#401).
     pub ring: crate::ring::Ring,
@@ -845,6 +843,7 @@ pub struct Hub<'a> {
     pub carried_rows: BTreeMap<String, BTreeMap<i64, Value>>,
     /// #538's planted lookup: each copy table's key order in its document's first revision.
     pub first_orders: BTreeMap<String, Vec<String>>,
+    pub(crate) compares: std::cell::RefCell<BTreeMap<String, Vec<Value>>>,
     /// The displays, the windows on them and the card's placement (#400).
     pub placement: Placement,
     /// Terminals, streams and session pages (#402).
@@ -1016,6 +1015,7 @@ impl<'a> Hub<'a> {
             first_frames: BTreeMap::new(),
             carried_rows: BTreeMap::new(),
             first_orders: BTreeMap::new(),
+            compares: Default::default(),
             placement: Placement::open(
                 scenario.displays.clone(),
                 scenario.window,
