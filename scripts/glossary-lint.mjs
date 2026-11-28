@@ -14,6 +14,9 @@ const findings = [];
 const fail = (at, why, fix) => findings.push(`FAIL glossary: ${at}: ${why}\n  Fix: ${fix}`);
 const finish = () => {
   for (const line of findings) console.log(line);
+  const named = findings.flatMap((finding) => WORDED.some((doc) => finding.startsWith(`FAIL glossary: ${doc}:`)) ? finding.match(/^FAIL glossary: ([^:\s]+:\d+):/)?.slice(1) ?? [] : []);
+  const places = new Set(named).size;
+  if (named.length) console.log(`FAIL glossary: ${named.length} finding${named.length === 1 ? '' : 's'} name${named.length === 1 ? 's' : ''} ${places} line${places === 1 ? '' : 's'} of ${WORDED.join(', ')}`);
   process.exit(findings.length ? 1 : 0);
 };
 const seen = new Map();
