@@ -1,0 +1,25 @@
+{
+  "id": "brick-3517",
+  "format": 1,
+  "basis": "drawing",
+  "license": "Apache-2.0",
+  "description": "A #3517 acceptance look: a paper ground and a brick accent, drawn with no tone map.",
+  "palette": { "paper": "#f2f0ea", "ink": "#22252b", "slate": "#8a9099", "coal": "#14161a", "brick": "#7a1f1f", "sand": "#e0c060" },
+  "roles": { "ground": "paper", "ink": "ink", "muted": "slate", "accent": "brick", "slate": "slate", "coal": "coal", "sand": "sand" },
+  "themes": { "light": {}, "dark": {} },
+  "fonts": {
+    "body": { "family": "Inter", "file": "Inter-Regular.ttf", "license": "OFL-1.1", "embed": true, "single_line": false },
+    "mono": { "family": "JetBrains Mono", "file": "JetBrainsMono-Regular.ttf", "license": "OFL-1.1", "embed": true, "single_line": false }
+  },
+  "tone_map": "none",
+  "exposure": -0.2630344058337938,
+  "finish": [],
+  "deband": "none",
+  "bloom": "none",
+  "ground_3d": { "kind": "none" },
+  "status": { "pass": "#007429", "fail": "#bf232b", "invalid": "#8645b0", "blocked": "#a44700", "inconclusive": "#666600", "running": "#0063b8", "needs_you": "#8a5900", "stale": "#326c6f", "idle": "#636464" },
+  "status_treatment": { "core_min_px": 4, "glyph": { "pass": "✓", "fail": "✗", "invalid": "⊘", "blocked": "■", "inconclusive": "?", "running": "↻", "needs_you": "!", "stale": "◇", "idle": "○" } },
+  "min_distance": 0.1,
+  "attention_treatment": { "line": "dashed", "role": "ink", "glyph": "⚠" },
+  "legend": "auto"
+}

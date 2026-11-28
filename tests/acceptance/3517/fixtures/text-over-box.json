@@ -1,0 +1,33 @@
+{
+  "format": 1,
+  "profile": "scene",
+  "title": "A word over a box",
+  "description": "A pale box under a pale sky, still, with one dark word drawn flat over it: a #3517 acceptance fixture for a flat item over a frame in depth.",
+  "size": [480, 360],
+  "camera": "cam",
+  "transport": { "span": "4s" },
+  "requires": { "modules": { "scene3d": "^1" } },
+  "items": {
+    "cam": {
+      "id": "cam", "name": "cam", "order": "a000", "kind": "camera@1",
+      "params": { "projection": "perspective", "position": [0, 0, 24], "target": [0, 0, 0], "fov": 30, "near": 0.5, "far": 200 }
+    },
+    "sky": {
+      "id": "sky", "name": "sky", "order": "a001", "kind": "sky@1",
+      "params": { "top": [0.6, 0.75, 0.95, 1], "low": [0.6, 0.75, 0.95, 1], "ambient_top": [0, 0, 0], "ambient_low": [0, 0, 0] }
+    },
+    "sand": {
+      "id": "sand", "name": "sand", "order": "a002", "kind": "material@1",
+      "params": { "base_color": [0.9, 0.85, 0.4, 1], "unlit": true, "alpha_mode": "opaque", "alpha": 1, "double_sided": true }
+    },
+    "box": {
+      "id": "box", "name": "box", "order": "a003", "kind": "mark.box@1",
+      "params": { "size": [8, 4, 1] }, "material": "sand"
+    },
+    "word": {
+      "id": "word", "name": "word", "order": "a004", "kind": "text@1",
+      "at": { "pos": [150, 140, 0] },
+      "params": { "text": "Hello", "font": "body", "size": 56, "weight": 400, "paint": { "fill": { "role": "ink" } } }
+    }
+  }
+}
