@@ -94,10 +94,9 @@ export function binaryPlan(cwd, patterns) {
 
 /**
  * Selected tests and the helper declarations they reach: `bin`, the binaries their DEEP_BIN_DIR consumers name,
- * `target`, the hub's binaries when one of them names the hub's or the CLI's package and each workspace binary one
- * reads at target/debug/<bin> without building it (#3720), `hub`, the selected paths that do either, which alone may
- * find `target` in place (#2817), and with `findBuilds` `builds`, their own `cargo build`s
- * (binaryPlan).
+ * `target`, the hub's binaries when one names the hub's or the CLI's package and each workspace binary one reads
+ * at target/debug/<bin> unbuilt (#3720), `hub`, the selected paths that do either, which alone may find `target`
+ * in place (#2817), and with `findBuilds` `builds`, their own `cargo build`s (binaryPlan).
  */
 export function selectBinaries(cwd, patterns, hubBinaries = true, findBuilds = false) {
   const hubRoots = [], debugRoots = [];
