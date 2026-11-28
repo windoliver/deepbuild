@@ -1,1 +1,1 @@
-{ "alone": true, "why": "starts hubs through the launchd stand-in and builds deep-hook with cargo, as #668's fast tests do" }
+{ "alone": true, "why": "binary: starts hubs through the launchd stand-in and builds deep-hook with cargo, as #668's fast tests do" }
