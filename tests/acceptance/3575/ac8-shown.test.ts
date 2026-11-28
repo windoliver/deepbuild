@@ -15,7 +15,7 @@ describe(`${AC[8]} shown to you: the list in the app, and a number with its sour
   it(`${AC[8]} the run takes both pictures from the fixture piece in the replica and writes them to the proof folder; whether they look right is one recorded taste call, INCONCLUSIVE without it`, async (ctx) => {
     const world = must(w, 'a hub with the table import and the table.derive tools');
     const p = must(await piece(world), 'three files fetched after one yes each, imported, and the first two derived into one table');
-    const doc = figure([FIRST({ show: { source: true } }), SECOND(), list({ of: 'document', fields: ['title', 'publisher', 'edition', 'license', 'url'], group: 'none' })], assetsOf(p));
+    const doc = figure([FIRST({ show: { source: true } }), SECOND(), list({ of: 'document', fields: ['title', 'publisher', 'edition', 'license'], group: 'none' })], assetsOf(p));
     const r = must(await Replica.launch(world.evidence), 'the app\'s replica over a copy of the hub\'s evidence store');
     const [session] = sessionsOfFixture();
     expect(await r.page(session!), 'the session\'s page opens').toBe('');

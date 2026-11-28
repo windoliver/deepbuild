@@ -96,3 +96,4 @@ FAILED  AC8 #3575.723dcdab  ac8-shown.test.ts:22
 # At main's head, as reported to this job and not observed by it, deep install packages/jobs/import is refused, because
 # that plug-in's envelope digest went stale in #3715, a defect of main and not of this issue, so a run there can't get
 # past the world's setup. No base run on main is recorded.
+# November 27, 2026: AC8's list dropped url (it holds the server's port, new each run) so its pictures repeat; not rerun.

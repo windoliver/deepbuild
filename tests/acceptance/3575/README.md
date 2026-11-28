@@ -90,7 +90,7 @@ Nothing missing passes (invariant 2): a reply without a field a test reads fails
 | 5 | `#3575.e744d3c9` | `ac5-ask.test.ts` | Each of the three asks, as `deep inbox` prints it, holds the file's size, license, title, publisher and edition. A fourth file listed without the three, fetched and imported; a list grouped by publisher of it and the third file: two rows, the third file under its publisher, the fourth under `127.0.0.1` (with or without its port) with a dash for each of title, publisher and edition. Fails on the merge base, an ask that shows no title, a guessed title (the file's name, the path), an empty cell, a row under no heading |
 | 6 | `#3575.1f2653c3` | `ac6-replica.test.ts` | The piece shown in `deep-drive` over a copy of the hub's evidence store: `see`'s tree holds three nodes of role `row` or `list_item`, each holding one file's URL whole, in order; your ⌥-drag across the first row then ⌘C puts a text on the replica's clipboard that holds the record's URL byte for byte; from the piece's opening to another page's, the replica's record gains no `source.called` and the files' server no request. Fails on the merge base, rows left out of the tree, a URL cut or wrapped with a break, a list that fetches |
 | 7 | `#3575.397602e4` | `ac7-planted-list.test.ts` | Control: the list passes with three rows. `check` with `planted: "sources_leaves_out_uncredited"`: the list draws the credited file's row alone, `ok` false, the first `data.sources` error names the second file. Fails on the merge base, a check that trusts the list it checks, one that names the last file or none |
-| 8 | `#3575.723dcdab` | `ac8-shown.test.ts` | The piece, `show.source` on `first`, in `deep-drive`: a picture of the window; the pointer over `first`, after which the snapshot holds `sum of 4 rows` where it held none; a second picture. Both PNGs go to the proof folder. With no `TASTE.json` here naming exactly those two hashes the test is skipped, `INCONCLUSIVE`; `looks_right` passes, anything else fails. No picture is read to judge it |
+| 8 | `#3575.723dcdab` | `ac8-shown.test.ts` | The piece, `show.source` on `first`, its list naming `title`, `publisher`, `edition` and `license` (no field whose text changes from run to run), in `deep-drive`: a picture of the window; the pointer over `first`, after which the snapshot holds `sum of 4 rows` where it held none; a second picture. Both PNGs go to the proof folder. With no `TASTE.json` here naming exactly those two hashes the test is skipped, `INCONCLUSIVE`; `looks_right` passes, anything else fails. No picture is read to judge it |
 
 ## The surface under test
 
@@ -154,9 +154,10 @@ implementer builds to it**, or a dispute goes to a blind redraft.
     **Chosen:** each row of the list is a node of `see`'s `snapshot.tree` with role `row` or
     `list_item`, whose name or value, or its descendants', hold the row's text, its bounds the row's place; your
     ⌥-drag (`act {kind: "drag", point, to_point, mods: ["alt"], source: "hid"}`) from a pixel inside its top left to
-    one inside its bottom right selects the row's text, and your ⌘C copies it. With `show.source`, the pointer held
-    over the label for a second of the replica's clock puts the source line into the snapshot (the tree, the drawn
-    strings or an item's value).
+    one inside its bottom right selects the row's text, and your ⌘C copies it. Criterion 8's list names no `url`,
+    so its two pictures are the same on every run (BLOCKED, INCONCLUSIVE and not tested). With `show.source`, the
+    pointer held over the label for a second of the replica's clock puts the source line into the snapshot (the
+    tree, the drawn strings or an item's value).
 
 ## The planted programs
 
@@ -207,6 +208,10 @@ Every name is made up. Each license's terms are a file of the pack, so no fetch 
 
 - Criterion 8 is INCONCLUSIVE (a skip) until `TASTE.json` in this folder records the call on the run's two pictures:
   `{issue, criterion, verdict: "looks_right" | "looks_wrong", who, when, files: {name: sha256}, note}`, as #124's.
+  A call matches by the pictures' SHA-256, so the piece criterion 8 shows holds nothing that changes between two runs
+  of one program: its list leaves out `url`, whose text holds the file server's port, a new one each run, and
+  `fetched`, a time. The replica's clock is virtual, its record, window and look the same each launch. Criterion 6
+  keeps `url`; it takes no picture.
 - Criteria 6 and 8 need macOS; elsewhere they fail `INCONCLUSIVE:`.
 - Not tested, because no criterion asks: `group: "publisher"` with every file named, a list in a playable page or the
   web player, `used_by` above 1, a text or a readout (the base has neither reading a column), focus in place of hover,
