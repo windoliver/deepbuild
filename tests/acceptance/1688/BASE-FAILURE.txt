@@ -1,0 +1,88 @@
+Base run of tests/acceptance/1688 at e87cefc44 (origin/main; merge base = HEAD), Node v24.22.0, macOS (Darwin 27.2.0, arm64), load average 266 / 104 / 57 at start.
+Command: node --test --test-concurrency=1 'tests/acceptance/1688/*.test.mjs'
+Wall time 15 s. Exit 1: 1 pass, 4 fail.
+
+✖ #1688.e0a10d9d AC1: the lint passes on the change's files (2.489166ms)
+✖ #1688.e0a10d9d AC1: the lint passes with every packages/*/src file in the change (0.22675ms)
+✖ #1688.e0a10d9d AC1: the lint fails on a planted exported function with no reader, naming it, and leaves a read one unnamed (3.991875ms)
+✔ #1688.9c597d35 AC2: the API report in contracts/api-report is unchanged from the merge base, and the change's extension API still gives it (5156.10825ms)
+ℹ node scripts/api-surface.mjs --root <sandbox>/root exited 3
+  BLOCKED api: cargo-semver-checks is not installed (cargo semver-checks --version: error: rustup could not choose a version of cargo to run, because one wasn't specified explicitly, and no default is configured.); install it with cargo install cargo-semver-checks --locked, so the crates' public items were not compared
+✖ #1688.49c6e110 AC3: no acceptance test or twin imports a name that lost its export, and the change drops exports (9191.932ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 1
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 14762.479875
+
+✖ failing tests:
+
+test at tests/acceptance/1688/ac1-clean.test.mjs:10:1
+✖ #1688.e0a10d9d AC1: the lint passes on the change's files (2.489166ms)
+  AssertionError [ERR_ASSERTION]: scripts/unread-exports.mjs, the lint of exports with no reader outside their file, does not exist
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/1688/ac1-clean.test.mjs:11:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1688/ac1-clean.test.mjs:18:1
+✖ #1688.e0a10d9d AC1: the lint passes with every packages/*/src file in the change (0.22675ms)
+  AssertionError [ERR_ASSERTION]: scripts/unread-exports.mjs, the lint of exports with no reader outside their file, does not exist
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/1688/ac1-clean.test.mjs:19:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1688/ac1-plant.test.mjs:17:1
+✖ #1688.e0a10d9d AC1: the lint fails on a planted exported function with no reader, naming it, and leaves a read one unnamed (3.991875ms)
+  AssertionError [ERR_ASSERTION]: scripts/unread-exports.mjs, the lint of exports with no reader outside their file, does not exist
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/1688/ac1-plant.test.mjs:18:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1688/ac3-imports.test.mjs:7:1
+✖ #1688.49c6e110 AC3: no acceptance test or twin imports a name that lost its export, and the change drops exports (9191.932ms)
+  AssertionError [ERR_ASSERTION]: the change drops no export against the merge base e87cefc44b8dc017c6a642ef8f5f8b7e141a81b4: no name lost its export, so nothing was cleaned
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/1688/ac3-imports.test.mjs:40:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+exit 1

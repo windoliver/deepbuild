@@ -1,0 +1,13 @@
+{
+  "contracts/api-report/extension-api.api.md": [
+    {
+      "find": [
+        "export interface Deep {"
+      ],
+      "wrong": [
+        "export interface Deep {",
+        "    \"zorvanthic.planted\"(params: {}): Promise<unknown>;"
+      ]
+    }
+  ]
+}
