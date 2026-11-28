@@ -56,9 +56,10 @@ layout under the checkout) is what this job checked against the two configs.
 ### The layout choice
 
 `baseManifestsApart()` (`base-apart.ts`, the redraft's one local addition) does what `baseManifests()` does, the same
-`git archive` of `BASE` with the same six paths, extracted the same way and reused when its `Cargo.lock` is there, but
-into `<os.tmpdir()>/deepbuild-acceptance-1662/c950fe146768` instead of under the checkout. Before that it walks every
-directory above the layout to the root, and if any holds `.cargo/config.toml` or `.cargo/config` (the cargo home's own
+`git archive` of `BASE` with the same six paths, extracted the same way, but into a fresh directory of its own per
+call, `mkdtemp` under the real path of `os.tmpdir()` (`deepbuild-acceptance-1662-c950fe146768-XXXXXX`, mode 0700),
+instead of under the checkout, and removes it when the test finishes (vitest's `onTestFinished`), pass or fail. No
+layout is ever reused. Before extracting it walks every directory above the layout's real path to the root, and if any holds `.cargo/config.toml` or `.cargo/config` (the cargo home's own
 excepted) it throws `BLOCKED: cargo would merge … into the pinned workspace's own .cargo/config.toml`, naming them. So:
 
 - **Cargo reads only the pinned config.** Discovery starts at the layout (cargo runs there, `featureTree(cwd)`), finds
@@ -70,8 +71,13 @@ excepted) it throws `BLOCKED: cargo would merge … into the pinned workspace's 
   passing `--config` overrides, would make the test decide which of today's settings the merge base "should" see, and
   would change as the checkout's config changes. The pinned commit's own files, read alone, never move.
 - **Why the system temp dir.** It is outside the checkout, so it has no checkout config above it, and the instructions
-  allow leaving files only there or under `target/`; `target/` sits inside the checkout, which is the fault. The
-  layout is kept between runs, as the original's was.
+  allow leaving files only there or under `target/`; `target/` sits inside the checkout, which is the fault.
+- **Why a fresh directory per run.** A fixed shared path could be half-extracted or removed by a parallel run (another
+  checkout or a lane copy), left broken by a dying `tar` and then reused, thinned by macOS's `/var/folders` cleanup,
+  or planted first by another user in a world-writable `/tmp`. A private `mkdtemp` directory, extracted in full each
+  run and removed after, has none of these. The walk uses the real path because cargo walks the real one
+  (`/private/var/…` on macOS, where `os.tmpdir()` says `/var/…`). Extraction takes seconds; the pinned crates come
+  from the cargo cache either way.
 
 ### The wrong program still fails for the criterion's reason
 
@@ -94,8 +100,10 @@ run reached the judge and the test passed, catching the message above (RUNS.txt,
 - **This file runs in its original's place.** `tests/acceptance/1662/ac1-tree.test.ts` then runs by hand only, so
   this folder's `ac1-tree.test.ts` holds all three tests of its `describe`: the right-program test (this checkout's
   tree) and the judge-on-written-trees test copied exactly in code, titles unchanged, and the redrafted wrong-program
-  test. Their bodies, judges, timeouts, assertions and messages are the original's; the only lines that differ are
-  the import of `baseManifestsApart` (and `baseManifests` no longer imported), its call, and the title suffix.
+  test. Their bodies, judges, timeouts, assertions and messages are the original's; the only differences are the
+  original's header comment, dropped (new files hold no comments); the helpers import, now `../1662/helpers.ts` and
+  without `baseManifests`; the added import of `baseManifestsApart` from `./base-apart.ts`; its call in place of
+  `baseManifests()`; and the title suffix.
 - Everything else comes from `../1662/helpers.ts`, imported unchanged: `AC1`, `TREE_ARGS`, `featureTree`, `featuresOf`,
   `judgeTree`, `failureOf`, and in `base-apart.ts` `BASE`, `REPO` and `redact`.
 - Not redrafted: `ac2-symbols.test.ts` and `ac3-planted.test.ts`, which don't lay out the merge base.
@@ -111,10 +119,22 @@ node node_modules/typescript/bin/tsc -p tests/acceptance/1662-redraft-config/tsc
 
 The wrong-program test needs the pinned `Cargo.lock`'s crate archives in the cargo cache, since the command runs
 `--offline`; where they're missing it reports BLOCKED naming the first one. To warm the cache once, outside the test
-and with network, a person can run `cargo fetch --locked` in `<os.tmpdir()>/deepbuild-acceptance-1662/c950fe146768`
-after a first run has laid it out.
-On this Mac that was needed once (2026-11-28, RUNS.txt 5): after one `cargo fetch --locked` in that layout the suite
+and with network, a person can run `cargo fetch --locked` in any extraction of the pinned files outside the checkout
+(the same `git archive` as `base-apart.ts`, into a scratch directory, removed after).
+On this Mac that was needed once (2026-11-28, RUNS.txt 5): after one `cargo fetch --locked` in the then-shared layout the suite
 passed 3 of 3, the wrong-program test catching `turns on deep-app's "plant-row": … <- … deep-replica`.
 The right-program test needs this checkout's cargo cache as the original did.
 RUNS.txt holds this job's runs: tsc clean, no comment-ratchet line for 1662, vitest 2 passed, 1 failed BLOCKED on
-the missing archives before the fetch, and 3 passed after it.
+the missing archives before the fetch, and 3 passed after it, and again with the per-run layout (RUNS.txt, 6).
+
+## Change after hand-in
+
+An independent review of this folder, relayed by the coordinator after hand-in, found no defect in the test logic and
+these in the layout helper, all failing closed (BLOCKED): (M1) the one machine-wide layout path, reused whenever its
+`Cargo.lock` existed, could be seen half-extracted or removed by a parallel run, and a `tar` that died after
+`Cargo.lock` left a broken layout every later run reused; (M2) macOS's `/var/folders` cleanup could thin a kept layout;
+(M3) on Linux a world-writable `/tmp` let another user plant the path first; (L1) the config walk used `resolve`, not
+the real path cargo walks; (L4) this file undercounted the lines that differ from the original. Fixed in
+`base-apart.ts` only (a private `mkdtemp` per call under `realpathSync(tmpdir())`, removed by `onTestFinished`, the
+walk from that real path) and in this file (The layout choice; Kept as they are; Run). The test file did not change.
+The old shared layout, `<tmp>/deepbuild-acceptance-1662/`, was removed by this job before the rerun.

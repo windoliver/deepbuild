@@ -63,3 +63,17 @@ Run 3 did not reach the wrong-program test's assertion: it needs the pinned lock
      deep-replica v0.0.0 (<tmp>/deepbuild-acceptance-1662/c950fe146768/crates/deep-replica) (*)
    It names `turns on deep-app's "plant-row"` and `<- … deep-replica`, the pinned layout's crate: the judge fails on
    the merge base for the criterion's reason.
+
+6. After the review round (REDRAFT.md, Change after hand-in): base-apart.ts now makes a private mkdtemp layout per
+   call under the real path of os.tmpdir() and removes it when the test finishes. The old shared layout
+   <tmp>/deepbuild-acceptance-1662/ was removed first. 2026-11-28 04:58 UTC, 1-minute load 70.
+   node node_modules/typescript/bin/tsc -p tests/acceptance/1662-redraft-config/tsconfig.json   exit 0, no output.
+   node scripts/comment-ratchet.mjs 2>&1 | grep 1662   no line.
+   node node_modules/vitest/vitest.mjs run --root tests/acceptance/1662-redraft-config --no-file-parallelism --reporter=verbose
+   Test Files 1 passed (1); Tests 3 passed (3); 9.47 s; exit 0.
+     v #1662.0b9026c1 the tree of this checkout names deep-app and no plant-* feature of it   4576 ms
+     v #1662.0b9026c1 (wrong program) the merge base's manifests, where deep-replica's dependency turns plant-row on,
+       fail the judge naming plant-row (redraft config)   4493 ms
+     v #1662.0b9026c1 the judge, on written trees: a plant-* feature fails named, a tree of other features holds   2 ms
+   The wrong-program test's two assertions (turns on deep-app's "plant-row"; <- … deep-replica) held on the fresh
+   layout. Afterwards `ls -d <tmp>/deepbuild-acceptance-1662*` finds nothing: the layout was removed.
