@@ -8,7 +8,6 @@ import { registry, sha256Hex, type JsonValue, type Schema } from '@deepbuild/con
 import { packageDigest } from './digest.js';
 
 type Texts = Record<string, string>;
-/** A fixture's input: text, kept in UTF-8, or a file's bytes in base64 (#3570: a zip, a workbook, a Latin-1 file). */
 type FixtureFile = string | { base64: string };
 export interface JobFixture { name: string; params: Record<string, JsonValue>; inputs: Record<string, FixtureFile>; expect: Texts }
 export interface JobKind {
@@ -31,7 +30,6 @@ export interface Weight { name: string; sha256: string }
 export interface JobTool {
   tool: string; params: Schema; run: { dir: string; entry: string } | { url: string } | { core: true }; qualification: unknown; cost?: { usd: number };
   weights?: Weight[]; needs?: string[];
-  /** The kind's outputs this tool writes, where its format writes only some of them (#3570: a table import writes a table and its receipt); all of them when left out. */
   outputs?: string[];
 }
 /**

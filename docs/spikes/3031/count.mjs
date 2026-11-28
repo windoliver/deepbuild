@@ -1,13 +1,3 @@
-// Spike #3031's counts. Run from the checkout root, after `cargo build --release --locked` in `spikes/3031/`:
-//
-//   node docs/spikes/3031/count.mjs take [fixture ...]   # draw a fixture's 300 frames, keep what they held and did
-//   node docs/spikes/3031/count.mjs record               # work the record out of the kept outputs
-//
-// `take` runs the harness twice for each fixture named (all seven with none): `spike-3031 frames`, whose API trace,
-// device listing and frame rows it reduces to `out/<fixture>.frames.json` (the device's listing and the pass list),
-// and `spike-3031 overdraw`, kept as `out/<fixture>.overdraw.json`. The trace itself, some 18,000 lines a frame of
-// the every-pass scene, is read and dropped. `record` reads only the kept outputs, writes `record.json` and prints
-// the report's lines and tables, which the README holds.
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -22,12 +12,10 @@ const BIN = join('spikes', '3031', 'target', 'release', 'spike-3031');
 const CLASSES = ['core_view', 'data_view', 'figure', 'work_product', 'showpiece', 'export'];
 const EVERY_PASS = 'every_pass';
 const NAMES = [...CLASSES, EVERY_PASS];
-/** Each fixture's document and look: a class's perf-lane fixture under the perf lane's look, and the every-pass scene. */
 const FIXTURES = {
   ...Object.fromEntries(CLASSES.map((c) => [c, { doc: `benchmarks/canvas/${c}.json`, look: 'tests/acceptance/379/fixtures/look.json' }])),
   [EVERY_PASS]: { doc: 'docs/spikes/3031/fixtures/every-pass-plus.json', look: 'docs/spikes/3031/fixtures/every-pass-plus.look.json' },
 };
-/** 300 frames at 5 a second: the whole of each fixture's 60 s, the every-pass scene's camera once around. */
 const FRAMES = 300;
 const FPS = 5;
 const FLICKS = 705_600_000;
@@ -40,8 +28,6 @@ const out = (name, kind) => `out/${name}.${kind}.json`;
 const grouped = (n) => n.toLocaleString('en-US');
 const mb = (n) => (n / 1e6).toFixed(1);
 
-// ---------------------------------------------------------------------------------------------- take
-
 function harness(mode, f, dir) {
   const args = [mode, '--doc', f.doc, '--look', f.look, '--frames', String(FRAMES), '--fps', String(FPS), '--out', dir];
   const run = spawnSync(BIN, args, { cwd: root, encoding: 'utf8', maxBuffer: 1 << 28 });
@@ -52,7 +38,6 @@ function harness(mode, f, dir) {
   return summary;
 }
 
-/** What every output says of its run: the fixture, the documents by hash, the commit, the Mac, the adapter and the lease. */
 function head(name, f, s) {
   const pinned = (path) => ({ path, sha256: sha256(readFileSync(join(root, path))) });
   const main = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).stdout.trim();
@@ -64,11 +49,6 @@ function head(name, f, s) {
   };
 }
 
-/**
- * The device's listing with the trace's names: each resource Metal listed, in the order it was made, is the trace's
- * next resource of that kind, label and shape still alive at the listing. A resource the layer made for itself, which
- * no call of the renderer asked for, has no descriptor in the trace: it keeps Metal's label and is named `i<n>`.
- */
 function listed(listing, model) {
   const alive = model.resources.filter((r) => r.dropped_at === null || r.dropped_at > model.lastSubmit);
   const taken = new Set();
@@ -78,7 +58,6 @@ function listed(listing, model) {
       && (m.kind === 'texture'
         ? r.size[0] === m.width && r.size[1] === m.height && r.mips === m.mip_levels && r.samples === m.sample_count
         : m.length >= r.size[0] && m.length < r.size[0] + 16);
-    // One the renderer let go of that the device still holds (a bind group keeps it) is the newest such in the trace.
     const r = alive.find(same) ?? model.resources.filter((x) => !alive.includes(x)).reverse().find(same);
     if (r) {
       taken.add(r.id);
@@ -93,12 +72,6 @@ function listed(listing, model) {
   return rows;
 }
 
-/**
- * The solids each of a pass's draws draws. The renderer names its color pass's mesh draws itself, in the order it
- * issues them (`Counts::draws`: the item a draw's first record is of, and its instances); a draw's solids are that
- * item's set, the layer's solids of its shape and feature set, in the scene's order. Any other draw that writes
- * depth from a mesh isn't named by the renderer, and stops the count: it is not guessed.
- */
 function solidsOf(pass, row, solids) {
   const batch = pass.draws.filter((d) => d.bundle !== null);
   if (pass.name !== 'scene3d.geometry') {
@@ -116,7 +89,6 @@ function solidsOf(pass, row, solids) {
   }));
 }
 
-/** A pass's draws by pipeline and shape, counted: what the every-pass scene's depth draws are read from. */
 function drew(pass, depthPass) {
   const by = new Map();
   for (const d of pass.draws) {
@@ -144,7 +116,6 @@ function take(name) {
       passes: fr.passes.map((p) => {
         const depthPass = p.touches.some((t) => t.how.includes('depth attachment'));
         const row = { name: p.name, reads: p.touches.filter((t) => t.reads).map((t) => t.id), writes: p.touches.filter((t) => t.writes).map((t) => t.id) };
-        // A class's fixture names each draw's solids; the every-pass scene's draws are kept counted, by pipeline.
         if (name === EVERY_PASS) return p.draws.length ? { ...row, drew: drew(p, depthPass) } : row;
         const named = solidsOf(p, rows[k], solids);
         return { ...row, draws: p.draws.map((d) => ({ solids: named.get(d) ?? [], depth: depthPass && d.depth_write })) };
@@ -164,9 +135,6 @@ function take(name) {
   }
 }
 
-// ---------------------------------------------------------------------------------------------- record
-
-/** Per frame, each resource's first and last pass by place in the frame, and whether its first touch reads it. */
 function scan(frames) {
   return frames.map((f) => {
     const touched = new Map();
@@ -181,10 +149,6 @@ function scan(frames) {
   });
 }
 
-/**
- * A resource's span in each frame, by place in the frame's pass list. One whose first touch in a frame reads it holds
- * what an earlier frame left: its span starts at that frame's start and runs back through the end of the frame before.
- */
 function spansOf(per, id) {
   const spans = new Array(per.length).fill(null);
   let nextReads = false;
@@ -199,10 +163,6 @@ function spansOf(per, id) {
 }
 const meet = (a, b) => a.some((s, f) => s && b[f] && s.start <= b[f].end && b[f].start <= s.end);
 
-/**
- * The sets of textures one texture could stand in for: among the listing's textures that hold bytes and share a size,
- * mips, samples, format and usage, each goes into the first set none of whose members' spans it meets in any frame.
- */
 function setsOf(resources, frames, usage = true) {
   const per = scan(frames);
   const bound = (id) => per.some((touched) => touched.has(id));
@@ -249,7 +209,6 @@ function fixtureOf(name) {
     overdraw: { mean: means.reduce((s, m) => s + m, 0) / means.length, largest: Math.max(...counted.run.overdraw.map((r) => r.max_overdraw)) },
   };
   if (name !== EVERY_PASS) {
-    // Each opaque solid's depth draws: the fewest and the most of a frame's draws that write depth and list it.
     const solids = played.run.solids.filter((s) => /^(plain|opaque)/.test(s.feature_set) && !s.per_pixel && s.alpha >= 1).map((s) => s.id);
     fixture.depth_draws = solids.sort().map((solid) => {
       const times = frames.map((f) => f.passes.reduce((n, p) => n + p.draws.filter((d) => d.depth && d.solids.includes(solid)).length, 0));
@@ -259,7 +218,6 @@ function fixtureOf(name) {
   return { fixture, run: played.run };
 }
 
-/** What sharing returns on a fixture: each set's device bytes less its largest target's. */
 function returned(fixture) {
   const bytes = new Map(fixture.targets.map((r) => [r.id, r.bytes]));
   return fixture.sets.reduce((sum, set) => { const b = set.targets.map((id) => bytes.get(id)); return sum + b.reduce((s, x) => s + x, 0) - Math.max(...b); }, 0);
@@ -270,7 +228,6 @@ function record() {
   const fixtures = Object.fromEntries(NAMES.map((name) => [name, read[name].fixture]));
   const mains = new Set(NAMES.map((name) => read[name].run.main));
   if (mains.size !== 1) throw Error(`the kept runs are of ${mains.size} commits: ${[...mains].join(', ')}`);
-  // The tasks filed for the thresholds, once they are: `tasks.json`, `{sharing: {issue, title, criteria}, overdraw: …}`.
   const tasks = existsSync(join(here, 'tasks.json')) ? JSON.parse(readFileSync(join(here, 'tasks.json'), 'utf8')) : {};
   const sharing = Object.fromEntries(['showpiece', EVERY_PASS].map((name) => { const bytes = returned(fixtures[name]); return [name, { returns_bytes: bytes, at_least_32_mb: bytes >= SHARE_BYTES }]; }));
   const mean = Object.fromEntries(NAMES.map((name) => [name, fixtures[name].overdraw.mean]));
@@ -281,8 +238,6 @@ function record() {
   writeFileSync(join(here, 'record.json'), `${JSON.stringify({ main: [...mains][0], fixtures, thresholds }, null, 1)}\n`);
   process.stdout.write(tables(read, fixtures, thresholds));
 }
-
-// ---------------------------------------------------------------------------------------------- the report's tables
 
 function tables(read, fixtures, thresholds) {
   const text = [];
@@ -333,7 +288,6 @@ function tables(read, fixtures, thresholds) {
   }
   text.push('');
 
-  // The every-pass scene's depth-writing draws, by pass and pipeline, with the fewest and the most a frame issues.
   text.push('## The every-pass scene\'s draws into depth', '', '| Pass | Pipeline | Draw | A frame issues |', '|---|---|---|---|');
   const seen = new Map();
   run.frames.forEach((f, k) => {
