@@ -451,7 +451,7 @@ export class Jobs {
     const kept: Record<string, string> = {};
     for (const n of outputs) kept[n] = await this.d.keep(wrote[n]!, `job:${kind}/${tool}#${n}`);
     if (tables !== undefined && isObj(record)) {
-      await this.d.table?.(kept.table!, { ...record, sha256: kept.table!, kind: 'table', source: { job: { kind, tool, input: params[tables] ?? null } }, lineage: kept.lineage! });
+      await this.d.table?.(kept.table!, { ...record, sha256: kept.table!, kind: 'table', source: { job: { kind, tool, input: params[tables] ?? null, params } }, lineage: kept.lineage! });
     } else if (kept['table']) {
       const input = Object.fromEntries(Object.entries(hashes(bytes)).map(([n, h]) => [n, (Array.isArray(h) ? h : [h]).map((sha) => ({ sha256: sha, ...(this.d.fetched?.(sha) ?? { origin: 'agent' }) }))]));
       const tableRec = tableRecord(kept['table'], wrote['table']!, params['key'], { job: { kind, tool, input } });

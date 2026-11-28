@@ -1,0 +1,10 @@
+[
+  {
+    "find": [
+      "  return filesUnder(root, path).filter(isTestFile);"
+    ],
+    "wrong": [
+      "  return filesUnder(root, path);"
+    ]
+  }
+]

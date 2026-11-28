@@ -1,0 +1,1 @@
+{ "alone": true, "why": "shared: memory; it feeds deep-hook a 1 GiB line and reads peak resident memory, and builds the merge base's deep-hook with cargo" }
