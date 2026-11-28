@@ -1,0 +1,13 @@
+{
+  "scripts/process-tree.mjs": [
+    {
+      "find": [
+        "    if (childRuns() && !owned.has(unreapedChild.pid) && rows.has(unreapedChild.pid)) owned.set(unreapedChild.pid, rows.get(unreapedChild.pid).start);"
+      ],
+      "wrong": [
+        "    if (childRuns()) try { process.kill(unreapedChild.pid, 'SIGKILL'); } catch {}",
+        "    return [];"
+      ]
+    }
+  ]
+}
