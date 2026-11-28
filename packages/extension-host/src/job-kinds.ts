@@ -8,12 +8,11 @@ import { registry, sha256Hex, type JsonValue, type Schema } from '@deepbuild/con
 import { packageDigest } from './digest.js';
 
 type Texts = Record<string, string>;
-/** A fixture's input: text, kept in UTF-8, or a file's bytes in base64 (#3570: a zip, a workbook, a Latin-1 file). */
 type FixtureFile = string | { base64: string };
 export interface JobFixture { name: string; params: Record<string, JsonValue>; inputs: Record<string, FixtureFile>; expect: Texts }
 export interface JobKind {
   /** Each input by name; one declared `many` (#154) takes zero or more files, in order, all of them in the key. */
-  schema: { params: Schema; inputs: Record<string, { media?: string; many?: boolean }> };
+  schema: { params: Schema; inputs: Record<string, { media?: string; many?: boolean }>; tables?: string };
   outputs: Record<string, { media?: string }>;
   key: string[];
   output_checks: string[];
@@ -31,7 +30,6 @@ export interface Weight { name: string; sha256: string }
 export interface JobTool {
   tool: string; params: Schema; run: { dir: string; entry: string } | { url: string } | { core: true }; qualification: unknown; cost?: { usd: number };
   weights?: Weight[]; needs?: string[];
-  /** The kind's outputs this tool writes, where its format writes only some of them (#3570: a table import writes a table and its receipt); all of them when left out. */
   outputs?: string[];
 }
 /**
@@ -126,6 +124,8 @@ export function kindOf(kind: string, raw: unknown): JobKind {
   if (!isPlain(k.schema) || !isPlain(k.schema.params) || !isPlain(k.schema.inputs)) throw Error(`the job kind ${kind} declares no params schema and inputs`);
   if (!Object.values(k.schema.inputs).every((i) => isPlain(i) && (i.many === undefined || typeof i.many === 'boolean'))) throw Error(`the job kind ${kind}'s inputs are {name: {media, many}}, many true or false`);
   if (!isPlain(k.outputs) || !Object.keys(k.outputs).length) throw Error(`the job kind ${kind} declares no outputs`);
+  const tables = k.schema.tables;
+  if (tables !== undefined && (typeof tables !== 'string' || !['table', 'lineage', 'record'].every((o) => Object.hasOwn(k.outputs!, o)))) throw Error(`the job kind ${kind}'s schema.tables names its params' field of tables by hash, and the kind writes table, lineage and record`);
   if (!Array.isArray(k.key) || KEY_PARTS.some((p) => !k.key!.includes(p)) || k.key.some((p) => !KEY_PARTS.includes(p))) throw Error(`the job kind ${kind}'s key is hash(tool@version, params, input hashes): its key lists tool, params and inputs`);
   if (!Array.isArray(k.output_checks) || !k.output_checks.every((c) => typeof c === 'string' && c)) throw Error(`the job kind ${kind} lists its output checks by check kind`);
   const core = isPlain(k.qualification) ? k.qualification.core : undefined;

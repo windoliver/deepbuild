@@ -496,7 +496,7 @@ test at tests/acceptance/3414/ac2-core-parts.test.mjs:39:1
   ok   scripts/guide.mjs --check
   exit 1 scripts/panel-catalog.mjs
             'info: downloading 7 components\n' +
-            "error: component download failed for rustfmt-x86_64-apple-darwin: could not rename 'downloaded' file from '/private<tmp>/home/.rustup/downloads/06491b425e02612479c30ad9a49f72f88bc8e033310ec8cc238a15eafecf91b7.partial' to '/private<tmp>/home/.rustup/downloads/06491b425e02612479c30ad9a49f72f88bc8e033310ec8cc238a15eafecf91b7': No such file or directory (os error 2): No such file or directory (os error 2)\n"
+            "error: component download failed for rustfmt-x86_64-apple-darwin: could not rename 'downloaded' file from '~/.rustup/downloads/06491b425e02612479c30ad9a49f72f88bc8e033310ec8cc238a15eafecf91b7.partial' to '~/.rustup/downloads/06491b425e02612479c30ad9a49f72f88bc8e033310ec8cc238a15eafecf91b7': No such file or directory (os error 2): No such file or directory (os error 2)\n"
         }
         Node.js v24.22.0
   exit 1 scripts/known-failures-check.mjs
@@ -540,7 +540,7 @@ test at tests/acceptance/3414/ac2-core-parts.test.mjs:40:1
         FAIL row #499 The tagged NV12 surface: a video frame's NV12 surface converted by its own range (`420v` limited, `420f` full) and matrix (its `kCVImageBufferYCbCrMatrixKey`, BT.709 when it has none), with the planted twin `Planted::StockFragment`, GPUI's stock full-range BT.601 fragment: the test tests/acceptance/499/video/shader.test.ts › ${AC[14]} the live shader converts Y and CbCr by the probe's matrix and range › ${AC[14]} untagged 1080p 75% bars drawn live are within ±2 code values of BT.709; the stock full-range BT.601 fragment misses and fails, naming color.matrix can't be checked: its suite gave no list
         ROW #499 The tagged NV12 surface: a video frame's NV12 surface converted by its own range (`420v` limited, `420f` full) and matrix (its `kCVImageBufferYCbCrMatrixKey`, BT.709 when it has none), with the planted twin `Planted::StockFragment`, GPUI's stock full-range BT.601 fragment: 12 marked, 0 over budget
   exit 2 scripts/canvas-lint.mjs
-        BLOCKED canvas-lint: cargo metadata exited 1: error: component download failed for rustfmt-x86_64-apple-darwin: could not rename 'downloaded' file from '/private<tmp>/home/.rustup/downloads/06491b425e02612479c30ad9a49f72f88bc8e033310ec8cc238a15eafecf91b7.partial' to '/private<tmp>/home/.rustup/downloads/06491b425e02612479c30ad9a49f72f88bc8e033310ec8cc238a15eafecf91b7': No such file or directory (os error 2): No such file or directory (os error 2)
+        BLOCKED canvas-lint: cargo metadata exited 1: error: component download failed for rustfmt-x86_64-apple-darwin: could not rename 'downloaded' file from '~/.rustup/downloads/06491b425e02612479c30ad9a49f72f88bc8e033310ec8cc238a15eafecf91b7.partial' to '~/.rustup/downloads/06491b425e02612479c30ad9a49f72f88bc8e033310ec8cc238a15eafecf91b7': No such file or directory (os error 2): No such file or directory (os error 2)
           Fix: Install Rust with Cargo and clippy, which preflight already needs, and make the workspace build.
   exit 1 scripts/size-ratchet.mjs
         FAIL size: packages/hub/src/core.ts: 2631 lines, over its ceiling of 2627
@@ -592,7 +592,7 @@ test at tests/acceptance/3414/ac2-core-parts.test.mjs:40:1
   ok   scripts/guide.mjs --check
   exit 1 scripts/panel-catalog.mjs
             'info: downloading 7 components\n' +
-            "error: component download failed for rustc-x86_64-apple-darwin: could not rename 'downloaded' file from '/private<tmp>/home/.rustup/downloads/203feef2c2165d7dda1f30ccf75590f72a6abc52ce259ed1c418de84a6887698.partial' to '/private<tmp>/home/.rustup/downloads/203feef2c2165d7dda1f30ccf75590f72a6abc52ce259ed1c418de84a6887698': No such file or directory (os error 2): No such file or directory (os error 2)\n"
+            "error: component download failed for rustc-x86_64-apple-darwin: could not rename 'downloaded' file from '~/.rustup/downloads/203feef2c2165d7dda1f30ccf75590f72a6abc52ce259ed1c418de84a6887698.partial' to '~/.rustup/downloads/203feef2c2165d7dda1f30ccf75590f72a6abc52ce259ed1c418de84a6887698': No such file or directory (os error 2): No such file or directory (os error 2)\n"
         }
         Node.js v24.22.0
   exit 1 scripts/known-failures-check.mjs
@@ -693,8 +693,8 @@ test at tests/acceptance/3414/ac2-core-parts.test.mjs:41:1
         FAIL size literal: crates/deep-app/src/card.rs:1414: `px(0.5)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>
   ok   scripts/guide.mjs --check
   exit 1 scripts/panel-catalog.mjs
-            "error: could not remove 'component' file: '/private<tmp>/home/.rustup/toolchains/1.99.1-x86_64-apple-darwin/lib/rustlib/wasm32-unknown-unknown/lib/libmemchr-390e66b9c82fee7c.rlib'\n" +
-            "error: could not remove 'component' file: '/private<tmp>/home/.rustup/toolc"... 7024 more characters
+            "error: could not remove 'component' file: '~/.rustup/toolchains/1.99.1-x86_64-apple-darwin/lib/rustlib/wasm32-unknown-unknown/lib/libmemchr-390e66b9c82fee7c.rlib'\n" +
+            "error: could not remove 'component' file: '~/.rustup/toolc"... 7024 more characters
         }
         Node.js v24.22.0
   exit 1 scripts/known-failures-check.mjs
@@ -794,7 +794,7 @@ test at tests/acceptance/3414/ac2-core-parts.test.mjs:43:1
   ok   scripts/guide.mjs --check
   exit 1 scripts/panel-catalog.mjs
             'info: downloading 7 components\n' +
-            "error: component download failed for rustfmt-x86_64-apple-darwin: could not rename 'downloaded' file from '/private<tmp>/home/.rustup/downloads/06491b425e02612479c30ad9a49f72f88bc8e033310ec8cc238a15eafecf91b7.partial' to '/private<tmp>/home/.rustup/downloads/06491b425e02612479c30ad9a49f72f88bc8e033310ec8cc238a15eafecf91b7': No such file or directory (os error 2): No such file or directory (os error 2)\n"
+            "error: component download failed for rustfmt-x86_64-apple-darwin: could not rename 'downloaded' file from '~/.rustup/downloads/06491b425e02612479c30ad9a49f72f88bc8e033310ec8cc238a15eafecf91b7.partial' to '~/.rustup/downloads/06491b425e02612479c30ad9a49f72f88bc8e033310ec8cc238a15eafecf91b7': No such file or directory (os error 2): No such file or directory (os error 2)\n"
         }
         Node.js v24.22.0
   exit 1 scripts/known-failures-check.mjs
