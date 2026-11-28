@@ -1,0 +1,12 @@
+{
+  "packages/hub/src/search.ts": [
+    {
+      "find": [
+        "  return { hits: shown.slice(0, n), more: Math.max(0, all.length - end), ...(end < all.length ? { next: `h${end}` } : {}) };"
+      ],
+      "wrong": [
+        "  return { hits: shown.slice(0, n), more: Math.max(0, all.length - end), ...(end < all.length ? { next: `h${end}` } : {}), note: await whyNothing(input, wanted) };"
+      ]
+    }
+  ]
+}

@@ -106,8 +106,10 @@ pub struct Circuit {
 /// and one of the item's writes by name, `(offset in the write region, address, type, count)`.
 pub struct Lookup<'a> {
     pub slot: &'a dyn Fn(&str) -> Option<u32>,
-    pub write: &'a dyn Fn(&str) -> Option<(u32, u32, String, u32)>,
+    pub write: &'a dyn Fn(&str) -> Option<Write>,
 }
+
+pub type Write = (u32, u32, String, u32);
 
 fn refusal(what: String, part: Option<&str>) -> Value {
     let mut out = json!({"rule": "circuit", "what": what});
@@ -1153,8 +1155,8 @@ impl<'a> Judge<'a> {
                     .as_array()
                     .into_iter()
                     .flatten()
-                    .filter(|e| e[0].as_i64().is_some_and(|at| at <= k))
-                    .last()
+                    .rev()
+                    .find(|e| e[0].as_i64().is_some_and(|at| at <= k))
                     .and_then(|e| e[1].as_f64())
                     .unwrap_or(h.given),
             };

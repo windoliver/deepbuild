@@ -1,4 +1,4 @@
-# 0018: The work a budget's run reports
+# 0021: The work a budget's run reports
 
 Status: accepted (#3537). The design states the rule these serve under Numbers version 0 has to hold (a gain is judged on the same work) and in `docs/parallel-proof.md`, section 12a (Work); the report's field, the row's and the record's fields and the approval's item are in `tests/acceptance/3537/README.md`. The decisions below are the ones written nowhere else.
 

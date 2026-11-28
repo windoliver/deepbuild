@@ -1,0 +1,41 @@
+{
+  "scoped": [
+    {
+      "check": "document.validate",
+      "code": "data.sources",
+      "severity": "error",
+      "ids": [
+        "second"
+      ],
+      "path": "items/second",
+      "actual": {
+        "title": "Metro area population",
+        "url": "https://127.0.0.1:59405/fixture/tables1/c-population.csv",
+        "sha256": "ed4e2cf0b9710f7a7393fb2f900252c8cfab991fc1df5f3bdc729691ca9654c6"
+      },
+      "what": "shows a number from Metro area population, a fetched file no sources list holds",
+      "fix": "Widen a sources list's `of` to this item, or to the document."
+    }
+  ],
+  "row_typed_over": {
+    "patch": {
+      "op": "add",
+      "path": "/items/sources/params/rows/0/title",
+      "value": "Typed over"
+    },
+    "errors": [
+      {
+        "check": "document.validate",
+        "code": "data.sources",
+        "severity": "error",
+        "ids": [
+          "sources"
+        ],
+        "path": "items/sources/params/rows",
+        "actual": "rows",
+        "what": "a sources list takes `of`, `fields` and `group`, and its rows are never typed; `rows` is none of them",
+        "fix": "Take the field out: the list writes its rows from the fetched files' records."
+      }
+    ]
+  }
+}
