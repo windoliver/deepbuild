@@ -2,7 +2,8 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { constants, existsSync, lstatSync, readFileSync } from 'node:fs';
 import { appendFile, chmod, copyFile, link, lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, symlink, utimes, writeFile } from 'node:fs/promises';
-import { createHash, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
+import { sha256Hex } from '@deepbuild/contracts';
 import { connect } from 'node:net';
 import { basename, dirname, isAbsolute, join, normalize } from 'node:path';
 import type { CheckResult, CheckRunnerFill, CheckSpec, Failure } from '@deepbuild/conformance';
@@ -84,7 +85,6 @@ function runGit(cwd: string, args: string[], env: NodeJS.ProcessEnv, input: stri
     if (input !== undefined) child.stdin!.end(input);
   });
 }
-const sha256 = (bytes: string): string => createHash('sha256').update(bytes).digest('hex');
 const inside = (path: string): boolean => !isAbsolute(path) && !normalize(path).startsWith('..');
 
 /** The deadline a check names in `asserts`, as `deadline:5s`. */
@@ -412,7 +412,7 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
         const started = await o.host.start({ run, argv: [process.execPath, file], cwd: dir, grant: { read: [dirname(dirname(process.execPath))] }, leases: [{ kind: 'port', env: 'PORT' }] });
         if (started.status !== 'started') throw Error(`BLOCKED: no ${started.kind} free for the stand-in of ${s.check}`);
         const port = Number(started.leases.find((l) => l.kind === 'port')!.key);
-        built.push({ check: s.check, kind: s.kind, hash: sha256(form), port, run });
+        built.push({ check: s.check, kind: s.kind, hash: sha256Hex(Buffer.from(form)), port, run });
         let up = false;
         for (let tries = 0; tries < 250 && !(up = await listening(port)); tries++) await new Promise((resolve) => setTimeout(resolve, 20));
         if (!up) throw Error(`BLOCKED: the stand-in of ${s.check} never listened`);
@@ -420,13 +420,13 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
         const bin = join(dir, '.deep-stand-in', 'bin', s.name.trim().split(/\s+/)[0]!.replace(/[^\w.-]/g, '-'));
         await mkdir(dirname(bin), { recursive: true });
         await writeFile(bin, FORMS.command, { mode: 0o755 });
-        built.push({ check: s.check, kind: s.kind, hash: sha256(FORMS.command), bin });
+        built.push({ check: s.check, kind: s.kind, hash: sha256Hex(Buffer.from(FORMS.command)), bin });
       } else if (s.kind === 'module' && 'path' in s && inside(s.path) && /\.[cm]?[jt]sx?$/.test(s.path) && s.exports.every((e) => /^[A-Za-z_$][\w$]*$/.test(e))) {
         if (linkOn(dir, s.path) || lstatSync(join(dir, s.path), { throwIfNoEntry: false })) continue;
         const form = moduleForm(s.exports);
         await mkdir(dirname(join(dir, s.path)), { recursive: true });
         await writeFile(join(dir, s.path), form);
-        built.push({ check: s.check, kind: s.kind, hash: sha256(form) });
+        built.push({ check: s.check, kind: s.kind, hash: sha256Hex(Buffer.from(form)) });
       }
     }
   };
@@ -503,7 +503,7 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
     snapshotted(commit);
     const rows: ClaimCheckRun[] = [];
     const records: Run[] = [];
-    const digestOf = (c: ClaimCheckInput): string => sha256(JSON.stringify(c.spec));
+    const digestOf = (c: ClaimCheckInput): string => sha256Hex(Buffer.from(JSON.stringify(c.spec)));
     const toDo: ClaimCheckInput[] = [];
     for (const c of claim.checks) {
       const kept = await carried(c, digestOf(c), claim.worktree, commit, claim.earlier ?? []);
