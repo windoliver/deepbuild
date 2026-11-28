@@ -381,7 +381,7 @@ function check(schema: Schema, value: unknown, at: string): unknown {
         const near = nearest(value, listed);
         throw refuse('enum', at, near ? `Give ${near} in place of ${value}.` : `Give one of ${listed.join(', ')}.`, value);
       }
-      if (typeof schema.pattern === 'string' && !new RegExp(schema.pattern).test(value)) throw refuse('pattern', at, `Give ${at.split('/').pop()} in the form ${schema.pattern}.`, value);
+      if (typeof schema.pattern === 'string' && !new RegExp(schema.pattern).test(value)) throw refuse('pattern', at, typeof schema.description === 'string' ? `Give ${at.split('/').pop()} as its schema describes it: "${schema.description}" Its pattern is ${schema.pattern}.` : `Give ${at.split('/').pop()} in the form ${schema.pattern}.`, value);
       return value;
     }
     default:

@@ -105,6 +105,11 @@ schedule: Pick<HookSchedule, "replaying" | "queue" | "askingNow" | "wakeable">;
 
 }
 
+const SETTINGS: Record<string, string> = {
+  deadline: 'Only the person declares that deadline, in their settings or the repo\'s done.yaml; ask them to, then call again.',
+  asks: 'Only the person fixes that line of the repo\'s done.yaml; ask them to, then call again.',
+};
+
 /** McpOperations: owns its domain state; services are resolved only when used. */
 export class McpOperations {
   constructor(private readonly options: McpOperationsOptions) {}
@@ -251,7 +256,7 @@ export class McpOperations {
 
   private forAgent(error: unknown, tool: string): Refused {
     if (error instanceof Answered) return error;
-    const refused = error instanceof Refused ? error : error instanceof AskRefused ? (asRefused(error) as Refused)
+    const refused = error instanceof Refused ? error : error instanceof AskRefused ? (error.field !== undefined && Object.hasOwn(SETTINGS, error.field) ? new Refused(refusal('role', '', `${error.message}. ${SETTINGS[error.field]}`)) : asRefused(error) as Refused)
       : new Refused(refusal('unavailable', '', `${tool} failed in the hub: ${error instanceof Error ? error.message : String(error)}; nothing was recorded.`, tool, true));
     const plant = this.options.settings.plant;
     const scrub = (text: string) => (plant === 'errors-unscrubbed' ? text : scrubText(text, { held: this.options.settings.held }));
