@@ -284,6 +284,7 @@ impl<'a> Hub<'a> {
         let mut shapes = self.geometry_shape_runs(c);
         // #1781: each attribute table read back.
         shapes.extend(self.geometry_attributes_runs(c));
+        shapes.extend(self.scene_relations_runs(c));
         // #456: render.review's readings, each from its model in a fresh context.
         let reviews = self.review_rows(claim, c);
         // #407: the film audit and the flicker check on every deliverable, the brief's own checks,

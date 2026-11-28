@@ -8,8 +8,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { CheckContext, Failure } from '@deepbuild/conformance';
 import {
-  approve, cantFail, clock, escape, exec, finish, KANI_FLAGS, Missing, missingRun, Overran, overranRun, redact, sources, toolsOf, unfoundCause,
-  versionOf, workCopy,
+  approve, cantFail, clock, escape, exec, finish, Missing, missingRun, Overran, overranRun, redact, sources, unfoundCause, versionOf, workCopy,
 } from './run.js';
 import type { Exec, Locate } from './run.js';
 import type { Cause, Checked, Fault, MutantReport, ProofSpec } from './types.js';
@@ -18,6 +17,8 @@ import type { Cause, Checked, Fault, MutantReport, ProofSpec } from './types.js'
 const ESCAPE = /\bkani::(?:assume|requires|stub|should_panic|unwind)\b/;
 /** Mutants tried per check, at most. */
 const MUTANTS = 12;
+const KANI_FLAGS = ['-Z', 'concrete-playback', '--concrete-playback=print'];
+const toolsOf = (version: string): Record<string, string> => ({ kani: version, 'kani.flags': KANI_FLAGS.join(' ') });
 
 type Cargo = (args: string[]) => Exec;
 interface KaniCheck { name: string; status: string; description: string; file: string; line: number }
@@ -129,12 +130,12 @@ export function kani(spec: ProofSpec, ctx: CheckContext, fault: Fault): Checked 
     const v = r ? report(r, harnesses, spec) : { failures: [], causes: [], smallest: null, ran: [] };
     return finish({
       testsRun: v.ran.length, failures: v.failures, causes: [...unfound.map(unfoundCause), ...escapes(work, spec), ...v.causes], proposals,
-      tools: toolsOf(spec, version), read, evidence: [`kani ${version}`, ...(r ? [redact(r.out, work)] : [])], receipt: receipt(version, harnesses, spec),
+      tools: toolsOf(version), read, evidence: [`kani ${version}`, ...(r ? [redact(r.out, work)] : [])], receipt: receipt(version, harnesses, spec),
       smallest: v.smallest,
     });
   } catch (error) {
-    if (error instanceof Overran) return overranRun(spec, ctx.deadline);
-    if (error instanceof Missing) return missingRun(spec, error.message);
+    if (error instanceof Overran) return overranRun(toolsOf(versionOf(spec)), ctx.deadline);
+    if (error instanceof Missing) return missingRun(toolsOf(versionOf(spec)), error.message);
     throw error;
   } finally {
     rmSync(work, { recursive: true, force: true });

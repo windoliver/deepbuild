@@ -64,6 +64,7 @@ mod narration;
 mod net;
 mod net_web;
 mod over3d;
+mod overflow;
 mod packs;
 mod physics;
 mod picks;
@@ -142,6 +143,8 @@ use hub::{
     Planted, PressPhase, Process, RecordObject, Requirement, Scenario, Session, Show, Slot,
     Startup, Via,
 };
+use overflow::tame_overflow;
+pub use overflow::OVERFLOW;
 use shared::{Clock, CommitFault, Quota};
 
 fn bad_input() -> Value {
@@ -184,57 +187,6 @@ fn base64(text: &str) -> Option<Vec<u8>> {
         out.extend_from_slice(&three[..3 - pad]);
     }
     Some(out)
-}
-
-/// The marker a JSON number past f64's range is read as, so the document check can refuse it
-/// with `out_of_range` at its path instead of the whole line failing to parse.
-pub const OVERFLOW: &str = "\u{0}overflow:";
-
-/// A line whose numbers past f64's range (`1e999`) are rewritten as [`OVERFLOW`] strings, or
-/// `None` when it has none.
-fn tame_overflow(line: &str) -> Option<String> {
-    let bytes = line.as_bytes();
-    let mut out = String::with_capacity(line.len());
-    let mut i = 0;
-    let mut changed = false;
-    while i < bytes.len() {
-        let c = bytes[i];
-        if c == b'"' {
-            // A string, its escapes included, copied as it is.
-            let start = i;
-            i += 1;
-            while i < bytes.len() && bytes[i] != b'"' {
-                i += if bytes[i] == b'\\' { 2 } else { 1 };
-            }
-            i = (i + 1).min(bytes.len());
-            out.push_str(&line[start..i]);
-            continue;
-        }
-        if c == b'-' || c.is_ascii_digit() {
-            let start = i;
-            i += 1;
-            while i < bytes.len()
-                && matches!(bytes[i], b'0'..=b'9' | b'.' | b'e' | b'E' | b'+' | b'-')
-            {
-                i += 1;
-            }
-            let token = &line[start..i];
-            match token.parse::<f64>() {
-                Ok(n) if n.is_infinite() => {
-                    out.push_str(&format!(
-                        "\"{}{token}\"",
-                        OVERFLOW.replace('\u{0}', "\\u0000")
-                    ));
-                    changed = true;
-                }
-                _ => out.push_str(token),
-            }
-            continue;
-        }
-        out.push(c as char);
-        i += 1;
-    }
-    changed.then_some(out)
 }
 
 /// An optional field as `read` takes it: `Some(None)` when it's absent, `None` when `read` refuses it.
@@ -694,7 +646,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
             return Some(Call::Kinds(Value::Object(args)));
         }
         "sandbox" => return Some(Call::Sandbox),
-        "piece_checks" => return Some(Call::PieceChecks),
+        "piece_checks" | "compiles" => return Some(Call::Count(name.into())),
         "provided" => return Some(Call::Provided(c.get("doc")?.as_str()?.to_string())),
         "validate" => {
             return Some(Call::Validate {
@@ -1323,7 +1275,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || deep_canvas_loop::PLANTED.contains(p)
                 || deep_canvas_media::PLANTED.contains(p)
                 // #1732's wrong programs live in the motion module's arrangement solve.
-                || deep_canvas_motion::arrange::PLANTED.contains(p)
+                || deep_canvas_motion::arrange::PLANTED.contains(p) || deep_canvas_motion::relations::PLANTED.contains(p)
                 || *p == deep_canvas_motion::module::UNDECLARED_KIND_ACCEPTED
                 || deep_canvas_motion::module::PLANTED.contains(p)
                 || deep_canvas_motion::cues::planted(p)
@@ -1362,6 +1314,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 // #466's boil and blur in deep-show's frames.
                 || films::PLANTED.contains(p) || sandbox::PLANTED.contains(p) || *p == frames::VALIDATED_PER_FRAME
                 || caption_design::PLANTED.contains(p) || scene3d::PLANTED.contains(p) || kit::lease::PLANTED.contains(p) || packs::PLANTED.contains(p)
+                || packs::checked::PLANTED.iter().any(|(name, _)| name == p)
         })
         .map(str::to_string);
     // #433's wrong programs are twins of the familiar@1 pack.
@@ -1767,6 +1720,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         quiet_hours,
         evidence: PathBuf::from(input.get("evidence")?.as_str()?),
         packs,
+        pack_checks: packs::checked::given(input)?,
         job_tools: export::tools::parse(input.get("job_tools"))?,
         notes,
         installed,
@@ -2660,7 +2614,10 @@ fn start_args(args: &[String]) -> Result<StartArgs, ()> {
     let mut rest = args.get(1..).unwrap_or_default();
     while let [flag, value, more @ ..] = rest {
         match flag.as_str() {
-            "--planted" if planted.is_none() => planted = Some(planted_named(value)?),
+            "--planted" if planted.is_none() => {
+                planted = Some(planted_named(value)?);
+                packs::checked::started(value);
+            }
             "--costs" if costs.is_none() => costs = Some(value.clone()),
             // #1901: the folder kept output lives in across processes.
             "--cache" if cache.is_none() => cache = Some(PathBuf::from(value)),

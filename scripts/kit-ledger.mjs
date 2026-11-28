@@ -1,12 +1,3 @@
-// The lint lane's check on the committed kit ledger (#3532): a release build seals only the canvas modules its embedded
-// ledger holds as PASS at their digests (crates/deep-show/src/kit/ledger.rs), while every lane starts debug builds,
-// which seal nothing. So this reads each module's digest from the tree's own seal, a debug deep-show's
-// `kinds --dump`, and holds crates/deep-show/kit-ledger.json to it: a module with no record, a record of another
-// digest, or a record at the tree's digest whose verdict isn't PASS fails, named with the ledger's digest and the
-// tree's, or with the verdict. It builds the debug deep-show first (cargo's no-op on a built tree), never a release.
-//   node scripts/kit-ledger.mjs [--root <tree>]
-// Output: `PASS kit ledger: ...`, one `FAIL kit ledger: <module>: ...` line a finding, or `BLOCKED kit ledger: ...`;
-// exit 0, 1, or 3 when it can't build or dump.
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';

@@ -159,10 +159,7 @@ pub struct Planted {
     pub frees_by_last_turn: bool,
     /// #3016: the estimate counts the scene's maps once for each view that draws them.
     pub estimate_maps_per_view: bool,
-    /// #3506: the cull's occluders draw into a multisampled depth of their own, not the
-    /// geometry pass's.
     pub occluders_own_depth: bool,
-    /// #3506: the estimate still counts a multisampled depth of the occluders' own.
     pub estimate_counts_occluders_depth: bool,
     /// #3507: the overdraw view's count of what the geometry pass shades leaves the depth test
     /// out.
