@@ -84,7 +84,7 @@ const transcripts = join(home, '.claude', 'projects', 'work');
 for (const dir of [root, work, transcripts]) mkdirSync(dir, { recursive: true, mode: 0o700 });
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => key === 'DEEP_HUB_PLANT' || !/^(DEEP_|CLAUDE|ANTHROPIC|OPENAI|CODEX|GH_TOKEN|GITHUB_TOKEN|NODE_OPTIONS)/.test(key)));
 // V8's optimizing tiers keep compiling long after warm-up, growth that is no leak (as hub-churn found).
-const hub = spawn(process.execPath, ['--no-opt', '--no-maglev', '--no-sparkplug', CLI, 'hub', 'run'], { cwd: work, env: { ...env, HOME: home }, stdio: ['ignore', 'ignore', 'pipe'] });
+const hub = spawn(process.execPath, ['--no-opt', '--no-maglev', '--no-sparkplug', '--expose-gc', CLI, 'hub', 'run'], { cwd: work, env: { ...env, HOME: home }, stdio: ['ignore', 'ignore', 'pipe'] });
 let stderr = '';
 hub.stderr.setEncoding('utf8').on('data', (chunk) => { stderr = (stderr + chunk).slice(-8000); });
 const exited = new Promise((resolve) => hub.once('exit', resolve));

@@ -24,6 +24,7 @@ import type { RunKey } from './gate-runner.js';
 import { FINDINGS, findingOf, type KeyFacts } from './shared-runs.js';
 import type { StackWant, Stacks } from './stacks.js';
 import { HELD_OUT, type Variant, type Variants } from './variants.js';
+import { COLLECTOR, collects } from './settle.js';
 import { keepAside, writeSynced } from './vfs.js';
 import { refusal, Refused, ulid, type Plant } from './wire.js';
 
@@ -197,6 +198,12 @@ export class Runs {
    * as empty: its runs in flight are rebuilt from their run.started, and one reading names the file.
    */
   async open(): Promise<void> {
+    // A hub launched without its collector keeps each thread's start-up garbage (#3439): one reading a process says so.
+    if (!collects()) {
+      const now = this.o.now();
+      await this.o.appendCore('reading.recorded', { reading: `reading:${ulid(now)}`, value: 0, unit: 'collections', as_of: now, source: `the hub's start-up garbage was not shed: its process was launched without ${COLLECTOR}, so no thread has a collector`, n: 1, outside: false })
+        .catch((error: unknown) => process.stderr.write(`deep hub: the reading of its unshed start-up garbage wasn't recorded: ${error instanceof Error ? error.message : String(error)}\n`));
+    }
     let bytes: Buffer;
     try {
       bytes = readFileSync(this.o.journalFile);

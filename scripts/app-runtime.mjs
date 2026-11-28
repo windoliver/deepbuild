@@ -5,7 +5,7 @@
 // --archives is a scripts/release-pack.mjs out folder: the `deepbuild` archive and this host's deep-hook archive, each
 // checked against its manifest.json. Without it, scripts/release-stage.mjs --here stages this checkout as it is built.
 // The folder (default target/app-runtime) holds the package tree with its deep-hook package beside it as npm installs
-// it; bin/deep, a /bin/sh launcher that puts the folder's own git/bin first on PATH and runs runtime/node on
+// it; bin/deep, a /bin/sh launcher that puts the folder's own git/bin first on PATH and runs runtime/node, with the collector's flag (#3439), on
 // bin/deep.mjs; bin/deep-hook; runtime/node, Node's official build; and git/, built from source with no developer tool
 // at run time and finding its own files from where it sits. Node and git's source come pinned from
 // scripts/fetch-lock.json; git's build is cached under target/app-git/<sha256 of its source>.
@@ -105,7 +105,7 @@ try {
   }
 
   // The launcher: shell built-ins only, so it runs with an empty PATH; its folder is found from its own path.
-  writeFileSync(join(staged, 'bin', 'deep'), '#!/bin/sh\nhere=$(cd "${0%/*}/.." && pwd)\nPATH="$here/git/bin${PATH:+:$PATH}" exec "$here/runtime/node" "$here/bin/deep.mjs" "$@"\n', { mode: 0o755 });
+  writeFileSync(join(staged, 'bin', 'deep'), '#!/bin/sh\nhere=$(cd "${0%/*}/.." && pwd)\nPATH="$here/git/bin${PATH:+:$PATH}" exec "$here/runtime/node" --expose-gc "$here/bin/deep.mjs" "$@"\n', { mode: 0o755 });
   symlinkSync(`../node_modules/${hookPackage}/bin/deep-hook`, join(staged, 'bin', 'deep-hook'));
 
   // Once alone, as a clean Mac would run it: that makes the launcher's links, which a signed app can't make later.

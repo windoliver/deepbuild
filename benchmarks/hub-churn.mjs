@@ -612,7 +612,7 @@ async function run({ cli, home, cycles, killed }) {
   await draftAskSettings(root);
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => key === 'DEEP_HUB_PLANT' || !/^(DEEP_|CLAUDE|ANTHROPIC|OPENAI|CODEX|GH_TOKEN|GITHUB_TOKEN|NODE_OPTIONS|NODE_EXTRA_CA_CERTS)/.test(key)));
   // V8's optimizing tiers keep compiling long after warm-up: about 0.7 MB over 500 cycles, as much as the leaks this looks for.
-  const hub = spawn(process.execPath, ['--inspect=127.0.0.1:0', '--no-opt', '--no-maglev', '--no-sparkplug', cli, 'hub', 'run'], { cwd: work, env: { ...env, HOME: home, DEEP_HUB_TEST_CONFIRM: confirm, DEEP_HUB_TEST_DRAFTS: drafts, NODE_EXTRA_CA_CERTS: source.ca }, stdio: ['ignore', 'ignore', 'pipe'] });
+  const hub = spawn(process.execPath, ['--inspect=127.0.0.1:0', '--no-opt', '--no-maglev', '--no-sparkplug', '--expose-gc', cli, 'hub', 'run'], { cwd: work, env: { ...env, HOME: home, DEEP_HUB_TEST_CONFIRM: confirm, DEEP_HUB_TEST_DRAFTS: drafts, NODE_EXTRA_CA_CERTS: source.ca }, stdio: ['ignore', 'ignore', 'pipe'] });
   const exited = new Promise((resolve) => hub.on('exit', resolve));
   leaving.add(() => hub.kill('SIGTERM'));
   let stderr = '';

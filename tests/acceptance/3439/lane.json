@@ -1,0 +1,1 @@
+{ "alone": true, "why": "timing: each test starts a real hub, as tests/acceptance/27 does on the one-at-a-time list, and one reads deep-hook's 50 ms acknowledgement window against it; other suites' load would be read as the hub's" }

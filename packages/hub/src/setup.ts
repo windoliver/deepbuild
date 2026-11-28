@@ -24,6 +24,7 @@ import { codexConfig, codexHooks, codexRelations, fixedHook, forgetEntries, reco
 import { call } from './client.js';
 import { installShipped } from './installer.js';
 import { deepHook, hubControl, installedPrograms, installedRoot, lastingNode, rootOf } from './paths.js';
+import { COLLECTOR } from './settle.js';
 import { activePlant as plant } from './plant.js';
 import { covered, listedPlugin, paseoCovered, paseoVersion, pluginProblem, pluginSource, sourceProblem } from './paseo-reading.js';
 import { removeService, startHub } from './service.js';
@@ -243,10 +244,13 @@ async function readHistory(quiet: boolean, tell: (text: string) => void): Promis
  * deep-hook as this checkout built it; from a checkout with none, or one built before it served deep-actions (#824),
  * setup builds it once (a release ships it built, #41).
  */
-/** DeepBuild's MCP server's program: the installed version's fixed deep, or Node with this checkout's CLI. */
+/**
+ * DeepBuild's MCP server's program: the installed version's fixed deep, or Node with this checkout's CLI, given the
+ * collector's flag as a checkout's hub is (#3439).
+ */
 function mcpServer(root: string, cli: string): { command: string; args: string[] } {
   const installed = installedPrograms(root);
-  return installed ? { command: installed.deep, args: ['mcp'] } : { command: lastingNode(), args: [cli, 'mcp'] };
+  return installed ? { command: installed.deep, args: ['mcp'] } : { command: lastingNode(), args: [COLLECTOR, cli, 'mcp'] };
 }
 async function builtHook(): Promise<string> {
   // Whether a build lists deep-actions; undefined when its --help can't be read, which is no reason to rebuild.
@@ -300,7 +304,8 @@ function installCodex(root: string, record: ReturnType<typeof setupRecord>, cli:
   const [hooksText, configText] = [read(hooksFile), read(configFile)];
   const server = mcpServer(root, cli);
   const [hooks, config] = [withEntries(hooksText, hook), withServer(configText, server)];
-  recordEntries(root, hook, server);
+  // A table already there is left as it is, so the record keeps naming the server it holds: undo matches what was written.
+  recordEntries(root, hook, config === configText ? recordedServer(root) ?? server : server);
   for (const [file, before, after] of [[hooksFile, hooksText, hooks], [configFile, configText, config]] as const) {
     if (after === before) continue;
     keepOriginal(root, record, file);

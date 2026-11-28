@@ -102,7 +102,7 @@ for (let s = 0; s < 100; s++) {
 await record.close();
 const grew = await new Promise((resolve, reject) => { const core = new Worker(${JSON.stringify(worker)}, { eval: true, type: 'module', resourceLimits: YOUNG }); core.once('message', resolve); core.once('error', reject); });
 console.log(JSON.stringify({ grew }));`;
-  const ran = spawnSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8' });
+  const ran = spawnSync(process.execPath, ['--expose-gc', '--input-type=module', '-e', script], { encoding: 'utf8' });
   expect(ran.status, ran.stderr).toBe(0);
   const { grew } = JSON.parse(ran.stdout) as { grew: number };
   // Read a thousand events a page, 20,000 events grew the heap by 11 MB, and a month's record took the hub's footprint
@@ -137,7 +137,7 @@ for (let i = 0; i < 600_000; i++) { const made = { at: i, name: 'n' + i, pair: [
 shedStartup();
 const { heapUsed, heapTotal } = process.memoryUsage();
 console.log(JSON.stringify({ heapUsed, heapTotal, kept: kept.length }));`;
-  const ran = spawnSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8' });
+  const ran = spawnSync(process.execPath, ['--expose-gc', '--input-type=module', '-e', script], { encoding: 'utf8' });
   expect(ran.status, ran.stderr).toBe(0);
   const { heapUsed, heapTotal, kept } = JSON.parse(ran.stdout) as { heapUsed: number; heapTotal: number; kept: number };
   expect(kept).toBe(85_715);
@@ -156,7 +156,7 @@ async function idleHeap(client: string): Promise<void> {
   const report = join(dir, 'heap.mjs');
   writeFileSync(report, `import { renameSync, writeFileSync } from 'node:fs';\nconst out = process.env.DEEP_TEST_HEAP;\nsetTimeout(() => { writeFileSync(out + '.part', JSON.stringify(process.memoryUsage())); renameSync(out + '.part', out); }, 4000).unref();\n`);
   mkdirSync(join(home, 'work'));
-  const child = spawn(process.execPath, ['--import', report, CLI, 'mcp'], { cwd: join(home, 'work'), env: { ...process.env, HOME: home, DEEP_TEST_HEAP: out }, stdio: ['pipe', 'pipe', 'inherit'] });
+  const child = spawn(process.execPath, ['--expose-gc', '--import', report, CLI, 'mcp'], { cwd: join(home, 'work'), env: { ...process.env, HOME: home, DEEP_TEST_HEAP: out }, stdio: ['pipe', 'pipe', 'inherit'] });
   try {
     const answered = new Promise<void>((resolve) => child.stdout.once('data', () => resolve()));
     child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', clientInfo: { name: client } } })}\n`);

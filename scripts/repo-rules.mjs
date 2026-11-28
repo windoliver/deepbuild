@@ -17,6 +17,7 @@ const fixes = {
   stale: `Remove the allowedFindings entry, or correct its path, kind or sha256.`,
   dep: `Remove it, or add it to ${config} with why the task needs it.`,
   config: `Repair ${config}: each dependency needs its spec and why, each allowedFindings entry its path, kind, sha256 and why.`,
+  flags: 'Remove the call: Node takes a V8 flag only when the process launches, so whoever launches Node passes it, as `deep hub start` passes --expose-gc.',
   read: 'Make the file readable, or remove it.',
   git: 'Install git and run this from a git checkout.',
   cargo: 'Install Rust with Cargo, which preflight already needs.',
@@ -388,6 +389,28 @@ function checkSecurity(files) {
     report('PASS', 'security', `${securityFiles.security} names the private report form, ${securityFiles.chooser} links it, and ${securityFiles.contributing} and ${securityFiles.security} state the rule in the same words`);
 }
 
+// Node's own words on v8.setFlagsFromString after the VM has started: it may crash, lose data or do nothing (#3439).
+// Any line of code under packages/ that names it fails, so a call through another name or a member fails too.
+function checkFlags(files) {
+  const before = results.length;
+  for (const path of files) {
+    if (!path.startsWith('packages/') || !/\.[cm]?[jt]sx?$/.test(path)) continue;
+    let text;
+    try {
+      text = readText(path);
+    } catch (error) {
+      // A tracked file deleted from the working tree is skipped.
+      if (error.code !== 'ENOENT') report('BLOCKED', 'v8-flags', `${path} cannot be read (${error.code ?? error.message})`, fixes.read);
+      continue;
+    }
+    if (!text?.includes('setFlagsFromString')) continue;
+    text.split('\n').forEach((line, index) => {
+      if (line.includes('setFlagsFromString') && !/^\s*(\/\/|\/?\*)/.test(line)) report('FAIL', 'v8-flags', `${path}:${index + 1}: setFlagsFromString, which sets a V8 flag after the process has started`, fixes.flags);
+    });
+  }
+  if (results.length === before) report('PASS', 'v8-flags', 'no file under packages/ calls setFlagsFromString');
+}
+
 // #3528: a tracked file a merge or patch tool leaves behind, outside the vendored crates, which publish their own.
 function checkLeftovers() {
   const leftovers = git('ls-files', '-z', '--cached').split('\0').filter((path) => /\.(?:orig|rej)$/.test(path) && !path.startsWith('vendor/'));
@@ -486,6 +509,7 @@ if (files) {
   else checkDeps(files, rules.listed);
   checkCards(files);
   checkSecurity(files);
+  checkFlags(files);
   checkLeftovers();
   noteSize();
 }

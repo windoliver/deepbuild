@@ -182,7 +182,7 @@ async function run({ cli, home }) {
   const env = { ...Object.fromEntries(Object.entries(process.env).filter(([key]) => key === 'DEEP_HUB_PLANT' || !/^(DEEP_|CLAUDE|ANTHROPIC|OPENAI|CODEX|GH_TOKEN|GITHUB_TOKEN|NODE_OPTIONS)/.test(key))), HOME: home, DEEP_HUB_TEST_CONFIRM: confirm };
   // Memory that can't be read is BLOCKED before any session is spent on it.
   memoryOf([process.pid]);
-  const hub = spawn(process.execPath, [cli, 'hub', 'run'], { cwd: work, env, stdio: ['ignore', 'ignore', 'pipe'] });
+  const hub = spawn(process.execPath, ['--expose-gc', cli, 'hub', 'run'], { cwd: work, env, stdio: ['ignore', 'ignore', 'pipe'] });
   const exited = new Promise((resolve) => hub.on('exit', resolve));
   let stderr = '';
   hub.stderr.setEncoding('utf8').on('data', (chunk) => { stderr = (stderr + chunk).slice(-8000); });

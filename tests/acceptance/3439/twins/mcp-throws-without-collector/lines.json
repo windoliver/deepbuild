@@ -1,0 +1,23 @@
+{
+  "packages/hub/src/mcp.ts": [
+    {
+      "find": [
+        "import { shedStartup } from './settle.js';"
+      ],
+      "wrong": [
+        "import { collects, shedStartup } from './settle.js';"
+      ]
+    },
+    {
+      "find": [
+        "export async function runMcp(server: 'deep' | 'deep-actions' = 'deep'): Promise<number> {",
+        "  shedStartup();"
+      ],
+      "wrong": [
+        "export async function runMcp(server: 'deep' | 'deep-actions' = 'deep'): Promise<number> {",
+        "  if (!collects()) throw Error('planted: deep mcp has no collector');",
+        "  shedStartup();"
+      ]
+    }
+  ]
+}

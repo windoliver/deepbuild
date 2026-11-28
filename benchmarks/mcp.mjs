@@ -61,7 +61,7 @@ await Promise.all(appends);
 await record.close();
 
 const started = [];
-const hub = spawn(process.execPath, [CLI, 'hub', 'run'], { env, stdio: ['ignore', 'pipe', 'inherit'] });
+const hub = spawn(process.execPath, ['--expose-gc', CLI, 'hub', 'run'], { env, stdio: ['ignore', 'pipe', 'inherit'] });
 started.push(hub);
 try {
   await new Promise((resolve, reject) => { hub.stdout.once('data', resolve); hub.once('exit', () => reject(Error('the hub did not start'))); });
@@ -82,7 +82,7 @@ try {
 
   // A `deep mcp` of this process's own, initialized and bound to the session: `node` goes before its entry.
   const open = async (node = [], added = {}) => {
-    const mcp = spawn(process.execPath, [...node, CLI, 'mcp'], { cwd: worktree, env: { ...env, ...added }, stdio: ['pipe', 'pipe', 'inherit'] });
+    const mcp = spawn(process.execPath, [...node, '--expose-gc', CLI, 'mcp'], { cwd: worktree, env: { ...env, ...added }, stdio: ['pipe', 'pipe', 'inherit'] });
     started.push(mcp);
     const waiting = new Map();
     createInterface({ input: mcp.stdout }).on('line', (raw) => { const m = JSON.parse(raw); waiting.get(m.id)?.(m); waiting.delete(m.id); });
