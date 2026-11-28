@@ -893,6 +893,11 @@ Object.assign(redrafted, Object.fromEntries([['1113', 'cli'], ['3238', 'serial']
   .map(([issue, file]) => [`tests/acceptance/${issue}/${file}.test.mjs`, `tests/acceptance/${issue}-redraft-3549/`])));
 byHand.push(...Object.keys(redrafted).filter((path) => redrafted[path].endsWith('-redraft-3549/')));
 
+for (const name of ['stalled-line', 'drain', 'under-grant']) {
+  redrafted[`tests/acceptance/3510/${name}.test.mjs`] = 'tests/acceptance/3510-redraft-3549/';
+  byHand.push(`tests/acceptance/3510/${name}.test.mjs`);
+}
+
 Object.assign(redrafted, Object.fromEntries([['2924', 'test-grants'], ['2924', 'blocked'], ['2924', 'log'], ['3238', 'inherited'], ['3549', 'passes'], ['3549', 'timed'], ['3549', 'window']]
   .map(([issue, file]) => [`tests/acceptance/${issue}/${file}.test.mjs`, `tests/acceptance/${issue}-redraft-3694/`])));
 byHand.push(...Object.keys(redrafted).filter((path) => redrafted[path].endsWith('-redraft-3694/')));

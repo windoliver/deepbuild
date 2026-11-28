@@ -159,6 +159,7 @@ Each caller waits for its grant at most:
 | An `affected.mjs` run, once for its binaries' build grant and once for its test grant | 30 min each |
 | A job of an admitted run, for its turn | no limit |
 | An admitted build, for its turn (#3549) | no limit |
+| A lane run's and a proof's test binaries (`buildBinaries`), under no caller's grant (#3510) | while build grants change hands; out of line once none has for 720 min (`DEEP_TEST_GRANT_STALL` sets the bound in minutes, for tests) |
 | A proof's bay pair (`claimPair` in `bays.mjs`, #3590) | under no grant: while bay-pair grants change hands, out of line once none has for 720 min (`DEEP_TEST_GRANT_STALL` sets the bound in minutes, for tests); nested in a caller's build, test or timed grant, whose slot it holds while it waits: 30 min |
 | A remote lane's far end, for its install and build grants and for each of its lane's commands and cargo listings (section 8, #3350) | while its class's grants change hands; out of line once none has for 30 min (`--stall 30`) |
 

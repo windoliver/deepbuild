@@ -261,8 +261,9 @@ export function buildBinaries(cwd, bin, names, run = spawnSync, { timeout = 20 *
   mkdirSync(bin, { recursive: true });
   // The proof tooling's JavaScript-only fixture repositories have no Rust build.
   if (!names.length) return bin;
-  const grant = acquire('build', { wait: 30 });
-  if (!grant) throw Error('INCONCLUSIVE no grant: no build grant came within 30 min for test binaries');
+  const stall = Number(process.env.DEEP_TEST_GRANT_STALL ?? '720');
+  const grant = acquire('build', { stall });
+  if (!grant) throw Error(`INCONCLUSIVE no grant: no build grant changed hands within ${stall} min for test binaries`);
   const artifactsDirectory = join(bin, '.artifacts');
   try {
     const env = { ...process.env, DEEP_THROTTLE: grant.token };
