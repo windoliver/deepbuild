@@ -68,6 +68,16 @@ To run against a twin, lay its `twins/<name>/lines.json` the way `twinOverlay` d
 one place and is replaced by its `wrong` lines. Then run `npm run build -w packages/hub`, run the file, and restore
 the file and rebuild.
 
+`lane.json` runs the folder alone and lists `wake.test.ts` as `timed`, as `scripts/lanes-lists.mjs` lists
+`../25/routes/wake.test.ts`. Its two 20-session p95 tests read 2 s, and `judgeP95` calls a miss INCONCLUSIVE only
+above the core count, so they run under a timed grant, not beside other work.
+
+AC5's wait for A's delivery outcome is 20 s after A's next prompt: twice the hub's own grace for a turn to show an
+answer (`WAKE_GRACE`, 10 s; its first transcript read is at `SHOWN_SOON`, 2 s). By then a working hub has recorded the
+delivery as delivered or as stalled (#25, Added Oct 9: every delivery ends in an outcome). An empty record at that
+point is the failure the criterion names, not a timeout to read as BLOCKED. A program that leaves your answer for
+a waiter the session never showed (`routes-from-settings`) records nothing either, and must fail there.
+
 ## Surfaces
 
 The same as the originals: `deep setup`, `deep inbox answer`, the hub's record (`delivery.outcome` events), and the
