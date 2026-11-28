@@ -8,11 +8,11 @@ const fs = require('node:fs');
 const home = process.argv[1];
 const end = Date.now() + 400;
 let n = 0;
-process.stdout.write('writing\\n');
 while (Date.now() < end) {
   const dir = home + '/' + (n++ % 64);
   try { fs.mkdirSync(dir); } catch {}
   try { fs.writeFileSync(dir + '/f', 'x'); } catch {}
+  if (n === 64) process.stdout.write('writing\\n');
 }
 `;
 
@@ -22,7 +22,6 @@ it('removes a test home a process the hub left behind is still writing into (#37
     const writer = spawn(process.execPath, ['-e', WRITER, home], { stdio: ['ignore', 'pipe', 'inherit'] });
     const gone = new Promise((resolve) => writer.once('exit', resolve));
     await new Promise((resolve) => writer.stdout.once('data', resolve));
-    await new Promise((resolve) => setTimeout(resolve, 50));
     expect(() => removeHome(home), `round ${round}`).not.toThrow();
     await gone;
     expect(existsSync(home), `round ${round}`).toBe(false);
