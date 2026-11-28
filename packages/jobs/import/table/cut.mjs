@@ -1,12 +1,5 @@
-// The cut (#3570): a published table's rows, as a reader hands them on, cut to the columns and rows a piece names and
-// written as one table. A column comes from a header text or an index and reads as its dtype; a cell equal to one of
-// its `missing` markers is missing and counted, and any other cell that doesn't parse as the dtype refuses the import,
-// naming the row and the column; a number with a group mark parses only where the column names the mark. `where`
-// keeps a row whose cell is in a list or starts with a prefix, kept rows stay in the file's order, and a key value two
-// kept rows share refuses the import, naming it. The table keeps the table probe's 16 MB cap.
 import { refusal } from './zip.mjs';
 
-/** The table probe's cap (Asset: tables: `≤ 16 MB*`; crates/deep-codecs/src/table.rs's MAX_BYTES). */
 export const TABLE_MAX = 16 * 1024 * 1024;
 const DTYPES = new Set(['i64', 'f64', 'str']);
 const INTEGER = /^[+-]?\d+$/;
@@ -14,13 +7,8 @@ const FLOAT = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
 const I64 = [-(2n ** 63n), 2n ** 63n - 1n];
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-/** A cell as the table writes it: quoted where it holds a comma, a quote or a row end. */
 const csvCell = (t) => (/[",\n\r]/.test(t) || t.startsWith('"') ? `"${t.replace(/"/g, '""')}"` : t);
 
-/**
- * A number's text, or undefined where it doesn't parse as `dtype`: an integer in i64's range, or a finite f64 written
- * in its shortest form, −0 as 0. With `group`, the integer part may group its digits by threes with that mark.
- */
 export function parse(text, dtype, group) {
   if (dtype === 'str') return text;
   let t = text;
@@ -39,11 +27,6 @@ export function parse(text, dtype, group) {
   return Object.is(n, -0) ? '0' : String(n);
 }
 
-/**
- * One cut, fed rows in the file's order: `row(n, count, text)`, `n` the row's place in the file (1 the first),
- * `count` its cells, `text(i)` cell i's text (null where the file holds no value; it refuses where the bytes aren't
- * valid in the encoding). `done()` writes `{table, receipt}`.
- */
 export class Cut {
   constructor(p) {
     this.p = p;
@@ -67,7 +50,6 @@ export class Cut {
     this.formulas = 0;
     this.at = undefined;
   }
-  /** Each kept column's place in the file's rows, from the header row's texts or by index. */
   place(n, count, text) {
     const header = [];
     for (let i = 0; i < count; i += 1) header.push(text(i));
@@ -83,7 +65,6 @@ export class Cut {
       if (found.length !== 1) throw refusal('column_missing', `the column ${name} comes from the header ${JSON.stringify(from)}, which the header row ${n} holds ${found.length ? `${found.length} times` : 'nowhere'}`, { column: name, row: n });
       at[name] = found[0];
     }
-    // The table's columns in the file's order, the same bytes however the params list them.
     this.order = [...this.names].sort((a, b) => at[a] - at[b] || (a < b ? -1 : a > b ? 1 : 0));
     this.at = at;
     this.count = count;
@@ -94,18 +75,15 @@ export class Cut {
     this.size += Buffer.byteLength(line);
     if (this.size <= TABLE_MAX) this.kept.push(line);
   }
-  /** Whether a row's cells stand where its header's do: a row of another length is refused. */
   shape(n, count) {
     if (this.p.format === 'csv' && count !== this.count) throw refusal('row_shape', `row ${n} has ${count} cells where the header row has ${this.count}`, { row: n });
   }
-  /** A row of the file: before the header, none of the table's; the header, the columns' places; after it, a data row. */
   row(n, count, text, formula) {
     if (n < this.header) return;
     if (n === this.header) return this.place(n, count, text);
     if (!this.at) throw refusal('header_missing', `the file has no header row ${this.header}`, { row: this.header });
     this.data(n, count, text, formula);
   }
-  /** One data row: kept where every `where` holds, each kept cell read as its column's dtype. */
   data(n, count, text, formula) {
     this.shape(n, count);
     this.rowsRead += 1;
@@ -122,7 +100,6 @@ export class Cut {
       if (formula?.(n, this.at[name])) this.formulas += 1;
       if (t === null || (c.missing ?? []).includes(t)) {
         this.missing[name] += 1;
-        // The planted reader writes a marker as 0 (#3570's qualification); the right one leaves the cell empty.
         out[name] = this.p.plant === 'reads_marker_as_zero' && t !== null ? '0' : '';
         continue;
       }
@@ -139,7 +116,6 @@ export class Cut {
     }
     this.write(this.order.map((name) => csvCell(out[name])));
   }
-  /** The table and its receipt, or a refusal naming the table's size where it passes the cap. */
   done(member) {
     if (!this.at) throw refusal('header_missing', `the file has no header row ${this.header}`, { row: this.header });
     if (this.size > TABLE_MAX) throw refusal('table_too_big', `the cut is ${this.size} bytes, past a table's ${TABLE_MAX}-byte cap`, { bytes: this.size, cap: TABLE_MAX });

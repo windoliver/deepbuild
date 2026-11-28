@@ -1,0 +1,40 @@
+{
+  "#3066.4268aebb": [
+    "names-another-failure",
+    "unmapped",
+    "missing-redraft",
+    "redraft-holds-no-test",
+    "maps-to-itself",
+    "maps-to-its-folder",
+    "maps-to-tests",
+    "maps-to-checkout",
+    "maps-outside",
+    "maps-to-by-hand"
+  ],
+  "#3699.c037e2f6": [
+    "unmapped",
+    "missing-redraft",
+    "redraft-holds-no-test",
+    "maps-to-itself",
+    "maps-to-its-folder",
+    "maps-to-tests",
+    "maps-to-checkout",
+    "maps-outside",
+    "maps-to-by-hand"
+  ],
+  "#3699.79b40a54": [
+    "unmapped"
+  ],
+  "#3699.f7548a54": [
+    "missing-redraft",
+    "redraft-holds-no-test"
+  ],
+  "#3699.e1f9065f": [
+    "maps-to-itself",
+    "maps-to-its-folder",
+    "maps-to-tests",
+    "maps-to-checkout",
+    "maps-outside",
+    "maps-to-by-hand"
+  ]
+}

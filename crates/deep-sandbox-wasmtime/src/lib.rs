@@ -156,6 +156,36 @@ impl Program {
         })
     }
 
+    /// #1172: a pack's check makes runners of one program many times, and a fresh canvas core's
+    /// first reply paid for compiling it each time; this thread's earlier compile of the same
+    /// program is reused, for a logic item's program too (#3529).
+    pub fn kept(
+        bytes: &[u8],
+        pages: Option<u64>,
+        faults: Faults,
+        written: bool,
+    ) -> Result<Program, String> {
+        let key: ProgramKey = (
+            bytes.to_vec(),
+            pages,
+            faults.wasmtime_fuel,
+            faults.every_trap_unreachable,
+            written,
+        );
+        if let Some(p) = PROGRAMS.with(|c| c.borrow().get(&key).cloned()) {
+            return Ok(p);
+        }
+        let program = Program::new(bytes, pages, faults, written)?;
+        PROGRAMS.with(|c| {
+            let mut c = c.borrow_mut();
+            if c.len() >= PROGRAMS_MAX {
+                c.clear();
+            }
+            c.insert(key, program.clone());
+        });
+        Ok(program)
+    }
+
     /// A fresh instance, in the state the module starts in.
     pub fn runner(&self) -> Result<Runner, String> {
         let mut store = Store::new(&self.engine, ());
@@ -197,7 +227,7 @@ type ProgramKey = (Vec<u8>, Option<u64>, bool, bool, bool);
 
 #[cfg(not(target_arch = "wasm32"))]
 thread_local! {
-    /// #1172: the programs `Runner::sized` compiled on this thread. Per thread, because a
+    /// #1172: the programs `Program::kept` compiled on this thread. Per thread, because a
     /// runner's deadline interrupts by its engine's epoch: an engine shared across threads would
     /// let one call's deadline stop another's.
     static PROGRAMS: std::cell::RefCell<std::collections::HashMap<ProgramKey, Program>> =
@@ -223,28 +253,7 @@ impl Runner {
         faults: Faults,
         written: bool,
     ) -> Result<Runner, String> {
-        // #1172: a pack's check makes runners of one program many times, and a fresh canvas
-        // core's first reply paid for compiling it each time; this thread's earlier compile of the
-        // same program is reused, and the runner is a fresh instance of it all the same.
-        let key: ProgramKey = (
-            bytes.to_vec(),
-            pages,
-            faults.wasmtime_fuel,
-            faults.every_trap_unreachable,
-            written,
-        );
-        if let Some(p) = PROGRAMS.with(|c| c.borrow().get(&key).cloned()) {
-            return p.runner();
-        }
-        let program = Program::new(bytes, pages, faults, written)?;
-        PROGRAMS.with(|c| {
-            let mut c = c.borrow_mut();
-            if c.len() >= PROGRAMS_MAX {
-                c.clear();
-            }
-            c.insert(key, program.clone());
-        });
-        program.runner()
+        Program::kept(bytes, pages, faults, written)?.runner()
     }
 
     /// #2662's planted wrong engine: a second runner on this one's store and instance, so a call

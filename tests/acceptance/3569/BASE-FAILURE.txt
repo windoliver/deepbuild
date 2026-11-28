@@ -1,0 +1,54 @@
+The #3569 suite run at the base commit 2daec1c4b (main after de00a9c64; no implementation of #3569), on November 27,
+2026, on macOS 27.2 arm64 (Mac17,10, shared; 1-minute load about 64 while it ran, up to 256 earlier), Node 24.22.2,
+vitest 5.0.5, TypeScript 5.9.3. node_modules came from `npm ci --offline --ignore-scripts` (the npm cache, no
+network); no workspace was built and no cargo build ran: at the base every test fails before it needs one.
+
+The type-check first:
+
+  node node_modules/typescript/bin/tsc -p tests/acceptance/3569/tsconfig.json            (exit 0, no error)
+
+then the whole suite, once:
+
+  NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/3569 --no-file-parallelism --testTimeout=600000
+
+It ran bare, not in a test grant: `node scripts/throttle.mjs test --wait 180 -- ...` waited its 180 minutes and gave
+no grant ("INCONCLUSIVE no grant: no test grant came within 180 min"), with 5 test requests in line. The throttle table
+held build and test grants and no timed grant when it ran, and at the base the run starts no hub, no build and no
+tool: 2.8 s of vitest reading files. `--root` because the root vitest.config.ts imports workspace packages that need
+`npm run build --workspaces`. Vitest's cache under tests/acceptance/3569/node_modules was deleted after.
+
+Result: Test Files 10 failed (10); Tests 11 failed (11); 2.77 s. Every test fails at an assertion in its own test
+file, the first in it, because the base lacks what its criterion asks: no package registers table.derive. None fails
+in a helper, at an import or at a timeout, none is BLOCKED or INCONCLUSIVE, and no test passes at the base.
+
+The base's answer, the same in every test (helpers.ts `openHub`, before any build or hub):
+  the asset-tools plug-in isn't at packages/jobs/asset-tools (no deepbuild.json there), so no package registers the
+  job kind table.derive or its output check data.derived (README: The surface under test)
+
+  ac1-group.test.ts:19      × AC1 #3569.a88c0771 join then group by metro with sum writes 250 for A and 307 for B, and count writes 4 and 2
+  ac2-derive.test.ts:24     × AC2 #3569.22f062d8 manufacturing + construction + mining over one row holding 120, 30 and 0 writes 150 with the unit of its columns; over workers and dollars it is refused, naming both units
+  ac3-join.test.ts:17       × AC3 #3569.9a78233f county 3 named twice under many_to_one is refused, naming county 3; a county the metro table doesn't name is dropped under inner and dropped reads 1
+  ac4-missing.test.ts:25    × AC4 #3569.becbb065 with county 2's cell empty metro A's sum is missing; with skip_missing it reads 170 with 1 skipped cell counted; the planted tool that reads the cell as 0 fails data.derived, naming metro A
+  ac5-nonfinite.test.ts:15  × AC5 #3569.5963e451 a / b where b is 0 writes a missing cell and counts it, never infinity or 0
+  ac6-rank.test.ts:18       × AC6 #3569.eb306d67 rank by the sum, descending, writes 1 for B and 2 for A, and two groups with equal sums rank by their key
+  ac7-bytes.test.ts:26      × AC7 #3569.f14e11fa two machines write byte-identical outputs; one changed input byte changes the key and the output's hash; a rerun with the output present runs nothing
+  ac8-honest.test.ts:34     × AC8 #3569.d0a835ea a label that shows metro A's 250 passes honest numbers in a document that binds a reading, its trace listing the two input files with the four county keys
+  ac8-honest.test.ts:55     × AC8 #3569.d0a835ea the same job with the county table written by an agent yields story numbers, and the label fails, naming the item
+  ac9-planted.test.ts:49    × AC9 #3569.070ae844 a planted tool that sums in f32 and one that counts a county in two groups each fail data.derived, naming the output cell
+  ac10-budget.test.ts:49    × AC10 #3569.1d1485e8 3,200 rows of 40 columns joined to a 2,000-row table and grouped into 1,000 groups finish in under 2 s on the reference Mac
+
+Before its first hub, AC9's own part passed, as it should at the base: the fixture separates f32 from f64 by about
+1.2e-8 relative in both metros (A 8691358 against 8691357.9, B 10000001 against 10000001.12), and county 3 holds 40.
+
+Behind the missing plug-in, also missing at the base (read in the code, not run): `units` on deep-show run's
+`table_import` (crates/deep-codecs/src/table.rs writes every column's unit as null), an empty cell read as missing in
+a number column (the probe types such a column `str`), a derived table's record with `source.job` and `lineage`, and
+honest numbers following a lineage (crates/deep-marks-vello/src/tables.rs traces a cell to its own table only).
+
+Checked of the harness, in a throwaway node probe not kept in the suite (fixtures/planted/spoil.mjs on hand-written
+tables): the reads-missing-as-zero plan turns `A,,4` into `A,170,4` and leaves a table whose A already holds 170
+untouched; on a quoted CR LF table it rewrites the cell and keeps CR LF; an empty plan hands the table on (null); the
+f32 and double-count plans rewrite exactly their cells. The naming judge finds county 3 in "the key county 3 appears
+twice" and not in a 64-hex hash, an absolute path, "row 13" or "v1.3". Not run: any hub, deep-show or
+deep-canvas-render leg, the planted plug-ins' install, and AC10's readings (this Mac isn't a reference Mac, so AC10
+reads INCONCLUSIVE here once the plug-in exists).

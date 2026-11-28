@@ -13,8 +13,6 @@ import { pathToFileURL } from 'node:url';
 const TABLE = 'vendor/gpui-pre-apple/upstream/README.md';
 const HEADING = '## Carried patches';
 const COLUMNS = 'Behavior|Issue|Files|Test|Budget|Removal';
-// #3622: the app moves to gpui-fast 0.1.19 (#3618). Every row carried on a gpui-pre tree is carried on its gpui-fast
-// twin too, or retired there under this heading, naming the upstream change that meets its removal condition.
 const RETIRED = '## Retired on gpui-fast 0.1.19';
 const RETIRED_COLUMNS = 'Behavior|Issue|Upstream change';
 const FAST_TWIN = /^vendor\/gpui-pre(-apple|-macos)?\//;
@@ -142,7 +140,6 @@ function marksOf(hunk, lines) {
   return [...lines.slice(from - 1, to).join('\n').matchAll(MARK)].map(([, issue]) => `#${issue}`);
 }
 
-/** The rows of the table under `heading` with these columns, each as its cells; null when there is none. */
 function readSection(heading, columns) {
   const lines = existsSync(TABLE) ? readFileSync(TABLE, 'utf8').split('\n') : [];
   const start = lines.indexOf(heading);
@@ -241,11 +238,6 @@ function judgeRow(row, fail) {
   for (const { path: file, added } of row.overFiles) fail(`${file}: ${added} added, over the budget of ${FILE_BUDGET} a file`);
 }
 
-/**
- * #3622: each file a row lists holds one of its marked hunks, so a port taken out of one tree is seen; a row carried
- * on a gpui-pre tree is carried on its gpui-fast twin or retired there, naming the upstream change; and a retired row
- * carries nothing on gpui-fast.
- */
 function judgePort(row, retired, fail) {
   const name = `${row.issue} ${row.behavior}`;
   const carried = new Set(row.hunks.map(({ path }) => path));
@@ -283,7 +275,7 @@ async function check() {
     for (const { path, lines, hunks } of rows ? changesIn(crate, pinned) : []) {
       const listed = rows.filter(({ files }) => files.includes(path));
       if (!listed.length) {
-        fail(`${path}:${hunks[0]?.line ?? 1}: no row in the carried-patch table`); // #3622: the line, as a plant names it
+        fail(`${path}:${hunks[0]?.line ?? 1}: no row in the carried-patch table`);
         continue;
       }
       for (const hunk of hunks) {

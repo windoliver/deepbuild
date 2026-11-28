@@ -39,6 +39,7 @@ pub(super) const BARE_MODULE_KINDS: &[(&str, &str)] = &[
     ("vector_field", "data"),
     // #269: a grid image is the data module's, which maps its grid as it maps logic columns.
     ("grid_image", "data"),
+    ("sources", "data"),
     ("puff", "scene3d"),
     ("cutaway", "scene3d"),
     ("instance", "scene3d"),
