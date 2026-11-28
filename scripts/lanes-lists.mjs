@@ -854,6 +854,7 @@ timed.push(...['idle', 'patch', 'replica', 'scene-read'].map((name) => `tests/ac
   ...['dirty', 'settled'].map((name) => `tests/acceptance/896/redraft-3300/${name}.test.ts`));
 byHand.push('tests/acceptance/3300/fit-mac.long.test.ts');
 timed.push('tests/acceptance/3300/fit-mac.long.test.ts');
+byHand.push('tests/acceptance/3377/ac1-580.long.test.ts');
 Object.assign(redrafted, {
   'tests/acceptance/1492/idle-energy.test.ts': 'tests/acceptance/1492/redraft-3300/',
   'tests/acceptance/1492/helpers.ts': 'tests/acceptance/1492/redraft-3300/',
