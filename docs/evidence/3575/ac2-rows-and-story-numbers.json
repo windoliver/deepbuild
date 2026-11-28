@@ -1,0 +1,32 @@
+{
+  "rows": [
+    {
+      "group": null,
+      "fields": {
+        "title": "County employment",
+        "url": "https://127.0.0.1:59382/fixture/tables1/a-counties.csv"
+      }
+    },
+    {
+      "group": null,
+      "fields": {
+        "title": "County to metro area crosswalk",
+        "url": "https://127.0.0.1:59382/fixture/tables1/b-crosswalk.csv"
+      }
+    }
+  ],
+  "with_a_reading_bound": [
+    {
+      "check": "document.validate",
+      "code": "number_unsourced",
+      "severity": "error",
+      "ids": [
+        "own#Northfold"
+      ],
+      "path": "items/own/params",
+      "actual": "9120",
+      "what": "shows a number from a table an agent wrote, a story number, where a status or a reading is bound; read it from a fetched table or bind it to a reading",
+      "fix": "Bind the number to a reading with a bound value, or compute it in the document."
+    }
+  ]
+}

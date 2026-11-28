@@ -58,6 +58,7 @@ pub mod scene;
 // Issue #1498: where a text's graphemes are drawn, for a text selection.
 pub mod select;
 pub mod shadow;
+pub mod sources;
 pub mod story;
 pub mod terrain;
 pub mod ticks;

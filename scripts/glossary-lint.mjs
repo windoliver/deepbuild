@@ -12,10 +12,14 @@ const REPO = 'https://github.com/windoliver/deepbuild/blob/main/';
 const WORDS = 'docs/canvas-primitives.md';
 const LIST = 'One word per idea';
 
+const WORDED = ['docs/technical-design.md', 'docs/canvas-primitives.md', 'docs/parallel-proof.md'];
 const findings = [];
 const fail = (at, why, fix) => findings.push(`FAIL glossary: ${at}: ${why}\n  Fix: ${fix}`);
 const finish = () => {
   for (const line of findings) console.log(line);
+  const named = findings.flatMap((finding) => WORDED.some((doc) => finding.startsWith(`FAIL glossary: ${doc}:`)) ? finding.match(/^FAIL glossary: ([^:\s]+:\d+):/)?.slice(1) ?? [] : []);
+  const places = new Set(named).size;
+  if (named.length) console.log(`FAIL glossary: ${named.length} finding${named.length === 1 ? '' : 's'} name${named.length === 1 ? 's' : ''} ${places} line${places === 1 ? '' : 's'} of ${WORDED.join(', ')}`);
   process.exit(findings.length ? 1 : 0);
 };
 const seen = new Map();
@@ -135,7 +139,6 @@ for (const { at, term, text, avoid } of entries) {
   }
 }
 
-const WORDED = ['docs/technical-design.md', 'docs/canvas-primitives.md', 'docs/parallel-proof.md'];
 const OTHER_KERNELS = [
   { file: 'docs/technical-design.md', words: "such as a kernel's output against", why: 'a numeric kernel, code that computes numbers' },
   { file: 'docs/technical-design.md', words: "such as a kernel's output, gets", why: 'a numeric kernel, code that computes numbers' },
@@ -216,5 +219,14 @@ if (places.every(Boolean)) {
 const pointers = readFileSync('AGENTS.md', 'utf8').split(/\r?\n/).filter((line) => line.includes(FILE)).length;
 if (pointers !== 1) fail('AGENTS.md', `names ${FILE} in ${pointers} lines, not one`, `Point to ${FILE} from AGENTS.md in one line.`);
 
-if (!findings.length) console.log(`PASS glossary: ${FILE} lists ${entries.length} terms in ${groups.length} groups, its links land, AGENTS.md points to it, ${WORDED.join(", ")} say kernel only in the ${OTHER_KERNELS.length} places listed as another kind, and the scope section, Building blocks and the diagram name the core's same ${places[0].parts.length} parts, and ${LIST} has one row named pack`);
+const GUIDE = 'docs/extension-guide.md';
+for (const doc of ['docs/technical-design.md', 'docs/canvas-primitives.md', GUIDE]) {
+  for (const { number, line } of prose(readFileSync(doc, 'utf8'))) {
+    const text = targets(line).reduce((rest, target) => rest.replaceAll(target, ''), line.replace(/(`+).+?\1/g, '').replace(/<\/?[a-z][^>]*>/gi, ''));
+    const said = text.replace(/\u00ad/g, '').match(/\bplug[-\u2010\u2011]ins?\b/i);
+    if (said) fail(`${doc}:${number}`, `says "${said[0]}"`, `Say extension, the word ${FILE} gives it${doc === GUIDE ? '; the guide is written by scripts/guide.mjs, so change it there and run node scripts/guide.mjs' : ''}.`);
+  }
+}
+
+if (!findings.length) console.log(`PASS glossary: ${FILE} lists ${entries.length} terms in ${groups.length} groups, its links land, AGENTS.md points to it, ${WORDED.join(", ")} say kernel only in the ${OTHER_KERNELS.length} places listed as another kind, and the scope section, Building blocks and the diagram name the core's same ${places[0].parts.length} parts, and the docs say extension, never plug-in, and ${LIST} has one row named pack`);
 finish();
