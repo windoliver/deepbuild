@@ -36,7 +36,7 @@ const shell = (env: NodeJS.ProcessEnv = {}, over?: { tool: string; fail: string 
   child.stdin.end(`{\n${script}\n}\n`);
 });
 
-async function claimed(o: { base: Record<string, string>; head: Record<string, string>; broken?: boolean; before?: (git: (...args: string[]) => string, dir: string) => void; there?: (git: (...args: string[]) => string, dir: string) => void; link?: ReturnType<typeof shell>; env?: NodeJS.ProcessEnv; over?: { tool: string; fail: string }; folder?: string; started?: (dir: string) => string; during?: (dir: string) => void; next?: Record<string, string>; ssh?: boolean }) {
+async function claimed(o: { base: Record<string, string>; head: Record<string, string>; broken?: boolean; before?: (git: (...args: string[]) => string, dir: string) => void; there?: (git: (...args: string[]) => string, dir: string) => void; link?: ReturnType<typeof shell>; env?: NodeJS.ProcessEnv; over?: { tool: string; fail: string }; folder?: string; started?: (dir: string) => string; during?: (dir: string) => void; next?: Record<string, string>; ssh?: boolean; started_runs?: { env?: Record<string, string> }[] }) {
   const root = mkdtempSync(join(tmpdir(), 'host-changes-'));
   dirs.push(root);
   const dir = join(root, 'repo');
@@ -58,7 +58,7 @@ async function claimed(o: { base: Record<string, string>; head: Record<string, s
   let gate: GateRunner;
   const options = {
     raw: async () => [], now: () => Date.now(), append: async () => undefined, core: {} as Connection,
-    start: async () => 'run1',
+    start: async (r: { env?: Record<string, string> }) => { o.started_runs?.push(r); return 'run1'; },
     ended: async (run: string) => {
       o.during?.(dir);
       gate.recorded(run, { run, outcome: 'passed', testsRun: 1, failures: [], evidence: [], read: [], mask: null, exit: { code: 0, signal: null, cause: 'exit' }, output: { stdout: '', stderr: '', sha256: { stdout: EMPTY, stderr: EMPTY } }, attempts: [], seeded: [], contract: null } as unknown as RecordedRun);
@@ -403,6 +403,32 @@ describe('what a claim on a host changed (#3511)', () => {
     } finally {
       chmodSync(join(dir, 'tests/price_test.sh'), 0o644);
     }
+  }, 60_000);
+
+  it('a test file a lingering process plants under a test folder while a check runs is the next claim\'s change; only a run\'s logs and reports are left out (#3511.5bba85cf)', async () => {
+    const v = await claimed({ base: BASE, head: { 'price.txt': '18.00\n' }, during: (dir) => writeFileSync(join(dir, 'tests/conftest.py'), 'import sys\n'), next: { 'price.txt': '17.00\n' } });
+    expect(v?.outcome, JSON.stringify(v)).not.toBe('PASS');
+    expect(v?.reasons).toContainEqual(expect.stringMatching(/price-approved counts as the agent's own: the claim changed tests\/conftest\.py, which it may load/));
+  }, 60_000);
+
+  it('a code-only claim passes beside ignored Python caches under a test folder, and its run keeps its own cache outside the folder (#3511.80ee3c2c)', async () => {
+    const started: { env?: Record<string, string> }[] = [];
+    const v = await claimed({ base: { ...BASE, '.gitignore': '__pycache__/\n' }, head: { 'price.txt': '17.00\n', 'tests/__pycache__/price_test.cpython-312.pyc': 'cached\n' }, started_runs: started });
+    expect(v?.outcome, JSON.stringify(v?.reasons)).toBe('PASS');
+    expect(started[0]?.env?.PYTHONPYCACHEPREFIX).toMatch(/^\/tmp\/deep-pycache-[0-9a-f-]{36}$/);
+  }, 60_000);
+
+  it('the local read leaves out ignored Python caches under a test folder, and still names an ignored test file (#3511.80ee3c2c)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'local-cache-'));
+    dirs.push(dir);
+    const git = (...args: string[]) => execFileSync('git', ['-c', 'user.name=T', '-c', 'user.email=t@example.test', '-c', 'commit.gpgsign=false', ...args], { cwd: dir }).toString().trim();
+    git('init', '-q');
+    for (const [path, text] of Object.entries({ ...BASE, '.gitignore': '__pycache__/\nskip_*.sh\n' })) { mkdirSync(join(dir, path, '..'), { recursive: true }); writeFileSync(join(dir, path), text); }
+    git('add', '-A');
+    git('commit', '-qm', 'one');
+    for (const path of ['tests/__pycache__/price_test.cpython-312.pyc', 'tests/skip_x.sh']) { mkdirSync(join(dir, path, '..'), { recursive: true }); writeFileSync(join(dir, path), 'x\n'); }
+    const read = await changesOf(dir, git('rev-parse', 'HEAD'), 30_000);
+    expect(read.changed).toEqual(['tests/skip_x.sh']);
   }, 60_000);
 
   it('a link that never answers: the stop returns at its hold with the check still to run, and the claim has no verdict yet, never PASS', async () => {

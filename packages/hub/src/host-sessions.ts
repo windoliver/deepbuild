@@ -92,8 +92,9 @@ export GIT_DIR="$gd" GIT_WORK_TREE="$top"; cd -- "$top" || exit 0
 ok=n; { echo "$B"; g rev-parse "$B^{tree}"; g ls-tree -r -t -d "$B" | awk '$2 == "tree" { print $3 }'; } | sort -u > "$d/objs" && [ "$(wc -l < "$d/objs")" -ge 2 ] && mkdir -p "$d/o/pack" && g pack-objects --stdout -q < "$d/objs" > "$d/o/pack/p.pack" && g index-pack -o "$d/o/pack/p.idx" "$d/o/pack/p.pack" > /dev/null && g show-index < "$d/o/pack/p.idx" | cut -d' ' -f2 | sort > "$d/named" && cmp -s "$d/objs" "$d/named" && ok=y
 if [ $ok = n ]; then say 'the commit %s or a tree it holds there is not the object its id names' "$B"
 elif (export GIT_OBJECT_DIRECTORY="$d/o"; run "$d/tree" ls-tree -r "$B") && run "$d/listed" ls-files --cached --others --exclude-standard && run "$d/ign" ls-files --others --ignored --exclude-standard --directory && run "$d/diffed" diff --name-only --no-renames "$B"; then
-  RE=$RE awk 'BEGIN { re = ENVIRON["RE"] } $0 ~ re' "$d/ign" > "$d/igown"
-  while IFS= read -r p; do case "$p" in */) run "$d/one" ls-files --others --ignored --exclude-standard -- "$p"; cat "$d/one" >> "$d/listed" ;; *) printf '%s\n' "$p" >> "$d/listed" ;; esac; done < "$d/igown"
+  RE=$RE awk 'BEGIN { re = ENVIRON["RE"] } $0 ~ re' "$d/ign" > "$d/igown"; : > "$d/igall"
+  while IFS= read -r p; do case "$p" in */) run "$d/one" ls-files --others --ignored --exclude-standard -- "$p"; cat "$d/one" >> "$d/igall" ;; *) printf '%s\n' "$p" >> "$d/igall" ;; esac; done < "$d/igown"
+  grep -v '\(^\|/\)__pycache__/' "$d/igall" >> "$d/listed" || :
   if grep -q "$T\"" "$d/tree" || grep -q '^"' "$d/listed"; then say "git names a path it can't list plainly"
   else
     cut -f2 "$d/tree" > "$d/paths"

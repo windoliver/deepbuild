@@ -43,7 +43,8 @@ export async function changesOf(cwd: string, base: string, ms: number): Promise<
   const nested = (): boolean => { for (let d = here; d !== workTree && d !== dirname(d); d = dirname(d)) if (existsSync(join(d, '.git'))) return true; return false; };
   if (workTree && (relative(workTree, here).startsWith('..') || !existsSync(join(workTree, '.git')) || nested())) unread.push(`git takes ${workTree} for the work tree of ${here}`);
   const own = new RegExp(OWN_BY_NAME);
-  const hidden = [...await Promise.all(ignored.filter((p) => own.test(p)).map(async (p) => (p.endsWith('/') ? paths(['ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--', p]) : [p])))].flat();
+  const cache = (p: string): boolean => /(^|\/)__pycache__\//.test(p);
+  const hidden = [...await Promise.all(ignored.filter((p) => own.test(p)).map(async (p) => (p.endsWith('/') ? paths(['ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--', p]) : [p])))].flat().filter((p) => !cache(p));
   const algorithm = format.toString('utf8').trim() === 'sha256' ? 'sha256' : 'sha1';
   const blob = (bytes: Buffer): string => createHash(algorithm).update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
   const differs = await Promise.all(entries.map(async (entry): Promise<string | undefined> => {

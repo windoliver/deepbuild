@@ -1,6 +1,7 @@
 // The gate for a session on a host (#999; design: Blocks for work on your other machines, Sessions on a host). A claim
 // made at such a session's stop is judged as a local one is, by the gate runner's verdict over its checks' runs, but
 // its checks run on the host as remote runs (#1942), in the session's folder there.
+import { randomUUID } from 'node:crypto';
 import { ownChanges } from '@deepbuild/gate';
 import type { Changes } from './claim-changes.js';
 import type { Claim, DefinitionState, Entry, GateOptions, GateRunner } from './gate-runner.js';
@@ -43,7 +44,7 @@ export async function stopOnHost(g: Runner, r: Parameters<GateRunner['stop']>[0]
       claim.changes = { ...claim.changes!, unread: claim.changes?.unread ?? `the read after its run couldn't be made (${now.unread ?? 'no read before it'})` };
       return;
     }
-    for (const [path, oid] of now.untracked ?? []) if (before.untracked?.get(path) !== oid) claim.written!.set(path, oid);
+    for (const [path, oid] of now.untracked ?? []) if (/\.(log|out|txt|xml)$/.test(path) && before.untracked?.get(path) !== oid) claim.written!.set(path, oid);
     const tracked = (c: Changes): Changes => ({ ...c, changed: c.changed.filter((path) => !c.untracked?.has(path)) });
     const was = new Set(ownChanges(tracked(before), null));
     const touched = [...before.stamps ?? []].filter(([path, stamp]) => now.stamps?.get(path) !== stamp).map(([path]) => path);
@@ -57,7 +58,7 @@ export async function stopOnHost(g: Runner, r: Parameters<GateRunner['stop']>[0]
     claim.entries.set(c.check, e);
     await changed;
     try {
-      const run = await g.o.start({ claim: r.claim, check: c.check, approved: c.approved, command: c.command, commit: r.base, cwd: r.cwd, lane: 'fast', expected_ms: null, deadline_ms: c.deadline_ms ?? null, host: r.host });
+      const run = await g.o.start({ claim: r.claim, check: c.check, approved: c.approved, command: c.command, commit: r.base, cwd: r.cwd, lane: 'fast', expected_ms: null, deadline_ms: c.deadline_ms ?? null, env: { PYTHONPYCACHEPREFIX: `/tmp/deep-pycache-${randomUUID()}` }, host: r.host });
       e.runs.push(run);
       e.outcome = await g.o.ended(run);
       await after();
