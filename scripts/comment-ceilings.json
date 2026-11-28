@@ -1439,7 +1439,7 @@
   "crates/deep-show/src/heard.rs": 38,
   "crates/deep-show/src/host.rs": 15,
   "crates/deep-show/src/hub.rs": 502,
-  "crates/deep-show/src/hub/call.rs": 178,
+  "crates/deep-show/src/hub/call.rs": 174,
   "crates/deep-show/src/hub/planted.rs": 9,
   "crates/deep-show/src/hub/presented.rs": 13,
   "crates/deep-show/src/hub/revise.rs": 24,

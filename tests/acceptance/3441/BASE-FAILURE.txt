@@ -1,0 +1,106 @@
+The suite at the base, fc09a09cb87937e72f6770f68111f6660c9e45dd (main, whose last merge is #3718), on November 27, 2026.
+Machine: Mac17,10 (Apple M5 Max, 18 cores, 64 GB), macOS 27.2, one-minute load 19 to 25 during the runs.
+deep-show was built in the checkout once, debug, with CARGO_INCREMENTAL=0 and
+CARGO_PROFILE_DEV_DEBUG=0 (cargo build --locked --bin deep-show); no run below compiled anything.
+
+Each file was run once, one at a time, with those two variables set and NO_COLOR=1, as:
+
+  node scripts/throttle.mjs test --wait 30 -- node node_modules/vitest/vitest.mjs run --root tests/acceptance/3441 --no-file-parallelism <file>
+
+Every grant came at once. All 9 tests fail, each at an assertion of the suite's own, and none passes.
+
+== counts.test.ts: 3 tests, 3 failed, exit 1 (8.3 s)
+
+ × AC1 #3441.fe33f0e7 under the thermal cap, 600 ticks exactly 1/60 s apart present 600 frames and 600 ticks 1/120 s apart present 300; the merge base's rule, planted, presents 300 and 200 and fails, naming both counts
+   AssertionError: under the thermal cap at 60 Hz, 600 ticks exactly 1/60 s apart: deep-show run answers the scenario ok: the #400 scenario with one display at 60 Hz, this suite's `tick` call (README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true
+    ❯ answered helpers.ts:105:130
+    ❯ play helpers.ts:155:19
+    ❯ counts.test.ts:15:91
+
+ × AC2 #3441.84feca42 the same two runs with each tick moved by a seeded offset of up to 200 µs either way present 600 and 300 for every seed, and no two presented frames are further apart than one cap period plus one refresh; the planted rule's counts differ between two seeds and fail
+   AssertionError: under the thermal cap at 60 Hz, 600 ticks 1/60 s apart, each moved by seed 1's offset: deep-show run answers the scenario ok: the #400 scenario with one display at 60 Hz, this suite's `tick` call (README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true
+    ❯ answered helpers.ts:105:130
+    ❯ play helpers.ts:155:19
+    ❯ counts.test.ts:10:113
+
+ × AC3 #3441.5ba15fef for a window that isn't active, 600 ticks at 60 Hz present 300 frames and 600 ticks at 120 Hz present 150, exactly spaced and jittered; the planted rule, jittered, presents fewer and fails, naming its longest gap
+   AssertionError: under the inactive cap at 60 Hz, 600 ticks exactly 1/60 s apart: deep-show run answers the scenario ok: the #400 scenario with one display at 60 Hz, this suite's `tick` call (README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true
+    ❯ answered helpers.ts:105:130
+    ❯ play helpers.ts:155:19
+    ❯ counts.test.ts:39:22
+
+== model.test.ts: 1 test, 1 failed, exit 1 (7.1 s)
+
+ × AC4 #3441.e809f907 on the virtual display clock at 60 and at 120 Hz, the vsyncs the model opens and the ticks the window's rule presents are the same list under each cap, the ticks exactly at their latches and jittered; a planted model that keeps a time threshold differs at the first capped tick and fails
+   AssertionError: under the thermal cap at 60 Hz, 600 ticks exactly 1/60 s apart: deep-show run answers the scenario ok: the #400 scenario with one display at 60 Hz, this suite's `tick` call (README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true
+    ❯ answered helpers.ts:105:130
+    ❯ play helpers.ts:155:19
+    ❯ model.test.ts:12:22
+
+== forced.test.ts: 1 test, 1 failed, exit 1 (7.1 s)
+
+ × AC5 #3441.68159139 a forced render and a frame that requires presentation present on their own tick under either cap, on a tick the cap skips without them; a planted cap that defers one fails, naming the frame
+   AssertionError: under the thermal cap at 120 Hz, 600 ticks exactly 1/120 s apart: deep-show run answers the scenario ok: the #400 scenario with one display at 120 Hz, this suite's `tick` call (README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true
+    ❯ answered helpers.ts:105:130
+    ❯ play helpers.ts:155:19
+    ❯ forcedAndRequired forced.test.ts:11:21
+
+== uncapped.test.ts: 1 test, 1 failed, exit 1 (7.2 s)
+
+ × AC6 #3441.e80d0654 a window under no cap presents on every one of 600 ticks at 60 and at 120 Hz, exactly spaced and jittered, as the merge base's rule, planted, does; the same check fails a capped window, naming how many ticks presented nothing
+   AssertionError: under no cap at 60 Hz, 600 ticks exactly 1/60 s apart: deep-show run answers the scenario ok: the #400 scenario with one display at 60 Hz, this suite's `tick` call (README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true
+    ❯ answered helpers.ts:105:130
+    ❯ play helpers.ts:155:19
+    ❯ uncapped.test.ts:10:133
+
+== budgets.test.ts: 2 tests, 2 failed, exit 1 (0.2 s)
+
+ × AC6 #3441.e80d0654 terminal-60hz and canvas-idle each name this criterion in benchmarks/budgets.json, so a budget window judges them against the merge base, and each keeps the merge base's definition
+   AssertionError: terminal-60hz and canvas-idle as the budget window reads them for #3441.e80d0654: expected [ …(2) ] to deeply equal []
+   + "terminal-60hz doesn't name #3441.e80d0654 in its criteria, so no budget window judges it for this criterion; it names []",
+   + "canvas-idle doesn't name #3441.e80d0654 in its criteria, so no budget window judges it for this criterion; it names [\"#854.022ea575\"]",
+    ❯ budgets.test.ts:68:104
+
+ × AC6 #3441.e80d0654 a budget window's record of the commit that made the two tasks name this criterion reads terminal-60hz and canvas-idle PASS beside their merge base's numbers; with no such record under benchmarks/windows/ the two are unjudged and this reads INCONCLUSIVE
+   AssertionError: INCONCLUSIVE: no budget window has judged terminal-60hz and canvas-idle for #3441.e80d0654: of the 0 commit records under benchmarks/windows/, none is of a commit whose budgets make both tasks name the criterion where its merge base's don't; this is not a pass
+    ❯ budgets.test.ts:83:14
+
+== patch.test.ts: 1 test, 1 failed, exit 1 (0.1 s)
+
+ × Scope of #3441: the carried-patch table holds a row of #3441 that lists vendor/gpui-pre/src/window.rs, each file it lists carries the mark of #3441, and it names its test and its removal condition
+   AssertionError: the row of #3441 in the carried-patch table: expected [ Array(1) ] to deeply equal []
+   + "the carried-patch table holds no row whose Issue is #3441",
+    ❯ patch.test.ts:13:92
+
+== Why each fails there
+
+- The six tests that play ticks (AC1 to AC6 of counts, model, forced and uncapped) fail where the scenario is answered:
+  the base's deep-show has no `tick` call, so its window has no rule a list can be played through. Each got as far as
+  its first play: the scenario with only the `windows` call ran before it and named the main window.
+- The first budgets test fails because neither task names the criterion, so no budget window would judge them for it.
+  The merge base's budgets were read (git merge-base HEAD origin/main is the base itself) and both tasks' definitions
+  equal them.
+- The second budgets test reads INCONCLUSIVE, as it does wherever no budget window has judged the two tasks:
+  benchmarks/windows/ holds no window at the base.
+- The Scope test fails because the table has no row of #3441.
+
+No test passes at the base. Criterion 6's ticks are behavior that must not change, and its test still fails there, for
+the missing call only; README, Criteria to tests, says what shows that check can fail.
+
+== What the base's deep-show does with the suite's scenario, without the `tick` calls
+
+One run of each scenario of model.test.ts with its ticks left out, driving the same binary as the suite's helpers do:
+
+  windows                 answered ok; the main window is "win-1" at 60 and at 120 Hz
+  no cap,       60 Hz     599 of 599 patches applied; frames at 600 of the 600 vsyncs
+  no cap,       120 Hz    599 of 599 patches applied; frames at 600 of the 600 vsyncs
+  thermal cap,  60 Hz     599 of 599 patches applied; frames at every vsync, 600
+  thermal cap,  120 Hz    599 of 599 patches applied; frames at every 2nd vsync, 300
+  inactive cap, 60 Hz     599 of 599 patches applied; frames at every 2nd vsync, 300
+  inactive cap, 120 Hz    599 of 599 patches applied; frames at every 4th vsync, 150
+  one `tick` call         {"ok":false,"code":"bad_input"}
+  planted window_cap_time_threshold, model_cap_time_threshold, window_cap_defers_forced: each {"ok":false,"code":"bad_input"}
+  planted ignores_thermal_cap (the base's own): answered ok
+
+No report was refused. So the fixture of AC4 holds at the base: with a patch current before every latch, the base's
+model opens every vsync its cap allows, from the first. A scenario with 599 patches took 6.7 to 17.2 s in this debug build.

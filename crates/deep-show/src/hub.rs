@@ -1682,24 +1682,9 @@ impl<'a> Hub<'a> {
                 rect,
                 agent,
             } => self.move_window(window, *rect, *agent),
-            Call::Activate { window, agent } => {
-                self.placement.activate(self.now, window.as_deref(), *agent)
-            }
-            Call::Thermal { hot, agent } => self.placement.thermal(self.now, *hot, *agent),
-            Call::Frontmost {
-                window,
-                front,
-                agent,
-            } => self.placement.frontmost(self.now, window, *front, *agent),
+            Call::Report(report, agent) => self.placement.take(self.now, report, *agent),
             Call::TestWindow => json!({}),
             Call::WindowCaps => crate::placement::caps_json(),
-            Call::HideWindow {
-                window,
-                hidden,
-                agent,
-            } => self
-                .placement
-                .hide_window(self.now, window, *hidden, *agent),
             Call::Windows => self.placement.windows_json(),
             Call::Layout => self.placement.layout_json(),
             Call::CardState => json!({"card": self.card_reply()}),

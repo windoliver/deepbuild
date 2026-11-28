@@ -269,33 +269,12 @@ pub enum Call {
         rect: [f64; 4],
         agent: bool,
     },
-    /// The window server's report of the key window, `None` for another app's (#400).
-    Activate {
-        window: Option<String>,
-        agent: bool,
-    },
-    /// The platform's report that a window is, or is no longer, frontmost (#140).
-    Frontmost {
-        window: String,
-        front: bool,
-        agent: bool,
-    },
+    Report(placement::Report, bool),
     /// A window of another app the test window backend stacks above the app's (#140); with no
     /// occlusion report the backend never tells the card about it.
     TestWindow,
     /// The window and input backends' capability table (#140).
     WindowCaps,
-    /// The OS's report of the thermal state: whether the Mac is hot (#400).
-    Thermal {
-        hot: bool,
-        agent: bool,
-    },
-    /// The window server's report that you hid a window or showed it again (#400).
-    HideWindow {
-        window: String,
-        hidden: bool,
-        agent: bool,
-    },
     /// Every open window (#400).
     Windows,
     /// The layout as the app would save it now (#400).
