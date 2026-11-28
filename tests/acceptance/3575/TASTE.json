@@ -1,0 +1,12 @@
+{
+  "issue": 3575,
+  "criterion": "#3575.723dcdab",
+  "verdict": "looks_right",
+  "who": "the implementing agent, on the owner's delegation of taste calls (AGENTS.md, Delivery); not the owner's own call, which overrules it by reopening the issue",
+  "when": "2026-11-28T02:27:00Z",
+  "files": {
+    "ac8-list-in-app.png": "0e0f049b10e471ecb0685c3eb759324a703cc6a7255e7d7a3460228d99b3119a",
+    "ac8-number-source-line.png": "b814e580e161c4393b50eae8570ab5a89a02604d211072a971595caf23adfb9e"
+  },
+  "note": "The list in the app: three rows under the two labels, in the files' order, each its title, publisher, edition and license with a middle dot between fields, in the look's body face, none cut or wrapped. The number with its source line open: the line sits under 250 and covers neither number; it reads both files' titles and editions, employed (workers), Northfold and sum of 4 rows. This piece lists no URL, so that the two pictures are the same on every run; a row's URL shown whole is criterion 6's, read as text. Judged from the two pictures the check run wrote, on a Mac17,10."
+}
