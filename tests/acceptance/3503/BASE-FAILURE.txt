@@ -1,0 +1,61 @@
+#3503 acceptance suite, run at the base f0a816405 (origin/main), 2026-11-26 22:03.
+Machine: Mac15,12 (Apple M3, 16 GiB), macOS arm64, 1-minute load 176 at the start and 167 at the end (8 cores).
+Node v24.22.0, rustc 1.99.1. deep-hook built with `cargo build --locked -p deep-hook` (debug);
+packages built with `npm ci` and `npm run build --workspaces`.
+Command: node node_modules/vitest/vitest.mjs run tests/acceptance/3503 --no-file-parallelism --reporter=verbose --silent=false
+`tsc -p tests/acceptance/3503/tsconfig.json` exits 0.
+
+Result: 8 tests, 5 failed, 2 passed, 1 skipped (INCONCLUSIVE). Nothing BLOCKED. Trimmed:
+
+ x #3503.54cedc2a with the hub's reply held open with no newline, deep-hook mcp actions gives up at the 16 MiB cap and tells its client the call failed 45070ms
+   -> the server tells its client within 45 s that the call failed; the stand-in had sent 33.6 MB of a reply with no
+      newline by then; what it wrote once the stand-in then dropped the connection: ... "id":2,"result":{...
+      "The DeepBuild hub is unreachable (it closed the connection) ..." "isError":true}}], exit 0, peak 38.9 MB:
+      expected undefined to be defined
+   (The base read the whole 32 MiB reply, grew to 38.9 MB, and answered only when the test dropped the connection.)
+
+ x #3503.2d94a9c4 a request of exactly the 16 MiB cap is answered, and one byte more is refused with an error naming the cap, the next line served
+   -> the 16777217-byte request (id 2) is refused, not answered: wrote [id 1 result {}, id 2 result {}, id 3 result {}],
+      peak 58.5 MB: expected {} to be undefined
+
+ x #3503.2d94a9c4 the bytes dropped past the cap aren't kept: a 256 MiB line leaves deep-hook mcp actions under 32 MB resident, refused naming the cap, the next line served
+   -> deep-hook mcp actions' peak resident memory, fed 100.7 MB of one line, was 106.7 MB, past 32.0 MB; wrote
+      [{"id":null,"error":{"code":-32700,"message":"Parse error: send one JSON-RPC message per line."}}, id 9 result {}]:
+      expected 106692608 to be less than 32000000
+
+ x #3503.3e8aff35 the same over-long request gets the same error code and the same words from deep mcp and deep-hook mcp actions
+   -> deep-hook mcp actions refuses the 16777217-byte request once, as deep mcp does; deep mcp said
+      [{"code":-32600,"message":"A request line ran past 16 MiB (16,777,216 bytes); it was dropped unread. Send each
+      JSON-RPC message as one line of at most 16 MiB."}], deep-hook said []: expected +0 to be 1
+      (deep mcp peak 129.0 MB; deep-hook answered all three pings, peak 58.6 MB)
+
+ x #3503.1357b746 fed 1 GB with no newline, deep-hook mcp actions stays under 32 MB resident, writes one error naming the 16 MiB cap, and answers the tools/list on the line after
+   -> deep-hook mcp actions' peak resident memory, fed 100.7 MB of one line with no newline, was 106.9 MB, past 32.0 MB;
+      wrote [{"id":null,"error":{"code":-32700,"message":"Parse error: send one JSON-RPC message per line."}},
+      id 7 tools/list answered]: expected the 106.9 MB peak to be less than 32000000
+   (Its reading passed 32 MB by the first 16 MiB step, so it was fed 64 MiB more and stopped: it holds what it is fed.)
+
+ v #3503.ac2ce418 a request line cut across two reads is read whole and answered
+ v #3503.ac2ce418 a multi-byte character cut across two reads is read whole
+   (Pass on the base: Rust's BufRead::lines joins reads and decodes each whole line. See README, On the base.)
+
+ - #3503.5f4bd902 ... no higher than the merge base's
+   [INCONCLUSIVE (reading only: load 166.7 is past the 8 cores)]
+   #3503.5f4bd902 reading: idle: change 3.9 MB, 3.9 MB, 3.9 MB; merge base f0a816405 4.0 MB, 4.0 MB, 4.0 MB; limit 4.3 MB
+   #3503.5f4bd902 reading: peak for an 8 MiB request: change 22.8 MB, 22.8 MB, 22.8 MB; merge base f0a816405 23.0 MB, 23.0 MB, 23.0 MB; limit 24.2 MB
+   (On the base the change is the merge base, so the comparison can't fail here; the merge base's binary was built
+   from git archive in /tmp/dh3503-*, which accounts for the small difference.)
+
+Base peak resident memory (time -l maximum resident set size, debug build):
+  1 GiB feed (stopped after 100.7 MB):  106.9 MB
+  256 MiB line (stopped after 100.7 MB): 106.7 MB
+  16 MiB and 16 MiB + 1 pings:           58.5 MB
+  32 MiB hub reply held open:            38.9 MB
+  8 MiB ping:                            23.0 MB; idle after initialize and tools/list: 4.0 MB (ps)
+
+Lints at the base with these files present: scripts/repo-rules.mjs and scripts/text-lint.mjs exit 0;
+scripts/wait-ratchet.mjs names no file of this folder (its findings at the base are in crates/deep-hook/tests/cli.rs,
+crates/deep-sandbox-wasmtime/tests/compile_once.rs, packages/asks/test/asks.test.ts and
+packages/hub/test/start-budget.test.ts, all already there).
+One earlier run's #3503.5f4bd902 read BLOCKED: cargo --offline could not fetch cc v1.9.0 while the machine was under
+other sessions' builds; the next two runs built it. A BLOCKED there never passes.

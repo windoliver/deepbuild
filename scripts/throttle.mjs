@@ -585,9 +585,9 @@ export function release(grant) {
 /**
  * A turn's compiles (#3221): a jobserver of the job's own, GNU make's named pipe through CARGO_MAKEFLAGS, empty at first,
  * since cargo runs its first compile on no token, the turn's. Each look takes back what the pipe holds unread and lends
- * it the pool's free tokens up to an even share, the pool over the turns held less the turn's own, or none while a job
- * waits for a turn. A token a killed build held stays lent until the turn goes back. `look` says false once the turn,
- * named by its ID, is gone. An admitted build's turn lends its command a pipe the same way (#3549).
+ * it the pool's free tokens up to an even share, the pool over the turns less its own, then one left to a least-lent turn
+ * (#3698), or none while a job waits for a turn. A token a killed build held stays lent until the turn goes back. `look`
+ * says false once the turn, named by its ID, is gone. An admitted build's turn lends its command a pipe likewise (#3549).
  */
 function lender(turn) {
   const dir = mkdtempSync(join(tmpdir(), 'deep-turn-')), fifo = join(dir, 'tokens');
@@ -614,10 +614,14 @@ function lender(turn) {
           if (!me) return null;
           const turns = table.grants.filter((grant) => grant.class === 'turn');
           me.lent = Math.max(0, me.lent - free);
-          const share = table.requests.some((other) => other.class === 'turn') ? 0 : Math.floor(pool() / turns.length) - 1;
-          const lend = Math.max(0, Math.min(share - me.lent, pool() - turns.reduce((sum, grant) => sum + 1 + grant.lent, 0)));
+          const waiting = table.requests.some((other) => other.class === 'turn');
+          const left = () => pool() - turns.reduce((sum, grant) => sum + 1 + grant.lent, 0);
+          const share = waiting ? 0 : Math.floor(pool() / turns.length) - 1;
+          const lend = Math.max(0, Math.min(share - me.lent, left()));
           me.lent += lend;
-          return lend;
+          const spare = !waiting && left() > 0 && me.lent === Math.min(...turns.map((grant) => grant.lent)) ? 1 : 0;
+          me.lent += spare;
+          return lend + spare;
         });
       } catch (error) {
         // The table still counts them lent, so they go back in the pipe.

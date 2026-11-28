@@ -25,6 +25,8 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use vello_cpu::kurbo::Affine;
 
+mod sourced;
+
 /// The history a hosted terminal keeps, in rows.
 const HISTORY: usize = 10_000;
 /// A terminal's palette defaults, as the hub's terminals draw them.
@@ -262,11 +264,15 @@ impl Core {
         let revision = self
             .current(&doc)
             .ok_or_else(|| refused("not_presented", "no revision"))?;
-        let (rev, document) = (revision.rev, revision.doc.clone());
+        let (rev, mut document) = (revision.rev, revision.doc.clone());
+        let read = document.as_object_mut().expect("a document is an object");
+        deep_marks_vello::tables::tables(read, Some(&self.evidence))
+            .map_err(|r| json!({"code": r.code, "path": r.path}))?;
+        let read = document.as_object().expect("a document is an object");
         let mut renderer = Renderer::new();
         let drawn = renderer
             .prepare(
-                document.as_object().expect("a document is an object"),
+                read,
                 0,
                 &self.look.light,
                 self.look.status.as_ref(),
@@ -274,7 +280,9 @@ impl Core {
                 &self.evidence,
             )
             .map_err(|u| json!({"code": u.code, "path": u.path}))?;
-        let texts = select::texts(&drawn.frame, &mut deep_text::Shaper::new());
+        let mut shaper = deep_text::Shaper::new();
+        let texts = select::texts(&drawn.frame, &mut shaper);
+        let lines = sourced::source_lines(read, &drawn.frame, &mut shaper);
         let boxes = drawn.boxes();
         let page = self.pages.get_mut(session).expect("looked up above");
         let pose = page.scope.pose();
@@ -318,7 +326,12 @@ impl Core {
                     }
                     None => (json!({"kind": kind}), *b),
                 };
-                json!({"id": id, "value": value, "box": page.to_px(b)})
+                let placed = |(text, b): &sourced::Placed| json!({"text": text, "box": page.to_px(*b)});
+                let rows = sourced::rows(read, id, &page.texts);
+                let rows: Vec<Value> = rows.iter().map(placed).collect();
+                let lines = lines.iter().filter(|(of, _)| of == id).map(|(_, line)| placed(line));
+                let lines: Vec<Value> = lines.collect();
+                json!({"id": id, "value": value, "box": page.to_px(b), "rows": rows, "source_lines": lines})
             })
             .collect();
         Ok(json!({

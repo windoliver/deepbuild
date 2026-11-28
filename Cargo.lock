@@ -2816,6 +2816,7 @@ dependencies = [
  "deep-gpu",
  "deep-logic",
  "deep-marks-raster",
+ "deep-marks-vello",
  "deep-text",
  "gpui-kit",
  "gpui-shell",

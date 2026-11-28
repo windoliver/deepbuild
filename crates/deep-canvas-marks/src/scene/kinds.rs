@@ -17,6 +17,7 @@ pub const KINDS: &[&str] = &[
     "axes3d@1",
     "vector_field@1",
     "grid_image@1",
+    "sources@1",
 ];
 
 /// The kinds of [`KINDS`] the data module owns: R1's mark sets, scales and axes, which marks2d
@@ -28,6 +29,7 @@ pub const DATA_KINDS: &[&str] = &[
     "axes3d@1",
     "vector_field@1",
     "grid_image@1",
+    "sources@1",
 ];
 
 /// The canvas module that owns one of [`KINDS`]: the data module's, or marks2d's.
