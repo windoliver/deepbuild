@@ -957,3 +957,4 @@ for (const entry of laneFolders.filter((folder) => !unread.includes(folder))) {
   for (const file of lists?.timed ?? []) if (!timed.includes(file)) timed.push(file), fromLaneFiles.timed.push(file);
   for (const file of lists?.slow ?? []) if (!slow.includes(file)) slow.push(file), fromLaneFiles.slow.push(file);
 }
+byHand.push('tests/acceptance/3371/ac3-compose.long.test.ts');
