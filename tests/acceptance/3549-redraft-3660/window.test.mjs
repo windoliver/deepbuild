@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { build, copyScripts, dump, ended, endOf, entryOf, finish, go, inLine, log, probe, refused, running, sandbox, startOf, stepOf, steps, stub, throttle, until } from '../3549/helpers.mjs';
+import { build, copyScripts, dump, ended, endOf, entryOf, finish, go, inLine, log, probe, running, sandbox, startOf, stepOf, steps, stub, throttle, until } from '../3549/helpers.mjs';
+import { turnsOf } from '../3549-redraft-3694/helpers.mjs';
 
 const chained = (box, copy) => throttle(box, 'test', ['--wait', '0.1'], stub(box, 'chain', 'drive', steps(box, 'chain', [{ go: 'window', argv: [process.execPath, copy.throttle, 'window', '--wait', '10'] }])));
 const opened = (box) => startOf(box, 'window') || log(box).find((e) => e.event === 'window-open');
@@ -24,10 +25,19 @@ async function opens(box, chain, name, held, all) {
   assert.equal(await ended(chain, 120_000), 0, `the chain the window was asked in didn't end with 0\n${all()}`);
 }
 
+async function admittedAndWaiting(box, waits, all) {
+  await until(() => entryOf(box, waits, 'granted') || !running(waits), 120_000);
+  const admission = entryOf(box, waits, 'granted');
+  assert.ok(admission?.class === 'build' && admission?.grant === 'top-level', `the log shows no top-level granted of class build for the build ${waits.named}: it waits for its admission, so no admitted build waits for a turn (exit ${waits.status}): ${JSON.stringify(admission)}\n${all()}`);
+  for (let k = 0; k < 2; k++) assert.ok((await probe(box)).ran, `a top-level bay-pair request didn't run on a table that holds no bay pair and no timed request\n${all()}`);
+  assert.equal(startOf(box, 'waits-its-turn'), undefined, `the build ${waits.named} started while every token of the pool was held: it took no turn, so no admitted build waits for one\n${all()}`);
+  assert.ok(running(waits), `the build ${waits.named} left the line within its 10 min wait (exit ${waits.status})\n${all()}`);
+}
+
 test('#3549.7ba8246d a window opens only once an admitted build that is under way has ended', { timeout: 10 * 60_000 }, async (t) => {
   const box = sandbox(t, { cores: 5 });
   const copy = copyScripts(box);
-  const holder = build(box, 'under-way', ['hold'], '0.1');
+  const holder = build(box, 'under-way');
   const chain = chained(box, copy);
   const all = () => dump(box, holder, chain);
   await until(() => (startOf(box, 'under-way') && startOf(box, 'chain')) || !running(holder) || !running(chain), 120_000);
@@ -39,19 +49,18 @@ test('#3549.7ba8246d a window opens only once an admitted build that is under wa
 });
 
 test('#3549.7ba8246d a window opens only once every admitted build has ended: one that waited for its turn when the window asked is dealt the token, runs and ends first', { timeout: 10 * 60_000 }, async (t) => {
-  const box = sandbox(t, { cores: 2 });
+  const box = sandbox(t, { cores: 3 });
   const copy = copyScripts(box);
-  const holder = build(box, 'holds-the-token', ['hold'], '0.1');
+  const holder = build(box, 'holds-the-token');
   const chain = chained(box, copy);
   let waits = null;
   const all = () => dump(box, holder, chain, waits);
   await until(() => (startOf(box, 'holds-the-token') && startOf(box, 'chain')) || !running(holder) || !running(chain), 120_000);
-  assert.ok(startOf(box, 'holds-the-token') && startOf(box, 'chain'), `the build that holds the pool's token, or the test grant's command, never started\n${all()}`);
+  assert.ok(startOf(box, 'holds-the-token') && startOf(box, 'chain'), `the build that holds one of the pool's two tokens, or the test grant's command, which holds the other, never started\n${all()}`);
+  assert.equal(turnsOf(box, 'chain'), 1, `the log names no turn of the pool for the plain test grant the window is asked under, so the pool's second token is free and no build waits for a turn\n${all()}`);
 
   waits = build(box, 'waits-its-turn');
-  for (let k = 0; k < 2; k++) assert.ok((await probe(box)).ran, `a top-level bay-pair request didn't run on a table that holds no bay pair and no timed request\n${all()}`);
-  assert.equal(startOf(box, 'waits-its-turn'), undefined, `the build ${waits.named} started beside the build that holds the pool's one token: it took no turn, so no admitted build waits for one\n${all()}`);
-  assert.ok(running(waits), `the build ${waits.named} left the line within its 10 min wait (exit ${waits.status})\n${all()}`);
+  await admittedAndWaiting(box, waits, all);
 
   go(box, 'window');
   await pending(box, chain, waits, all);
@@ -64,26 +73,17 @@ test('#3549.7ba8246d a window opens only once every admitted build has ended: on
 });
 
 test('#3549.7ba8246d a window does not open while an admitted build still waits for its turn inside its own wait: asked under the build that holds the one token of the pool, its request runs out its wait', { timeout: 10 * 60_000 }, async (t) => {
-  const box = sandbox(t, { cores: 2, load: 1000 });
+  const box = sandbox(t, { cores: 2 });
   const copy = copyScripts(box);
-  const holder = throttle(box, 'build', ['--wait', '0.1'], stub(box, 'holds-the-token', 'drive', steps(box, 'holds-the-token', [{ go: 'window', argv: [process.execPath, copy.throttle, 'window', '--wait', '0.05'] }])));
-  const beside = throttle(box, 'test', ['--wait', '0.1'], stub(box, 'test-holder', 'hold'));
-  let waits = null, witness = null;
-  const all = () => dump(box, holder, beside, waits, witness);
-  await until(() => (startOf(box, 'holds-the-token') && startOf(box, 'test-holder')) || !running(holder) || !running(beside), 120_000);
-  assert.ok(startOf(box, 'holds-the-token') && startOf(box, 'test-holder'), `the build that holds the pool's token, or the test grant's holder, never started\n${all()}`);
+  const holder = throttle(box, 'build', ['--wait', '10'], stub(box, 'holds-the-token', 'drive', steps(box, 'holds-the-token', [{ go: 'window', argv: [process.execPath, copy.throttle, 'window', '--wait', '0.05'] }])));
+  let waits = null;
+  const all = () => dump(box, holder, waits);
+  await until(() => startOf(box, 'holds-the-token') || !running(holder), 120_000);
+  assert.ok(startOf(box, 'holds-the-token') && running(holder), `the build that holds the pool's one token never started\n${all()}`);
 
-  waits = build(box, 'waits-its-turn', ['exit'], '10');
-  witness = throttle(box, 'test', ['--wait', '0.1'], stub(box, 'witness', 'exit'));
-  await ended(witness, 120_000);
-  assert.ok(refused(witness) && !startOf(box, 'witness'), `the test request that was to wait out its 0.1 min behind a held test grant, at a load above the cores, didn't (exit ${witness.status}), so nothing shows the build had waited\n${all()}`);
-  assert.equal(startOf(box, 'waits-its-turn'), undefined, `the build ${waits.named} started beside the build that holds the pool's one token: it took no turn, so no admitted build waits for one\n${all()}`);
-  assert.ok(running(waits), `the build ${waits.named} left the line while the pool's one token was held (exit ${waits.status}), inside its wait of 10 min\n${all()}`);
-  const admission = entryOf(box, waits, 'granted');
-  assert.ok(admission?.class === 'build' && admission?.grant === 'top-level', `the log shows no top-level granted of class build for the build ${waits.named}: it waits for its admission, so no admitted build waits for a turn: ${JSON.stringify(admission)}\n${all()}`);
+  waits = build(box, 'waits-its-turn', ['exit']);
+  await admittedAndWaiting(box, waits, all);
 
-  finish(box, 'test-holder');
-  assert.equal(await ended(beside, 120_000), 0, `the test grant's holder didn't end with 0\n${all()}`);
   go(box, 'window');
   await until(() => stepOf(box, 'holds-the-token', 0, 'answered') || opened(box) || !running(holder), 120_000);
   assert.equal(opened(box), undefined, `the window opened while the admitted build ${waits.named} still waited for its turn: an admitted build had not ended\n${all()}`);
@@ -96,4 +96,5 @@ test('#3549.7ba8246d a window does not open while an admitted build still waits 
   assert.equal(await ended(waits, 120_000), 0, `the build ${waits.named} didn't run and end with 0 once the pool's token went back\n${all()}`);
   const [taken, freed] = [startOf(box, 'waits-its-turn'), endOf(box, 'holds-the-token')];
   assert.ok(taken && freed && taken.at >= freed.at, `the build ${waits.named} didn't start once the build that held the token had ended (its start: ${taken?.at}; that build's end: ${freed?.at})\n${all()}`);
+  assert.doesNotMatch(waits.output(), /INCONCLUSIVE/, `the build ${waits.named} printed an INCONCLUSIVE line, though its turn came inside its wait\n${all()}`);
 });

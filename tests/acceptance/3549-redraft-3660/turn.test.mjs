@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { build, clock, copyScripts, dump, ended, endOf, finish, log, refused, running, sandbox, since, start, startOf, stub, throttle, until } from '../3549/helpers.mjs';
+import { build, clock, copyScripts, dump, ended, endOf, finish, log, probe, refused, running, sandbox, since, start, startOf, until } from '../3549/helpers.mjs';
 
 const POOL = 4;
 const FIRST_S = 400, SECOND_S = 40, LATER_MS = 30_000, WITHIN_MS = 60_000;
-const SHORT = '0.05', LONG = '10', BOUND_MS = 60_000;
+const SHORT = '0.05', LONG = '10', SHORT_MS = 3_000, BOUND_MS = 60_000;
 
 function turnOf(box, name, all) {
   const begun = startOf(box, name);
@@ -18,6 +18,11 @@ function turnOf(box, name, all) {
 }
 
 const at = (box, child, event) => log(box).findIndex((e) => e.event === event && e.pid === child.pid);
+const admitted = (entry) => entry?.class === 'build' && entry?.grant === 'top-level';
+
+async function twoProbes(box, all) {
+  for (let k = 0; k < 2; k++) assert.ok((await probe(box)).ran, `a top-level bay-pair request didn't run on a table that holds no bay pair and no timed request\n${all()}`);
+}
 
 test('#3549.b6b01435 on a pool of 4 tokens a second stub build of 40 s, asked 30 s after one of 400 s, ends within 60 s of asking, each under a jobserver of its own, and with four builds under way a fifth waits for one to end', { timeout: 8 * 60_000 }, async (t) => {
   const box = sandbox(t, { cores: POOL + 1, load: 50 });
@@ -54,28 +59,23 @@ test('#3549.b6b01435 on a pool of 4 tokens a second stub build of 40 s, asked 30
   assert.equal(under, 3, `only ${under} of three more builds got under way beside the first on a pool of ${POOL} tokens\n${all()}`);
   const fifth = build(box, 'fifth', ['exit']);
   more.push(fifth);
-  for (const k of [1, 2]) {
-    const control = throttle(box, 'test', ['--wait', '0'], stub(box, `control-${k}`, 'exit'));
-    more.push(control);
-    assert.equal(await ended(control, 120_000), 0, `a test request on a table that holds no test grant didn't run: ${control.named}\n${all()}`);
-  }
+  await twoProbes(box, all);
   assert.equal(startOf(box, 'fifth'), undefined, `the fifth build, ${fifth.named}, started beside four builds under way on a pool of ${POOL} tokens: nothing made it wait\n${all()}`);
+  assert.ok(running(fifth), `the fifth build, ${fifth.named}, left the line within its ${LONG} min wait (exit ${fifth.status})\n${all()}`);
   finish(box, 'filler-1');
   await until(() => startOf(box, 'fifth') || !running(fifth), 120_000);
   const [taken, freed] = [startOf(box, 'fifth'), endOf(box, 'filler-1')];
   assert.ok(taken && freed && taken.at >= freed.at, `the fifth build, ${fifth.named}, didn't start once one of the four had ended (its start: ${taken?.at}; that build's end: ${freed?.at})\n${all()}`);
 });
 
-test('#3549.b6b01435 #3660.a7f3d0fa on a pool of 1 token a build asked beside one under way, by throttle.mjs build and through scripts/lease, is admitted and waits for its turn on its own wait: with 0.05 min it ends INCONCLUSIVE at that wait with its command never started, and with 10 min it runs under a jobserver of its own once the token goes back', { timeout: 8 * 60_000 }, async (t) => {
+test('#3549.b6b01435 #3660.a7f3d0fa on a pool of 1 token a build asked beside one under way, by throttle.mjs build and through scripts/lease, is admitted and waits for its turn on its own wait: with 0.05 min it ends INCONCLUSIVE at that wait with its command never started and its admission given back, and with 10 min it runs under a jobserver of its own once the token goes back', { timeout: 8 * 60_000 }, async (t) => {
   const box = sandbox(t, { cores: 2, load: 1000 });
   const copy = copyScripts(box);
-  const holder = build(box, 'under-way', ['hold'], '0.1');
-  const beside = throttle(box, 'test', ['--wait', '0.1'], stub(box, 'test-holder', 'hold'));
+  const holder = build(box, 'under-way');
   const asked = [];
-  let witness = null;
-  const all = () => dump(box, holder, beside, asked.map(([, child]) => child), witness);
-  await until(() => (startOf(box, 'under-way') && startOf(box, 'test-holder')) || !running(holder) || !running(beside), 120_000);
-  assert.ok(startOf(box, 'under-way') && startOf(box, 'test-holder'), `the build that holds the pool's one token, or the test grant's holder, never started\n${all()}`);
+  const all = () => dump(box, holder, asked.map(([, child]) => child));
+  await until(() => startOf(box, 'under-way') || !running(holder), 120_000);
+  assert.ok(startOf(box, 'under-way') && running(holder), `the build that holds the pool's one token never started\n${all()}`);
 
   const lease = (name, wait) => start(box, [copy.lease, 'node', box.stub, name, 'exit'], { env: { ...copy.env, DEEP_LEASE_WAIT: wait }, label: `scripts/lease node stub.mjs ${name} exit (DEEP_LEASE_WAIT=${wait})` });
   const short = [['direct-short', build(box, 'direct-short', ['exit'], SHORT)], ['leased-short', lease('leased-short', SHORT)]];
@@ -85,23 +85,28 @@ test('#3549.b6b01435 #3660.a7f3d0fa on a pool of 1 token a build asked beside on
     assert.ok(!running(child), `the build \`${name}\`, ${child.named}, asked with a wait of ${SHORT} min while the pool's one token was held, was still waiting ${BOUND_MS / 1000} s after asking: its wait for its turn ran past its own wait\n${all()}`);
     assert.ok(refused(child), `the build \`${name}\`, ${child.named}, didn't end at its wait as an admission timeout does, with exit 3 and INCONCLUSIVE no grant (exit ${child.status})\n${all()}`);
     assert.equal(startOf(box, name), undefined, `the build \`${name}\`, ${child.named}, started its command, though the pool's one token was held all its wait\n${all()}`);
+    assert.ok(child.ended - child.asked >= SHORT_MS, `the build \`${name}\`, ${child.named}, gave up ${child.ended - child.asked} ms after asking, before its wait of ${SHORT} min had run out\n${all()}`);
     const [granted, timeout] = [at(box, child, 'granted'), at(box, child, 'timeout')];
-    const admission = log(box)[granted];
-    assert.ok(admission?.class === 'build' && admission?.grant === 'top-level', `the log shows no top-level granted of class build for the build \`${name}\`, ${child.named}: it wasn't admitted, so its timeout is its admission's, not its turn's: ${JSON.stringify(admission)}\n${all()}`);
+    assert.ok(admitted(log(box)[granted]), `the log shows no top-level granted of class build for the build \`${name}\`, ${child.named}: it wasn't admitted, so its timeout is its admission's, not its turn's: ${JSON.stringify(log(box)[granted])}\n${all()}`);
     const out = log(box)[timeout];
     assert.ok(timeout > granted && out?.class === 'build' && Number(out?.wait) === Number(SHORT), `the log shows no timeout of class build with wait ${SHORT} after the build \`${name}\`'s granted: ${JSON.stringify(out)}\n${all()}`);
   }
+  assert.ok(running(holder) && !endOf(box, 'under-way'), `the build that holds the pool's one token ended while the two short builds waited, so the token was free\n${all()}`);
 
   const long = [['direct', build(box, 'direct', ['exit'], LONG)], ['leased', lease('leased', LONG)]];
   asked.push(...long);
-  witness = throttle(box, 'test', ['--wait', '0.1'], stub(box, 'witness', 'exit'));
-  await ended(witness, 120_000);
-  assert.ok(refused(witness) && !startOf(box, 'witness'), `the test request that was to wait out its 0.1 min behind a held test grant, at a load above the cores, didn't (exit ${witness.status}), so nothing shows the builds had waited longer than ${SHORT} min\n${all()}`);
+  await until(() => long.every(([, child]) => at(box, child, 'granted') >= 0) || long.some(([, child]) => !running(child)), 120_000);
+  for (const [name, child] of long) {
+    assert.ok(admitted(log(box)[at(box, child, 'granted')]), `the log shows no top-level granted of class build for the build \`${name}\`, ${child.named}, asked once the two short builds had left: it waits for its admission, not for its turn (exit ${child.status})\n${all()}`);
+  }
+  await twoProbes(box, all);
   for (const [name, child] of long) {
     assert.equal(startOf(box, name), undefined, `the build \`${name}\`, ${child.named}, started beside the build that holds the pool's one token: it took no turn\n${all()}`);
     assert.ok(running(child), `the build \`${name}\`, ${child.named}, left the line while the pool's one token was held (exit ${child.status}), inside its wait of ${LONG} min\n${all()}`);
-    const admission = log(box)[at(box, child, 'granted')];
-    assert.ok(admission?.class === 'build' && admission?.grant === 'top-level', `the log shows no top-level granted of class build for the build \`${name}\`, ${child.named}, while it waited: it waits for its admission, not for its turn: ${JSON.stringify(admission)}\n${all()}`);
+  }
+  for (const [name, child] of short) {
+    const pruned = log(box).filter((e) => e.event === 'released' && e.pid === child.pid && e.reason === 'holder gone');
+    assert.deepEqual(pruned, [], `the table gave back a grant of the build \`${name}\`, ${child.named}, only once it found its holder gone: the build left its admission behind when its wait ran out\n${all()}`);
   }
 
   finish(box, 'under-way');
