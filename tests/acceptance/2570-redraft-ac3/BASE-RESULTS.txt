@@ -1,0 +1,256 @@
+# #2570.1d553870 (restart.test.mjs): runs at the base and on the planted wrong programs
+
+Machine: the Spark, Linux 7.0.0-1025-nvidia aarch64, 20 cores, shared with other jobs; Node v24.22.0.
+Checkout: a fresh clone of github.com/windoliver/deepbuild at 254bdc87c7f2fc34676193463ee2e685b67a43df, with this folder
+copied in. 2026-11-28 04:04Z to 04:48Z (UTC). Each run was its own systemd user unit (MemoryMax=22G), one at a time.
+Setup: npm ci --no-audit --no-fund; npm run build --workspaces --if-present; CARGO_BUILD_JOBS=4 node scripts/throttle.mjs
+build -- cargo build --locked -q -p deep-hook. npm 11 skipped better-sqlite3's install script; `npm rebuild better-sqlite3`
+was run once after that, and better-sqlite3 loaded.
+A twin or control run: `cp -a` of the checkout, the twin's packages/ laid over it, npm run build --workspaces --if-present
+(BUILD OK = it type-checked and built), then `node --test --test-concurrency=1 tests/acceptance/2570-redraft-ac3/restart.test.mjs`.
+Load is the 1-minute load average from /proc/loadavg at start and end of each run. Paths redacted: ~ is the home folder,
+<checkout> the clone, <twin copy> a twin's copy, /tmp/d1334-* the sandbox.
+
+The final test file (the one committed) was used in runs 3 to 8.
+
+| # | Run | Program | Load start → end | Result |
+|---|---|---|---|---|
+| 1 | base, first test version | base | 218.4 → 187.0 | pass (vacuous, see below) |
+| 2 | start-ignores-exiting, first test and twin version | twin v1 | 119.6 → 74.2 | pass: the twin wasn't caught |
+| 3 | base | base | 60.4 → 65.6 | PASS; deep hub start after the stop took 2432 ms |
+| 4 | start-ignores-exiting, twin v1 (linger before the stop's connection closed) | twin v1 | 83.1 → 55.7 | pass: the twin wasn't caught |
+| 5 | notice-again-at-start | twin | 42.8 → 39.7 | FAIL at "one notice, never twice": 3 notices |
+| 6 | linger-only control, v1 | control | 81.1 → 50.5 | pass, as expected |
+| 7 | start-ignores-exiting, final twin | twin | 45.2 → 33.3 | FAIL at "deep hub start, asked for right after deep hub stop, must end with a hub answering, exit 0": exit 3 |
+| 8 | linger-only control, final | control | 37.3 → 31.8 | pass, as expected; deep hub start after the stop took 3691 ms |
+
+Nothing read INCONCLUSIVE or BLOCKED, and nothing failed in setup.
+
+What runs 1, 2 and 4 showed:
+- Runs 1 and 2: the first test version judged only the scene's own restart. On this base that restart restarts
+  nothing. The scene's hub.stop (token alone, no peer) is refused `unconfirmed` (#1865), and its deep hub start reads
+  "The hub is up; it was already running." So the twin passed too. The probe below shows the refusal. The test was then
+  changed to restart the hub itself (README: Why a restart of its own).
+- Run 4: `deep hub stop` returns only when the hub closes the stop's own connection, which a stopped hub does at
+  process exit. A linger placed before that close is invisible to the start. The final twin and control close that
+  connection first, then linger 3 s with the lock released (the gap the issue describes, made certain).
+
+## Probe: the scene's hub.stop on this base (a probe script, not committed; 04:1xZ, load not recorded)
+
+tick 0
+promote 0 true
+hello1 start 01M8G62WC73MYNG79MS4QRS19V
+hub.stop refused/failed: hub.stop refused: {"code":"unconfirmed","retryable":false,"remediation":"deep hub stop changed nothing: the call names no process for the peer check; run the deep command itself.","path":"/method","actual":"deep hub stop","evidence":[]}
+socket quiet after stop: false
+deep hub start exit 0 The hub is up; it was already running. 
+hello2 start 01M8G62WC73MYNG79MS4QRS19V same hub: true
+launchd [["load","",1795839586372],["start","",1795839586407]]
+
+## Run 3 base
+
+machine: Linux 7.0.0-1025-nvidia aarch64, 20 cores; node v24.22.0; commit 254bdc87c7f2fc34676193463ee2e685b67a43df
+start 2026-11-28T04:22:14Z load1 60.37
+✔ #2570.1d553870 #1334's crash case reaches "one notice, never twice" after its restart (its redraft under #2565) (135891.693067ms)
+ℹ the scene's restart left the same hub running (its hub.stop was refused); deep hub start: The hub is up; it was already running.
+ℹ the good build answered 25.3 s after the crash build first ran; deep hub start after the stop took 2432 ms; 1-minute load 63.3 on 20 cores
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 138605.482281
+exit 0 end 2026-11-28T04:24:33Z load1 65.55
+
+## Run 5 notice-again-at-start
+
+ M packages/hub/src/core.ts
+BUILD OK
+machine: Linux 7.0.0-1025-nvidia aarch64, 20 cores; node v24.22.0; commit 254bdc87c7f2fc34676193463ee2e685b67a43df
+start 2026-11-28T04:31:10Z load1 42.76
+✖ #2570.1d553870 #1334's crash case reaches "one notice, never twice" after its restart (its redraft under #2565) (117372.747496ms)
+ℹ the scene's restart left the same hub running (its hub.stop was refused); deep hub start: The hub is up; it was already running.
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 119389.829652
+
+✖ failing tests:
+
+test at tests/acceptance/2570-redraft-ac3/restart.test.mjs:73:1
+✖ #2570.1d553870 #1334's crash case reaches "one notice, never twice" after its restart (its redraft under #2565) (117372.747496ms)
+  AssertionError [ERR_ASSERTION]: #2570.1d553870 one notice, never twice: after the hub's restarts the record must hold the one build.rolled_back it held before; it holds 3: [{"id":"01M8G6S344WKTJ02QP3MEXJTRQ","data":{"commit":"dc4603d12f2e854ac1c2838a9bef4dacbaa4f9cb","restored":"b566015f1977d7770047a0ce369aba3cfd9311c1","why":"its hub didn't answer within 25 s"}},{"id":"01M8G6V6ZXMZF6PK6Z9N5BSC32","data":{"commit":"dc4603d12f2e854ac1c2838a9bef4dacbaa4f9cb","restored":"b566015f1977d7770047a0ce369aba3cfd9311c1","why":"its hub didn't answer within 25 s"}},{"id":"01M8G6V7R4KYF66DT7BC255ZRP","data":{"commit":"dc4603d12f2e854ac1c2838a9bef4dacbaa4f9cb","restored":"b566015f1977d7770047a0ce369aba3cfd9311c1","why":"its hub didn't answer within 25 s"}}]
+  + actual - expected
+  
+    [
+      {
+        commit: 'dc4603d12f2e854ac1c2838a9bef4dacbaa4f9cb',
+        id: '01M8G6S344WKTJ02QP3MEXJTRQ'
+      },
+  +   {
+  +     commit: 'dc4603d12f2e854ac1c2838a9bef4dacbaa4f9cb',
+  +     id: '01M8G6V6ZXMZF6PK6Z9N5BSC32'
+  +   },
+  +   {
+  +     commit: 'dc4603d12f2e854ac1c2838a9bef4dacbaa4f9cb',
+  +     id: '01M8G6V7R4KYF66DT7BC255ZRP'
+  +   }
+    ]
+  
+      at TestContext.<anonymous> (file://<twin copy>/tests/acceptance/2570-redraft-ac3/restart.test.mjs:104:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ { id: '01M8G6S344WKTJ02QP3MEXJTRQ', commit: 'dc4603d12f2e854ac1c2838a9bef4dacbaa4f9cb' }, { id: '01M8G6V6ZXMZF6PK6Z9N5BSC32', commit: 'dc4603d12f2e854ac1c2838a9bef4dacbaa4f9cb' }, { id: '01M8G6V7R4KYF66DT7BC255ZRP', commit: 'dc4603d12f2e854ac1c2838a9bef4dacbaa4f9cb' } ],
+    expected: [ { id: '01M8G6S344WKTJ02QP3MEXJTRQ', commit: 'dc4603d12f2e854ac1c2838a9bef4dacbaa4f9cb' } ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+exit 1 end 2026-11-28T04:33:09Z load1 39.69
+
+## Run 7 start-ignores-exiting (final)
+
+ M packages/hub/src/server.ts
+ M packages/hub/src/service.ts
+BUILD OK
+machine: Linux 7.0.0-1025-nvidia aarch64, 20 cores; node v24.22.0; commit 254bdc87c7f2fc34676193463ee2e685b67a43df
+start 2026-11-28T04:41:21Z load1 45.19
+✖ #2570.1d553870 #1334's crash case reaches "one notice, never twice" after its restart (its redraft under #2565) (200591.937673ms)
+ℹ the scene's restart left the same hub running (its hub.stop was refused); deep hub start: The hub is up; it was already running.
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 202591.5459
+
+✖ failing tests:
+
+test at tests/acceptance/2570-redraft-ac3/restart.test.mjs:73:1
+✖ #2570.1d553870 #1334's crash case reaches "one notice, never twice" after its restart (its redraft under #2565) (200591.937673ms)
+  AssertionError [ERR_ASSERTION]: #2570.1d553870 deep hub start, asked for right after deep hub stop, must end with a hub answering, exit 0; it gave exit 3
+  stdout:
+  
+  stderr:
+  deep hub start: no hub answered at unix:/tmp/d1334-*/h/.deepbuild/hub.sock within 15 s; see /tmp/d1334-*/h/.deepbuild/logs/hub.log
+  
+  launchd stand-in (event, code, ms): load 1795840884277; start 1795840884313; exit 75 1795840902622; load 1795840902770; start 1795840902773; exit 1 1795840902778; start 1795840912777; exit 1 1795840912783; start 1795840922783; exit 1 1795840922790; load 1795840927921; start 1795840927923; exit 75 1795840946183; start 1795840946685; load 1795840947561; exit 0 1795840950506
+  
+  3 !== 0
+  
+      at TestContext.<anonymous> (file://<twin copy>/tests/acceptance/2570-redraft-ac3/restart.test.mjs:98:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 3,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+exit 1 end 2026-11-28T04:44:44Z load1 33.26
+
+## Run 8 linger-only control (final)
+
+ M packages/hub/src/server.ts
+BUILD OK
+machine: Linux 7.0.0-1025-nvidia aarch64, 20 cores; node v24.22.0; commit 254bdc87c7f2fc34676193463ee2e685b67a43df
+start 2026-11-28T04:46:48Z load1 37.25
+✔ #2570.1d553870 #1334's crash case reaches "one notice, never twice" after its restart (its redraft under #2565) (70958.497495ms)
+ℹ the scene's restart left the same hub running (its hub.stop was refused); deep hub start: The hub is up; it was already running.
+ℹ the good build answered 25.4 s after the crash build first ran; deep hub start after the stop took 3691 ms; 1-minute load 31.8 on 20 cores
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 72828.080595
+exit 0 end 2026-11-28T04:48:01Z load1 31.75
+
+## Run 1 base, first test version
+
+machine: Linux 7.0.0-1025-nvidia aarch64, 20 cores; node v24.22.0; commit 254bdc87c7f2fc34676193463ee2e685b67a43df
+start 2026-11-28T04:04:32Z load1 218.37
+✔ #2570.1d553870 #1334's crash case reaches "one notice, never twice" after its restart (its redraft under #2565) (157298.635212ms)
+ℹ the good build answered 25.9 s after the crash build first ran; deep hub start took 1110 ms; 1-minute load 195.6 on 20 cores
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 160958.475702
+exit 0 end 2026-11-28T04:07:13Z load1 186.97
+
+## Run 2 start-ignores-exiting, first versions
+
+ M packages/hub/src/server.ts
+ M packages/hub/src/service.ts
+BUILD OK
+machine: Linux 7.0.0-1025-nvidia aarch64, 20 cores; node v24.22.0; commit 254bdc87c7f2fc34676193463ee2e685b67a43df
+start 2026-11-28T04:13:01Z load1 119.61
+✔ #2570.1d553870 #1334's crash case reaches "one notice, never twice" after its restart (its redraft under #2565) (127834.063298ms)
+ℹ the good build answered 25.6 s after the crash build first ran; deep hub start took 501 ms; 1-minute load 77.6 on 20 cores
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 132298.863949
+exit 0 end 2026-11-28T04:15:13Z load1 74.22
+
+## Run 4 start-ignores-exiting, twin v1, final test
+
+ M packages/hub/src/server.ts
+ M packages/hub/src/service.ts
+BUILD OK
+machine: Linux 7.0.0-1025-nvidia aarch64, 20 cores; node v24.22.0; commit 254bdc87c7f2fc34676193463ee2e685b67a43df
+start 2026-11-28T04:28:07Z load1 83.12
+✔ #2570.1d553870 #1334's crash case reaches "one notice, never twice" after its restart (its redraft under #2565) (78634.051569ms)
+ℹ the scene's restart left the same hub running (its hub.stop was refused); deep hub start: The hub is up; it was already running.
+ℹ the good build answered 25.4 s after the crash build first ran; deep hub start after the stop took 2490 ms; 1-minute load 57.0 on 20 cores
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 82101.343412
+exit 0 end 2026-11-28T04:29:29Z load1 55.73
+
+## Run 6 linger-only control v1, final test
+
+ M packages/hub/src/server.ts
+BUILD OK
+machine: Linux 7.0.0-1025-nvidia aarch64, 20 cores; node v24.22.0; commit 254bdc87c7f2fc34676193463ee2e685b67a43df
+start 2026-11-28T04:35:39Z load1 81.07
+✔ #2570.1d553870 #1334's crash case reaches "one notice, never twice" after its restart (its redraft under #2565) (130106.04363ms)
+ℹ the scene's restart left the same hub running (its hub.stop was refused); deep hub start: The hub is up; it was already running.
+ℹ the good build answered 25.5 s after the crash build first ran; deep hub start after the stop took 1292 ms; 1-minute load 50.5 on 20 cores
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 132631.822439
+exit 0 end 2026-11-28T04:37:52Z load1 50.46
