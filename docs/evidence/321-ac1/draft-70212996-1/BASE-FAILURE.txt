@@ -1,0 +1,37 @@
+Base commit: debda22a6ef976bd7ce20a92e005272406accf23 (no implementation of #321 or #1101)
+Built:   cd <repo> && npm ci && npm run build --workspaces && CARGO_BUILD_JOBS=1 RUSTC_WRAPPER= cargo build --locked -q -p deep-hook
+Command: cd <repo> && NO_COLOR=1 npx vitest run --root tests/acceptance/321-ac1-70212996 --no-file-parallelism --reporter=verbose
+Date: 2026-11-24  Node v24.22.0  vitest 5.0.5  linux x64, load average about 200 from other work.
+Result: 2 files, 2 tests: 2 failed, 0 passed, 0 skipped. Exit code 1. Duration 3.8 s.
+Type-check: node node_modules/typescript/bin/tsc -p tests/acceptance/321-ac1-70212996/tsconfig.json: no errors
+  (the suite imports no package code, only node and vitest).
+
+ x proceed.test.ts > #321.70212996 the planted sorter proceeds on "want me to push to main?", ...
+   -> the stop that ends on "Want me to push to main?" must be answered "proceed" by the planted sorter
+      (DEEP_HUB_TEST_SORTER=planted-proceed-every-question), in the stop's reply that keeps the agent working
+      (decision block, its reason saying proceed); deep-hook said: exit 0, stdout "", stderr "":
+      expected false to be true
+   Why: the base has no sorter for questions at the stop and no DEEP_HUB_TEST_SORTER. The hub holds a stop only
+   while the session has an ask to deliver, so it lets this one end with an empty reply, and no
+   question.proceeded is recorded.
+
+ x wrong.test.ts > #321.70212996 a core that lets a "proceed" cover the calls of the turn it starts ...
+   -> the scenario must fail because the push was let through, naming the call `git push origin main`:
+      expected 'BLOCKED: the hub didn't start with DEEP_HUB_PLANT=proceed-covers-turn (the planted wrong
+      program this test runs against): ... Error: DEEP_HUB_PLANT=proceed-covers-turn names no planted program'
+      to contain '`git push origin main` was let through at PreToolUse'
+   Why: the base hub's plant list (packages/hub/src/plant.ts) has no proceed-covers-turn, so the hub refuses to
+   start, and that failure doesn't name the call.
+
+A check on the later steps, run against the base and then deleted (it was not part of the suite): a temporary copy
+of scenario.ts with the two proceed checks of the first stop taken out, run against the base hub. It failed with
+"`git push origin main` was let through at PreToolUse before any answer of yours, in the turn the "proceed" for
+"Want me to push to main?" started: ... deep-hook said: exit 0, stdout "", stderr """. So the base lets the push
+through at PreToolUse, as the planted core must, and the scenario's failure then carries the text wrong.test.ts
+looks for. (A first draft of the scenario failed there with "... the session has no authority ask" instead,
+because it read deep-hook's reply too late; the scenario was corrected before this run.)
+
+Not run: the passing side. No implementation of #321's first criterion or of #1101's hold exists in the inputs,
+so the steps after the push is held (the ask waiting, your yes, the hold, the try, the push after it, and the
+npm test turn) have never run against a hub that does them. The wrong program's failure against a real
+proceed-covers-turn plant is unverified for the same reason.

@@ -1,0 +1,98 @@
+tree ef1ccb28aaca217b3b0dce1fde93452e2c14503a + isAbsolute Tue Nov 24 01:36:14 AM PST 2026
+[build 0]
+ 01:36:27 up 4 days,  5:12,  6 users,  load average: 87.49, 139.88, 180.11
+
+ RUN  v5.0.5 <home>/deepbuild/.claude/worktrees/321-redraft-ac1/tests/acceptance/321-ac1-70212996
+
+ ✓ proceed.test.ts > #321.70212996 a "proceed" never covers a call that needs authority > #321.70212996 the planted sorter proceeds on "want me to push to main?", recorded with its rule; the push in its turn is held at PreToolUse with an authority ask until your yes and its 10 s hold, a try during the hold is refused, the push then runs; after its proceed on "want me to run the tests?", npm test runs with no ask 19265ms
+ ✓ wrong.test.ts > #321.70212996 a "proceed" never covers a call that needs authority: the wrong program > #321.70212996 a core that lets a "proceed" cover the calls of the turn it starts lets the push through and fails this test, naming the call 2256ms
+
+ Test Files  2 passed (2)
+      Tests  2 passed (2)
+   Start at  01:36:28
+   Duration  21.92s (tests 100%)
+
+[draft run 1 exit 0] Tue Nov 24 01:36:50 AM PST 2026
+ 01:36:50 up 4 days,  5:12,  6 users,  load average: 82.34, 134.39, 177.22
+
+ RUN  v5.0.5 <home>/deepbuild/.claude/worktrees/321-redraft-ac1/tests/acceptance/321-ac1-70212996
+
+ ✓ proceed.test.ts > #321.70212996 a "proceed" never covers a call that needs authority > #321.70212996 the planted sorter proceeds on "want me to push to main?", recorded with its rule; the push in its turn is held at PreToolUse with an authority ask until your yes and its 10 s hold, a try during the hold is refused, the push then runs; after its proceed on "want me to run the tests?", npm test runs with no ask 19692ms
+ ✓ wrong.test.ts > #321.70212996 a "proceed" never covers a call that needs authority: the wrong program > #321.70212996 a core that lets a "proceed" cover the calls of the turn it starts lets the push through and fails this test, naming the call 2662ms
+
+ Test Files  2 passed (2)
+      Tests  2 passed (2)
+   Start at  01:36:51
+   Duration  22.63s (tests 100%)
+
+[draft run 2 exit 0] Tue Nov 24 01:37:14 AM PST 2026
+ 01:37:14 up 4 days,  5:13,  6 users,  load average: 81.25, 130.01, 174.64
+
+ RUN  v5.0.5 <home>/deepbuild/.claude/worktrees/321-redraft-ac1/tests/acceptance/321-ac1-70212996
+
+ ✓ proceed.test.ts > #321.70212996 a "proceed" never covers a call that needs authority > #321.70212996 the planted sorter proceeds on "want me to push to main?", recorded with its rule; the push in its turn is held at PreToolUse with an authority ask until your yes and its 10 s hold, a try during the hold is refused, the push then runs; after its proceed on "want me to run the tests?", npm test runs with no ask 19291ms
+ ✓ wrong.test.ts > #321.70212996 a "proceed" never covers a call that needs authority: the wrong program > #321.70212996 a core that lets a "proceed" cover the calls of the turn it starts lets the push through and fails this test, naming the call 2334ms
+
+ Test Files  2 passed (2)
+      Tests  2 passed (2)
+   Start at  01:37:14
+   Duration  22.07s (tests 100%)
+
+[draft run 3 exit 0] Tue Nov 24 01:37:36 AM PST 2026
+ 01:37:36 up 4 days,  5:13,  6 users,  load average: 88.96, 128.58, 173.21
+
+ RUN  v5.0.5 <home>/deepbuild/.claude/worktrees/321-redraft-ac1/tests/acceptance/321
+
+ ✓ deadline.test.ts > AC5 #321.e6090cff on the virtual clock, each hold takes no at the 1-day authority deadline and its call never runs > AC5 git push origin main, gh pr merge 12, and forge's new delete_repo and post_update, held with nobody answering: each ask takes no at its 1-day deadline and no call runs 39865ms
+ ✓ deadline.test.ts > AC5 #321.e6090cff on the virtual clock, each hold takes no at the 1-day authority deadline and its call never runs > AC5 (wrong program) a hold filed as a choice whose recommended option approves (DEEP_HUB_PLANT=hold-as-choice) fails this test, naming the source 2850ms
+ ✓ yours.test.ts > AC4 #321.ed0f414b a server you added yourself, never synced, has a new delete_repo held the same way > AC4 tracker (yours, local scope) and forge (synced, user scope) each add delete_repo at the next session start: both held until your yes, tracker's read tool still runs 13167ms
+ ✓ yours.test.ts > AC4 #321.ed0f414b a server you added yourself, never synced, has a new delete_repo held the same way > AC4 (wrong program) a guard that holds only synced servers' tools (DEEP_HUB_PLANT=holds-synced-only) lets tracker's delete_repo run and fails this test, naming the server 4932ms
+ ✓ read-only-hint.test.ts > AC3 #321.876b8dcb a new tool's readOnlyHint never lowers its class: post_update counts as change and waits for your answer > AC3 forge updated to add post_update (readOnlyHint: true, no facts entry): its first call is held with the update's one authority ask and the fake server receives no request until your yes 13402ms
+ ✓ read-only-hint.test.ts > AC3 #321.876b8dcb a new tool's readOnlyHint never lowers its class: post_update counts as change and waits for your answer > AC3 (wrong program) a classifier that trusts the hint (DEEP_HUB_PLANT=trusts-hints) lets the call run and fails this test on the fake server's request count 4342ms
+ ✓ delete-repo.test.ts > AC2 #321.d75b4c41 a server update that adds delete_repo holds it until you approve it once; read-only tools keep working > AC2 forge updated to add delete_repo: delete_repo held by one ask and never sent to the server until your yes, then runs with no ask in this session and the next; list_issues and get_issue run throughout 22171ms
+ × proceed.test.ts > AC1 #321.69952336 a proceed never covers a push: held at PreToolUse with an authority ask, whatever sorter answered > AC1 a planted sorter's proceed is recorded with its rule; in the turn it starts, git push origin main is held with an authority ask naming it until your answer; after a proceed for the tests, npm test runs with no ask 9347ms
+   → AC1 #321.69952336 [effect.push] after your yes to ask:01M86ES5NVCM2E2AWQKZ4JTR4F, `git push origin main` must run: the held call was denied, and the same call sent again was not allowed (exit 2 after 12 ms, stdout "", stderr "DeepBuild denied this (guard push-needs-ask): no request you typed in this thread names it. DeepBuild is holding this: you said yes to `git push origin main` (ask:01M86ES5NVCM2E2AWQKZ4JTR4F), and since it can't be undone it starts only once its 10 s hold is over, with Undo on its card until then. Run the same call again after that.\n")
+ ↓ proceed.test.ts > AC1 #321.69952336 a proceed never covers a push: held at PreToolUse with an authority ask, whatever sorter answered > AC1 (wrong program) a core that lets a proceed cover the turn's calls (DEEP_HUB_PLANT=proceed-covers-turn) lets the push through and fails this test, naming the call 3920ms [INCONCLUSIVE AC1 #321.69952336 [effect.push] `git push origin main` was let through because the hub's acknowledgement came after deep-hook's 50 ms (exit 0 after 42 ms, stdout "", stderr "deep-hook: spooled 01M86ESGAWZF6D2EC0J5K1GD6W, but its sync didn't finish within the hook's 50 ms\n"), so the hub never decided it; read at 1-minute load 116.4 on 20 cores]
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  proceed.test.ts > AC1 #321.69952336 a proceed never covers a push: held at PreToolUse with an authority ask, whatever sorter answered > AC1 a planted sorter's proceed is recorded with its rule; in the turn it starts, git push origin main is held with an authority ask naming it until your answer; after a proceed for the tests, npm test runs with no ask
+Error: AC1 #321.69952336 [effect.push] after your yes to ask:01M86ES5NVCM2E2AWQKZ4JTR4F, `git push origin main` must run: the held call was denied, and the same call sent again was not allowed (exit 2 after 12 ms, stdout "", stderr "DeepBuild denied this (guard push-needs-ask): no request you typed in this thread names it. DeepBuild is holding this: you said yes to `git push origin main` (ask:01M86ES5NVCM2E2AWQKZ4JTR4F), and since it can't be undone it starts only once its 10 s hold is over, with Undo on its card until then. Run the same call again after that.\n")
+ ❯ must helpers.ts:85:18
+     83| }
+     84| export function must(ok: boolean, message: string): asserts ok {
+     85|   if (!ok) throw Error(message);
+       |                  ^
+     86| }
+     87|
+ ❯ expectRuns helpers.ts:638:5
+ ❯ scenario proceed.test.ts:32:5
+ ❯ verdict helpers.ts:63:5
+ ❯ proceed.test.ts:45:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 4 passed (5)
+      Tests  1 failed | 7 passed | 1 skipped (9)
+   Start at  01:37:37
+   Duration  115.27s (tests 100%)
+
+[321 suite exit 1] Tue Nov 24 01:39:32 AM PST 2026
+
+ RUN  v5.0.5 <home>/deepbuild/.claude/worktrees/321-redraft-ac1
+
+ ✓ packages/hub/test/holds.test.ts (39 tests) 3851ms
+   ✓ a saved approval of an MCP tool (1)
+     ✓ covers the tool at the schema you approved, and lapses once its schema changes 330ms
+   ✓ a call that needs your authority in the turn a proceed starts (1)
+     ✓ is held with an authority ask even when a warn entry also matches it; a block entry denies it with no ask 1174ms
+   ✓ a held push (#1156) (37)
+     ✓ still raises its ask when the copy never ends, inside the gate's hold 2070ms
+
+ Test Files  1 passed (1)
+      Tests  39 passed (39)
+   Start at  01:39:33
+   Duration  5.97s (tests 67%, transform 28%, import 5%)
+
+[holds.test exit 0] Tue Nov 24 01:39:40 AM PST 2026

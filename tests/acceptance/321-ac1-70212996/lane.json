@@ -1,0 +1,1 @@
+{"alone":true,"why":"binary: runs target/debug/deep-hook and the built CLI, and starts a hub per test"}

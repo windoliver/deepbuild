@@ -226,7 +226,7 @@ export function guard({ root, change, issue }, approvals, say) {
       // A name a disk that folds case reads as tests/acceptance/<issue>/lane.json is refused even approved, as is a wrong
       // shape there; anywhere else lanes.mjs never reads it.
       const problem = laneFileProblem(text), place = LANE_FILE.exec(path), read = LANE_FILE.test(fold(path));
-      const folder = path.slice(0, -'lane.json'.length), own = place && !place[2] && !place[3];
+      const folder = path.slice(0, -'lane.json'.length), own = place && !/redraft|oracle/.test(place[2] ?? '') && !place[3];
       if (read && !place) return judge({ detail: `${path}: a lane file named other than exactly ${fold(path)}, which a disk that folds case reads in its place${how}`, hard: true }, path);
       if (problem && read) return judge({ detail: `${path}: a suite's lane file refused${how}, since ${problem}`, hard: true }, path);
       if (landed) return;
@@ -238,7 +238,7 @@ export function guard({ root, change, issue }, approvals, say) {
           if (why) judge({ detail: `${path}: a suite's lane file refused${how}, since ${why}`, hard: true }, path);
         }
       }
-      if (!place) judge({ detail: `${path}: a lane file lanes.mjs never reads, since it reads only a numbered suite's tests/acceptance/<issue>/lane.json, a redraft or oracle folder's tests/acceptance/<issue>-<suffix>/lane.json, or a redraft or oracle subfolder's` }, path);
+      if (!place) judge({ detail: `${path}: a lane file lanes.mjs never reads, since it reads only a numbered suite's tests/acceptance/<issue>/lane.json, a suffixed folder's tests/acceptance/<issue>-<suffix>/lane.json, or a redraft or oracle subfolder's` }, path);
       else if (own && place[1] !== String(issue?.number)) judge({ detail: `${path}: a lane file in #${place[1]}'s folder, added by a change ${issue?.number ? `that names #${issue.number}` : 'that names no issue'}; a new one lands only with its own issue's suite` }, path);
       // A landed folder's tests run where they ran: alone, a test that fails only beside the parallel block would pass.
       else if (git(root, ['ls-tree', '--name-only', change.base, '--', folder]).trim()) judge({ detail: `${path}: a lane file added to ${folder}, whose files landed before it; a new one lands only with its folder's files` }, path);

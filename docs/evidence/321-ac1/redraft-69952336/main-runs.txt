@@ -1,0 +1,376 @@
+tree dc8625b09d2148426167adce0d5346d21d26f820 Tue Nov 24 12:25:06 AM PST 2026
+[setup 0] Tue Nov 24 12:29:47 AM PST 2026
+
+ RUN  v5.0.5 <home>/deepbuild/.claude/worktrees/321-redraft-ac1/tests/acceptance/321-redraft-ac1
+
+ × proceed.test.ts > #321.69952336 a proceed never covers a call that needs authority > #321.69952336 the planted sorter's proceed for "want me to push to main?" is recorded with its rule, and the turn's `git push origin main` is held at PreToolUse with an authority ask that waits for your answer 993ms
+   → the stop ending on "want me to push to main?" was not answered proceed: its reply let the turn end (exit 0 after 843 ms, stdout "{\"systemMessage\":\"says done · next: DeepBuild · session/5a6f5b9e/01M86ASX8HP1KNDZ01ZQ1DYBSG\"}", stderr "")
+ × proceed.test.ts > #321.69952336 a proceed never covers a call that needs authority > #321.69952336 after the same sorter's proceed for "want me to run the tests?", `npm test` runs with no ask 30403ms
+   → no event records the proceed for "want me to run the tests?" with the rule that sorted it (planted-proceed-19a1758f) within 30 s; the stop was sent on with "says done · next: DeepBuild · session/62f766a4/01M86ASXRBC027F6CQKA34D52D\nDeepBuild: proceed (\"want me to run the tests?\", by rule offer-in-scope). Go on with the work. A call that pushes, merges, dispatches, sends or deletes still waits for an authority ask."; the record holds kinds agent.reach, session.start, task.created, user.ask, tool.before, tool.after, agent.stop, turn.usage, claim.made, session.state, row.set, session.reading, stop.held, session.rules_delivered, notice.delivered, question.proceeded
+ × proceed.test.ts > #321.69952336 wrong program: a core that lets a proceed cover the calls of the turn it starts > #321.69952336 DEEP_HUB_PLANT=proceed-covers-turn lets `git push origin main` through, and the push's judgement fails naming the call 1800ms
+   → and fails it because the push ran, naming the call: expected 'the stop ending on "want me to push t…' to match /`git push origin main` ran in the turn/
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  proceed.test.ts > #321.69952336 a proceed never covers a call that needs authority > #321.69952336 the planted sorter's proceed for "want me to push to main?" is recorded with its rule, and the turn's `git push origin main` is held at PreToolUse with an authority ask that waits for your answer
+Error: the stop ending on "want me to push to main?" was not answered proceed: its reply let the turn end (exit 0 after 843 ms, stdout "{\"systemMessage\":\"says done · next: DeepBuild · session/5a6f5b9e/01M86ASX8HP1KNDZ01ZQ1DYBSG\"}", stderr "")
+ ❯ must helpers.ts:41:18
+     39| /** Throws `message` unless `ok`: a judgement reads as one sentence of…
+     40| export function must(ok: boolean, message: string): void {
+     41|   if (!ok) throw Error(message);
+       |                  ^
+     42| }
+     43| /** The message a judgement throws, or null when it holds: the wrong p…
+ ❯ judgeProceed proceed.test.ts:52:3
+ ❯ judgePush proceed.test.ts:74:9
+ ❯ proceed.test.ts:121:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  proceed.test.ts > #321.69952336 a proceed never covers a call that needs authority > #321.69952336 after the same sorter's proceed for "want me to run the tests?", `npm test` runs with no ask
+Error: no event records the proceed for "want me to run the tests?" with the rule that sorted it (planted-proceed-19a1758f) within 30 s; the stop was sent on with "says done · next: DeepBuild · session/62f766a4/01M86ASXRBC027F6CQKA34D52D\nDeepBuild: proceed (\"want me to run the tests?\", by rule offer-in-scope). Go on with the work. A call that pushes, merges, dispatches, sends or deletes still waits for an authority ask."; the record holds kinds agent.reach, session.start, task.created, user.ask, tool.before, tool.after, agent.stop, turn.usage, claim.made, session.state, row.set, session.reading, stop.held, session.rules_delivered, notice.delivered, question.proceeded
+ ❯ must helpers.ts:41:18
+     39| /** Throws `message` unless `ok`: a judgement reads as one sentence of…
+     40| export function must(ok: boolean, message: string): void {
+     41|   if (!ok) throw Error(message);
+       |                  ^
+     42| }
+     43| /** The message a judgement throws, or null when it holds: the wrong p…
+ ❯ judgeProceed proceed.test.ts:62:3
+ ❯ judgeTests proceed.test.ts:105:3
+ ❯ proceed.test.ts:125:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  proceed.test.ts > #321.69952336 wrong program: a core that lets a proceed cover the calls of the turn it starts > #321.69952336 DEEP_HUB_PLANT=proceed-covers-turn lets `git push origin main` through, and the push's judgement fails naming the call
+AssertionError: and fails it because the push ran, naming the call: expected 'the stop ending on "want me to push t…' to match /`git push origin main` ran in the turn/
+
+- Expected:
+/`git push origin main` ran in the turn/
+
++ Received:
+"the stop ending on \"want me to push to main?\" was not answered proceed: its reply let the turn end (exit 0 after 632 ms, stdout \"{\\\"systemMessage\\\":\\\"says done · next: DeepBuild · session/bd72cc00/01M86ATWY1GHA8S53ABDZX3XW0\\\"}\", stderr \"\")"
+
+ ❯ proceed.test.ts:136:75
+    134|     const failure = await failureOf(() => judgePush(w));
+    135|     expect(failure, 'the planted core that lets a proceed cover its tu…
+    136|     expect(failure, 'and fails it because the push ran, naming the cal…
+       |                                                                           ^
+    137|   }, 300_000);
+    138| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  00:29:48
+   Duration  35.71s (tests 99%, transform 1%)
+
+[redraft run 1 exit 1] Tue Nov 24 12:30:24 AM PST 2026
+
+ RUN  v5.0.5 <home>/deepbuild/.claude/worktrees/321-redraft-ac1/tests/acceptance/321-redraft-ac1
+
+ × proceed.test.ts > #321.69952336 a proceed never covers a call that needs authority > #321.69952336 the planted sorter's proceed for "want me to push to main?" is recorded with its rule, and the turn's `git push origin main` is held at PreToolUse with an authority ask that waits for your answer 858ms
+   → the stop ending on "want me to push to main?" was not answered proceed: its reply let the turn end (exit 0 after 288 ms, stdout "{\"systemMessage\":\"says done · next: DeepBuild · session/0da04e79/01M86AV0HCRR787CWQQGJVE70D\"}", stderr "")
+ × proceed.test.ts > #321.69952336 a proceed never covers a call that needs authority > #321.69952336 after the same sorter's proceed for "want me to run the tests?", `npm test` runs with no ask 30510ms
+   → no event records the proceed for "want me to run the tests?" with the rule that sorted it (planted-proceed-29c680ac) within 30 s; the stop was sent on with "says done · next: DeepBuild · session/02e3963a/01M86AV10VNAXCJ5SX8J2BJC2K\nDeepBuild: proceed (\"want me to run the tests?\", by rule offer-in-scope). Go on with the work. A call that pushes, merges, dispatches, sends or deletes still waits for an authority ask."; the record holds kinds agent.reach, session.start, task.created, user.ask, session.state, row.set, tool.before, tool.after, agent.stop, turn.usage, claim.made, session.reading, stop.held, notice.delivered, question.proceeded
+ × proceed.test.ts > #321.69952336 wrong program: a core that lets a proceed cover the calls of the turn it starts > #321.69952336 DEEP_HUB_PLANT=proceed-covers-turn lets `git push origin main` through, and the push's judgement fails naming the call 3394ms
+   → and fails it because the push ran, naming the call: expected 'the stop ending on "want me to push t…' to match /`git push origin main` ran in the turn/
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  proceed.test.ts > #321.69952336 a proceed never covers a call that needs authority > #321.69952336 the planted sorter's proceed for "want me to push to main?" is recorded with its rule, and the turn's `git push origin main` is held at PreToolUse with an authority ask that waits for your answer
+Error: the stop ending on "want me to push to main?" was not answered proceed: its reply let the turn end (exit 0 after 288 ms, stdout "{\"systemMessage\":\"says done · next: DeepBuild · session/0da04e79/01M86AV0HCRR787CWQQGJVE70D\"}", stderr "")
+ ❯ must helpers.ts:41:18
+     39| /** Throws `message` unless `ok`: a judgement reads as one sentence of…
+     40| export function must(ok: boolean, message: string): void {
+     41|   if (!ok) throw Error(message);
+       |                  ^
+     42| }
+     43| /** The message a judgement throws, or null when it holds: the wrong p…
+ ❯ judgeProceed proceed.test.ts:52:3
+ ❯ judgePush proceed.test.ts:74:9
+ ❯ proceed.test.ts:121:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  proceed.test.ts > #321.69952336 a proceed never covers a call that needs authority > #321.69952336 after the same sorter's proceed for "want me to run the tests?", `npm test` runs with no ask
+Error: no event records the proceed for "want me to run the tests?" with the rule that sorted it (planted-proceed-29c680ac) within 30 s; the stop was sent on with "says done · next: DeepBuild · session/02e3963a/01M86AV10VNAXCJ5SX8J2BJC2K\nDeepBuild: proceed (\"want me to run the tests?\", by rule offer-in-scope). Go on with the work. A call that pushes, merges, dispatches, sends or deletes still waits for an authority ask."; the record holds kinds agent.reach, session.start, task.created, user.ask, session.state, row.set, tool.before, tool.after, agent.stop, turn.usage, claim.made, session.reading, stop.held, notice.delivered, question.proceeded
+ ❯ must helpers.ts:41:18
+     39| /** Throws `message` unless `ok`: a judgement reads as one sentence of…
+     40| export function must(ok: boolean, message: string): void {
+     41|   if (!ok) throw Error(message);
+       |                  ^
+     42| }
+     43| /** The message a judgement throws, or null when it holds: the wrong p…
+ ❯ judgeProceed proceed.test.ts:62:3
+ ❯ judgeTests proceed.test.ts:105:3
+ ❯ proceed.test.ts:125:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  proceed.test.ts > #321.69952336 wrong program: a core that lets a proceed cover the calls of the turn it starts > #321.69952336 DEEP_HUB_PLANT=proceed-covers-turn lets `git push origin main` through, and the push's judgement fails naming the call
+AssertionError: and fails it because the push ran, naming the call: expected 'the stop ending on "want me to push t…' to match /`git push origin main` ran in the turn/
+
+- Expected:
+/`git push origin main` ran in the turn/
+
++ Received:
+"the stop ending on \"want me to push to main?\" was not answered proceed: its reply let the turn end (exit 0 after 152 ms, stdout \"{\\\"systemMessage\\\":\\\"says done · next: DeepBuild · session/233f2404/01M86AW1W8VRA4EVYEZH4D9SBY\\\"}\", stderr \"\")"
+
+ ❯ proceed.test.ts:136:75
+    134|     const failure = await failureOf(() => judgePush(w));
+    135|     expect(failure, 'the planted core that lets a proceed cover its tu…
+    136|     expect(failure, 'and fails it because the push ran, naming the cal…
+       |                                                                           ^
+    137|   }, 300_000);
+    138| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  00:30:24
+   Duration  36.98s (tests 100%)
+
+[redraft run 2 exit 1] Tue Nov 24 12:31:01 AM PST 2026
+
+ RUN  v5.0.5 <home>/deepbuild/.claude/worktrees/321-redraft-ac1/tests/acceptance/321
+
+ ↓ proceed.test.ts > AC1 #321.69952336 a proceed never covers a push: held at PreToolUse with an authority ask, whatever sorter answered > AC1 a planted sorter's proceed is recorded with its rule; in the turn it starts, git push origin main is held with an authority ask naming it until your answer; after a proceed for the tests, npm test runs with no ask 2165ms [INCONCLUSIVE AC1 #321.69952336 [effect.push] `git push origin main` was let through because the hub's acknowledgement came after deep-hook's 50 ms (exit 0 after 33 ms, stdout "", stderr "deep-hook: spooled 01M86AW4V9JB48AEZXQ7EYD71A, but its sync didn't finish within the hook's 50 ms\n"), so the hub never decided it; read at 1-minute load 115.2 on 20 cores]
+ × proceed.test.ts > AC1 #321.69952336 a proceed never covers a push: held at PreToolUse with an authority ask, whatever sorter answered > AC1 (wrong program) a core that lets a proceed cover the turn's calls (DEEP_HUB_PLANT=proceed-covers-turn) lets the push through and fails this test, naming the call 32244ms
+   → #321.69952336 the planted core must fail this test naming the call `git push origin main`; it failed with: AC1 #321.69952336 the planted sorter's proceed for "want me to push to main?" must be recorded with the question and the rule that sorted it (planted-proceed-a361c74d): 30 s after the stop, no event names both
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  proceed.test.ts > AC1 #321.69952336 a proceed never covers a push: held at PreToolUse with an authority ask, whatever sorter answered > AC1 (wrong program) a core that lets a proceed cover the turn's calls (DEEP_HUB_PLANT=proceed-covers-turn) lets the push through and fails this test, naming the call
+Error: #321.69952336 the planted core must fail this test naming the call `git push origin main`; it failed with: AC1 #321.69952336 the planted sorter's proceed for "want me to push to main?" must be recorded with the question and the rule that sorted it (planted-proceed-a361c74d): 30 s after the stop, no event names both
+ ❯ must helpers.ts:85:18
+     83| }
+     84| export function must(ok: boolean, message: string): asserts ok {
+     85|   if (!ok) throw Error(message);
+       |                  ^
+     86| }
+     87|
+ ❯ proceed.test.ts:52:7
+ ❯ verdict helpers.ts:63:5
+ ❯ proceed.test.ts:49:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 skipped (2)
+   Start at  00:31:02
+   Duration  34.83s (tests 99%, transform 1%)
+
+[first draft proceed exit 1] Tue Nov 24 12:31:37 AM PST 2026
+tree dc8625b09d2148426167adce0d5346d21d26f820 + holds.ts seam Tue Nov 24 12:32:49 AM PST 2026
+[build 0]
+
+ RUN  v5.0.5 <home>/deepbuild/.claude/worktrees/321-redraft-ac1/tests/acceptance/321-redraft-ac1
+
+ × proceed.test.ts > #321.69952336 a proceed never covers a call that needs authority > #321.69952336 the planted sorter's proceed for "want me to push to main?" is recorded with its rule, and the turn's `git push origin main` is held at PreToolUse with an authority ask that waits for your answer 891ms
+   → the stop ending on "want me to push to main?" was not answered proceed: its reply let the turn end (exit 0 after 297 ms, stdout "{\"systemMessage\":\"says done · next: DeepBuild · session/4a0a0994/01M86AZZ9BYWD454MXTFVRM5D2\"}", stderr "")
+ × proceed.test.ts > #321.69952336 a proceed never covers a call that needs authority > #321.69952336 after the same sorter's proceed for "want me to run the tests?", `npm test` runs with no ask 30570ms
+   → no event records the proceed for "want me to run the tests?" with the rule that sorted it (planted-proceed-f6c8c6c7) within 30 s; the stop was sent on with "says done · next: DeepBuild · session/975ebe47/01M86AZZRSAKT9K5BB4QGYX4X6\nDeepBuild: proceed (\"want me to run the tests?\", by rule offer-in-scope). Go on with the work. A call that pushes, merges, dispatches, sends or deletes still waits for an authority ask."; the record holds kinds agent.reach, session.start, task.created, user.ask, tool.before, tool.after, agent.stop, turn.usage, claim.made, session.state, row.set, session.reading, stop.held, session.rules_delivered, notice.delivered, question.proceeded
+ × proceed.test.ts > #321.69952336 wrong program: a core that lets a proceed cover the calls of the turn it starts > #321.69952336 DEEP_HUB_PLANT=proceed-covers-turn lets `git push origin main` through, and the push's judgement fails naming the call 1786ms
+   → and fails it because the push ran, naming the call: expected 'the stop ending on "want me to push t…' to match /`git push origin main` ran in the turn/
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  proceed.test.ts > #321.69952336 a proceed never covers a call that needs authority > #321.69952336 the planted sorter's proceed for "want me to push to main?" is recorded with its rule, and the turn's `git push origin main` is held at PreToolUse with an authority ask that waits for your answer
+Error: the stop ending on "want me to push to main?" was not answered proceed: its reply let the turn end (exit 0 after 297 ms, stdout "{\"systemMessage\":\"says done · next: DeepBuild · session/4a0a0994/01M86AZZ9BYWD454MXTFVRM5D2\"}", stderr "")
+ ❯ must helpers.ts:41:18
+     39| /** Throws `message` unless `ok`: a judgement reads as one sentence of…
+     40| export function must(ok: boolean, message: string): void {
+     41|   if (!ok) throw Error(message);
+       |                  ^
+     42| }
+     43| /** The message a judgement throws, or null when it holds: the wrong p…
+ ❯ judgeProceed proceed.test.ts:52:3
+ ❯ judgePush proceed.test.ts:74:9
+ ❯ proceed.test.ts:121:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  proceed.test.ts > #321.69952336 a proceed never covers a call that needs authority > #321.69952336 after the same sorter's proceed for "want me to run the tests?", `npm test` runs with no ask
+Error: no event records the proceed for "want me to run the tests?" with the rule that sorted it (planted-proceed-f6c8c6c7) within 30 s; the stop was sent on with "says done · next: DeepBuild · session/975ebe47/01M86AZZRSAKT9K5BB4QGYX4X6\nDeepBuild: proceed (\"want me to run the tests?\", by rule offer-in-scope). Go on with the work. A call that pushes, merges, dispatches, sends or deletes still waits for an authority ask."; the record holds kinds agent.reach, session.start, task.created, user.ask, tool.before, tool.after, agent.stop, turn.usage, claim.made, session.state, row.set, session.reading, stop.held, session.rules_delivered, notice.delivered, question.proceeded
+ ❯ must helpers.ts:41:18
+     39| /** Throws `message` unless `ok`: a judgement reads as one sentence of…
+     40| export function must(ok: boolean, message: string): void {
+     41|   if (!ok) throw Error(message);
+       |                  ^
+     42| }
+     43| /** The message a judgement throws, or null when it holds: the wrong p…
+ ❯ judgeProceed proceed.test.ts:62:3
+ ❯ judgeTests proceed.test.ts:105:3
+ ❯ proceed.test.ts:125:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  proceed.test.ts > #321.69952336 wrong program: a core that lets a proceed cover the calls of the turn it starts > #321.69952336 DEEP_HUB_PLANT=proceed-covers-turn lets `git push origin main` through, and the push's judgement fails naming the call
+AssertionError: and fails it because the push ran, naming the call: expected 'the stop ending on "want me to push t…' to match /`git push origin main` ran in the turn/
+
+- Expected:
+/`git push origin main` ran in the turn/
+
++ Received:
+"the stop ending on \"want me to push to main?\" was not answered proceed: its reply let the turn end (exit 0 after 655 ms, stdout \"{\\\"systemMessage\\\":\\\"says done · next: DeepBuild · session/d730c1f5/01M86B0Z0DN4X4C65DNZ6CH6E0\\\"}\", stderr \"\")"
+
+ ❯ proceed.test.ts:136:75
+    134|     const failure = await failureOf(() => judgePush(w));
+    135|     expect(failure, 'the planted core that lets a proceed cover its tu…
+    136|     expect(failure, 'and fails it because the push ran, naming the cal…
+       |                                                                           ^
+    137|   }, 300_000);
+    138| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  00:33:07
+   Duration  35.30s (tests 100%)
+
+[redraft run 1 exit 1] Tue Nov 24 12:33:43 AM PST 2026
+
+ RUN  v5.0.5 <home>/deepbuild/.claude/worktrees/321-redraft-ac1/tests/acceptance/321-redraft-ac1
+
+ × proceed.test.ts > #321.69952336 a proceed never covers a call that needs authority > #321.69952336 the planted sorter's proceed for "want me to push to main?" is recorded with its rule, and the turn's `git push origin main` is held at PreToolUse with an authority ask that waits for your answer 554ms
+   → the stop ending on "want me to push to main?" was not answered proceed: its reply let the turn end (exit 0 after 204 ms, stdout "{\"systemMessage\":\"says done · next: DeepBuild · session/31eec3b9/01M86B12THK1XHMZ9W64QN62DE\"}", stderr "")
+ × proceed.test.ts > #321.69952336 a proceed never covers a call that needs authority > #321.69952336 after the same sorter's proceed for "want me to run the tests?", `npm test` runs with no ask 30281ms
+   → no event records the proceed for "want me to run the tests?" with the rule that sorted it (planted-proceed-4235ce73) within 30 s; the stop was sent on with "says done · next: DeepBuild · session/1e880da3/01M86B1362ZPAH7DMAXZWQXHBJ\nDeepBuild: proceed (\"want me to run the tests?\", by rule offer-in-scope). Go on with the work. A call that pushes, merges, dispatches, sends or deletes still waits for an authority ask."; the record holds kinds agent.reach, session.start, session.rules_delivered, task.created, user.ask, tool.before, tool.after, agent.stop, turn.usage, claim.made, session.state, row.set, session.reading, stop.held, notice.delivered, question.proceeded
+ × proceed.test.ts > #321.69952336 wrong program: a core that lets a proceed cover the calls of the turn it starts > #321.69952336 DEEP_HUB_PLANT=proceed-covers-turn lets `git push origin main` through, and the push's judgement fails naming the call 1806ms
+   → and fails it because the push ran, naming the call: expected 'the stop ending on "want me to push t…' to match /`git push origin main` ran in the turn/
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  proceed.test.ts > #321.69952336 a proceed never covers a call that needs authority > #321.69952336 the planted sorter's proceed for "want me to push to main?" is recorded with its rule, and the turn's `git push origin main` is held at PreToolUse with an authority ask that waits for your answer
+Error: the stop ending on "want me to push to main?" was not answered proceed: its reply let the turn end (exit 0 after 204 ms, stdout "{\"systemMessage\":\"says done · next: DeepBuild · session/31eec3b9/01M86B12THK1XHMZ9W64QN62DE\"}", stderr "")
+ ❯ must helpers.ts:41:18
+     39| /** Throws `message` unless `ok`: a judgement reads as one sentence of…
+     40| export function must(ok: boolean, message: string): void {
+     41|   if (!ok) throw Error(message);
+       |                  ^
+     42| }
+     43| /** The message a judgement throws, or null when it holds: the wrong p…
+ ❯ judgeProceed proceed.test.ts:52:3
+ ❯ judgePush proceed.test.ts:74:9
+ ❯ proceed.test.ts:121:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  proceed.test.ts > #321.69952336 a proceed never covers a call that needs authority > #321.69952336 after the same sorter's proceed for "want me to run the tests?", `npm test` runs with no ask
+Error: no event records the proceed for "want me to run the tests?" with the rule that sorted it (planted-proceed-4235ce73) within 30 s; the stop was sent on with "says done · next: DeepBuild · session/1e880da3/01M86B1362ZPAH7DMAXZWQXHBJ\nDeepBuild: proceed (\"want me to run the tests?\", by rule offer-in-scope). Go on with the work. A call that pushes, merges, dispatches, sends or deletes still waits for an authority ask."; the record holds kinds agent.reach, session.start, session.rules_delivered, task.created, user.ask, tool.before, tool.after, agent.stop, turn.usage, claim.made, session.state, row.set, session.reading, stop.held, notice.delivered, question.proceeded
+ ❯ must helpers.ts:41:18
+     39| /** Throws `message` unless `ok`: a judgement reads as one sentence of…
+     40| export function must(ok: boolean, message: string): void {
+     41|   if (!ok) throw Error(message);
+       |                  ^
+     42| }
+     43| /** The message a judgement throws, or null when it holds: the wrong p…
+ ❯ judgeProceed proceed.test.ts:62:3
+ ❯ judgeTests proceed.test.ts:105:3
+ ❯ proceed.test.ts:125:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  proceed.test.ts > #321.69952336 wrong program: a core that lets a proceed cover the calls of the turn it starts > #321.69952336 DEEP_HUB_PLANT=proceed-covers-turn lets `git push origin main` through, and the push's judgement fails naming the call
+AssertionError: and fails it because the push ran, naming the call: expected 'the stop ending on "want me to push t…' to match /`git push origin main` ran in the turn/
+
+- Expected:
+/`git push origin main` ran in the turn/
+
++ Received:
+"the stop ending on \"want me to push to main?\" was not answered proceed: its reply let the turn end (exit 0 after 556 ms, stdout \"{\\\"systemMessage\\\":\\\"says done · next: DeepBuild · session/0875faed/01M86B22878GCSEP9XSNXWN2CA\\\"}\", stderr \"\")"
+
+ ❯ proceed.test.ts:136:75
+    134|     const failure = await failureOf(() => judgePush(w));
+    135|     expect(failure, 'the planted core that lets a proceed cover its tu…
+    136|     expect(failure, 'and fails it because the push ran, naming the cal…
+       |                                                                           ^
+    137|   }, 300_000);
+    138| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  00:33:44
+   Duration  34.76s (tests 100%)
+
+[redraft run 2 exit 1] Tue Nov 24 12:34:18 AM PST 2026
+
+ RUN  v5.0.5 <home>/deepbuild/.claude/worktrees/321-redraft-ac1/tests/acceptance/321-redraft-ac1
+
+ × proceed.test.ts > #321.69952336 a proceed never covers a call that needs authority > #321.69952336 the planted sorter's proceed for "want me to push to main?" is recorded with its rule, and the turn's `git push origin main` is held at PreToolUse with an authority ask that waits for your answer 1294ms
+   → the stop ending on "want me to push to main?" was not answered proceed: its reply let the turn end (exit 0 after 645 ms, stdout "{\"systemMessage\":\"says done · next: DeepBuild · session/317fb8d7/01M86B26940KKERKA2HFNC91ZH\"}", stderr "")
+ × proceed.test.ts > #321.69952336 a proceed never covers a call that needs authority > #321.69952336 after the same sorter's proceed for "want me to run the tests?", `npm test` runs with no ask 30559ms
+   → no event records the proceed for "want me to run the tests?" with the rule that sorted it (planted-proceed-9e9411fe) within 30 s; the stop was sent on with "says done · next: DeepBuild · session/71738a94/01M86B275NY0XBJ0KBTP84B269\nDeepBuild: proceed (\"want me to run the tests?\", by rule offer-in-scope). Go on with the work. A call that pushes, merges, dispatches, sends or deletes still waits for an authority ask."; the record holds kinds agent.reach, session.start, task.created, user.ask, session.state, row.set, tool.before, tool.after, agent.stop, turn.usage, claim.made, session.reading, stop.held, session.rules_delivered, notice.delivered, question.proceeded
+ × proceed.test.ts > #321.69952336 wrong program: a core that lets a proceed cover the calls of the turn it starts > #321.69952336 DEEP_HUB_PLANT=proceed-covers-turn lets `git push origin main` through, and the push's judgement fails naming the call 2143ms
+   → and fails it because the push ran, naming the call: expected 'the stop ending on "want me to push t…' to match /`git push origin main` ran in the turn/
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  proceed.test.ts > #321.69952336 a proceed never covers a call that needs authority > #321.69952336 the planted sorter's proceed for "want me to push to main?" is recorded with its rule, and the turn's `git push origin main` is held at PreToolUse with an authority ask that waits for your answer
+Error: the stop ending on "want me to push to main?" was not answered proceed: its reply let the turn end (exit 0 after 645 ms, stdout "{\"systemMessage\":\"says done · next: DeepBuild · session/317fb8d7/01M86B26940KKERKA2HFNC91ZH\"}", stderr "")
+ ❯ must helpers.ts:41:18
+     39| /** Throws `message` unless `ok`: a judgement reads as one sentence of…
+     40| export function must(ok: boolean, message: string): void {
+     41|   if (!ok) throw Error(message);
+       |                  ^
+     42| }
+     43| /** The message a judgement throws, or null when it holds: the wrong p…
+ ❯ judgeProceed proceed.test.ts:52:3
+ ❯ judgePush proceed.test.ts:74:9
+ ❯ proceed.test.ts:121:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  proceed.test.ts > #321.69952336 a proceed never covers a call that needs authority > #321.69952336 after the same sorter's proceed for "want me to run the tests?", `npm test` runs with no ask
+Error: no event records the proceed for "want me to run the tests?" with the rule that sorted it (planted-proceed-9e9411fe) within 30 s; the stop was sent on with "says done · next: DeepBuild · session/71738a94/01M86B275NY0XBJ0KBTP84B269\nDeepBuild: proceed (\"want me to run the tests?\", by rule offer-in-scope). Go on with the work. A call that pushes, merges, dispatches, sends or deletes still waits for an authority ask."; the record holds kinds agent.reach, session.start, task.created, user.ask, session.state, row.set, tool.before, tool.after, agent.stop, turn.usage, claim.made, session.reading, stop.held, session.rules_delivered, notice.delivered, question.proceeded
+ ❯ must helpers.ts:41:18
+     39| /** Throws `message` unless `ok`: a judgement reads as one sentence of…
+     40| export function must(ok: boolean, message: string): void {
+     41|   if (!ok) throw Error(message);
+       |                  ^
+     42| }
+     43| /** The message a judgement throws, or null when it holds: the wrong p…
+ ❯ judgeProceed proceed.test.ts:62:3
+ ❯ judgeTests proceed.test.ts:105:3
+ ❯ proceed.test.ts:125:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  proceed.test.ts > #321.69952336 wrong program: a core that lets a proceed cover the calls of the turn it starts > #321.69952336 DEEP_HUB_PLANT=proceed-covers-turn lets `git push origin main` through, and the push's judgement fails naming the call
+AssertionError: and fails it because the push ran, naming the call: expected 'the stop ending on "want me to push t…' to match /`git push origin main` ran in the turn/
+
+- Expected:
+/`git push origin main` ran in the turn/
+
++ Received:
+"the stop ending on \"want me to push to main?\" was not answered proceed: its reply let the turn end (exit 0 after 181 ms, stdout \"\", stderr \"\")"
+
+ ❯ proceed.test.ts:136:75
+    134|     const failure = await failureOf(() => judgePush(w));
+    135|     expect(failure, 'the planted core that lets a proceed cover its tu…
+    136|     expect(failure, 'and fails it because the push ran, naming the cal…
+       |                                                                           ^
+    137|   }, 300_000);
+    138| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  00:34:19
+   Duration  36.74s (tests 100%)
+
+[redraft run 3 exit 1] Tue Nov 24 12:34:56 AM PST 2026
+ 00:34:56 up 4 days,  4:10,  4 users,  load average: 67.07, 96.73, 121.93

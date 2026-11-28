@@ -13,6 +13,7 @@
 // A hold denies the call, naming its ask; once you say yes the same call runs. #84's sort lives in questions.ts; its
 // proceeds are recorded here, and DEEP_HUB_TEST_SORTER, which only tests set, can still plant one.
 import { readFileSync } from 'node:fs';
+import { isAbsolute } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { AskRefused, subjectKey, type Asks, type PlanInput, type Target } from '@deepbuild/asks';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
@@ -109,9 +110,9 @@ const THREAD_REPLY = /\/pulls\/\d+\/comments\/\d+\/replies\b/;
 export class Holds {
   constructor(private readonly o: HoldOptions) {}
 
-  /** The planted sorter's rule and questions; none unless a test named a file. */
   private sorted(question: string): string | undefined {
     if (!this.o.sorter || !question) return undefined;
+    if (!isAbsolute(this.o.sorter)) return this.o.sorter;
     try {
       const s = JSON.parse(readFileSync(this.o.sorter, 'utf8')) as { rule?: unknown; proceed?: unknown };
       return Array.isArray(s.proceed) && s.proceed.includes(question.trim()) && typeof s.rule === 'string' ? s.rule : undefined;

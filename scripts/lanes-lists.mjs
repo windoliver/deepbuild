@@ -34,7 +34,7 @@ export const alone = ['tests/acceptance/149/', 'tests/acceptance/1523/', 'tests/
   ...['cycles', 'planted', 'leftovers', 'sessions/readings', 'sessions/planted'].map((f) => `tests/acceptance/824/${f}.test.ts`), 'tests/acceptance/1285/', 'tests/acceptance/1294/', 'tests/acceptance/1507/', 'tests/acceptance/1998/', 'tests/acceptance/1999/', 'tests/acceptance/1848/', 'tests/acceptance/2653/', 'tests/acceptance/1868/', 'tests/acceptance/1868-redraft-ac2/',
   'tests/acceptance/1334-redraft-2565/'];
 
-export const LANE_FILE = /^tests\/acceptance\/(\d+)(-[a-z0-9-]*(?:redraft|oracle)[a-z0-9-]*)?\/(?:([a-z0-9-]*(?:redraft|oracle)[a-z0-9-]*)\/)?lane\.json$/;
+export const LANE_FILE = /^tests\/acceptance\/(\d+)(-[a-z0-9-]+)?\/(?:([a-z0-9-]*(?:redraft|oracle)[a-z0-9-]*)\/)?lane\.json$/;
 function laneLists(text, folder, isFile) {
   let lane;
   try { lane = JSON.parse(text); } catch { return null; }
@@ -49,7 +49,7 @@ const isFile = (path) => statSync(join(root, path), { throwIfNoEntry: false })?.
 const laneFolders = [];
 export const fromLaneFiles = { alone: [], timed: [], slow: [] };
 for (const folder of existsSync(suites) ? readdirSync(suites, { withFileTypes: true }) : []) {
-  if (!folder.isDirectory() || !/^\d+(?:-[a-z0-9-]*(?:redraft|oracle)[a-z0-9-]*)?$/.test(folder.name)) continue;
+  if (!folder.isDirectory() || !/^\d+(?:-[a-z0-9-]+)?$/.test(folder.name)) continue;
   const at = `tests/acceptance/${folder.name}/`;
   const subfolders = readdirSync(join(suites, folder.name), { withFileTypes: true }).filter((sub) => sub.isDirectory()).map((sub) => `${at}${sub.name}/`);
   for (const entry of [at, ...subfolders]) if (LANE_FILE.test(`${entry}lane.json`) && isFile(`${entry}lane.json`)) laneFolders.push(entry);
@@ -349,6 +349,7 @@ alone.push('tests/acceptance/2028/');
 alone.push('tests/acceptance/2021/');
 alone.push('tests/acceptance/2029/');
 alone.push('tests/acceptance/1101/');
+byHand.push('tests/acceptance/321/proceed.test.ts');
 alone.push('tests/acceptance/1056/');
 alone.push('tests/acceptance/1897/', 'tests/acceptance/1899/', 'tests/acceptance/1903/');
 alone.push('tests/acceptance/2189/', 'tests/acceptance/2189-redraft-ac1/', 'tests/acceptance/2189-redraft-ac3/', 'tests/acceptance/2691/');

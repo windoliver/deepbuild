@@ -1,0 +1,138 @@
+// #321.69952336: a planted sorter answers "want me to push to main?" with "proceed". The proceed is recorded with its
+// rule, and in the turn it starts the agent's `git push origin main` is held at PreToolUse with an authority ask naming
+// the push, which waits for your answer. After the same sorter's "proceed" for "want me to run the tests?", `npm test`
+// runs with no ask. A core that lets a "proceed" cover the calls of the turn it starts (DEEP_HUB_PLANT=
+// proceed-covers-turn) lets the push through and fails the push's judgement, naming the call.
+//
+// Everything goes through the real programs: deep-hook as Claude Code's hook entry runs it, the hub as `deep hub run`,
+// and the record and the inbox read back on the hub's socket as the cli role. No call is ever executed: a PreToolUse
+// is the agent asking whether it may run one.
+import { randomBytes } from 'node:crypto';
+import { join } from 'node:path';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import {
+  AC, allEvents, asksOf, cleanup, deepHook, failureOf, inbox, makeHome, makeRepo, must, Session, shown, sleep,
+  startHub, stopReason, stopReply, toolDecision, type Asked, type HookCall, type Hub,
+} from './helpers.ts';
+
+const PUSH = 'git push origin main';
+const TESTS = 'npm test';
+const PUSH_QUESTION = 'want me to push to main?';
+const TESTS_QUESTION = 'want me to run the tests?';
+/** How long a judgement waits for the hub to record something or raise an ask; no number in the issue or design. */
+const WAIT_MS = 30_000;
+/** How long a held push's PreToolUse is watched after its ask shows, to see that it doesn't let the call run. */
+const WATCH_MS = 3_000;
+
+interface World { hub: Hub; home: string; repo: string; rule: string }
+async function world(plant?: string): Promise<World> {
+  const home = makeHome();
+  const repo = makeRepo();
+  // The rule the planted sorter names for every proceed it gives: a token no shipped rule has.
+  const rule = `planted-proceed-${randomBytes(4).toString('hex')}`;
+  const hub = await startHub(home, { sorterRule: rule, ...(plant ? { plant } : {}) });
+  return { hub, home, repo, rule };
+}
+
+/** A session you started with a prompt, whose agent edits a file and ends its turn on `question`. */
+async function turnEndingOn(w: World, question: string): Promise<{ s: Session; stop: HookCall }> {
+  const s = new Session(w.home, w.repo);
+  await s.start();
+  await s.prompt('The login page shows the wrong name. Fix it.');
+  await s.edit(join(w.repo, 'src', 'login.js'), 'user.name', 'user.displayName');
+  const stop = await s.stop(question);
+  return { s, stop };
+}
+
+/**
+ * The stop's question was answered "proceed": its reply sends the agent on, an event records the proceed with the
+ * question and the planted sorter's rule, and the proceed raised no ask.
+ */
+async function judgeProceed(w: World, s: Session, stop: HookCall, question: string): Promise<void> {
+  must(stopReply(stop.ran) === 'continue', `the stop ending on "${question}" was not answered proceed: its reply let the turn end (${shown(stop.ran)})`);
+  const deadline = Date.now() + WAIT_MS;
+  let recorded = false;
+  let kinds: string[] = [];
+  while (!recorded && Date.now() < deadline) {
+    const events = await allEvents(w.hub);
+    kinds = [...new Set(events.map((e) => e.kind))];
+    recorded = events.some((e) => !e.kind.startsWith('ask.') && JSON.stringify(e.data).includes(question) && JSON.stringify(e.data).includes(w.rule));
+    if (!recorded) await sleep(250);
+  }
+  must(recorded, `no event records the proceed for "${question}" with the rule that sorted it (${w.rule}) within ${WAIT_MS / 1000} s; the stop was sent on with ${JSON.stringify(stopReason(stop.ran).slice(0, 300))}; the record holds kinds ${kinds.join(', ')}`);
+  const asked = asksOf(await inbox(w.hub), s.id);
+  must(asked.length === 0, `the proceed for "${question}" raised an ask at the stop: ${JSON.stringify(asked)}`);
+}
+
+/** The authority ask of the session that names a push, if one is in the inbox. */
+const pushAsk = (rows: readonly Asked[], s: Session): Asked | undefined =>
+  asksOf(rows, s.id).find((r) => r.kind === 'authority' && /\bpush\b/i.test(r.question));
+
+/** After the proceed for "want me to push to main?", the turn's `git push origin main` is held with an authority ask that waits. */
+async function judgePush(w: World): Promise<void> {
+  const { s, stop } = await turnEndingOn(w, PUSH_QUESTION);
+  await judgeProceed(w, s, stop, PUSH_QUESTION);
+  // The turn the proceed started: the agent's next call is the push. Its hook may be held, so it isn't awaited here.
+  const { hook } = s.before('Bash', { command: PUSH, description: 'Push main to origin' }, WAIT_MS * 3);
+  let ended: HookCall | undefined;
+  void hook.then((h) => { ended = h; });
+  const deadline = Date.now() + WAIT_MS;
+  let ask: Asked | undefined;
+  let rows: Asked[] = [];
+  while (Date.now() < deadline) {
+    rows = await inbox(w.hub);
+    ask = pushAsk(rows, s);
+    if (ended && toolDecision(ended.ran) === 'allow') break;
+    if (ask) break;
+    await sleep(250);
+  }
+  const ran = (why: string) => `\`${PUSH}\` ran in the turn the proceed for "${PUSH_QUESTION}" started: ${why}`;
+  if (ended && toolDecision(ended.ran) === 'allow') {
+    throw Error(ran(`its PreToolUse let it through (${shown(ended.ran)}), ${ask ? `beside the ask ${ask.ask}` : 'with no authority ask naming it'}`));
+  }
+  must(ask !== undefined, `\`${PUSH}\` was not held with an authority ask naming the push within ${WAIT_MS / 1000} s of its PreToolUse; the session's asks: ${JSON.stringify(asksOf(rows, s.id))}; its PreToolUse ${ended ? `ended ${shown(ended.ran)}` : 'still waits'}`);
+  // Held, not let through later: the hook either still waits or has ended without allowing the call.
+  await sleep(WATCH_MS);
+  if (ended) must(toolDecision(ended.ran) === 'held', ran(`its PreToolUse let it through (${shown(ended.ran)}) while ${ask!.ask} was open`));
+  // And the ask waits for your answer: still open, unanswered, nobody having answered it.
+  const now = asksOf(await inbox(w.hub), s.id).find((r) => r.ask === ask!.ask);
+  must(now !== undefined && now.status !== 'closed' && now.outcome === 'unanswered', `the authority ask ${ask!.ask} naming \`${PUSH}\` didn't wait for your answer: it reads ${JSON.stringify(now)}`);
+}
+
+/** After the same sorter's proceed for "want me to run the tests?", the turn's `npm test` runs with no ask. */
+async function judgeTests(w: World): Promise<void> {
+  const { s, stop } = await turnEndingOn(w, TESTS_QUESTION);
+  await judgeProceed(w, s, stop, TESTS_QUESTION);
+  const pre = await s.before('Bash', { command: TESTS, description: 'Run the tests' }).hook;
+  must(toolDecision(pre.ran) === 'allow', `\`${TESTS}\` was held in the turn the proceed for "${TESTS_QUESTION}" started: ${shown(pre.ran)}`);
+  await sleep(WATCH_MS);
+  const asked = asksOf(await inbox(w.hub), s.id);
+  must(asked.length === 0, `\`${TESTS}\` raised an ask in the turn the proceed for "${TESTS_QUESTION}" started: ${JSON.stringify(asked)}`);
+}
+
+beforeAll(async () => { await deepHook(); }, 900_000);
+
+describe(`${AC} a proceed never covers a call that needs authority`, () => {
+  let w: World;
+  beforeAll(async () => { w = await world(); }, 120_000);
+  afterAll(cleanup, 60_000);
+
+  it(`${AC} the planted sorter's proceed for "${PUSH_QUESTION}" is recorded with its rule, and the turn's \`${PUSH}\` is held at PreToolUse with an authority ask that waits for your answer`, async () => {
+    await judgePush(w);
+  }, 300_000);
+
+  it(`${AC} after the same sorter's proceed for "${TESTS_QUESTION}", \`${TESTS}\` runs with no ask`, async () => {
+    await judgeTests(w);
+  }, 300_000);
+});
+
+describe(`${AC} wrong program: a core that lets a proceed cover the calls of the turn it starts`, () => {
+  afterAll(cleanup, 60_000);
+
+  it(`${AC} DEEP_HUB_PLANT=proceed-covers-turn lets \`${PUSH}\` through, and the push's judgement fails naming the call`, async () => {
+    const w = await world('proceed-covers-turn');
+    const failure = await failureOf(() => judgePush(w));
+    expect(failure, 'the planted core that lets a proceed cover its turn fails the push judgement').not.toBeNull();
+    expect(failure, 'and fails it because the push ran, naming the call').toMatch(new RegExp(`\`${PUSH}\` ran in the turn`));
+  }, 300_000);
+});
