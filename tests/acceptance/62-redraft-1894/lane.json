@@ -1,0 +1,1 @@
+{ "alone": true, "why": "timing: budgets.test.ts times the wiki build and the query as #62's own budgets file does", "timed": ["budgets.test.ts"] }

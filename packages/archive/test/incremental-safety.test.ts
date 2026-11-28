@@ -3,7 +3,7 @@ import { appendFileSync, readFileSync, renameSync, writeFileSync } from 'node:fs
 import { afterAll, expect, test } from 'vitest';
 import {
   allEvents, appendClaude, archivedOf, claudeTranscript, dataOf, openArchiveOn, openWorld, redacted, removeTemps,
-} from '../../../tests/acceptance/20/helpers.ts';
+} from '../../../tests/acceptance/20-redraft-1894/helpers.ts';
 
 afterAll(removeTemps);
 
