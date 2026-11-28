@@ -1,5 +1,5 @@
 //! A piece played headless, a step at a time, with a bot's entries on its input track (#184;
-//! canvas primitives: Check input: playtest, Check input: plug-in reads). The replica's play mode
+//! canvas primitives: Check input: playtest, Check input: extension reads). The replica's play mode
 //! (`deep-drive`'s `play`) is this: the piece's own logic items step on the track, and a bot, a
 //! policy given as data or a logic item added to this copy of the piece, writes entries with the
 //! writer `bot`. It answers the recorded track by hash, the values at the paths asked for at each

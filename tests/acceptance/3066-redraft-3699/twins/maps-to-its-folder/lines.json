@@ -1,0 +1,12 @@
+{
+  "scripts/lanes-lists.mjs": [
+    {
+      "find": [
+        "Object.assign(redrafted, { 'tests/acceptance/3066/same-failures.test.mjs': 'tests/acceptance/3066-redraft-3699/' });"
+      ],
+      "wrong": [
+        "Object.assign(redrafted, { 'tests/acceptance/3066/same-failures.test.mjs': 'tests/acceptance/3066/' });"
+      ]
+    }
+  ]
+}
