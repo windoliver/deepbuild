@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
-import { binaryNames, placeHubBinaries, selectBinaries } from '../scripts/proof-binaries.mjs';
+import { placeHubBinaries, selectBinaries } from '../scripts/proof-binaries.mjs';
 
 const CRATES = ['deep-hook', 'deep-show', 'deep-app'];
 function repo(t, files) {
@@ -20,7 +20,7 @@ function repo(t, files) {
 const start = "import { spawnSync } from 'node:child_process';\nimport { join } from 'node:path';\nimport test from 'node:test';\n";
 const APP_HELPER = "import { join } from 'node:path';\nexport const APP = process.env.DEEP_APP_BIN || join(process.cwd(), 'target/debug/deep-app');\n";
 
-test('a test whose helper reads target/debug/deep-app gets that binary in the copy, and runs with it placed (#3720)', (t) => {
+test('a test whose helper reads target/debug/deep-app gets that binary in the copy (#3720)', (t) => {
   const dir = repo(t, {
     'tests/acceptance/1/helpers.mjs': APP_HELPER,
     'tests/acceptance/1/app.test.mjs': `${start}import { APP } from './helpers.mjs';\ntest('app', () => spawnSync(APP, ['check']));\n`,
@@ -59,7 +59,6 @@ test('a test that builds its binary itself, in its own call or a helper\'s, name
 
 test('a run in the checkout itself, which keeps its own target/, is asked for none', (t) => {
   const dir = repo(t, { 'tests/acceptance/8/app.test.mjs': `${start}test('app', () => spawnSync(join(process.cwd(), 'target/debug/deep-app'), []));\n` });
-  assert.deepEqual(binaryNames(dir, ['tests/acceptance/8/app.test.mjs']), []);
   assert.deepEqual(selectBinaries(dir, ['tests/acceptance/8/app.test.mjs'], false).target, []);
 });
 
@@ -77,4 +76,18 @@ test('a binary placed for one use of a bay is gone for the next use that needs n
   assert.deepEqual([existsSync(placed('deep-app')), existsSync(placed('deep-hook'))], [false, true]);
   placeHubBinaries(bay, bin, []);
   assert.deepEqual([existsSync(placed('deep-app')), existsSync(placed('deep-hook')), existsSync(placed('deps/kept'))], [false, false, true]);
+});
+
+test("a binary cargo built in the bay keeps its own bytes in target/debug/deps when the lane's copy takes its place", (t) => {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'deep-3720-link-')));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const bin = join(dir, 'bin'), debug = join(dir, 'bay', 'target', 'debug');
+  mkdirSync(bin);
+  writeFileSync(join(bin, 'deep-app'), 'the lane built this\n');
+  mkdirSync(join(debug, 'deps'), { recursive: true });
+  writeFileSync(join(debug, 'deps', 'deep-app-0123'), 'cargo built this\n');
+  linkSync(join(debug, 'deps', 'deep-app-0123'), join(debug, 'deep-app'));
+  placeHubBinaries(join(dir, 'bay'), bin, ['deep-app']);
+  assert.equal(readFileSync(join(debug, 'deep-app'), 'utf8'), 'the lane built this\n');
+  assert.equal(readFileSync(join(debug, 'deps', 'deep-app-0123'), 'utf8'), 'cargo built this\n');
 });
