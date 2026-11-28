@@ -1,0 +1,7 @@
+{
+  "id": "test/counter",
+  "version": "1.0.0",
+  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
+  "checks": ["ext.counter.report"],
+  "requires": { "preview": ["deep.registerRoute"] }
+}

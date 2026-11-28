@@ -1,0 +1,1 @@
+{ "alone": true, "why": "binary: every file builds deep-hook with cargo (#25 routes helpers), starts real hubs and Claude Code stand-ins; two run #25's route files in a child Vitest" }

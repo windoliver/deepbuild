@@ -1,0 +1,68 @@
+commit b1aea29b33a61923e79fb0200e264182971403a6
+Author: scratch <scratch@invalid>
+Date:   Fri Nov 27 21:35:05 2026 -0800
+
+    scratch: before lane for #3298, pass A (never pushed)
+    
+    Part of #27
+
+diff --git a/scripts/lanes.mjs b/scripts/lanes.mjs
+index 40ded6be0..502813cbe 100644
+--- a/scripts/lanes.mjs
++++ b/scripts/lanes.mjs
+@@ -1201,3 +1201,27 @@ if (process.argv[2] === 'alone' && process.argv[3] === '--by-reason' && realpath
+   for (const [reason, count] of [...counts].sort(([a], [b]) => a.localeCompare(b))) console.log(`| ${reason} | ${count} |`);
+   console.log(`\n${alone.length} alone entries.`);
+ }
++
++// scratch for #3298 pass A: every other #27-tagged file by hand, so the lane runs only the kept files
++byHand.push('tests/acceptance/27/budgets.test.ts');
++byHand.push('tests/acceptance/27/desktop-redraft-2/desktop.test.ts');
++byHand.push('tests/acceptance/27/redraft-3178/waits.test.ts');
++byHand.push('tests/acceptance/27/wake.test.ts');
++byHand.push('tests/acceptance/3178/suites.test.ts');
++byHand.push('tests/acceptance/3428/doctor.test.ts');
++byHand.push('tests/acceptance/3428/real.test.ts');
++byHand.push('tests/acceptance/3428/setup.test.ts');
++byHand.push('tests/acceptance/3428/source.test.ts');
++byHand.push('tests/acceptance/3429/gate.test.ts');
++byHand.push('tests/acceptance/3429/mode.test.ts');
++byHand.push('tests/acceptance/3430/canceled.test.ts');
++byHand.push('tests/acceptance/55-redraft-ac13/delivery.test.ts');
++byHand.push('tests/acceptance/55-redraft-ac13/wrong-program.test.ts');
++byHand.push('tests/acceptance/55/budgets.test.ts');
++byHand.push('tests/acceptance/55/gate.test.ts');
++byHand.push('tests/acceptance/55/permissions.test.ts');
++byHand.push('tests/acceptance/55/real.test.ts');
++byHand.push('tests/acceptance/994/deadline-redraft/deadline.test.ts');
++byHand.push('tests/acceptance/994/first-screen-redraft/first-screen.test.ts');
++byHand.push('tests/acceptance/994/first-screen-redraft/shown.test.ts');
++byHand.push('tests/acceptance/994/hub.test.ts');
+diff --git a/tests/acceptance/27/twins.json b/tests/acceptance/27/twins.json
+index 98f325a9b..f5aa5c858 100644
+--- a/tests/acceptance/27/twins.json
++++ b/tests/acceptance/27/twins.json
+@@ -1,20 +1,5 @@
+ {
+-  "#27.778c531d": [
+-    "waiter-never-wakes"
+-  ],
+-  "#27.6e863673": [
+-    "repeat-reaches-you"
+-  ],
+-  "#27.f8331d25": [
+-    "wake-assumed"
+-  ],
+-  "#27.e6116d56": [
+-    "skip-default-at-deadline",
+-    "wake-assumed",
+-    "waiter-outlives-session",
+-    "answer-skips-held-stop"
+-  ],
+-  "#27.ffbe7d6f": [
+-    "waiter-checks-every-5s"
+-  ]
++  "#27.6e863673": ["repeat-reaches-you"],
++  "#27.e6116d56": ["answer-skips-held-stop"],
++  "#27.ffbe7d6f": ["waiter-checks-every-5s"]
+ }

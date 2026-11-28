@@ -39,6 +39,9 @@ timed.push('tests/acceptance/667/redraft-3178/criteria.test.ts');
 alone.push('tests/acceptance/27/redraft-3178/', 'tests/acceptance/27/outcomes-redraft-3178/', 'tests/acceptance/111/redraft-3178/');
 slow.push('tests/acceptance/3178/suites.test.ts');
 slow.push('tests/acceptance/27/redraft-3178/waits.test.ts');
+byHand.push('tests/acceptance/25/routes/held.test.ts', 'tests/acceptance/25/routes/one-route.test.ts');
+Object.assign(redrafted, { 'tests/acceptance/25/routes/held.test.ts': 'tests/acceptance/25-redraft-3243/', 'tests/acceptance/25/routes/one-route.test.ts': 'tests/acceptance/25-redraft-3243/' });
+byHand.push('tests/acceptance/3243/provisional.test.ts');
 
 // #1876: the design links lane compares the design with files on main, which #2339's first draft doesn't copy into its
 // scratch tree, so its planted tests stop at their control (tests/acceptance/2339/redraft-1876/DISPUTE.md). On the
@@ -157,6 +160,7 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/1861/', 'tests/acceptance/2897/', 'tests/acceptance/2897-redraft-ac6/', 'tests/acceptance/2697/', 'tests/acceptance/409-redraft-2697/',
     'tests/acceptance/1181/', 'tests/acceptance/1834/', 'tests/acceptance/2035/', 'tests/acceptance/2288/', 'tests/acceptance/2748/', 'tests/acceptance/1500/',
     'tests/acceptance/1500-oracle/', 'tests/acceptance/3234/', 'tests/acceptance/3234-redraft-ac3/', 'tests/acceptance/2039-oracle/',
+    'tests/acceptance/1881-redraft-2047/', 'tests/acceptance/96-redraft-1412/',
   ],
   timing: [
     'tests/acceptance/2513-redraft-2047/',
@@ -179,6 +183,7 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/268-redraft-1830/', 'tests/acceptance/465-redraft-1830/', 'tests/acceptance/968-redraft-1830/', 'tests/acceptance/1830/ac2-timing.test.ts',
     'tests/acceptance/1801/', 'tests/acceptance/2760-redraft-ac8/', 'tests/acceptance/2777/', 'tests/acceptance/553/',
     'tests/acceptance/980-redraft-ac9/', 'tests/acceptance/2317/', 'tests/acceptance/2740/',
+    'tests/acceptance/3405/',
   ],
   'shared: Docker': [
     'tests/acceptance/580/', 'tests/acceptance/238/', 'tests/acceptance/1255/', 'tests/acceptance/194/', 'tests/acceptance/531/', 'tests/acceptance/532/', 'tests/acceptance/190/',
@@ -224,6 +229,7 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/1488/', 'tests/acceptance/161/', 'tests/acceptance/2034/', 'tests/acceptance/2054/', 'tests/acceptance/3171/', 'tests/acceptance/290/',
     'tests/acceptance/2215/', 'tests/acceptance/2215-redraft-ac5/', 'tests/acceptance/3034/',
     'tests/acceptance/3507-redraft-ac2/',
+    'tests/acceptance/1219/', 'tests/acceptance/231/', 'tests/acceptance/2844/', 'tests/acceptance/2844-redraft-moving/', 'tests/acceptance/3036/', 'tests/acceptance/853/',
   ],
   'shared: the Lima VMs': [
     'tests/acceptance/1942/', 'tests/acceptance/1945/', 'tests/acceptance/1946/', 'tests/acceptance/1943/', 'tests/acceptance/1942-redraft-2073/',
@@ -233,6 +239,7 @@ for (const [reason, entries] of Object.entries({
   ],
   "shared: the checkout's built packages": ['tests/acceptance/2696/'],
   'shared: the sandbox log stream': [
+    'tests/acceptance/3570/',
     'tests/acceptance/67/', 'tests/acceptance/66/', 'tests/acceptance/103/', 'tests/acceptance/363/', 'tests/acceptance/365/', 'tests/acceptance/262/', 'tests/acceptance/366/',
     'tests/acceptance/881/', 'tests/acceptance/411/', 'tests/acceptance/236/', 'tests/acceptance/30/', 'tests/acceptance/104/', 'tests/acceptance/989/', 'tests/acceptance/37/',
     'tests/acceptance/348/', 'tests/acceptance/349/', 'tests/acceptance/351/', 'tests/acceptance/355/', 'tests/acceptance/139/', 'tests/acceptance/996/', 'tests/acceptance/832/',

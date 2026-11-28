@@ -9,6 +9,7 @@
 use std::sync::{Mutex, Once};
 
 use deep_gpu::view::Ui;
+#[cfg(target_os = "macos")]
 use gpui_kit::*;
 
 static VIEWS: Mutex<Vec<Ui>> = Mutex::new(Vec::new());
