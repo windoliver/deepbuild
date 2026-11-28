@@ -124,7 +124,15 @@ function runLane(): Promise<Lane> {
 // ---- Readings.
 
 const UUID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i;
-const unrunWord = (cause: string): 'INCONCLUSIVE' | 'BLOCKED' => (/^INCONCLUSIVE\b/.test(cause) ? 'INCONCLUSIVE' : 'BLOCKED');
+// The lane keeps a failure's cause as `<name>[ [code]]: <first line>`: a test the machine kept from its verdict ends
+// with BLOCKED or INCONCLUSIVE first in that line, as a twin's run on a loaded machine can.
+const ENV = /^(?:\w+(?: \[[^\]]*\])?: )?(BLOCKED|INCONCLUSIVE)\b/;
+const unrunWord = (cause: string): 'INCONCLUSIVE' | 'BLOCKED' => (ENV.exec(cause)?.[1] === 'INCONCLUSIVE' ? 'INCONCLUSIVE' : 'BLOCKED');
+/** A result that ended unrun: failed with BLOCKED or INCONCLUSIVE first in its cause's message. */
+const endedUnrun = (r: Result | null | undefined): boolean => r?.status === 'fail' && ENV.test(r.failure?.cause ?? '');
+const onMain = (t: LaneTest): Result => ({ status: t.status, failure: t.failure });
+/** INCONCLUSIVE when any of the reasons is, else BLOCKED. */
+const wordOf = (reasons: readonly string[]): 'INCONCLUSIVE' | 'BLOCKED' => (reasons.some((u) => unrunWord(u) === 'INCONCLUSIVE') ? 'INCONCLUSIVE' : 'BLOCKED');
 const shown = (r: Result | null): string => (!r ? 'no result' : `${r.status}${r.failure ? ` ${r.failure.atAssertion ? 'at its assertion' : 'before its assertion'} (${r.failure.cause})` : ''}`);
 const linesOf = (l: Lane, t: LaneTest): string[] => l.lines.filter((line) => line.includes(` before: ${t.key}: `));
 
@@ -159,7 +167,7 @@ function judgeTwin(l: Lane, c: Criterion, twin: string, naming: RegExp[], withou
   const headUnrun = files.filter((f) => l.head.unrunnable[f]).map((f) => `${f}: ${l.head.unrunnable[f]}`);
   const headErrors = files.filter((f) => l.head.fileErrors[f]).map((f) => `${f}: ${l.head.fileErrors[f]}`);
   if (!mine.length) {
-    if (headUnrun.length && !headErrors.length) return { state: 'unrun', detail: `${unrunWord(headUnrun.map((u) => u.split(': ').slice(1).join(': ')).find((u) => /^INCONCLUSIVE/.test(u)) ?? '')} the lane couldn't run the redraft on main: ${headUnrun.join('; ')}` };
+    if (headUnrun.length && !headErrors.length) return { state: 'unrun', detail: `${wordOf(headUnrun.map((u) => u.split(': ').slice(1).join(': ')))} the lane couldn't run the redraft on main: ${headUnrun.join('; ')}` };
     return { state: 'failed', detail: `the lane ran no test carrying ${c.tag} on main${headErrors.length ? `; files failed there outside their tests: ${headErrors.join('; ')}` : ''}${headUnrun.length ? `; not run: ${headUnrun.join('; ')}` : ''}` };
   }
   const laid = mine.flatMap((t) => t.twins.filter((x) => x.twin === twin));
@@ -175,11 +183,14 @@ function judgeTwin(l: Lane, c: Criterion, twin: string, naming: RegExp[], withou
   });
   if (proofs.length) return { state: 'proven', detail: proofs.map((t) => t.key).join(', ') };
   // Kept from a verdict by the machine: the twin's copy or main's couldn't run the file, or a test that fails on the twin
-  // as the criterion names was skipped on main (INCONCLUSIVE under load).
+  // as the criterion names was skipped on main (INCONCLUSIVE under load), or a test ended BLOCKED or INCONCLUSIVE on main
+  // or on the twin. A test that ran to its end on the twin and passed, or failed elsewhere for another cause, is no such.
   const twinUnrun = laid.filter((e) => e.unrunnable).map((e) => e.unrunnable!);
   const skippedOnMain = mine.filter((t) => t.status === 'skip' && !withoutTwin.includes('skip') && (() => { const r = t.twins.find((x) => x.twin === twin)?.result; return r?.status === 'fail' && r.failure?.atAssertion; })());
-  const unrun = [...twinUnrun, ...headUnrun, ...skippedOnMain.map((t) => `INCONCLUSIVE ${t.key} was skipped on main, so whether it passes without ${twin} is unread`)];
-  if (unrun.length) return { state: 'unrun', detail: `${unrunWord(unrun.find((u) => /^INCONCLUSIVE/.test(u)) ?? '')} ${unrun.join('; ')}\n${table()}` };
+  const endedOnTwin = mine.filter((t) => endedUnrun(t.twins.find((x) => x.twin === twin)?.result)).map((t) => `${t.twins.find((x) => x.twin === twin)!.result!.failure!.cause} (${t.key}, on ${twin})`);
+  const endedOnMain = mine.filter((t) => endedUnrun(onMain(t))).map((t) => `${t.failure!.cause} (${t.key}, on main)`);
+  const unrun = [...twinUnrun, ...headUnrun, ...endedOnTwin, ...endedOnMain, ...skippedOnMain.map((t) => `INCONCLUSIVE ${t.key} was skipped on main, so whether it passes without ${twin} is unread`)];
+  if (unrun.length) return { state: 'unrun', detail: `${wordOf(unrun)} ${unrun.join('; ')}\n${table()}` };
   return { state: 'failed', detail: table() };
 }
 
@@ -188,7 +199,7 @@ function settle(ctx: TestContext, l: Lane, verdicts: Record<string, Verdict>, wh
   const failed = Object.entries(verdicts).filter(([, v]) => v.state === 'failed');
   const unrun = Object.entries(verdicts).filter(([, v]) => v.state === 'unrun');
   const told = Object.entries(verdicts).map(([twin, v]) => `${twin}: ${v.state}: ${v.detail}`).join('\n');
-  if (!failed.length && unrun.length) ctx.skip(`${unrunWord(unrun.map(([, v]) => v.detail).find((d) => d.startsWith('INCONCLUSIVE')) ?? '')} ${what}: ${unrun.map(([twin]) => twin).join(', ')} kept from a verdict by the machine\n${told}`);
+  if (!failed.length && unrun.length) ctx.skip(`${wordOf(unrun.map(([, v]) => v.detail))} ${what}: ${unrun.map(([twin]) => twin).join(', ')} kept from a verdict by the machine\n${told}`);
   expect(Object.fromEntries(Object.entries(verdicts).map(([twin, v]) => [twin, v.state])), `#3289 ${what}\n${told}\n\nlane lines:\n${l.lines.join('\n').slice(-6000)}`)
     .toEqual(Object.fromEntries(Object.keys(verdicts).map((twin) => [twin, 'proven'])));
 }
@@ -233,14 +244,18 @@ describe('#3289 #25\'s twins counted by the before lane', () => {
       const proven = mine.filter((t) => linesOf(l, t).includes(`PASS before: ${t.key}: failed on ${twin} at its assertion`));
       // A test that fails on the twin is one the lane must count: read as failed on a twin at its assertion, never as
       // "fails on neither", nor left unproven. A test that passes on the twin (a wrong-program test, run on its plant
-      // either way) isn't the twin's reading.
-      const miscounted = mine.filter((t) => t.status === 'pass' && onTwin(t)?.result?.status === 'fail' && !linesOf(l, t).some((line) => /^PASS before: .*: failed on \S+ at its assertion$/.test(line)));
-      const neither = mine.filter((t) => onTwin(t)?.result?.status === 'fail' && linesOf(l, t).some((line) => line.includes('fails on neither the merge base nor its planted wrong program')));
+      // either way) isn't the twin's reading, nor is one that ended BLOCKED or INCONCLUSIVE on the twin, which the lane
+      // reads as "fails on neither" too: that one is unrun.
+      const ended = (t: LaneTest) => endedUnrun(onTwin(t)?.result);
+      const miscounted = mine.filter((t) => t.status === 'pass' && onTwin(t)?.result?.status === 'fail' && !ended(t) && !linesOf(l, t).some((line) => /^PASS before: .*: failed on \S+ at its assertion$/.test(line)));
+      const neither = mine.filter((t) => onTwin(t)?.result?.status === 'fail' && !ended(t) && linesOf(l, t).some((line) => line.includes('fails on neither the merge base nor its planted wrong program')));
       const stale = mine.flatMap((t) => linesOf(l, t).filter((line) => line.startsWith('BLOCKED before: ') && line.includes(`/twins/${twin} does not apply`)));
       const unrun = [...mine.flatMap((t) => (onTwin(t)?.unrunnable ? [onTwin(t)!.unrunnable!] : [])), ...redraftOf(c).files.filter((f) => l.head.unrunnable[f]).map((f) => l.head.unrunnable[f]!),
-        ...mine.filter((t) => t.status === 'skip' && onTwin(t)?.result?.status === 'fail').map((t) => `INCONCLUSIVE ${t.key} was skipped on main, so the lane read nothing of it`)];
+        ...mine.filter((t) => t.status === 'skip' && onTwin(t)?.result?.status === 'fail').map((t) => `INCONCLUSIVE ${t.key} was skipped on main, so the lane read nothing of it`),
+        ...mine.filter(ended).map((t) => `${onTwin(t)!.result!.failure!.cause} (${t.key}, on ${twin})`),
+        ...mine.filter((t) => endedUnrun(onMain(t))).map((t) => `${t.failure!.cause} (${t.key}, on main)`)];
       if (proven.length && !miscounted.length && !neither.length && !stale.length) verdicts[twin] = { state: 'proven', detail: proven.map((t) => t.key).join(', ') };
-      else if (!miscounted.length && !neither.length && !stale.length && unrun.length) verdicts[twin] = { state: 'unrun', detail: `${unrunWord(unrun.find((u) => /^INCONCLUSIVE/.test(u)) ?? '')} ${unrun.join('; ')}\n${table}` };
+      else if (!miscounted.length && !neither.length && !stale.length && unrun.length) verdicts[twin] = { state: 'unrun', detail: `${wordOf(unrun)} ${unrun.join('; ')}\n${table}` };
       else verdicts[twin] = { state: 'failed', detail: `${proven.length ? '' : `no test carrying ${c.tag} reads "failed on ${twin} at its assertion"; `}${[...miscounted, ...neither].map((t) => `${t.key} fails on ${twin} but the lane doesn't count it`).join('; ')}${stale.length ? `; ${stale.join('; ')}` : ''}\n${table}` };
     }
     settle(ctx, l, verdicts, 'the before lane on main must read each twin, laid alone, as "failed on <twin> at its assertion" for a redraft test of its criterion, and never read a test that fails on it as "fails on neither"');

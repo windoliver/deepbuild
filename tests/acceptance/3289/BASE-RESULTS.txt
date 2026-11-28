@@ -36,3 +36,15 @@ problems. The base is this suite's wrong program; no twin of its own is needed.
 
 The lane run itself (run-lane.mjs: prepareRuns and before over a redraft, on main and on each twin) never starts on the
 base, so it was not exercised; it runs once a redraft lands.
+
+## Rerun after the unrun fix (a result that ends with BLOCKED or INCONCLUSIVE first in its message counts as unrun)
+
+Same base 254bdc87c, fresh clone in ~/mac-runs, npm ci + npm run build --workspaces, Node v24.22.0. The first attempt
+ran before the workspace build and stopped at Vitest startup (@deepbuild/config-eval unresolved); it was rerun after.
+
+$ node node_modules/typescript/bin/tsc --noEmit -p tests/acceptance/3289
+exit 0
+
+$ node scripts/throttle.mjs test --wait 720 -- node node_modules/vitest/vitest.mjs run tests/acceptance/3289/lane.test.ts --no-file-parallelism
+vm.loadavg before: { 21.44 21.16 18.70 }   after: { 20.45 20.96 18.64 }
+exit 1; Tests 5 failed (5); the same five AssertionErrors, first lines unchanged ("#3289 no blind redraft of <AC> replaces ...").

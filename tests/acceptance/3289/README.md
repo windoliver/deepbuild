@@ -98,7 +98,10 @@ fails the test.
 
 A run the machine keeps from a verdict is skipped, with INCONCLUSIVE or BLOCKED first in the note, never passed: the
 lane wrote nothing or threw (BLOCKED, or INCONCLUSIVE when stopped at 5.5 h), a file the lane couldn't run on main or on
-a twin's copy (`unrunnable`, as a timed grant that never came, a build or an install that failed), or a test that fails
+a twin's copy (`unrunnable`, as a timed grant that never came, a build or an install that failed), a test that ended
+on main or on the twin with BLOCKED or INCONCLUSIVE first in its cause's message (the lane keeps `<name>: <first line>`,
+as `Error: BLOCKED: …`, and prints "fails on neither" for one that ended so on its twin; that line doesn't count as a
+miss), or a test that fails
 on the twin as named but was skipped on main (INCONCLUSIVE under load), so whether it passes without the twin is
 unread. A skip only stands when no twin of the test failed outright.
 
