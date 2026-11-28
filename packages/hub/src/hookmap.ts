@@ -9,7 +9,7 @@ export { adapterOf, hubAdapters, registry } from './adapter-facts.js';
 import { isObject as isObj, canonicalize, getSchema, sha256Hex, validate, type JsonValue } from '@deepbuild/contracts/runtime';
 import { isPrCreate, prUrlIn } from './forge.js';
 import { countMcp } from './mcp-servers.js';
-import { derivedId, refusal, signature, type Draft, type HookMeta, type Hunk, type Parsed, type Plant } from './wire.js';
+import { derivedId, refusal, signature, type Draft, type HookMeta, type Hunk, type ModeRead, type Parsed, type Plant } from './wire.js';
 
 /** The hub's moments an agent's own event names stand for, where the agent's differ from the hook names the core reads. */
 const MOMENTS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
@@ -17,7 +17,7 @@ const MOMENTS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   paseo: { 'agent.turn.after': 'Stop', 'agent.permission.before': 'PermissionRequest' },
 };
 const TOOL_KINDS = ['shell', 'read', 'edit', 'write', 'search', 'fetch', 'mcp', 'unknown'];
-const FROM = ['person', 'scheduled', 'subagent', 'session', 'continuation', 'unknown'];
+const FROM = ['person', 'scheduled', 'subagent', 'session', 'channel', 'continuation', 'unknown'];
 const ASKS = ['tool', 'plan', 'question', 'mode'];
 const ATTENTION = ['working', 'waiting', 'finished'];
 /**
@@ -151,6 +151,18 @@ function newest(name: string): string {
   const versions = ((registry().get(name).facts as JsonObject).events as JsonObject).versions as JsonObject;
   return Object.keys(versions).at(-1)!;
 }
+/**
+ * What a provider's facts say of the mode a turn started in (#3429), for a session paseo's plugin gates: one in which
+ * the agent approves its own calls, so paseo raises no request and no call reaches a guard; one that asks; or one the
+ * entry doesn't list, a snapshot that named none included, which is not known and never read as one that asks.
+ */
+function modeRead(provider: string, entry: JsonObject, mode: string, shown: string): ModeRead {
+  const modes = isObj(entry.modes) ? entry.modes : {};
+  const lists = (key: string): boolean => { const listed = modes[key]; return mode !== '' && Array.isArray(listed) && listed.includes(mode); };
+  if (lists('approvesOwnCalls')) return { code: 'mode_unchecked', reading: `This session runs ${provider} through paseo in its mode ${shown}, where the agent approves its own calls: no call is checked before it runs, and no guard entry is matched. Its turn's end is still checked.` };
+  if (lists('asks')) return { code: 'mode_asks', reading: `This session runs ${provider} through paseo in its mode ${shown}, which asks before each call: its calls are checked before they run.` };
+  return { code: 'mode_unknown', reading: `This session runs ${provider} through paseo in ${mode ? `the mode ${shown}` : 'a mode its snapshot does not name'}: mode not known. Its facts don't list it, so it isn't read as one that asks, and a call may run with no check before it. Its turn's end is still checked.` };
+}
 /** A model call as the agent's own transcript records it (#2019): a retry, with its attempt, most and cause, or the reply that ends the retries. */
 export interface ModelCall { outcome: 'retry' | 'reply'; attempt?: number; max?: number; cause?: string; at: number; record: string }
 /**
@@ -230,6 +242,7 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
   if (request.notes) meta.notes = request.notes;
   if (request.stage) meta.stage = request.stage;
   if (request.heavy) meta.heavy = request.heavy;
+  if (request.event === 'SessionStart' && typeof request.inbox === 'string' && request.inbox) meta.inbox = request.inbox;
   const fields: NonNullable<HookMeta['fields']> = {};
   for (const key of ['prompt_id', 'prompt', 'error', 'agent_id', 'source', 'last_assistant_message', 'turn_id', 'file_path', 'model'] as const) if (str(payload[key])) fields[key] = str(payload[key]);
   // The agent's own title for the session (#2018), on one line, scrubbed as a prompt's text is.
@@ -243,9 +256,13 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
     for (const [key, field] of [['request', 'request_id'], ['kind', 'permission_kind'], ['behavior', 'behavior'], ['from', 'from']] as const) if (str(payload[field])) meta.paseo[key] = str(payload[field]);
     // A provider the facts have no entry for is watch-only, and says which facts it lacks (#55).
     const providers = (registry().get(name).facts as JsonObject).providers;
-    if (!isObj(providers) || !isObj(providers[provider])) {
+    const entry = isObj(providers) ? providers[provider] : undefined;
+    if (!isObj(entry)) {
       meta.watchOnly = true;
       meta.paseo.lacks = `This session runs ${provider || 'an unnamed provider'} through paseo, which DeepBuild's paseo facts have no entry for, so it is watch-only: nothing is held, answered or sent for it, while its fail_closed guard entries still deny. The facts it lacks: bridge (its pinned bridge version), permissions (its permission quirks), modelCheck (the check of the exact model before the first prompt) and timeouts.`;
+    } else if (request.event === 'agent.turn.before' && entry.hooks === 'plugin') {
+      // The turn of a session the plugin gates starts in the mode paseo's snapshot named (#3429).
+      meta.paseo.mode = modeRead(provider, entry, str(payload.mode), scrub(str(payload.mode)).slice(0, 200));
     }
   }
   const tool = str(payload.tool_name);
@@ -299,6 +316,7 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
       data = { agent, worktree: meta.cwd || '-', branch: null, thread: meta.session || '-', loads: [] };
       // Which billing keys the agent had set, never their values.
       if (request.billing) data.billing = request.billing;
+      if (meta.inbox) data.inbox = meta.inbox;
       fill = 'loads';
       v = 3;
       if (typeof mapped.parent === 'string' && mapped.parent) {
@@ -324,6 +342,7 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
         data.disposition = 'handled';
         v = 2;
       }
+      if (data.from === 'channel') v = 2;
       break;
     }
     case 'tool.before':
@@ -552,4 +571,14 @@ function payloadCaller(payload: Record<string, unknown>): string | undefined {
   if (/[\\/]\.grok[\\/]/.test(transcript)) return 'grok';
   if (/[\\/]\.claude[\\/]projects[\\/]/.test(transcript)) return 'claude-code';
   return undefined;
+}
+
+/** A request line the adapters map, for a payload the core rebuilt from what the parser kept of the hook. */
+export function mappedHook(meta: HookMeta, draft: Draft, payload: Record<string, unknown>, transcript: readonly Record<string, unknown>[]): Record<string, unknown> | undefined {
+  if (meta.agent === 'pi' || meta.agent === 'paseo') return undefined;
+  const name = ADAPTERS[meta.agent] ?? 'claude';
+  const adapter = registry().get(name);
+  const version = ((adapter.facts as Record<string, unknown>).versions as string[]).at(-1)!;
+  const line = { v: 1 as const, agent: name, event: meta.event, seq: draft.seq ?? '0', id: draft.id, pid: meta.pid, ppid: meta.ppid, matched: [], payload: { session_id: meta.session, hook_event_name: meta.event, ...payload } as JsonValue };
+  return adapter.mapHook(line, version, transcript as JsonValue[]).events.find((e) => e.kind === draft.kind)?.data as Record<string, unknown> | undefined;
 }

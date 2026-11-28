@@ -29,6 +29,7 @@
     "render.exposure",
     "render.noise",
     "render.review",
+    "scene.relations",
     "scene.scale",
     "sound_lock"
   ],

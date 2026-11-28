@@ -1,0 +1,12 @@
+{
+  "packages/hub/src/session-state.ts": [
+    {
+      "find": [
+        "      const said = mode.reading !== last?.reading && (mode.code !== 'mode_asks' || (last !== null && last.code !== 'mode_asks'));"
+      ],
+      "wrong": [
+        "      const said = mode.code !== 'mode_asks' || (last !== null && last.code !== 'mode_asks');"
+      ]
+    }
+  ]
+}

@@ -147,8 +147,9 @@ export class McpOperations {
       const sent = isObj(params.arguments) ? params.arguments : {};
       // A listing asked while plug-ins load answers not_ready with what loaded, never part of the list (#1415); the
       // planted hub answers the list as it stands once its record, the start's first step, is open.
-      const loading = tool === 'deep_kinds' ? this.loading() : undefined;
-      if (loading && this.options.settings.plant === 'kinds-partial-while-loading') {
+      // A fetch reads the libraries the plug-ins add, as a lookup reads the kinds they add: both wait for them to load.
+      const loading = tool === 'deep_kinds' || (tool === 'deep_job' && args.op === 'fetch') ? this.loading() : undefined;
+      if (loading && tool === 'deep_kinds' && this.options.settings.plant === 'kinds-partial-while-loading') {
         while (!this.options.services.record && !this.options.kernel.stopping) await new Promise((done) => setTimeout(done, 10));
         return await this.options.services.canvasSide.kinds(args);
       }
@@ -170,9 +171,10 @@ export class McpOperations {
           return asAnswered(await this.fit(limit, false, (room) => canvas.show(session ? { session } : { session: null }, room === undefined ? call : { ...call, room })));
         }
         case 'deep_query': return asAnswered(await this.fit(limit, true, (room) => canvas.query(session ?? null, room === undefined ? args : { ...args, room })));
-        // Asset search and fetch read the hub's libraries, which no room reaches, and a fetch is not asked twice.
-        case 'deep_kinds': return asAnswered(args.op === 'assets' || args.op === 'fetch' ? await canvas.kinds(args) : await this.fit(limit, true, (room) => canvas.kinds(room === undefined ? args : { ...args, room })));
-        case 'deep_job': return asAnswered(await this.options.control().job(args, context.call));
+        // Asset search reads the hub's libraries, which no room reaches.
+        case 'deep_kinds': return asAnswered(args.op === 'assets' ? await canvas.kinds(args) : await this.fit(limit, true, (room) => canvas.kinds(room === undefined ? args : { ...args, room })));
+        // A fetch brings an asset in from those libraries, and is not asked twice (#3525).
+        case 'deep_job': return asAnswered(args.op === 'fetch' ? await canvas.assets(args) : await this.options.control().job(args, context.call));
         case 'deep_root_plan': return await this.options.services.hosts.proposeRoot(args);
         case 'deep_status': return await this.status(session);
         case 'deep_search': return await this.find(String(args.query), session, context, typeof args.file === 'string' ? args.file : undefined, typeof args.cursor === 'string' ? args.cursor : undefined);
@@ -532,7 +534,7 @@ export class McpOperations {
         if (!slackConfig(this.options.services.root.dir)) throw refuse('required', '/params/arguments/thread', 'No Slack connector: put your Slack user ID in the hub\'s slack.json as {"you": "U…"}, mode 0600, and enter your bot token with deep secret add slack token, to read this thread.', null);
       } else {
         need('check', 'Name the check in the repo\'s spec that will prove the task done; a task without one is refused, since nobody could tell it was done.');
-        const approved = checksIn((await approvedSpec(s.cwd, (await headOf(s.cwd).catch(() => undefined))?.sha ?? '')).spec);
+        const approved = checksIn((await approvedSpec(s.cwd, (await headOf(s.cwd).catch(() => undefined))?.sha ?? '', this.options.services.record)).spec);
         if (!approved.has(String(args.check))) throw this.unknownCheck([...approved.keys()], args.check);
       }
       need('steps', 'List the task\'s steps, in order.');

@@ -33,6 +33,8 @@ pub(crate) mod test_tools;
 pub(crate) mod tools;
 // #2892: `ship.bytes` and the ship checks' test server.
 pub(crate) mod ship;
+mod sources;
+mod subset;
 mod web;
 mod work;
 pub(crate) use web::full_player;
@@ -164,7 +166,7 @@ pub enum Guard {
     /// `valid_until`.
     ReuseIgnoresValidUntil,
     /// #231: one export guard waits 8.4 ms on every frame.
-    GuardWaits,
+    ExportGuardWaits,
     /// #231: the content key of an item that reads a spectrum array leaves the band levels out.
     KeyWithoutSpectrumBand,
     /// #231: each frame is read back and hashed with BLAKE3 on the CPU.
@@ -281,7 +283,7 @@ pub(crate) fn planted(name: &str) -> Option<Planted> {
         "receipt_wall_sums_phases" => Planted::Export(G::WallSumsPhases),
         "receipt_books_compiles_under_draw" => Planted::Export(G::BooksCompilesUnderDraw),
         "reuse_ignores_valid_until" => Planted::Export(G::ReuseIgnoresValidUntil),
-        "guard_waits_8_4_ms" => Planted::Export(G::GuardWaits),
+        "guard_waits_8_4_ms" => Planted::Export(G::ExportGuardWaits),
         "content_key_without_spectrum_band" => Planted::Export(G::KeyWithoutSpectrumBand),
         "export_hashes_on_cpu" => Planted::Export(G::HashesOnCpu),
         other => Planted::Export(G::Codec(CODEC_PLANTS.iter().find(|p| **p == other)?)),
@@ -552,6 +554,8 @@ pub struct Job {
     pub pins: Vec<String>,
     /// #1250: `gif: {scale}` (or `video.gif`), an indexed look's GIF's options.
     pub gif: Value,
+    /// #1042: `web: {sources}` (or `video.web`), the web player's public sources.
+    pub web: Value,
     /// #231: `purpose: draft`: an export that runs film.blank and frames.finite but not the
     /// delivery decode, stays in the app's store and is never shared, attached or sent.
     pub draft: bool,
@@ -594,6 +598,7 @@ impl Default for Job {
             tool: None,
             pins: Vec::new(),
             gif: Value::Null,
+            web: Value::Null,
             draft: false,
             readings: Vec::new(),
         }
@@ -780,6 +785,11 @@ pub fn parse(c: &Map<String, Value>) -> Option<Job> {
         gif: c
             .get("gif")
             .or_else(|| video.and_then(|v| v.get("gif")))
+            .cloned()
+            .unwrap_or(Value::Null),
+        web: c
+            .get("web")
+            .or_else(|| video.and_then(|v| v.get("web")))
             .cloned()
             .unwrap_or(Value::Null),
         draft: match c.get("purpose") {

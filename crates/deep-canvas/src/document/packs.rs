@@ -27,6 +27,7 @@ use crate::registry::{self, Range, Sealed, Semver};
 use crate::schedule::{canonical, Hasher};
 pub(super) use inputs::input_fault;
 pub(super) use moved::{moved_notice, moved_to, removals, removed};
+use parser::Parser;
 
 mod aliases;
 pub mod census;
@@ -35,6 +36,7 @@ mod entries;
 mod inputs;
 pub mod module_fields;
 mod moved;
+mod parser;
 mod parts;
 mod place;
 mod refused;
@@ -307,6 +309,25 @@ pub struct Pack {
     pub removed: BTreeMap<String, String>,
 }
 
+impl Pack {
+    pub fn left(&self) -> Value {
+        let entries: Vec<Value> = self.entries.iter().map(|e| {
+            json!({"registry": e.registry, "name": e.name, "kit": e.kit.kept(), "twin": e.twin.as_ref().map(|t| t.kept())})
+        }).collect();
+        let kinds: Map<String, Value> = self
+            .kinds
+            .iter()
+            .map(|(name, k)| {
+                (
+                    name.clone(),
+                    json!({"kit": k.kit, "at_extremes": k.at_extremes, "meshes": k.meshes}),
+                )
+            })
+            .collect();
+        json!({"entries": entries, "kinds": kinds})
+    }
+}
+
 /// The step ops this slice expands: a mark or an item of a kind the build registers.
 /// `cue` writes a cue over the calling cue's targets; only a `cue.kind@1` verb runs it (#222).
 /// A film recipe's `shot`, `marker`, `strip` and `transition` each write an entry of the
@@ -348,6 +369,22 @@ pub fn section_of(op: &str) -> Option<&'static str> {
 /// The pack check (Pack: checked once per version). Refuses with the issues at the manifest's
 /// paths; a module the build lacks is `module_missing` naming it.
 pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result<Pack, Vec<Issue>> {
+    run_check(manifest, sealed, planted, None, &mut Ran::default())
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Ran {
+    pub kits: u64,
+    pub fields: u64,
+}
+
+fn run_check(
+    manifest: &Value,
+    sealed: &Sealed,
+    planted: Planted,
+    left: Option<&Value>,
+    ran: &mut Ran,
+) -> Result<Pack, Vec<Issue>> {
     let mut issues = Vec::new();
     let bad = |path: &str, actual: Value, what: &str| {
         Issue::envelope("out_of_range", path.to_string(), actual, what)
@@ -406,19 +443,27 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
             Some(req) => {
                 for (key, value) in req {
                     match key.as_str() {
-                        "core" => {
-                            if value
-                                .as_str()
-                                .filter(|r| Range::parse(r).is_some())
-                                .is_none()
-                            {
-                                issues.push(bad(
-                                    "requires/core",
-                                    value.clone(),
-                                    "not a version range",
-                                ));
+                        // The range of cores the pack runs on against the build's own (#2058).
+                        "core" => match value.as_str().and_then(Range::parse) {
+                            None => issues.push(bad(
+                                "requires/core",
+                                value.clone(),
+                                "not a version range",
+                            )),
+                            Some(range) => {
+                                let build = registry::core_semver();
+                                if !range.matches(build) {
+                                    issues.push(bad(
+                                        "requires/core",
+                                        value.clone(),
+                                        &format!(
+                                            "pack `{}` requires core {range}; this build has core {build}",
+                                            id.text()
+                                        ),
+                                    ));
+                                }
                             }
-                        }
+                        },
                         "modules" => match value.as_object() {
                             None => {
                                 issues.push(bad("requires/modules", value.clone(), "not an object"))
@@ -523,7 +568,14 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
         None => Vec::new(),
         Some(e) => {
             let recipes = fields.get("recipes");
-            check_entries(&id, e, &assets, recipes, sealed, &mut issues)
+            check_entries(
+                &id,
+                e,
+                (assets.as_slice(), recipes),
+                sealed,
+                (left, &mut *ran),
+                &mut issues,
+            )
         }
     };
     let kinds = check_kinds(
@@ -554,7 +606,10 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
     };
     let (moved, removed) = moved::read(fields, &id.name, &requires_packs, &mut issues);
     for key in fields.keys().filter(|k| !PACK_KEYS.contains(&k.as_str())) {
-        issues.extend(module_fields::check(sealed, manifest, key));
+        if left.is_none() {
+            ran.fields += 1;
+            issues.extend(module_fields::check(sealed, manifest, key));
+        }
     }
     if !issues.is_empty() {
         return Err(issues);
@@ -581,9 +636,9 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
 fn check_entries(
     id: &PackId,
     entries: &Value,
-    assets: &[Value],
-    recipes: Option<&Value>,
+    (assets, recipes): (&[Value], Option<&Value>),
     sealed: &Sealed,
+    (left, ran): (Option<&Value>, &mut Ran),
     issues: &mut Vec<Issue>,
 ) -> Vec<registry::lists::SealedEntry> {
     let mut out = Vec::new();
@@ -696,7 +751,26 @@ fn check_entries(
                     v
                 }
             };
-            let kit = reg.def.run_kit(entry, &judged);
+            let kept = left.and_then(|l| {
+                let mut held = l["entries"].as_array()?.iter();
+                let e = held.find(|e| e["registry"] == **name && e["name"] == *entry)?;
+                let kit = registry::lists::KitResult::from_kept(&reg.def.kit, &e["kit"])?;
+                let twin = match reg.def.twin {
+                    Some(_) => Some(registry::lists::KitResult::from_kept(
+                        &reg.def.kit,
+                        &e["twin"],
+                    )?),
+                    None => None,
+                };
+                Some((kit, twin))
+            });
+            let (kit, twin) = kept.unwrap_or_else(|| {
+                ran.kits += 1 + u64::from(reg.def.twin.is_some());
+                (
+                    reg.def.run_kit(entry, &judged),
+                    reg.def.twin.map(|t| t(entry, value)),
+                )
+            });
             if !kit.pass() {
                 let why: Vec<String> = kit
                     .rules
@@ -710,25 +784,27 @@ fn check_entries(
                 ));
                 continue;
             }
-            out.push(registry::lists::SealedEntry {
-                name: entry.to_string(),
-                registry: name.clone(),
-                origin: "pack",
-                module: String::new(),
-                pack: pack.clone(),
-                value: value.clone(),
-                since: id.version.to_string(),
-                digest: registry::lists::entry_digest(name, entry, value, &id.version.to_string()),
-                twin: reg.def.twin.map(|t| t(entry, value)),
-                kit,
-            });
+            match entries::admitted(
+                &pack,
+                reg,
+                entry,
+                value,
+                id.version.to_string(),
+                (kit, twin),
+            ) {
+                Ok(admitted) => out.push(admitted),
+                Err(why) => issues.push(refuse(
+                    json!({"registry": name, "entry": entry}),
+                    format!("`{entry}` of `{name}` has no canonical form to digest: {why}"),
+                )),
+            }
         }
     }
     out
 }
 
 /// `d1:` SHA-256 of a manifest's canonical form: a version's bytes, frozen.
-fn digest(manifest: &Value) -> String {
+pub fn digest(manifest: &Value) -> String {
     format!("d1:{}", crate::schedule::sha256_hex(&canonical(manifest)))
 }
 
@@ -1575,11 +1651,13 @@ pub fn manifest_of(
 #[derive(Clone, Debug, Default)]
 pub struct Packs {
     by_id: BTreeMap<String, Pack>,
-    /// The versions the pack check refused for a canvas module this build lacks, with those
-    /// issues: a document that names one is refused with the same `module_missing`.
+    /// The versions the pack check refused for a canvas module this build lacks or for a core
+    /// range that leaves out the build's (#2058), with those issues: a document that names one
+    /// is refused with the same issue.
     refused: BTreeMap<String, Vec<Issue>>,
     /// How often the pack check ran per `owner/name@version`: once, as a version is checked once.
     checks: BTreeMap<String, u32>,
+    pub ran: Ran,
     /// The versions uninstalled while something names them: kept, and taking no new instance.
     retired: BTreeSet<String>,
     pub planted: Planted,
@@ -1633,35 +1711,42 @@ impl Packs {
         }
         // The pack check, its place in the pack graph (#1957), then each kind's kit (#202), which
         // checks documents of the pack beside the versions it requires.
-        let checked = check_pack(manifest, sealed, self.planted).and_then(|mut pack| {
-            deps::cycle(self, &pack)?;
-            // Each move followed to a kind that exists, and no kind dropped silently (#1962).
-            moved::check(self, &pack)?;
-            if !pack.kinds.is_empty() || !pack.census.is_empty() {
-                let mut alone = deps::store(self, &pack);
-                // A pack's kit checks its kinds as shipped: a planted cue-list expander (#142) or
-                // load migrator (#1959) is a document's wrong program, never the kit's.
-                alone.planted.expander = None;
-                alone.planted.migrate_one_major = false;
-                alone.planted.migrate_zero_as_absent = false;
-                alone.planted.migrate_params_only = false;
-                alone.planted.migrate_channels_only = false;
-                alone.planted.drops_moved = false;
-                // #1493: a parameter a pack's census maps must reach the frame, so each meets
-                // field.effect on its recipe as a kind's field does.
-                super::pack_kinds::alias_effect(&pack, sealed, &alone)?;
-                if !pack.kinds.is_empty() {
-                    super::pack_kinds::kit(&mut pack, sealed, alone)?;
+        let mut ran = self.ran;
+        let checked =
+            run_check(manifest, sealed, self.planted, None, &mut ran).and_then(|mut pack| {
+                deps::cycle(self, &pack)?;
+                // Each move followed to a kind that exists, and no kind dropped silently (#1962).
+                moved::check(self, &pack)?;
+                if !pack.kinds.is_empty() || !pack.census.is_empty() {
+                    ran.kits += u64::from(!pack.census.is_empty()) + pack.kinds.len() as u64;
+                    let mut alone = deps::store(self, &pack);
+                    // A pack's kit checks its kinds as shipped: a planted cue-list expander (#142) or
+                    // load migrator (#1959) is a document's wrong program, never the kit's.
+                    alone.planted.expander = None;
+                    alone.planted.migrate_one_major = false;
+                    alone.planted.migrate_zero_as_absent = false;
+                    alone.planted.migrate_params_only = false;
+                    alone.planted.migrate_channels_only = false;
+                    alone.planted.drops_moved = false;
+                    // #1493: a parameter a pack's census maps must reach the frame, so each meets
+                    // field.effect on its recipe as a kind's field does.
+                    super::pack_kinds::alias_effect(&pack, sealed, &alone)?;
+                    if !pack.kinds.is_empty() {
+                        super::pack_kinds::kit(&mut pack, sealed, alone)?;
+                    }
                 }
-            }
-            Ok(pack)
-        });
+                Ok(pack)
+            });
+        self.ran = ran;
         let pack = match checked {
             Ok(pack) => pack,
             Err(issues) => {
                 let missing: Vec<Issue> = issues
                     .iter()
-                    .filter(|i| i.code == "module_missing")
+                    .filter(|i| {
+                        i.code == "module_missing"
+                            || (i.path == "requires/core" && i.what.contains("this build has core"))
+                    })
                     .cloned()
                     .collect();
                 if !missing.is_empty() {
@@ -1678,6 +1763,45 @@ impl Packs {
     /// Admits a version this process's check admitted before, as it was, without checking again.
     pub fn readmit(&mut self, pack: Pack) -> &Pack {
         self.by_id.entry(pack.id.text()).or_insert(pack)
+    }
+
+    pub fn admit_kept(&mut self, manifest: &Value, sealed: &Sealed, left: &Value) -> Option<&Pack> {
+        let key = manifest_id(manifest).filter(|k| !self.by_id.contains_key(k))?;
+        let mut ran = Ran::default();
+        let pack = run_check(manifest, sealed, self.planted, Some(left), &mut ran);
+        self.ran.kits += ran.kits;
+        let mut pack = pack.ok().filter(|_| ran == Ran::default())?;
+        deps::cycle(self, &pack).ok()?;
+        moved::check(self, &pack).ok()?;
+        for (name, kind) in &mut pack.kinds {
+            let kept = left["kinds"].get(name)?;
+            kind.kit = kept.get("kit")?.clone();
+            kind.at_extremes = kept.get("at_extremes")?.clone();
+            let meshes = kept.get("meshes")?.as_array()?.iter();
+            kind.meshes = meshes
+                .map(|m| m.as_str().map(String::from))
+                .collect::<Option<_>>()?;
+        }
+        Some(&*self.by_id.entry(key).or_insert(pack))
+    }
+
+    pub fn refuse_kept(&mut self, key: &str, issues: &[Value]) {
+        let missing: Vec<Issue> = issues
+            .iter()
+            .filter(|i| i["code"] == "module_missing")
+            .map(|i| {
+                let text = |k: &str| i[k].as_str().unwrap_or_default();
+                Issue::envelope(
+                    "module_missing",
+                    text("path").into(),
+                    i["actual"].clone(),
+                    text("what"),
+                )
+            })
+            .collect();
+        if !missing.is_empty() {
+            self.refused.entry(key.to_string()).or_insert(missing);
+        }
     }
 
     /// How often the pack check has run for `owner/name@version`.
@@ -1816,12 +1940,13 @@ pub fn resolve<'a>(
             packs.get(&id.text())
         };
         let Some(pack) = found else {
-            // A version the pack check refused for a module this build lacks: the document
-            // that names it is refused the same way, naming the module.
+            // A version the pack check refused for a module this build lacks or for its core
+            // range: the document that names it is refused the same way, naming the module or
+            // the pack and its range.
             if let Some(missing) = packs.refused.get(&id.text()) {
                 for m in missing {
                     issues.push(Issue::envelope(
-                        "module_missing",
+                        m.code,
                         format!("{path}/{}", m.path),
                         m.actual.clone(),
                         &m.what,
@@ -2945,200 +3070,6 @@ fn could_be_expression(text: &str) -> bool {
         };
     }
     !operand && stack.len() == 1 && stack[0].asks == 0
-}
-
-struct Parser {
-    tokens: Vec<String>,
-    at: usize,
-    /// How deep the expression being read nests.
-    depth: usize,
-}
-
-impl Parser {
-    /// `f` one level deeper, refused past the closed function list's nesting cap.
-    fn nest<T>(&mut self, f: impl FnOnce(&mut Self) -> Result<T, String>) -> Result<T, String> {
-        if self.depth == MAX_NEST {
-            return Err(format!("nests past the cap of {MAX_NEST} levels"));
-        }
-        self.depth += 1;
-        let e = f(self);
-        self.depth -= 1;
-        e
-    }
-
-    fn peek(&self) -> Option<&str> {
-        self.tokens.get(self.at).map(String::as_str)
-    }
-
-    fn take(&mut self) -> Option<String> {
-        let t = self.tokens.get(self.at).cloned();
-        self.at += 1;
-        t
-    }
-
-    fn cond(&mut self) -> Result<Expr, String> {
-        let c = self.or()?;
-        if self.peek() != Some("?") {
-            return Ok(c);
-        }
-        self.at += 1;
-        let a = self.nest(Self::cond)?;
-        if self.take().as_deref() != Some(":") {
-            return Err("missing `:`".into());
-        }
-        let b = self.nest(Self::cond)?;
-        Ok(Expr::Cond(Box::new(c), Box::new(a), Box::new(b)))
-    }
-
-    fn or(&mut self) -> Result<Expr, String> {
-        let mut left = self.and()?;
-        while self.peek() == Some("||") {
-            self.at += 1;
-            left = Expr::Logic("||", Box::new(left), Box::new(self.and()?));
-        }
-        Ok(left)
-    }
-
-    fn and(&mut self) -> Result<Expr, String> {
-        let mut left = self.compare()?;
-        while self.peek() == Some("&&") {
-            self.at += 1;
-            left = Expr::Logic("&&", Box::new(left), Box::new(self.compare()?));
-        }
-        Ok(left)
-    }
-
-    fn compare(&mut self) -> Result<Expr, String> {
-        let left = self.sum()?;
-        let op = match self.peek() {
-            Some("==") => "==",
-            Some("!=") => "!=",
-            Some("<") => "<",
-            Some("<=") => "<=",
-            Some(">") => ">",
-            Some(">=") => ">=",
-            _ => return Ok(left),
-        };
-        self.at += 1;
-        Ok(Expr::Logic(op, Box::new(left), Box::new(self.sum()?)))
-    }
-
-    fn sum(&mut self) -> Result<Expr, String> {
-        let mut left = self.product()?;
-        while let Some(op @ ("+" | "-")) = self.peek() {
-            let op = op.chars().next().unwrap_or('+');
-            self.at += 1;
-            let right = self.product()?;
-            left = Expr::Bin(op, Box::new(left), Box::new(right));
-        }
-        Ok(left)
-    }
-
-    fn product(&mut self) -> Result<Expr, String> {
-        let mut left = self.unary()?;
-        while let Some(op @ ("*" | "/" | "%")) = self.peek() {
-            let op = op.chars().next().unwrap_or('*');
-            self.at += 1;
-            let right = self.unary()?;
-            left = Expr::Bin(op, Box::new(left), Box::new(right));
-        }
-        Ok(left)
-    }
-
-    fn unary(&mut self) -> Result<Expr, String> {
-        match self.peek() {
-            Some("-") => {
-                self.at += 1;
-                Ok(Expr::Neg(Box::new(self.nest(Self::unary)?)))
-            }
-            Some("!") => {
-                self.at += 1;
-                Ok(Expr::Not(Box::new(self.nest(Self::unary)?)))
-            }
-            _ => self.postfix(),
-        }
-    }
-
-    /// An atom with its indexes and members, `a[i].b`.
-    fn postfix(&mut self) -> Result<Expr, String> {
-        let mut e = self.atom()?;
-        loop {
-            match self.peek() {
-                Some("[") => {
-                    self.at += 1;
-                    let i = self.nest(Self::cond)?;
-                    if self.take().as_deref() != Some("]") {
-                        return Err("missing `]`".into());
-                    }
-                    e = Expr::Index(Box::new(e), Box::new(i));
-                }
-                Some(".") => {
-                    self.at += 1;
-                    match self.take() {
-                        Some(name) if well_named_member(&name) => {
-                            e = Expr::Member(Box::new(e), name)
-                        }
-                        _ => return Err("a member is a name".into()),
-                    }
-                }
-                _ => return Ok(e),
-            }
-        }
-    }
-
-    fn atom(&mut self) -> Result<Expr, String> {
-        let Some(t) = self.take() else {
-            return Err("expression ends early".into());
-        };
-        if t == "(" {
-            let e = self.nest(Self::cond)?;
-            if self.take().as_deref() != Some(")") {
-                return Err("missing `)`".into());
-            }
-            return Ok(e);
-        }
-        if let Ok(n) = t.parse::<f64>() {
-            return Ok(Expr::Num(n));
-        }
-        // A word led by a digit, such as a stage's `3d` or a time's `0.5s`: a bare word (#142).
-        if t.starts_with(|c: char| c.is_ascii_digit())
-            && t.chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.')
-        {
-            return Ok(Expr::Name(t));
-        }
-        match t.as_str() {
-            "pi" => return Ok(Expr::Num(std::f64::consts::PI)),
-            "tau" => return Ok(Expr::Num(std::f64::consts::TAU)),
-            _ => {}
-        }
-        if well_named_member(&t) {
-            if self.peek() == Some("(") {
-                self.at += 1;
-                let args = self.nest(Self::args)?;
-                return Ok(Expr::Call(t, args));
-            }
-            return Ok(Expr::Name(t));
-        }
-        Err(format!("unexpected `{t}`"))
-    }
-
-    /// A call's arguments after its `(`, through its `)`.
-    fn args(&mut self) -> Result<Vec<Expr>, String> {
-        let mut args = Vec::new();
-        if self.peek() == Some(")") {
-            self.at += 1;
-            return Ok(args);
-        }
-        loop {
-            args.push(self.cond()?);
-            match self.take().as_deref() {
-                Some(",") => continue,
-                Some(")") => return Ok(args),
-                _ => return Err("missing `)`".into()),
-            }
-        }
-    }
 }
 
 /// A name token: a letter or `_` first.

@@ -18,6 +18,7 @@
 //! color at the arc length of the nearest point on the path, so the stroke has no seams where its
 //! segments meet.
 
+mod fetched;
 pub mod tables;
 
 use std::sync::Arc;
@@ -801,6 +802,52 @@ pub fn sampler(sampling: ImageSampling) -> ImageSampler {
         },
         ..ImageSampler::default()
     }
+}
+
+/// The pixels `[x, y, w, h]` of `pixmap` drawn at `to`, inside `bounds`: once, cut at the bounds'
+/// edges as a cover image is, or, along each axis `repeat` names, again and again across the
+/// bounds, the last copy cut at their end (#2039: a nine-part frame's tiled edges and centre).
+pub fn image_at(
+    ctx: &mut impl Canvas,
+    pixmap: Arc<Pixmap>,
+    sampler: ImageSampler,
+    [cx, cy, cw, ch]: [f64; 4],
+    [x, y, w, h]: [f64; 4],
+    [bx, by, bw, bh]: [f64; 4],
+    repeat: [bool; 2],
+) {
+    let extend = |again| match again {
+        true => peniko::Extend::Repeat,
+        false => peniko::Extend::Pad,
+    };
+    ctx.set_paint(
+        Image {
+            image: ImageSource::Pixmap(pixmap),
+            sampler: ImageSampler {
+                x_extend: extend(repeat[0]),
+                y_extend: extend(repeat[1]),
+                ..sampler
+            },
+        }
+        .into(),
+    );
+    ctx.set_paint_transform(
+        Affine::translate((x, y))
+            * Affine::scale_non_uniform(w / cw.max(1e-9), h / ch.max(1e-9))
+            * Affine::translate((-cx, -cy)),
+    );
+    let along = |again, at: f64, len: f64, from: f64, span: f64| match again {
+        true => (from, from + span),
+        false => (at.max(from), (at + len).min(from + span)),
+    };
+    let ((x0, x1), (y0, y1)) = (
+        along(repeat[0], x, w, bx, bw),
+        along(repeat[1], y, h, by, bh),
+    );
+    if x1 > x0 && y1 > y0 {
+        ctx.fill_rect(&Rect::new(x0, y0, x1, y1));
+    }
+    ctx.reset_paint_transform();
 }
 
 /// An image's straight RGBA pixels resampled to `to` pixels by `sampling` as Vello CPU draws it

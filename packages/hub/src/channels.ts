@@ -1,4 +1,4 @@
-// Channels (#65; design: Blocks for plug-ins that do real work, Channel): the hub's side of every way to reach you.
+// Channels (#65; design: Blocks for extensions that do real work, Channel): the hub's side of every way to reach you.
 // A channel plug-in only transports. The hub reads where things go (`channels.json`: each channel's provider, the
 // routes by kind and urgency, quiet hours), renders each open ask as one item per channel, one thread per ask on every
 // channel, sends it, and keeps it current: a refusal comes back to its thread, an answer anywhere closes it everywhere.

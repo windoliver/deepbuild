@@ -66,6 +66,9 @@ pub enum Plant {
     ShellFocusStaysDisabled,
     /// #851: a game shell's prompts keep the keys' glyphs whatever device wrote last.
     ShellPromptsKeepKeys,
+    ShellDoneOnEnter,
+    ShellDoneInSave,
+    ShellSettingInReadRegion,
     /// The process's footprint read fails, as the system call does on any error (#1431 criterion 2).
     FootprintReadFails,
     /// A reader that gives 0 for a footprint read that failed (#1431 criterion 2).
@@ -111,6 +114,9 @@ impl Plant {
             "pause-runs-level-clock" => Some(Plant::ShellPauseRunsClock),
             "focus-stays-on-disabled" => Some(Plant::ShellFocusStaysDisabled),
             "prompts-keep-key-glyphs" => Some(Plant::ShellPromptsKeepKeys),
+            "done-on-enter" => Some(Plant::ShellDoneOnEnter),
+            "done-in-save" => Some(Plant::ShellDoneInSave),
+            "setting-through-reads" => Some(Plant::ShellSettingInReadRegion),
             "footprint-read-fails" => Some(Plant::FootprintReadFails),
             "footprint-reads-zero" => Some(Plant::FootprintReadsZero),
             "leaks-ungauged-buffer" => Some(Plant::LeaksUngaugedBuffer),

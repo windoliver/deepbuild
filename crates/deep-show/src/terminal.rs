@@ -1,5 +1,5 @@
 //! Issue #402: terminals, streams and the session page's terminal tab, on the virtual display
-//! clock (technical design: Blocks for plug-ins that host something live; Panels and devices:
+//! clock (technical design: Blocks for extensions that host something live; Panels and devices:
 //! Stream and raw input, Cell grid; canvas primitives: Cell grid `cells@1`).
 //!
 //! - A terminal is fed its program's output as recorded chunks; each chunk is one update of its

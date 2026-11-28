@@ -129,11 +129,29 @@ fn adjust_issue(
     None
 }
 
+fn agents_word(origin: &Value) -> bool {
+    if origin == "agent" {
+        return true;
+    }
+    let inputs = origin.pointer("/job/input").and_then(Value::as_object);
+    inputs.is_some_and(|i| {
+        i.values()
+            .flat_map(|files| files.as_array().into_iter().flatten())
+            .any(|f| f["origin"] == "agent")
+    })
+}
+
 /// Every number the document's mark sets and axes show, with what each traces to (Honest numbers,
 /// the check), and the issues tracing finds: a table's cell whose kept bytes differ from the
 /// file's (`table_cell_changed`, naming its row), and a table an agent wrote or a template's story
 /// number shown where a status or a reading is bound (`number_unsourced`: story numbers).
 pub fn numbers(doc: &Map<String, Value>) -> (Vec<Value>, Vec<Issue>) {
+    let (mut shown, issues) = traced(doc);
+    shown.extend(crate::sources::quoted(doc, &shown));
+    (shown, issues)
+}
+
+pub(crate) fn traced(doc: &Map<String, Value>) -> (Vec<Value>, Vec<Issue>) {
     let items = object_or_empty(doc.get("items"));
     let binds = ["status_bindings", "bound_values"].iter().any(|k| {
         doc.get(*k)
@@ -142,14 +160,18 @@ pub fn numbers(doc: &Map<String, Value>) -> (Vec<Value>, Vec<Issue>) {
     });
     let (mut shown, mut issues) = (Vec::new(), Vec::new());
     for (id, item) in items {
-        let found = crate::data::numbers(id, item, items);
+        let mut found = crate::data::numbers(id, item, items);
+        crate::sources::lines(item, items, &mut found);
         let mut named = Vec::new();
         for n in &found {
             let name = match n["row"].as_str() {
                 Some(row) => format!("{id}#{row}"),
                 None => id.clone(),
             };
-            if binds && n["source"]["origin"] == "agent" && !named.contains(&name) {
+            if binds
+                && (agents_word(&n["source"]["origin"]) || n["source"]["weakest"] == "agent")
+                && !named.contains(&name)
+            {
                 issues.push(Issue::error(
                     "number_unsourced",
                     &name,
@@ -579,7 +601,10 @@ fn story_issues(items: &Map<String, Value>) -> Vec<Issue> {
 pub fn check(doc: &Map<String, Value>, look: &Look, min: Option<f64>) -> Vec<Issue> {
     let items = object_or_empty(doc.get("items"));
     let mut issues = roles_apart(items, look);
-    issues.extend(numbers(doc).1);
+    let (shown, unsourced) = traced(doc);
+    issues.extend(unsourced);
+    let listed = crate::sources::drawn(doc, &shown, Default::default());
+    issues.extend(crate::sources::issues(doc, &shown, &listed));
     issues.extend(story_issues(items));
     issues.extend(text_cap_issues(items));
     // #2031: a lit group's cap, nesting and light colors, each named.
@@ -639,7 +664,9 @@ pub fn check(doc: &Map<String, Value>, look: &Look, min: Option<f64>) -> Vec<Iss
                 .strip_prefix("items/")
                 .and_then(|rest| rest.split(['/', ':']).next())
                 .unwrap_or("");
-            if let Some(issue) = text_refusal(items, id, &r) {
+            // #2039: a sliced row smaller than its corners is named, with the smallest size.
+            let named = text_refusal(items, id, &r).or_else(|| crate::atlas::short_row(id, &r));
+            if let Some(issue) = named {
                 issues.push(issue);
                 break;
             }
@@ -688,4 +715,23 @@ pub fn check(doc: &Map<String, Value>, look: &Look, min: Option<f64>) -> Vec<Iss
     // #538: keyed copy's every key, in every locale, at its arguments' widest.
     crate::copy::fit_issues(doc, &look.light_type, &mut issues);
     issues
+}
+
+#[cfg(test)]
+mod tests {
+    use super::agents_word;
+    use serde_json::json;
+
+    #[test]
+    fn a_job_table_is_the_agents_word_only_where_no_fetch_brought_its_input() {
+        let job = |file| json!({"job": {"kind": "import", "tool": "table-import@1.0.0", "input": {"file": [file], "look": []}}});
+        assert!(agents_word(&json!("agent")));
+        assert!(!agents_word(
+            &json!({"url": "https://example.test/t.csv", "fetched": 1})
+        ));
+        assert!(!agents_word(&job(
+            json!({"sha256": "a", "url": "https://example.test/t.csv", "fetched": 1})
+        )));
+        assert!(agents_word(&job(json!({"sha256": "a", "origin": "agent"}))));
+    }
 }

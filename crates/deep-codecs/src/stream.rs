@@ -14,7 +14,9 @@ use std::time::{Duration, Instant};
 use serde_json::{json, Value};
 
 use crate::pipe::Pipe;
-use crate::{codec, mp4, over_caps, points_at, refused, track_color, Caps, Format, Job, Planted};
+use crate::{
+    backed, codec, mp4, over_caps, points_at, refused, track_color, Caps, Format, Job, Planted,
+};
 
 fn error(e: impl ToString) -> Value {
     json!({"error": e.to_string()})
@@ -60,9 +62,10 @@ fn streamed<R: BufRead, W: Write>(
         return Err(refused("over_cap", cap));
     }
     let head = mp4::Head::read(&mut file).map_err(unreadable)?;
-    let movie = head
-        .movie
-        .ok_or_else(|| unreadable("a file without moov"))?;
+    let movie = backed(
+        head.movie
+            .ok_or_else(|| unreadable("a file without moov"))?,
+    )?;
     let f = Format::Movie(movie);
     if let Some(url) = points_at(&f) {
         return Err(refused("external_reference", json!({"url": url})));

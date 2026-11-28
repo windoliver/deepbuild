@@ -729,7 +729,7 @@ fn slide() -> Value {
 /// transform then written into the core's from that one solve; the planted per-frame solve runs
 /// in a frame phase instead.
 fn register_arrange(r: &mut Registrar) {
-    use crate::arrange;
+    use crate::{arrange, relations};
     use deep_canvas::kinds::{Entry, Param, ParamType, Version};
     let json_param = |name: &'static str, form: &'static str| Param {
         name,
@@ -816,6 +816,20 @@ fn register_arrange(r: &mut Registrar) {
         arrange::UNSATISFIED,
         "An arrangement whose relations can't all hold with nothing passing into anything.",
         "Drop or loosen the relations it names, or give the items more room.",
+        false,
+    );
+    let codes = [relations::MISSED, relations::COUNT];
+    r.check(relations::KIND, "any", &codes, relations::issues);
+    r.code(
+        relations::MISSED,
+        "A relation a requirement states that the items don't hold where they stand, past 1 mm or 1°.",
+        relations::MISSED_FIX,
+        false,
+    );
+    r.code(
+        relations::COUNT,
+        "The number of a collection's items that hold a relation is outside the range a requirement states.",
+        relations::COUNT_FIX,
         false,
     );
 }

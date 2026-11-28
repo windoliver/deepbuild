@@ -1,11 +1,12 @@
 {
   "id": "deepbuild/import",
   "version": "1.0.0",
-  "digest": "d1:154e6d2b9f97f4ba4b5a1f545db812096dc802dbea4499aa5b2f334d8970331d",
+  "digest": "d1:4b0f54ba1fda3231af5f2db93d4469ad9d24107eb172eb6699307f984b73ec6d",
   "checks": [
     "import.document",
     "import.colors_mapped",
-    "import.no_expression"
+    "import.no_expression",
+    "import.table"
   ],
   "jobs": [
     "import"
@@ -18,6 +19,10 @@
     {
       "kind": "import",
       "tool": "urdf-import@1.0.0"
+    },
+    {
+      "kind": "import",
+      "tool": "table-import@1.0.0"
     }
   ],
   "requires": {

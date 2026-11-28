@@ -19,7 +19,7 @@ use crate::grammar::{
 use crate::kinds::{
     lookup, parse_kind, parse_required, Entry, Lookup, ParamType, Registry, Version,
 };
-use crate::registry::{self, core_name, Cost, Range, Rule, Sealed, SealedModule};
+use crate::registry::{self, core_name, Cost, Range, Rule, Sealed, SealedModule, Semver};
 
 /// The closed list of item roles.
 const ROLES: &[&str] = &["part", "control", "label", "data", "decoration"];
@@ -141,7 +141,7 @@ fn check_by(
 ) -> CheckResult {
     let mut lowered = copy_of(doc);
     let mut head = lower(doc, lowered.get_mut("items"), sealed, kinds, packs);
-    settle(&mut lowered, &head, packs);
+    settle(&mut lowered, &mut head, packs);
     finish(&lowered, &mut head, sealed, kinds, coefficients, sizes);
     let Head {
         mut issues,
@@ -404,24 +404,12 @@ fn lower<'a>(
 }
 
 /// What lowering writes beyond the items: `lowered` is the document with its lowered items.
-fn settle(lowered: &mut Value, head: &Head<'_>, packs: &Packs) {
-    let expansions = &head.expansions;
+fn settle(lowered: &mut Value, head: &mut Head<'_>, packs: &Packs) {
     // A rename carries every path that names the param it renames (#1960).
     super::pack_kinds::migrate::carry_paths(lowered, &head.resolved, packs.planted);
     // A recipe's channels join the document's, targeting the items it derived (#420).
-    let recipe_channels: Map<String, Value> =
-        expansions.iter().flat_map(|e| e.channels.clone()).collect();
-    if !recipe_channels.is_empty() {
-        if let Some(doc) = lowered.as_object_mut() {
-            let channels = doc
-                .entry("channels")
-                .or_insert_with(|| Value::Object(Map::new()));
-            if let Some(map) = channels.as_object_mut() {
-                map.extend(recipe_channels);
-            }
-        }
-    }
-    super::expands::merge(lowered, expansions);
+    super::expands::join_channels(lowered, &head.expansions, &mut head.issues);
+    super::expands::merge(lowered, &head.expansions);
 }
 
 /// The last part of a check, added to `head`: the module checks, the budget estimate and the
@@ -983,7 +971,7 @@ fn recheck_by(
                     .any(|(id, item)| o.op.applies.is_none_or(|a| a(doc, id, item)))
             })
         });
-    if !maps_empty || sealed.has_costs() || costly || packed {
+    if !maps_empty || sealed.has_costs() || costly || packed || member(doc, "budget").is_some() {
         return None;
     }
     let items = member(doc, "items")?.as_object()?;
@@ -1086,7 +1074,7 @@ fn recheck_by(
         // Lowering writes members besides the items: it writes them on a copy.
         let mut copy = lent.doc.clone();
         copy["items"] = lowered;
-        settle(&mut copy, &head, packs);
+        settle(&mut copy, &mut head, packs);
         finish(&copy, &mut head, sealed, kinds, None, &Sizes::new());
     } else {
         lent.swap(lowered);
@@ -1291,11 +1279,20 @@ fn required_minors(doc: &Value, sealed: &Sealed, issues: &mut Vec<Issue>) -> BTr
         let wrong = |what: &str| Issue::envelope("out_of_range", path.clone(), value.clone(), what);
         match field.as_str() {
             "kinds" => {}
-            "core" => {
-                if !value.is_string() {
-                    issues.push(wrong("not a version"));
+            // The core the document needs against the build's own (#2058): a newer one changed
+            // meanings this build would misread, so the document is refused as a module at
+            // another version is.
+            "core" => match value.as_str().and_then(Semver::parse) {
+                None => issues.push(wrong("not a version")),
+                Some(needs) => {
+                    let build = registry::core_semver();
+                    if needs > build {
+                        issues.push(wrong(&format!(
+                            "the document requires core {needs}; this build has core {build}"
+                        )));
+                    }
                 }
-            }
+            },
             "modules" => match value.as_object() {
                 Some(modules) => {
                     for (module, range) in modules {
@@ -2129,6 +2126,9 @@ mod item_fields;
 use item_fields::{check_adjust, check_at};
 mod members;
 use members::{check_layers, check_ports};
+mod transport;
+use transport::check_transport;
+pub use transport::frame_rate_of;
 
 /// A bound value's fields (Bound value).
 const BOUND_VALUE_FIELDS: &[&str] = &[
@@ -2141,64 +2141,6 @@ const BOUND_VALUE_FIELDS: &[&str] = &[
     "stale_after",
     "missing",
 ];
-
-/// The transport's `frame_rate` as `[p, q]`, as `p/q` text, or as a whole number `p` (p/1),
-/// when it is one.
-pub fn frame_rate_of(transport: &Value) -> Option<(u32, u32)> {
-    let whole = |v: &Value| u32::try_from(v.as_u64()?).ok();
-    match member(transport, "frame_rate")? {
-        Value::Array(pq) if pq.len() == 2 => Some((whole(&pq[0])?, whole(&pq[1])?)),
-        n @ Value::Number(_) => Some((whole(n)?, 1)),
-        Value::String(s) => {
-            let (p, q) = s.split_once('/').unwrap_or((s, "1"));
-            Some((p.trim().parse().ok()?, q.trim().parse().ok()?))
-        }
-        _ => None,
-    }
-}
-
-/// The transport's rates (issue #488; Time and the flick: the valid-rates rule): a frame rate
-/// whose frame, or a sample rate whose sample, isn't a whole number of flicks is refused with
-/// `bad_rate` naming the rate. A rate that isn't a rate at all is refused the same way.
-fn check_transport(doc: &Value, issues: &mut Vec<Issue>) {
-    let Some(transport) = member(doc, "transport").filter(|t| t.is_object()) else {
-        return;
-    };
-    if let Some(rate) = member(transport, "frame_rate") {
-        let parsed = frame_rate_of(transport);
-        let outcome = match parsed {
-            Some((p, q)) => crate::time::frame_length(p, q).map(|_| ()),
-            None => Err(format!(
-                "frame rate {rate} is not two whole numbers above zero"
-            )),
-        };
-        if let Err(why) = outcome {
-            let named = parsed
-                .map(|(p, q)| crate::time::Rate::Frame { p, q }.text())
-                .unwrap_or_else(|| rate.to_string());
-            issues.push(Issue::envelope(
-                "bad_rate",
-                "transport/frame_rate".into(),
-                json!(named),
-                &why,
-            ));
-        }
-    }
-    if let Some(rate) = member(transport, "sample_rate") {
-        let outcome = match rate.as_u64().and_then(|hz| u32::try_from(hz).ok()) {
-            Some(hz) => crate::time::sample_length(hz).map(|_| ()),
-            None => Err(format!("sample rate {rate} is not a whole number of hertz")),
-        };
-        if let Err(why) = outcome {
-            issues.push(Issue::envelope(
-                "bad_rate",
-                "transport/sample_rate".into(),
-                rate.clone(),
-                &why,
-            ));
-        }
-    }
-}
 
 /// A duration field's flicks: a time span (`"2s"`, `"120f"` at the transport's rate), above 0.
 pub fn duration(doc: &Value, value: &Value) -> Result<i64, String> {

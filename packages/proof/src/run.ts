@@ -89,26 +89,19 @@ export const unfoundCause = (theorem: string): Cause => ({ theorem, why: 'unfoun
 
 // ---- The result.
 
-/** comparator's flag on macOS, where bubblewrap doesn't exist; on Linux comparator runs in its own sandbox. */
-export const LEAN_FLAGS = process.platform === 'darwin' ? ['--inadvisably-no-sandbox'] : [];
-/** Kani prints the counterexample of each failed check as a Rust test. */
-export const KANI_FLAGS = ['-Z', 'concrete-playback', '--concrete-playback=print'];
 /** The version a toolchain pin names: `leanprover/lean4:v4.35.0` is 4.35.0, `kani 0.68.0` is 0.68.0. */
 export const versionOf = (spec: ProofSpec): string => /(\d+\.\d+\.\d+\S*)$/.exec(spec.toolchain)?.[1] ?? spec.toolchain;
-/** The key's tools: the toolchain's version and the runner's flags, so a change to either runs the check again. */
-export function toolsOf(spec: ProofSpec, version = versionOf(spec)): Record<string, string> {
-  return spec.runner === 'lean4' ? { lean4: version, 'lean4.comparator': LEAN_FLAGS.join(' ') } : { kani: version, 'kani.flags': KANI_FLAGS.join(' ') };
-}
 
-const empty = (spec: ProofSpec): Omit<ProofResult, 'outcome' | 'reasons' | 'receipt'> => ({
-  testsRun: 0, failures: [], evidence: [], read: [], mask: null, proposals: [], tools: toolsOf(spec), smallest: null,
+/** `tools` is the runner's key tools: its toolchain's version and its flags, so a change to either runs the check again. */
+const empty = (tools: Record<string, string>): Omit<ProofResult, 'outcome' | 'reasons' | 'receipt'> => ({
+  testsRun: 0, failures: [], evidence: [], read: [], mask: null, proposals: [], tools, smallest: null,
 });
 /** The machine can't run the check: missing, keyed as the check, so the core blocks on it, naming why. */
-export const missingRun = (spec: ProofSpec, why: string): Checked =>
-  ({ result: { outcome: 'missing', ...empty(spec), reasons: [why], receipt: `not run: ${why}` }, causes: [] });
-export const overranRun = (spec: ProofSpec, deadline: number): Checked => {
+export const missingRun = (tools: Record<string, string>, why: string): Checked =>
+  ({ result: { outcome: 'missing', ...empty(tools), reasons: [why], receipt: `not run: ${why}` }, causes: [] });
+export const overranRun = (tools: Record<string, string>, deadline: number): Checked => {
   const why = `the checker was still running at the ${deadline} ms deadline`;
-  return { result: { outcome: 'overran', ...empty(spec), reasons: [why], receipt: `stopped: ${why}` }, causes: [] };
+  return { result: { outcome: 'overran', ...empty(tools), reasons: [why], receipt: `stopped: ${why}` }, causes: [] };
 };
 
 interface Parts {

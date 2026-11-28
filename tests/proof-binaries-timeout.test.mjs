@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import test from 'node:test';
 import { ROOT, sandbox, write } from './acceptance/1123/helpers.mjs';
+import { endTree } from '../scripts/process-tree.mjs';
 
 test('a spawn timeout through real lease returns nonzero and leaves no compiler descendants', async t=>{
   const box=sandbox(t),dir=join(box.dir,'run'),ready=join(box.dir,'ready'),done=join(box.dir,'done');mkdirSync(dir);
@@ -14,7 +15,7 @@ test('a spawn timeout through real lease returns nonzero and leaves no compiler 
   write(box.dir,'owner.mjs',`import {spawnSync} from 'node:child_process';import {writeFileSync} from 'node:fs';const start=spawnSync('ps',['-o','lstart=','-p',String(process.pid)],{env:{...process.env,TZ:'UTC',LC_ALL:'C'},encoding:'utf8'}).stdout.trim();const r=spawnSync(${JSON.stringify(join(box.repo,'scripts/lease'))},[process.execPath,${JSON.stringify(join(ROOT,'scripts/proof-bin-build.mjs'))},${JSON.stringify(dir)},String(process.pid),start,process.execPath,${JSON.stringify(join(box.dir,'work.mjs'))}],{encoding:'utf8',timeout:3000,killSignal:'SIGKILL',detached:true});writeFileSync(${JSON.stringify(done)},JSON.stringify({status:r.status,error:r.error?.code,signal:r.signal}));setInterval(()=>{},1000);`);
   const child=spawn(process.execPath,[join(box.dir,'owner.mjs')],{cwd:box.repo,env:box.env,stdio:'ignore',detached:true});let built;
   const alive=pid=>{const r=spawnSync('ps',['-o','stat=','-p',String(pid)],{encoding:'utf8'});return r.status===0&&!r.stdout.trim().startsWith('Z');};
-  t.after(()=>{try{process.kill(-child.pid,'SIGKILL')}catch{};for(const p of [built?.pid,built?.worker])if(p)try{process.kill(p,'SIGKILL')}catch{}});
+  t.after(async()=>{for(const p of [built?.pid,built?.worker])if(p)try{process.kill(p,'SIGKILL')}catch{};const left=await endTree(child);if(left?.length!==0)console.error(`fixture processes left after the test: ${left?.join(', ')??'unknown, ps failed'}`);});
   const deadline=Date.now()+15000;while(!existsSync(done)&&Date.now()<deadline)await sleep(25);
   assert.ok(existsSync(ready),'real work starts before timeout');built=JSON.parse(readFileSync(ready,'utf8'));
   assert.ok(existsSync(done),'timed-out spawn returns despite inherited output descriptors');

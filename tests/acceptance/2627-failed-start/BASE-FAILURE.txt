@@ -1,0 +1,88 @@
+# #2627 AC1 acceptance test: the run on the base
+
+## The base (254bdc87c, no #2627 fix), this checkout, macOS (Mac, 12 cores), load about 48 to 60, Node 24
+
+$ npm ci && npm run build --workspaces   # packages/cli/dist/main.js present
+$ node --test tests/acceptance/2627-failed-start/failed-start.test.mjs
+(the checkout reads <repo>, the test's scratch folder <scratch>, home paths ~, the temporary folder <tmp>)
+
+The test fails at its one comparison, for the reason the criterion names. The build slots of the run's own throttle
+table were held, so the builder never started; the file under scrutiny failed at line 20 ('builder started') after
+its 15 s wait and its process exited 15 s after its start. But 60 s later the fixture's `deep lease` stage (scripts/lease
+exec'd into `throttle.mjs build`, waiting for its grant, reparented after `t.after` SIGKILLed the owner) was still
+alive: `t.after` kills only the owner, `leasePid` and `built`'s PIDs, and the latter two weren't set yet. It would
+have waited up to 30 min and then, given a slot, started the builder. After the test, the leftover was SIGKILLed by
+PID and start, the holders ended and the scratch folder removed (the last lines: 0 processes naming the scratch
+folders, no scratch folder left).
+
+19:48  up 8 days, 14 mins, 3 users, load averages: 47.99 60.04 68.78
+✖ #2627.b782c214 when the builder's ready file does not appear within proof-binaries-lease-loss's wait, the test fails, its file's process exits and no process of its fixture (owner, lease, proof-bin-build and its worker, build.mjs and its worker) is left alive (77323.116042ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 77400.508
+
+✖ failing tests:
+
+test at tests/acceptance/2627-failed-start/failed-start.test.mjs:15:1
+✖ #2627.b782c214 when the builder's ready file does not appear within proof-binaries-lease-loss's wait, the test fails, its file's process exits and no process of its fixture (owner, lease, proof-bin-build and its worker, build.mjs and its worker) is left alive (77323.116042ms)
+  AssertionError [ERR_ASSERTION]: the file exited (1) 15 s after its start; alive 60 s after that: 1; the holders still held: 4
+  --- the file's TAP ---
+  TAP version 13
+  # Subtest: SIGKILL of the real lease while the owner lives ends its Cargo group and releases captured output
+  not ok 1 - SIGKILL of the real lease while the owner lives ends its Cargo group and releases captured output
+    ---
+    duration_ms: 15083.446417
+    type: 'test'
+    location: '<repo>/tests/proof-binaries-lease-loss.test.mjs:10:1'
+    failureType: 'testCodeFailure'
+    error: 'builder started'
+    code: 'ERR_ASSERTION'
+    name: 'AssertionError'
+    expected: true
+    actual: false
+    operator: '=='
+    stack: |-
+      TestContext.<anonymous> (file://<repo>/tests/proof-binaries-lease-loss.test.mjs:20:94)
+      async Test.run (node:internal/test_runner/test:1409:7)
+      async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+    ...
+  1..1
+  # tests 1
+  # suites 0
+  # pass 0
+  # fail 1
+  # cancelled 0
+  # skipped 0
+  # todo 0
+  # duration_ms 15144.938625
+  
+  + actual - expected
+  
+    {
+      fileExited: true,
+  +   left: [
+  +     '91775 node <scratch>/tmp/deep-1123-bPNCcZ/repo/scripts/throttle.mjs build --wait 30 --turns 0 -- node <scratch>/tmp/deep-1123-bPNCcZ/repo/scripts/../packages/cli/dist/main.js lease -- ~/.nvm/versions/node/v24.22.0/bin/node <repo>/scripts/proof-bin-build.mjs <scratch>/tmp/deep-1123-bPNCcZ/run 91755 Sat Nov 28 03:48:02 2026 ~/.nvm/versions/node/v24.22.0/bin/node <scratch>/tmp/deep-1123-bPNCcZ/build.mjs'
+  +   ],
+  -   left: [],
+      result: 'did not pass'
+    }
+  
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/priceless-wilbur-f5e863/tests/acceptance/2627-failed-start/failed-start.test.mjs:68:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: { result: 'did not pass', fileExited: true, left: [ '91775 node <scratch>/tmp/deep-1123-bPNCcZ/repo/scripts/throttle.mjs build --wait 30 --turns 0 -- node <scratch>/tmp/deep-1123-bPNCcZ/repo/scripts/../packages/cli/dist/main.js lease -- ~/.nvm/versions/node/v24.22.0/bin/node <repo>/scripts/proof-bin-build.mjs <scratch>/tmp/deep-1123-bPNCcZ/run 91755 Sat Nov 28 03:48:02 2026 ~/.nvm/versions/node/v24.22.0/bin/node <scratch>/tmp/deep-1123-bPNCcZ/build.mjs' ] },
+    expected: { result: 'did not pass', fileExited: true, left: [] },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+exit 1
+19:49  up 8 days, 15 mins, 3 users, load averages: 48.31 58.26 67.37
+0
+ls: <tmp>//deep-2627fs-*: No such file or directory

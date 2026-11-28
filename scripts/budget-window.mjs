@@ -35,6 +35,8 @@ function blocked(message, fix) {
 }
 // The window's own record (#2674), beside its commits' records once it runs: its grant, start and end, the machine and
 // its load, the commits it measured, the tasks it ran and those it reached on no commit, and the task that took longest.
+// From the throttle it holds `drain`, the milliseconds from its request to its grant, and `waited`, the grants it
+// waited on, by class (#3551).
 // A window over one day's merges should end within two hours; its note names the longest task when it doesn't.
 const LONG_MS = 2 * 60 * 60 * 1000;
 let opened = null;
@@ -102,7 +104,7 @@ function reachable(tree, { change, base }, tasks) {
 }
 
 /** A side's numbers, so two commits compare and a climb can be drawn: p50, p95, peak bytes and each round's instructions retired. */
-const numbersOf = (side) => side && { p50Ms: side.p50Ms, p95Ms: side.p95Ms, peakBytes: side.peakBytes, instructions: side.instructions };
+const numbersOf = (side) => side && { p50Ms: side.p50Ms, p95Ms: side.p95Ms, peakBytes: side.peakBytes, instructions: side.instructions, work: side.work };
 
 /**
  * A task's row in the record: as perf reads it, with a load at or above the cores at any run's start or end, or at the
@@ -110,11 +112,11 @@ const numbersOf = (side) => side && { p50Ms: side.p50Ms, p95Ms: side.p95Ms, peak
  * (#2665). A count's limit holds on any machine, so its FAIL stands under any load. The row keeps each side's numbers,
  * the load at each run's start and end (both sides' rounds, then the limit runs), and how long the task took (#2674).
  */
-function judged(task, established, cwd, baseCwd) {
+function judged(task, established, cwd, baseCwd, approved) {
   const started = Date.now();
   let misses, limits, sides, loads;
   try {
-    const result = judgeTask(task, established, cwd, baseCwd);
+    const result = judgeTask(task, established, cwd, baseCwd, undefined, approved);
     limits = result.limits;
     sides = { change: numbersOf(result.now), base: numbersOf(result.then) };
     loads = [...result.now.loads, ...result.then?.loads ?? [], ...result.loads];
@@ -125,6 +127,8 @@ function judged(task, established, cwd, baseCwd) {
       ...result.regression ? [{ status: 'FAIL', reason: result.regression }] : [],
       ...Object.entries(limits).map(([metric, limit]) => ({ ...limit, reason: `${metric}: ${limit.reason}` })),
       ...result.instructions ? [{ ...result.instructions, reason: `instructions: ${result.instructions.reason}` }] : [],
+      ...result.work ? [{ ...result.work, reason: `work: ${result.work.reason}` }] : [],
+      ...result.lowering ? [result.lowering] : [],
       ...targets ? [{ ...targets, reason: `targets: ${targets.reason}` }] : [],
       ...high !== null && high < cores ? [] : [{ status: 'INCONCLUSIVE', reason: high === null ? "a run's load couldn't be read" : `the load was ${high.toFixed(1)} on ${cores} cores` }],
     ].filter(({ status }) => status !== 'PASS');
@@ -142,14 +146,24 @@ const slackOf = ({ id, limits }) => Object.entries(limits ?? {}).flatMap(([metri
   return reading < 0.8 * limit ? [{ id, metric, limit, reading }] : [];
 });
 
+const middleOf = (reading) => {
+  if (!Array.isArray(reading)) return reading;
+  const sorted = [...reading].sort((a, b) => a - b), half = sorted.length / 2;
+  return !sorted.every(Number.isFinite) ? null : sorted.length % 2 ? sorted[Math.floor(half)] : (sorted[half - 1] + sorted[half]) / 2;
+};
+const fallsOf = ({ id, sides }) => (sides?.base ? ['p50Ms', 'p95Ms', 'peakBytes', 'instructions'] : []).flatMap((metric) => {
+  const base = middleOf(sides.base[metric]), change = middleOf(sides.change[metric]);
+  return Number.isFinite(base) && Number.isFinite(change) && change < 0.5 * base ? [{ id, metric, base, change }] : [];
+});
+
 function measured(commit) {
   const { change, base } = sides(commit);
-  let tests, named = new Set(), notReached = [], lowered = [], noCeiling = null, slack = [];
+  let tests, named = new Set(), notReached = [], lowered = [], noCeiling = null, slack = [], noWork = null, falls = [];
   try {
-    const current = budgetsAt(change), established = budgetsAt(base);
+    const current = budgetsAt(change), established = budgetsAt(base), approved = approvedItems(root, base, change);
     // A limit only moves down (#2665): a commit may lower one, and a raise, a removal, a wider margin or a new command
     // passes only by an approved proposal on its commits. Its tasks are judged by the merge base's numbers either way.
-    const moved = validateBudgets(current, established, approvedItems(root, base, change));
+    const moved = validateBudgets(current, established, approved);
     const here = treeOf('change', change), reach = reachable(here, { change, base }, current.tasks);
     // A task the commit can't reach doesn't run: its record lists it as not reached, never PASS. With none to run, no
     // copy is built.
@@ -157,20 +171,23 @@ function measured(commit) {
     notReached = current.tasks.filter(({ id }) => !reach.has(id)).map(({ id }) => id);
     if (run.length) ready('change', here);
     const there = run.length && established ? ready('base', treeOf('base', base)) : null;
-    tests = run.map((task) => judged(task, established?.tasks.find(({ id }) => id === task.id), here, there));
+    tests = run.map((task) => judged(task, established?.tasks.find(({ id }) => id === task.id), here, there, approved));
     // Each lowered limit keeps the merge base's value, the commit's, and the readings judged against the first.
     lowered = moved.map((entry) => ({ ...entry, runs: tests.find(({ id }) => id === entry.id)?.limits?.[entry.metric]?.runs ?? null }));
     // The tasks with no limit, by name, and how many: a task with targets has a judge of its own.
     const open = current.tasks.filter((task) => !Object.keys(task.limits).length && !task.targets).map(({ id }) => id);
     noCeiling = { count: open.length, tasks: open };
     slack = tests.flatMap(slackOf);
+    const silent = tests.filter(({ sides }) => sides && sides.change.work === undefined).map(({ id }) => id);
+    noWork = { count: silent.length, tasks: silent };
+    falls = tests.flatMap(fallsOf);
     // What the commit's tasks proved (#1874): each that ran names its criteria by ID, and only its numbers stay the merge
     // base's. A criterion only an unreached task names stays unmeasured.
     named = new Set(run.flatMap(({ criteria }) => criteria ?? []));
   } catch (error) {
     tests = [{ id: manifest, state: 'BLOCKED', note: error.message }];
   }
-  return { commit, change, base, tests, named, notReached, lowered, noCeiling, slack, state: worst(tests.map(({ state }) => state)) ?? 'PASS' };
+  return { commit, change, base, tests, named, notReached, lowered, noCeiling, slack, noWork, falls, state: worst(tests.map(({ state }) => state)) ?? 'PASS' };
 }
 
 /** The issues a commit's messages name, as GitHub reads them, in this repository. */
@@ -228,7 +245,7 @@ try {
 // Read once: a commit merged from here on is the next window's.
 const tip = git('rev-parse', 'origin/main');
 const from = existsSync(mark) ? readFileSync(mark, 'utf8').trim() : null;
-opened = { lane: 'budget-window', grant: process.env.DEEP_WINDOW ?? null, start: new Date().toISOString(), machine: fingerprint(), cores: cpus().length, loadStart: loadavg()[0], from, tip, commits: [], records: {}, rows: [], unreached: [] };
+opened = { lane: 'budget-window', grant: process.env.DEEP_WINDOW ?? null, ...JSON.parse(process.env.DEEP_WINDOW_DRAIN ?? '{}'), start: new Date().toISOString(), machine: fingerprint(), cores: cpus().length, loadStart: loadavg()[0], from, tip, commits: [], records: {}, rows: [], unreached: [] };
 if (!from) {
   writeFileSync(mark, tip);
   closeWindow('PASS', `the first window on this machine marks ${tip}`);
@@ -251,7 +268,7 @@ for (const [at, commit] of commits.entries()) {
     blocked(`${commit}'s issues weren't read: ${error.message}`, 'Sign in to gh; the next window measures this commit again.');
   }
   const unmeasured = read.flatMap((issue) => (unticked(issue) ?? []).filter((id) => !record.named.has(id)));
-  const file = writeRecord(`budget-window ${commit}`, record.state, tree, record.tests, { commit, base: record.base, unmeasured, notReached: record.notReached, lowered: record.lowered, noCeiling: record.noCeiling, slack: record.slack });
+  const file = writeRecord(`budget-window ${commit}`, record.state, tree, record.tests, { commit, base: record.base, unmeasured, notReached: record.notReached, lowered: record.lowered, noCeiling: record.noCeiling, slack: record.slack, noWork: record.noWork, falls: record.falls });
   opened.commits.push(commit);
   opened.records[commit] = basename(file);
   opened.rows.push(...record.tests.filter(({ id }) => id !== manifest).map(({ id, ms }) => ({ task: id, commit, ms })));

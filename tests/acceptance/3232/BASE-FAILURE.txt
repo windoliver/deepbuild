@@ -1,0 +1,109 @@
+window.test.ts: 7 tests, 7 failed; Start at  20:00:30, Duration  27.81s
+  AC1 #3232.2159e687: in a replica with session A's page open in the key window, an ask from A opens; the snapshot's
+  announcements hold exactly one entry, with the count in words and the ask's question, within one event of the ask,
+  and no notification is posted
+      FAILS at window.test.ts:130:37: the ask ask:01M883G06D13BJ9PG4J4QEKT2A ("Which store keeps the cart totals?")
+      from Cart totals opened on its session's open page in the key window and nothing was announced: the snapshot
+      carries no announcements list (snapshot.announcements is missing)
+  AC2 #3232.67b6e9ba: that entry starts with "needs you" and ends with the key the action table gives for opening that
+  ask's card
+      FAILS at window.test.ts:136:35: the ask ask:01M883G06D13BJ9PG4J4QEKT2A ("Which store keeps the cart totals?")
+      from Cart totals: no entry was made for it, so there is no line to read
+  AC2 #3232.67b6e9ba wrong program: a planted line that starts with the session's doing words
+  (ask-line-starts-with-doing) fails, naming the line
+      FAILS at window.test.ts:140:41: the ask ask:01M883G06D13BJ9PG4J4QEKT2A ("Which store keeps the cart totals?")
+      from Cart totals: no entry was made for it, so there is no line to read
+      (its planted run is never reached: "the shipped app must pass this judge first, or a plant it fails proves nothing")
+  AC3 #3232.98c95ce3: after that run and four more changes, the region's node holds five rows in the tree, newest
+  first, each with its line and its time, and the screenshot draws none of them
+      FAILS at window.test.ts:149:21: the snapshot's tree holds 0 nodes with the id "live-region", not the one region,
+      and the run made no entry for it to keep
+  AC3 #3232.98c95ce3 wrong program: a planted window that keeps only the last line (region-keeps-last-line) fails,
+  naming the four it lost
+      FAILS at window.test.ts:157:41: the snapshot's tree holds 0 nodes with the id "live-region", not the one region,
+      and the run made no entry for it to keep
+      (its planted run is never reached: "the shipped app must pass this judge first, or a plant it fails proves nothing")
+  AC4 #3232.1291a87a: with the same page open, an ask from session B posts its notification and adds no announcement
+      FAILS at window.test.ts:170:36: the ask ask:01M883G41B0RE30JE54CYGTBW0 ("Which heading opens the release
+      notes?") from Release notes: the snapshot carries no announcements list (snapshot.announcements is missing)
+  AC4 #3232.1291a87a wrong program: a planted window that announces every new ask (announces-every-ask) fails, naming
+  B's ask
+      FAILS at window.test.ts:174:42: the ask ask:01M883G41B0RE30JE54CYGTBW0 ("Which heading opens the release
+      notes?") from Release notes: the snapshot carries no announcements list (snapshot.announcements is missing)
+      (its planted run is never reached: "the shipped app must pass this judge first, or a plant it fails proves nothing")
+
+state.test.ts: 3 tests, 3 failed; Start at  20:00:58, Duration  40.69s
+  AC5 #3232.2276c799: the session on the open page goes from says done to sent back, round 1 of 3; one entry holds its
+  name, "sent back" and the round
+      FAILS at state.test.ts:134:99: session:e26aa351-73ec-4376-8312-a820c25f8969 ("Cart totals"): the snapshot
+      carries no announcements list (snapshot.announcements is missing)
+  AC5 #3232.2276c799: a recorded turn whose 30 tool events change the doing line 30 times in 60 s adds none
+      FAILS at state.test.ts:138:37: the recorded turn of session:9fe04be2-be13-48b7-8db6-8c060312d04d ("Search box"),
+      whose 30 tool events changed its doing line 30 times in 60 s,: the snapshot carries no announcements list
+      (snapshot.announcements is missing)
+  AC5 #3232.2276c799 wrong program: a planted window that announces the doing line (announces-doing-line) fails,
+  naming the count
+      FAILS at state.test.ts:142:43: the recorded turn of session:9fe04be2-be13-48b7-8db6-8c060312d04d ("Search box"),
+      whose 30 tool events changed its doing line 30 times in 60 s,: the snapshot carries no announcements list
+      (snapshot.announcements is missing)
+      (its planted run is never reached: "the shipped app must pass this judge first, or a plant it fails proves nothing")
+
+card.test.ts: 2 tests, 2 failed; Start at  20:01:39, Duration  4.36s
+  AC6 #3232.7554be7e: a presented card whose pinned revision moves adds one entry saying the question changed, and the
+  card arms again
+      FAILS at card.test.ts:62:159: the card for ask:01M88371QC9QZ44K8WC3JB7RJ5 ("Does the new header look right?"):
+      the snapshot carries no announcements list (snapshot.announcements is missing)
+  AC6 #3232.7554be7e: redrawing the same card adds none
+      FAILS at card.test.ts:68:178: nothing was said that a redraw could say again: the card for
+      ask:01M88371QC9QZ44K8WC3JB7RJ5 ("Does the new header look right?"): the snapshot carries no announcements list
+      (snapshot.announcements is missing)
+
+hold.test.ts: 2 tests, 2 failed; Start at  20:01:44, Duration  6.84s
+  AC7 #3232.c570463b: approving a fixture push adds one entry at the hold's start with "10 s" and the key that undoes
+  it, none while the countdown runs on the virtual clock, and one when the push ran
+      FAILS at hold.test.ts:79:37: the push ask:01MCC5TF9PCS25GZP4MR5BZSW8 (`git push origin main`): the snapshot
+      carries no announcements list (snapshot.announcements is missing)
+  AC7 #3232.c570463b wrong program: a planted receipt that announces each second (receipt-announces-each-second)
+  fails, naming 10 entries
+      FAILS at hold.test.ts:83:43: the push ask:01MCC5TF9PCS25GZP4MR5BZSW8 (`git push origin main`): the snapshot
+      carries no announcements list (snapshot.announcements is missing)
+      (its planted run is never reached: "the shipped app must pass this judge first, or a plant it fails proves nothing")
+
+changes.test.ts: 2 tests, 2 failed; Start at  20:01:51, Duration  11.92s
+  AC8 #3232.b7a0e74d: three changes within 2 s add one entry with the count 3
+      FAILS at changes.test.ts:60:37: three changes within 2 s (the asks ask:01M883JDPAKF1DC4MKENMMGER2 "Which store
+      keeps the cart totals?", ask:01M883JG8YS6QVJYB46F138FX3 "Keep the old totals table?",
+      ask:01M883JJX1VEHXG52DSBAJEY73 "Round the totals up or down?" from Cart totals, its page open): the snapshot
+      carries no announcements list (snapshot.announcements is missing)
+  AC8 #3232.b7a0e74d wrong program: a planted window that adds three (announces-each-change) fails, naming them
+      FAILS at changes.test.ts:64:43: three changes within 2 s (the asks ask:01M883JDPAKF1DC4MKENMMGER2 "Which store
+      keeps the cart totals?", ask:01M883JG8YS6QVJYB46F138FX3 "Keep the old totals table?",
+      ask:01M883JJX1VEHXG52DSBAJEY73 "Round the totals up or down?" from Cart totals, its page open): the snapshot
+      carries no announcements list (snapshot.announcements is missing)
+      (its planted run is never reached: "the shipped app must pass this judge first, or a plant it fails proves nothing")
+
+hub.test.ts: 2 tests, 2 failed; Start at  20:02:03, Duration  6.45s
+  AC9 #3232.a096a169: with the hub stopped, one entry says the hub isn't answering
+      FAILS at hub.test.ts:65:35: the hub stopped: the snapshot carries no announcements list (snapshot.announcements
+      is missing)
+  AC9 #3232.a096a169: none repeats over the next 60 s, and one more comes when it answers
+      FAILS at hub.test.ts:69:44: nothing to repeat: the hub stopped: the snapshot carries no announcements list
+      (snapshot.announcements is missing)
+
+live.test.ts: 1 tests, 1 failed; Start at  22:46:33, Duration  11.25s
+  AC10 #3232.a107747a: on the reference Mac, the live window's tree read through AppKit holds one node marked as a
+  polite live region whose value is the last line, and the first criterion's run gives the same entries live as in the
+  replica; BLOCKED, naming where it stopped, if the platform can't be read
+      FAILS at live.test.ts:62:97: the replica's announcements for the ask ask:01M8DHSK7ACJXEPT9EXR6DMHJ8 ("Run `git
+      push origin main`? It pushes, and no request in this thread names that."): the snapshot carries no announcements
+      list (snapshot.announcements is missing)
+      (this entry alone is from a run at 501534ea685b on 2026-11-26; every other entry is from the run before it)
+      (the same day's first run read BLOCKED at the front gate, live.test.ts:45:40; this one had the Mac idle 116 s)
+
+budgets.test.ts: 1 tests, 1 failed; Start at  20:02:11, Duration  5.21s
+  AC11 #3232.fec442e2: a window with 30 quiet sessions adds no announcement and no wakeup over 60 s, compared with the
+  merge base, on the reference Mac in the local preflight
+      FAILS at budgets.test.ts:63:138: 60 s of a window with 30 quiet sessions and no event: the snapshot carries no
+      announcements list (snapshot.announcements is missing)
+
+In all: 20 tests, 20 failed, 0 passed.
