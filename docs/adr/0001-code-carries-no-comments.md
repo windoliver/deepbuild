@@ -48,6 +48,7 @@ One page per module topic. Each decision names the file and the symbol it govern
 - [0006](0006-web-export-set-ceilings.md): the web-export task's set ceilings
 - [0007](0007-kept-pack-checks.md): a pack check's result kept in the store, what a taken row gives a core, and its counts
 - [0008](0008-scene-relations.md): the `scene.relations` check kind
+- [0010](0010-lane-lists-reasons.md): the lane lists in `scripts/lanes-lists.mjs`: why each entry runs alone, slow, timed or by hand
 - [0012](0012-replica-shell-replay-and-spike-3031.md): a shell's replay in the replica, and spike #3031's readers
 - [0013](0013-hub-proof-and-host-packages.md): the hub's paseo readings and table record, the shell journeys check and the Lean runner's flag
 - [0014](0014-proof-lane-scripts.md): the kit ledger lint, a vendored file with no row, and a taste criterion's file

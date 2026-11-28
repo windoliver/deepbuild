@@ -140,8 +140,6 @@ function prepare(root, k) {
     git(dir, ['init', '-q', '--template=', dir]);
     mkdirSync(join(dir, '.git/objects/info'), { recursive: true });
   }
-  // The shard reads its objects from every repository that has used it, each named once in its alternates: one made by
-  // another clone can't reach this root's HEAD or tree otherwise (#3515). The lines already there stay.
   const alternates = join(dir, '.git/objects/info/alternates');
   const objects = join(resolve(root, git(root, ['rev-parse', '--git-common-dir']).trim()), 'objects');
   const named = existsSync(alternates) ? readFileSync(alternates, 'utf8').split('\n').filter(Boolean) : [];
@@ -203,7 +201,6 @@ export async function claimShards(root, want, say) {
     });
   })));
   const claimed = ready.filter(Boolean);
-  // A run left with none runs its alone block one group at a time, unsharded; stderr says so apart from the SHARD lines (#3515).
   if (want > 0 && !claimed.length) process.stderr.write(`SHARD none claimed of ${want} asked for: the alone block runs unsharded in the worktree, one group at a time\n`);
   return claimed;
 }
