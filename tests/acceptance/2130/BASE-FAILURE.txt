@@ -1,0 +1,373 @@
+The suite at the base commit 2a689d81f ("Merge pull request #3556 ..."), before any implementation, on macOS
+(Mac17,10, Apple M5 Max), rustc 1.99.1, Node 24.22.2, CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0, on 2026-11-27.
+
+Who ran it, and who wrote this file. The job that drafted the suite could not run cargo (README.md, Base runs;
+LANES.md). Its caller, the session that made the change, ran the suite in that job's checkout: a worktree detached
+at 2a689d81f holding this folder's files, each with the SHA-256 the job left, and nothing else. Each node test file
+ran once, as LANES.md runs it, all under one build grant of the machine's throttle. This file holds that run's own
+words, with the checkout written as <checkout>. It judges no test.
+
+Where each test fails: the suite's package builds, each of the 12 node tests fails at its assertion with its Rust
+test's own panic message, none reads BLOCKED, and no message starts "<ID> precondition:". An earlier run of the seven
+Rust files as targets of crates/deep-canvas, on 2026-11-26, failed the same 12 at the same assertions.
+
+====================================================================================================
+
+$ node --test tests/acceptance/2130/budget-recheck.test.mjs
+✖ #2130.766a56f0 a second light created past budget.lights 1 is rechecked against the whole document: None, or over_budget at budget/lights (44991.443584ms)
+✖ #2130.766a56f0 a patch to one of three lights past budget.lights 2 keeps the over_budget the whole check raises (0.616917ms)
+✖ #2130.766a56f0 a document whose budget names only a class is rechecked whole too: one fill light past the fill_shaded of its class (0.312167ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 0
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 45072.094916
+
+✖ failing tests:
+
+test at tests/acceptance/2130/budget-recheck.test.mjs:7:1
+✖ #2130.766a56f0 a second light created past budget.lights 1 is rechecked against the whole document: None, or over_budget at budget/lights (44991.443584ms)
+  AssertionError [ERR_ASSERTION]: #2130.766a56f0: a second light is created in a document with budget.lights 1 and one light; recheck, with the new item as changed, returned issues without over_budget at budget/lights, which check of the same document raises, so the patch is accepted: the reduced document it checked holds only the new light. It returned []
+  (libtest: test ac1_a_second_light_past_budget_lights_1_is_checked_against_the_whole_document ... FAILED, panicked at ../../../tests/acceptance/2130/budget_recheck.rs:85:9; cargo test --no-fail-fast --manifest-path target/acceptance-2130/suite/Cargo.toml --target-dir target/acceptance-2130 --test acceptance_2130_budget_recheck)
+  
+  'FAILED' !== 'ok'
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2130/budget-recheck.test.mjs:9:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'FAILED',
+    expected: 'ok',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2130/budget-recheck.test.mjs:12:1
+✖ #2130.766a56f0 a patch to one of three lights past budget.lights 2 keeps the over_budget the whole check raises (0.616917ms)
+  AssertionError [ERR_ASSERTION]: #2130.766a56f0: one of three lights is patched in a document with budget.lights 2; recheck, with that light as changed, returned issues without over_budget at budget/lights, which check of the same document raises: the old over_budget was dropped and the reduced document, holding one light, raised none. It returned []
+  (libtest: test ac1_a_patch_to_one_of_three_lights_past_budget_lights_2_keeps_the_over_budget ... FAILED, panicked at ../../../tests/acceptance/2130/budget_recheck.rs:119:9; cargo test --no-fail-fast --manifest-path target/acceptance-2130/suite/Cargo.toml --target-dir target/acceptance-2130 --test acceptance_2130_budget_recheck)
+  
+  'FAILED' !== 'ok'
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2130/budget-recheck.test.mjs:14:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'FAILED',
+    expected: 'ok',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2130/budget-recheck.test.mjs:17:1
+✖ #2130.766a56f0 a document whose budget names only a class is rechecked whole too: one fill light past the fill_shaded of its class (0.312167ms)
+  AssertionError [ERR_ASSERTION]: #2130.766a56f0: a fill light past the figure class's 32 is created in a document whose budget names the class; recheck, with the new item as changed, returned issues without over_budget at budget/fill_shaded, which check of the same document raises: the class's checks ran on a reduced document holding one light. It returned []
+  (libtest: test ac1_a_document_whose_budget_names_only_a_class_is_checked_whole_too ... FAILED, panicked at ../../../tests/acceptance/2130/budget_recheck.rs:166:9; cargo test --no-fail-fast --manifest-path target/acceptance-2130/suite/Cargo.toml --target-dir target/acceptance-2130 --test acceptance_2130_budget_recheck)
+  
+  'FAILED' !== 'ok'
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2130/budget-recheck.test.mjs:19:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'FAILED',
+    expected: 'ok',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+exit 1 (budget-recheck, 14:50:59Z)
+
+$ node --test tests/acceptance/2130/entry-digest.test.mjs
+✖ #2130.873c8710 the pack check refuses a data.layout@1 entry with no canonical form, naming the registry and the entry (1480.9985ms)
+✖ #2130.873c8710 the seal gives no entry a canvas module fills an empty digest (0.425584ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1585.57625
+
+✖ failing tests:
+
+test at tests/acceptance/2130/entry-digest.test.mjs:7:1
+✖ #2130.873c8710 the pack check refuses a data.layout@1 entry with no canonical form, naming the registry and the entry (1480.9985ms)
+  AssertionError [ERR_ASSERTION]: #2130.873c8710: a pack's data.layout@1 entry with no canonical form, which otherwise passes its kit, is refused by the pack check, naming the registry and the entry, and is never sealed with an empty digest: ["the entry acc2130.grid (max_bytes: 9007199254740993) is admitted and sealed with the digest [\"\"]", "the entry acc2130.spare (an extra member holding 9007199254740993) is admitted and sealed with the digest [\"\"]", "the entry acc2130.accents (two keys that are one key after NFC) is admitted and sealed with the digest [\"\"]"]
+  (libtest: test ac2_the_pack_check_refuses_an_entry_with_no_canonical_form_naming_registry_and_entry ... FAILED, panicked at ../../../tests/acceptance/2130/entry_digest.rs:126:5; cargo test --no-fail-fast --manifest-path target/acceptance-2130/suite/Cargo.toml --target-dir target/acceptance-2130 --test acceptance_2130_entry_digest)
+  
+  'FAILED' !== 'ok'
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2130/entry-digest.test.mjs:9:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'FAILED',
+    expected: 'ok',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2130/entry-digest.test.mjs:12:1
+✖ #2130.873c8710 the seal gives no entry a canvas module fills an empty digest (0.425584ms)
+  AssertionError [ERR_ASSERTION]: #2130.873c8710: the set sealed though the module acc fills data.layout@1 with acc.grid, whose max_bytes 9007199254740993 leaves it no canonical form; the sealed entries with an empty digest are ["data.layout@1 acc.grid"]
+  (libtest: test ac2_the_seal_gives_no_module_entry_an_empty_digest ... FAILED, panicked at ../../../tests/acceptance/2130/entry_digest.rs:176:9; cargo test --no-fail-fast --manifest-path target/acceptance-2130/suite/Cargo.toml --target-dir target/acceptance-2130 --test acceptance_2130_entry_digest)
+  
+  'FAILED' !== 'ok'
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2130/entry-digest.test.mjs:14:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'FAILED',
+    expected: 'ok',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+exit 1 (entry-digest, 14:51:01Z)
+
+$ node --test tests/acceptance/2130/migrates-from.test.mjs
+✖ #2130.00e7dfcf a range some version of an earlier major meets is met by a module at 2.0.0 that migrates from it (1442.529584ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1543.007792
+
+✖ failing tests:
+
+test at tests/acceptance/2130/migrates-from.test.mjs:7:1
+✖ #2130.00e7dfcf a range some version of an earlier major meets is met by a module at 2.0.0 that migrates from it (1442.529584ms)
+  AssertionError [ERR_ASSERTION]: #2130.00e7dfcf: b is sealed at 2.0.0 and its one kind carries its step from major 1, so a range some 1.x version meets is satisfied; the document check refuses it, as if only 1.0.0 were tried: ["b at ^1.2 is refused: [\"out_of_range: the document requires the b module at ^1.2; this build has 2.0.0\"]", "b at ~1.4 is refused: [\"out_of_range: the document requires the b module at ~1.4; this build has 2.0.0\"]", "b at =1.3.0 is refused: [\"out_of_range: the document requires the b module at =1.3.0; this build has 2.0.0\"]", "b at >=1.1.0, <2.0.0 is refused: [\"out_of_range: the document requires the b module at >=1.1.0, <2.0.0; this build has 2.0.0\"]"]
+  (libtest: test ac3_a_range_some_version_of_an_earlier_major_meets_is_met_by_a_module_that_migrates_from_it ... FAILED, panicked at ../../../tests/acceptance/2130/migrates_from.rs:174:5; cargo test --no-fail-fast --manifest-path target/acceptance-2130/suite/Cargo.toml --target-dir target/acceptance-2130 --test acceptance_2130_migrates_from)
+  
+  'FAILED' !== 'ok'
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2130/migrates-from.test.mjs:9:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'FAILED',
+    expected: 'ok',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+exit 1 (migrates-from, 14:51:02Z)
+
+$ node --test tests/acceptance/2130/duplicate-check-kind.test.mjs
+✖ #2130.b3f91bae the seal refuses a module that registers the check kind c.audit twice, with duplicate_check_kind naming the module (2908.593458ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3026.470792
+
+✖ failing tests:
+
+test at tests/acceptance/2130/duplicate-check-kind.test.mjs:7:1
+✖ #2130.b3f91bae the seal refuses a module that registers the check kind c.audit twice, with duplicate_check_kind naming the module (2908.593458ms)
+  AssertionError [ERR_ASSERTION]: #2130.b3f91bae: the set sealed though the module c registers the check kind c.audit twice: no duplicate_check_kind was raised, check_kinds() lists c.audit 2 times and only the first registration's run is ever reached
+  (libtest: test ac4_the_seal_refuses_a_module_that_registers_one_check_kind_twice ... FAILED, panicked at ../../../tests/acceptance/2130/duplicate_check_kind.rs:112:13; cargo test --no-fail-fast --manifest-path target/acceptance-2130/suite/Cargo.toml --target-dir target/acceptance-2130 --test acceptance_2130_duplicate_check_kind)
+  
+  'FAILED' !== 'ok'
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2130/duplicate-check-kind.test.mjs:9:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'FAILED',
+    expected: 'ok',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+exit 1 (duplicate-check-kind, 14:51:06Z)
+
+$ node --test tests/acceptance/2130/recipe-channels.test.mjs
+✖ #2130.96087f96 a document channel at an ID the channel of the named test recipe expands to is refused bad_id at that channel (2612.845584ms)
+✖ #2130.96087f96 a document channel at n1.rise, where the channel of a one-item recipe expands to, is refused bad_id (0.565375ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2763.98175
+
+✖ failing tests:
+
+test at tests/acceptance/2130/recipe-channels.test.mjs:7:1
+✖ #2130.96087f96 a document channel at an ID the channel of the named test recipe expands to is refused bad_id at that channel (2612.845584ms)
+  AssertionError [ERR_ASSERTION]: #2130.96087f96: the test's document holds a channel of its own at an ID its recipe's channel `rise` expands to, and its check: ["no bad_id is raised at channels/n1.rise.0; the check raised []", "the lowered document's channel n1.rise.0 targets Some(\"items/n1.bars.0/params/h\"), not the document's own items/n1/at/pos/0: the recipe's channel took its place", "no bad_id is raised at channels/n1.rise.1; the check raised []", "the lowered document's channel n1.rise.1 targets Some(\"items/n1.bars.1/params/h\"), not the document's own items/n1/at/pos/0: the recipe's channel took its place"]
+  (libtest: test ac5_a_document_channel_where_the_tests_recipe_channel_expands_to_is_refused_bad_id ... FAILED, panicked at ../../../tests/acceptance/2130/recipe_channels.rs:140:5; cargo test --no-fail-fast --manifest-path target/acceptance-2130/suite/Cargo.toml --target-dir target/acceptance-2130 --test acceptance_2130_recipe_channels)
+  
+  'FAILED' !== 'ok'
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2130/recipe-channels.test.mjs:9:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'FAILED',
+    expected: 'ok',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2130/recipe-channels.test.mjs:12:1
+✖ #2130.96087f96 a document channel at n1.rise, where the channel of a one-item recipe expands to, is refused bad_id (0.565375ms)
+  AssertionError [ERR_ASSERTION]: #2130.96087f96: the document holds a channel of its own at n1.rise, the ID the recipe's channel `rise` expands to for the instance n1, and its check: ["no bad_id is raised at channels/n1.rise; the check raised []", "the lowered document's channel n1.rise targets Some(\"items/n1.bars/params/h\"), not the document's own items/n1/at/pos/0: the recipe's channel took its place"]
+  (libtest: test ac5_a_document_channel_at_n1_rise_is_refused_bad_id ... FAILED, panicked at ../../../tests/acceptance/2130/recipe_channels.rs:169:5; cargo test --no-fail-fast --manifest-path target/acceptance-2130/suite/Cargo.toml --target-dir target/acceptance-2130 --test acceptance_2130_recipe_channels)
+  
+  'FAILED' !== 'ok'
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2130/recipe-channels.test.mjs:14:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'FAILED',
+    expected: 'ok',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+exit 1 (recipe-channels, 14:51:08Z)
+
+$ node --test tests/acceptance/2130/check-reads.test.mjs
+✖ #2130.219ed3ba the not_exact refusal of a check with machines any that reads c.p names the array in its arrays (1299.180833ms)
+✖ #2130.219ed3ba the unresolved_read refusal of a check that reads c.q, which no operator writes, names the array in its arrays (0.580792ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1420.199542
+
+✖ failing tests:
+
+test at tests/acceptance/2130/check-reads.test.mjs:7:1
+✖ #2130.219ed3ba the not_exact refusal of a check with machines any that reads c.p names the array in its arrays (1299.180833ms)
+  AssertionError [ERR_ASSERTION]: assertion `left == right` failed: #2130.219ed3ba: the not_exact refusal's arrays is [], not [c.p]: the array a check reads is only in the refusal's text (check `c.audit` of `c` says machines any but reads `c.p`, which is same_machine)
+    left: []
+   right: ["c.p"]
+  (libtest: test ac6_a_not_exact_refusal_of_a_checks_read_names_the_array ... FAILED, panicked at ../../../tests/acceptance/2130/check_reads.rs:88:13; cargo test --no-fail-fast --manifest-path target/acceptance-2130/suite/Cargo.toml --target-dir target/acceptance-2130 --test acceptance_2130_check_reads)
+  
+  'FAILED' !== 'ok'
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2130/check-reads.test.mjs:9:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'FAILED',
+    expected: 'ok',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2130/check-reads.test.mjs:12:1
+✖ #2130.219ed3ba the unresolved_read refusal of a check that reads c.q, which no operator writes, names the array in its arrays (0.580792ms)
+  AssertionError [ERR_ASSERTION]: assertion `left == right` failed: #2130.219ed3ba: the unresolved_read refusal's arrays is [], not [c.q]: the array a check reads is only in the refusal's text (check `c.audit` of `c` reads `c.q`, which no operator writes)
+    left: []
+   right: ["c.q"]
+  (libtest: test ac6_an_unresolved_read_refusal_of_a_checks_read_names_the_array ... FAILED, panicked at ../../../tests/acceptance/2130/check_reads.rs:117:13; cargo test --no-fail-fast --manifest-path target/acceptance-2130/suite/Cargo.toml --target-dir target/acceptance-2130 --test acceptance_2130_check_reads)
+  
+  'FAILED' !== 'ok'
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2130/check-reads.test.mjs:14:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'FAILED',
+    expected: 'ok',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+exit 1 (check-reads, 14:51:10Z)
+
+$ node --test tests/acceptance/2130/module-of-check.test.mjs
+✖ #2130.995b1ac2 module_of_check of geometry.shading is Some(loop) in the sealed set of the core, with no loop module (1986.672083ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2168.008708
+
+✖ failing tests:
+
+test at tests/acceptance/2130/module-of-check.test.mjs:7:1
+✖ #2130.995b1ac2 module_of_check of geometry.shading is Some(loop) in the sealed set of the core, with no loop module (1986.672083ms)
+  AssertionError [ERR_ASSERTION]: assertion `left == right` failed: #2130.995b1ac2: in the core's sealed set, with no loop module, module_of_check("geometry.shading") is None, not Some("loop"): the module check kinds have no row for the loop module and the kind's family `geometry` is no module, so a check input naming it is BLOCKED with no module named
+    left: None
+   right: Some("loop")
+  (libtest: test ac7_geometry_shading_names_the_loop_module_in_the_cores_sealed_set ... FAILED, panicked at ../../../tests/acceptance/2130/module_of_check.rs:39:5; cargo test --no-fail-fast --manifest-path target/acceptance-2130/suite/Cargo.toml --target-dir target/acceptance-2130 --test acceptance_2130_module_of_check)
+  
+  'FAILED' !== 'ok'
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2130/module-of-check.test.mjs:9:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'FAILED',
+    expected: 'ok',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+exit 1 (module-of-check, 14:51:12Z)

@@ -30,6 +30,8 @@ deep-gpu = { path = "../deep-gpu" }
 deep-canvas-marks = { path = "../deep-canvas-marks" }
 deep-canvas-cells = { path = "../deep-canvas-cells" }
 deep-marks-raster = { path = "../deep-marks-raster" }
+# Issue #3605: a shell screen's driven data values written where its templates read them, as the scheduler writes them.
+deep-canvas-motion = { path = "../deep-canvas-motion" }
 deep-text = { path = "../deep-text" }
 vello_cpu = { version = "0.3", default-features = false, features = ["std", "text", "f32_pipeline", "u8_pipeline"] }
 

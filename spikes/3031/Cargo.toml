@@ -1,0 +1,26 @@
+[package]
+name = "spike-3031"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+# Spike #3031: a headless reader of what a 3D frame holds and how often it draws depth. It draws a
+# document's frames offscreen through the scene renderer's public entry, on a device opened as the
+# app's is but with wgpu's API trace on, and lists what Metal holds for it. Outside the workspace,
+# with its own Cargo.lock, so the trace feature and what it pulls in never reach the app.
+[workspace]
+
+[dependencies]
+deep-canvas = { path = "../../crates/deep-canvas" }
+deep-canvas-scene3d = { path = "../../crates/deep-canvas-scene3d" }
+deep-effects-render = { path = "../../crates/deep-effects-render" }
+deep-gpu = { path = "../../crates/deep-gpu" }
+deep-scene3d-render = { path = "../../crates/deep-scene3d-render" }
+wgpu = { version = "=30.0.1", default-features = false, features = ["std", "wgsl", "metal", "parking_lot", "trace"] }
+pollster = "0.4"
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+
+[profile.release]
+debug = false
+strip = "none"
