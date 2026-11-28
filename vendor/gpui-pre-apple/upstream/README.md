@@ -74,24 +74,26 @@ Outcome: pin moved
 | #390 | pass |
 | #391 | pass |
 | #140 | not run: its sRGB test passes; the live color check and the pacing test read INCONCLUSIVE on this machine |
-| #358 | not run: not reached within the hour |
+| #358 | pass |
 | #124 | pass |
-| #177 | not run: not reached within the hour |
-| #499 | not run: not reached within the hour |
+| #177 | pass |
+| #499 | fail: no frame allocates and the shader test passes, but three of five runs drew 233 to 239 frames where 240 are due, on a loaded machine |
 | #542 | pass |
-| #1427 | fail: the lab panel's launch is refused for importing gpui-kit, as it is at the merge base |
-| #1431 | not run: not reached within the hour |
+| #1427 | fail: the lab panel's launch is refused for importing gpui-kit, as it is by the merge base's own build |
+| #1431 | pass |
 | #1434 | pass |
 | #1480 | pass |
-| #1482 | fail: counts.test.ts AC13, "no view outside the list", names 8 views; its hover, wheel and access tests pass |
-| #1489 | not run: not reached within the hour |
+| #1482 | fail: counts.test.ts AC13 names 8 views outside the list, as the merge base's own build does; its hover, wheel and access tests pass |
+| #1489 | pass |
 | #1546 | pass |
-| #1551 | not run: not reached within the hour; #3502's own still-window test, on the same surface, passes |
-| #1843 | not run: not reached within the hour |
+| #1551 | fail: deep-show live answers not_presented for its still board, as the merge base's own build does; #3502's still-window test passes |
+| #1843 | pass |
 | #2471 | not run: its test skips on macOS; it needs the Linux lane |
-| #3232 | not run: its unseen-window test passes; live.test.ts was not reached within the hour |
+| #3232 | not run: its unseen-window test passes; live.test.ts read BLOCKED, another window took the front |
 
-A suite's result here is the result of its carried rows' tests, the ones the table above names, each run once on this tree on a loaded Mac17,10. `pass` means every one of them passed. The workspace builds (`cargo build --workspace --locked`) and `node scripts/vendor-rebase.mjs check` passes. With suites unrun and two failing, this trial is open: the pin is moved on the branch, and the move is not proven.
+A suite's result here is the result of its carried rows' tests, the ones the table above names, each run on this tree on a loaded Mac17,10. `pass` means every one of them passed. The workspace builds (`cargo build --workspace --locked`) and `node scripts/vendor-rebase.mjs check` passes. Three suites fail as they do on the merge base, one misses its frame rate under load, and three could not be read here, so this trial is open: the pin is moved on the branch, and the move is not proven.
+
+The retired #1550 row's test does not pass on 0.3.14's own line breaking (`tests/acceptance/1550/redraft/wrap.test.ts`: right-to-left rows out of text order, and 14,259 boundaries LineBreakTest.txt does not allow), so its removal is not proven either.
 
 ## What was offered upstream (#711)
 
