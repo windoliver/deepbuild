@@ -169,9 +169,9 @@ export interface Ran { code: number | null; stdout: string; stderr: string }
 export const sshConfig = (): string => join(homedir(), '.ssh', 'config');
 /** ssh's options for every call to a host: your config file, a connection of its own, and a dead link noticed within 15 s. */
 export const sshOptions = (): string[] => ['-F', sshConfig(), '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', '-o', 'ControlPath=none', '-o', 'ServerAliveInterval=5', '-o', 'ServerAliveCountMax=3', '-o', 'ConnectTimeout=30'];
-/** One ssh call on a connection of its own: the script on its stdin, run by `sh -s` with `args`. */
+/** One ssh call on a connection of its own: the script on its stdin, run by `/bin/sh -s` with `args`. */
 export function sshScript(host: string, args: string[], script: string): ChildProcess {
-  const child = spawn('ssh', [...sshOptions(), '--', host, ['sh', '-s', '--', ...args].map(q).join(' ')], { stdio: ['pipe', 'pipe', 'pipe'] });
+  const child = spawn('ssh', [...sshOptions(), '--', host, ['/bin/sh', '-s', '--', ...args].map(q).join(' ')], { stdio: ['pipe', 'pipe', 'pipe'] });
   child.stdin!.on('error', () => undefined);
   // Braced, so the shell has read all of it before any of it runs.
   child.stdin!.end(`{\n${script}\n}\n`);

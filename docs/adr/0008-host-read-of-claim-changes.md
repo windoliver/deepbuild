@@ -19,6 +19,12 @@ The script is `CHANGES` in `packages/hub/src/host-sessions.ts`, run by the host'
 - **Any step that fails ends the read with no `read` line**, by `set -e`, and a failed encoding of a list is a failed read: a short list never reads as no change.
 - **What the script prints is base64, each list on a line of its own**, so no path can forge a line.
 
-## Open
+## What the agent controls there (#3584, #3589, folded into #3511)
 
-Filed as #3584 and #3589: an ignore rule the agent controls, the host user's own shell and git config, which the agent can write, and a session started in a subfolder of its repo.
+- **The read runs as `/bin/sh -s`, with the system's PATH and no libraries set to load first.** `packages/hub/src/hosts.ts`, `sshScript`; `CHANGES`. A login file the agent can write sets PATH and LD_PRELOAD; a `git` or `sh` it puts first is never the one the read runs, and a read with LD_PRELOAD, LD_LIBRARY_PATH or LD_AUDIT set is a failed read. A login file that prints its own `read` line in place of the script's is not caught: ssh runs the login shell before `/bin/sh`, and nothing the hub sends can run first.
+- **The session's repo top is read once, at its first hook, and a read whose git takes another top is a failed read.** `packages/hub/src/session-state.ts`, `sessionTops`; `HostSessions.topOf`. A hub that restarts reads the top again at the session's next hook.
+- **An ignored file whose path is own by name counts as changed.** The ignore rules are the agent's. A cache the check's tool writes under a test folder, such as `tests/__pycache__`, then makes the check the agent's own unless the repo's own run leaves it as the next point says.
+- **An untracked own file a check of an earlier claim on the same folder wrote is not this claim's change while its bytes are the same.** `packages/hub/src/host-gate.ts`, `stopOnHost`: the hub reads the folder again after each run, and keeps the hash of each untracked own file that appeared or changed (`Claim.written`).
+- **A tracked own file that changes between the read and the run's end makes the read a failed one.** The same read after the run. An untracked own file written while the run went is taken for the run's own output, not the agent's; that is the gap left open.
+- **A Makefile or justfile at the repo top counts as a script the check runs, at the file level.** `packages/gate/src/own.ts`, `ownChanges`. Which target a check's command reaches isn't parsed.
+- **Locally, `changesOf` compares own files by their bytes too, lists ignored own files, and fails a read whose git takes another work tree.** `packages/hub/src/claim-changes.ts`.

@@ -127,7 +127,7 @@ const LOAD_WAIT_MS = 30 * 60_000;
 interface Held { entry: Entry; why: 'background' | 'due' | 'grace'; record: HeldRecord }
 /** A reply that ended the turn before its fast lane was ready to place slow checks (#2075). */
 interface TurnEnd { session: string; background: string[]; stopAt: number; repliedAt: number; reading: LoopReading | undefined }
-export interface Claim { claim: string; session: string; task: string; cwd: string; base: string; snapshot: string; tree: string | undefined; checkout: Promise<TempCheckout> | null; requirements: ClaimRequirement[]; entries: Map<string, Entry>; repo: Promise<string>; installs: Promise<string>; names: Promise<string>; programs: Map<string, string>; state?: StatePin | undefined; changes?: Changes; ready?: boolean; host?: string }
+export interface Claim { claim: string; session: string; task: string; cwd: string; base: string; snapshot: string; tree: string | undefined; checkout: Promise<TempCheckout> | null; requirements: ClaimRequirement[]; entries: Map<string, Entry>; repo: Promise<string>; installs: Promise<string>; names: Promise<string>; programs: Map<string, string>; state?: StatePin | undefined; changes?: Changes; ready?: boolean; host?: string; written?: Map<string, string> }
 const READ_FLOOR_MS = 5_000;
 /** Run outcomes a key keeps: a result. Missing, stopped and uncounted runs say nothing of the key, so they never carry. */
 const KEPT = new Set(['passed', 'failed', 'overran', 'ran_nothing']);

@@ -136,6 +136,7 @@ export class SessionState {
 
   /** The host each session on another machine runs on, from the connection its hooks came over (#999). */
   readonly sessionHosts = new Map<string, string>();
+  readonly sessionTops = new Map<string, Promise<string | undefined>>();
 
   /** The project each session entered, for its packs (#67). */
   readonly entered = new Map<string, string>();
@@ -948,6 +949,7 @@ export class SessionState {
     const none = (meta.agent === 'codex' && !meta.transcript) || meta.agent === 'paseo';
     // A session is on the host its first hook's connection came over (#999).
     if (meta.host && meta.session && !this.sessionHosts.has(meta.session)) this.sessionHosts.set(meta.session, meta.host);
+    if (meta.host && meta.session && meta.cwd && !this.sessionTops.has(meta.session)) this.sessionTops.set(meta.session, this.options.services.hosts.sessions.topOf(meta.host, meta.cwd));
     if (!meta.session || !meta.cwd || (!none && !isAbsolute(meta.transcript))) return false;
     // A session on a host (#999) keeps its transcript under its agent's home there, and its process is read there.
     const homes = meta.host ? [`${this.options.services.hosts.sessions.home(meta.host) ?? ''}/.claude/projects`] : meta.agent === 'codex' ? sessionHomes(this.options.services.root.dir) : [join(homedir(), '.claude', 'projects')];

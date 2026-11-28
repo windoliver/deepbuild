@@ -1,6 +1,6 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { crc32, deflateSync } from 'node:zlib';
@@ -9,13 +9,24 @@ import type { RecordedRun } from '@deepbuild/gate';
 import type { Connection } from '@deepbuild/record';
 import { GateRunner, type GateOptions } from '../src/gate-runner.js';
 import { HostSessions } from '../src/host-sessions.js';
+import { sshEnded, sshScript } from '../src/hosts.js';
 
 const EMPTY = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
 const dirs: string[] = [];
 afterEach(() => { for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true }); });
 
-const shell = (env: NodeJS.ProcessEnv = {}) => (_host: string, args: string[], script: string): Promise<{ code: number | null; stdout: string; stderr: string }> => new Promise((done) => {
-  const child = spawn('sh', ['-s', '--', ...args], { stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, ...env } });
+const shell = (env: NodeJS.ProcessEnv = {}, over?: { tool: string; fail: string }) => (_host: string, args: string[], script: string): Promise<{ code: number | null; stdout: string; stderr: string }> => new Promise((done) => {
+  let child = spawn('sh', ['-s', '--', ...args], { stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, ...env } });
+  if (over) {
+    const bin = mkdtempSync(join(tmpdir(), 'host-bin-'));
+    dirs.push(bin);
+    const real = execFileSync('sh', ['-c', `PATH=/usr/bin:/bin command -v ${over.tool}`]).toString().trim();
+    copyFileSync(realpathSync(real), join(bin, 'real'));
+    chmodSync(join(bin, 'real'), 0o755);
+    writeFileSync(join(bin, 'stub'), `#!/bin/sh\n${over.fail}\nexec ${join(bin, 'real')} "$@"\n`, { mode: 0o755 });
+    child.kill();
+    child = spawn('unshare', ['-rm', 'sh', '-c', `mount --bind ${join(bin, 'stub')} ${real} && exec sh -s -- "$@"`, 'sh', ...args], { stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, ...env } });
+  }
   let stdout = '';
   let stderr = '';
   child.stdout.setEncoding('utf8').on('data', (d: string) => (stdout += d));
@@ -24,7 +35,7 @@ const shell = (env: NodeJS.ProcessEnv = {}) => (_host: string, args: string[], s
   child.stdin.end(`{\n${script}\n}\n`);
 });
 
-async function claimed(o: { base: Record<string, string>; head: Record<string, string>; broken?: boolean; before?: (git: (...args: string[]) => string, dir: string) => void; there?: (git: (...args: string[]) => string, dir: string) => void; link?: ReturnType<typeof shell>; env?: NodeJS.ProcessEnv }) {
+async function claimed(o: { base: Record<string, string>; head: Record<string, string>; broken?: boolean; before?: (git: (...args: string[]) => string, dir: string) => void; there?: (git: (...args: string[]) => string, dir: string) => void; link?: ReturnType<typeof shell>; env?: NodeJS.ProcessEnv; over?: { tool: string; fail: string }; folder?: string; started?: (dir: string) => string; during?: (dir: string) => void; next?: Record<string, string>; ssh?: boolean }) {
   const root = mkdtempSync(join(tmpdir(), 'host-changes-'));
   dirs.push(root);
   const dir = join(root, 'repo');
@@ -40,22 +51,30 @@ async function claimed(o: { base: Record<string, string>; head: Record<string, s
   put(o.head);
   o.there?.(git, dir);
   if (o.broken) writeFileSync(join(dir, '.git', 'index'), 'not an index\n');
-  const sessions = new HostSessions({ root: dir, hosts: { exec: o.link ?? shell(o.env), read: o.link ?? shell(o.env) } } as unknown as ConstructorParameters<typeof HostSessions>[0]);
+  const top = o.started ? o.started(realpathSync(dir)) : realpathSync(dir);
+  const link = o.ssh ? (host: string, args: string[], script: string) => sshEnded(sshScript(host, args, script)) : o.link ?? shell(o.env, o.over);
+  const sessions = new HostSessions({ root: dir, hosts: { exec: link, read: link } } as unknown as ConstructorParameters<typeof HostSessions>[0]);
   let gate: GateRunner;
   const options = {
     raw: async () => [], now: () => Date.now(), append: async () => undefined, core: {} as Connection,
     start: async () => 'run1',
     ended: async (run: string) => {
+      o.during?.(dir);
       gate.recorded(run, { run, outcome: 'passed', testsRun: 1, failures: [], evidence: [], read: [], mask: null, exit: { code: 0, signal: null, cause: 'exit' }, output: { stdout: '', stderr: '', sha256: { stdout: EMPTY, stderr: EMPTY } }, attempts: [], seeded: [], contract: null } as unknown as RecordedRun);
       return 'passed';
     },
-    changesOn: (host: string, cwd: string, b: string, ms: number) => sessions.changes(host, cwd, b, ms),
+    changesOn: (host: string, cwd: string, b: string, ms: number) => sessions.changes(host, cwd, b, ms, top),
     slots: () => ({ free: 1 }), budget_ms: 10_000, hold_ms: o.link ? 2_000 : 60_000, invalid: async () => undefined, stopping: () => false, stoodIn: async () => undefined,
   } as unknown as GateOptions;
   gate = new GateRunner(options);
   const check = { check: 'price-approved', approved: null, command: 'npm test', covers: [], depth: 'unit' as const, on_base: 'passes' as const, asserts: [], expected_ms: 1, source: 'spec' as const };
-  await gate.stop({ session: 'S', claim: 'claim:c', task: 'task:1', cwd: dir, base, requirements: [], checks: [check], stopAt: Date.now(), host: 'gpu-box' });
-  return gate.verdictOf('claim:c');
+  const cwd = o.folder ? join(dir, o.folder) : dir;
+  await gate.stop({ session: 'S', claim: 'claim:c', task: 'task:1', cwd, base, requirements: [], checks: [check], stopAt: Date.now(), host: 'gpu-box' });
+  if (!o.next) return gate.verdictOf('claim:c');
+  expect(gate.verdictOf('claim:c')?.outcome, 'the first claim is judged before the next').toBeDefined();
+  put(o.next);
+  await gate.stop({ session: 'S', claim: 'claim:d', task: 'task:1', cwd, base, requirements: [], checks: [check], stopAt: Date.now(), host: 'gpu-box' });
+  return gate.verdictOf('claim:d');
 }
 const pkg = (test: string) => JSON.stringify({ scripts: { test } });
 const BASE = { 'src/a.txt': 'export const a = 1;\n', 'price.txt': '20.00\n', 'tests/price_test.sh': 'compare\n', 'package.json': pkg('sh tests/price_test.sh') };
@@ -167,11 +186,7 @@ describe('what a claim on a host changed (#3511)', () => {
 
   const fails: [string, string][] = [['awk', `case "$*" in *'ENVIRON["RE"]'*) exit 2 ;; esac`], ['base64', 'exit 1']];
   it.each(fails)('a step of the read that fails there ends it with no change set, though git is set to hide the edit: a failing %s', async (tool, fail) => {
-    const bin = mkdtempSync(join(tmpdir(), 'host-bin-'));
-    dirs.push(bin);
-    const real = execFileSync('sh', ['-c', `command -v ${tool}`]).toString().trim();
-    writeFileSync(join(bin, tool), `#!/bin/sh\n${fail}\nexec ${real} "$@"\n`, { mode: 0o755 });
-    const v = await claimed({ base: BASE, head: { 'price.txt': '18.00\n' }, there: hides[0][1], env: { PATH: `${bin}:${process.env.PATH ?? ''}` } });
+    const v = await claimed({ base: BASE, head: { 'price.txt': '18.00\n' }, there: hides[0][1], over: { tool, fail } });
     expect(v?.outcome, JSON.stringify(v)).not.toBe('PASS');
     expect(v?.reasons).toContainEqual(expect.stringMatching(/price-approved counts as the agent's own: what the claim changed couldn't be read \(on gpu-box, the read of what the claim changed didn't end/));
   }, 60_000);
@@ -281,6 +296,83 @@ describe('what a claim on a host changed (#3511)', () => {
   it('an edited test file whose name git would quote is named plainly, and counts', async () => {
     const v = await claimed({ base: { ...BASE, 'tests/prix_é.sh': 'compare\n' }, head: { 'tests/prix_é.sh': 'nothing\n' } });
     expect(v?.reasons).toContainEqual(expect.stringMatching(/price-approved counts as the agent's own: the claim changed tests\/prix_é\.sh,/));
+  }, 60_000);
+
+  it('a check\'s own file changed on the host after the read, while its check ran, makes the claim no change set (#3511.5bba85cf)', async () => {
+    const v = await claimed({ base: BASE, head: { 'price.txt': '19.00\n' }, during: (dir) => writeFileSync(join(dir, 'tests/price_test.sh'), 'exit 0\n') });
+    expect(v?.outcome, JSON.stringify(v)).not.toBe('PASS');
+    expect(v?.reasons).toContainEqual(expect.stringMatching(/price-approved counts as the agent's own: what the claim changed couldn't be read \(.*tests\/price_test\.sh changed on gpu-box after the read, while a check ran/));
+  }, 60_000);
+
+  it('a git earlier on the host\'s PATH that reads a clean copy is not the git the read runs (#3511.89c2a00f)', async () => {
+    const away = mkdtempSync(join(tmpdir(), 'host-path-'));
+    dirs.push(away);
+    const clean = join(away, 'clean');
+    for (const [path, text] of Object.entries(BASE)) { mkdirSync(join(clean, path, '..'), { recursive: true }); writeFileSync(join(clean, path), text); }
+    const real = execFileSync('sh', ['-c', 'command -v git']).toString().trim();
+    mkdirSync(join(away, 'bin'));
+    writeFileSync(join(away, 'bin', 'git'), `#!/bin/sh\n[ -n "$GIT_WORK_TREE" ] && { cd ${clean} && GIT_WORK_TREE=${clean}; export GIT_WORK_TREE; }\nexec ${real} "$@"\n`, { mode: 0o755 });
+    const v = await claimed({ base: BASE, head: { 'tests/price_test.sh': 'exit 0\n' }, env: { PATH: `${join(away, 'bin')}:${process.env.PATH ?? ''}` } });
+    expect(v?.outcome, JSON.stringify(v)).not.toBe('PASS');
+    expect(v?.reasons).toContainEqual(expect.stringMatching(/price-approved counts as the agent's own: the claim changed tests\/price_test\.sh, which it may load/));
+  }, 60_000);
+
+  it('a read made with libraries set to load first is no change set (#3511.89c2a00f)', async () => {
+    const v = await claimed({ base: BASE, head: { 'price.txt': '18.00\n' }, env: { LD_PRELOAD: '/nonexistent/clean-git.so' } });
+    expect(v?.reasons).toContainEqual(expect.stringMatching(/price-approved counts as the agent's own: what the claim changed couldn't be read \(on gpu-box, the read runs with libraries set to load first/));
+  }, 60_000);
+
+  it('the read over ssh runs the system\'s shell, not an sh the login PATH puts first (#3511.89c2a00f)', async () => {
+    const away = mkdtempSync(join(tmpdir(), 'host-ssh-'));
+    dirs.push(away);
+    for (const d of ['bin', 'plant']) mkdirSync(join(away, d));
+    writeFileSync(join(away, 'plant', 'sh'), '#!/bin/sh\ncat > /dev/null\necho read\n', { mode: 0o755 });
+    writeFileSync(join(away, 'bin', 'ssh'), `#!/bin/sh\nfor a; do last=$a; done\nPATH=${join(away, 'plant')}:/usr/bin:/bin; export PATH\nexec /bin/sh -c "$last"\n`, { mode: 0o755 });
+    const path = process.env.PATH;
+    process.env.PATH = `${join(away, 'bin')}:${path ?? ''}`;
+    try {
+      const v = await claimed({ base: BASE, head: { 'tests/price_test.sh': 'exit 0\n' }, ssh: true });
+      expect(v?.outcome, JSON.stringify(v)).not.toBe('PASS');
+      expect(v?.reasons).toContainEqual(expect.stringMatching(/price-approved counts as the agent's own: the claim changed tests\/price_test\.sh, which it may load/));
+    } finally {
+      process.env.PATH = path;
+    }
+  }, 60_000);
+
+  it('a session in a subfolder whose git now takes that subfolder for the repo top, holding a clean copy, is no change set (#3511.1d3555aa)', async () => {
+    const v = await claimed({ base: { ...BASE, 'app/price.txt': '20.00\n' }, folder: 'app', head: { 'tests/price_test.sh': 'exit 0\n' }, there: (_git, dir) => {
+      const clone = join(dirname(dir), 'clone');
+      execFileSync('git', ['clone', '-q', dir, clone]);
+      for (const [path, text] of Object.entries({ ...BASE, 'app/price.txt': '20.00\n' })) { mkdirSync(join(dir, 'app', path, '..'), { recursive: true }); writeFileSync(join(dir, 'app', path), text); }
+      execFileSync('git', ['-C', clone, 'config', 'core.worktree', join(dir, 'app')]);
+      writeFileSync(join(dir, 'app', '.git'), `gitdir: ${join(clone, '.git')}\n`);
+      expect(execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd: join(dir, 'app') }).toString().trim()).toBe(realpathSync(join(dir, 'app')));
+    } });
+    expect(v?.outcome, JSON.stringify(v)).not.toBe('PASS');
+    expect(v?.reasons).toContainEqual(expect.stringMatching(/price-approved counts as the agent's own: what the claim changed couldn't be read \(on gpu-box, git there takes .*app for the repo top, not ".*repo", the one the session started in/));
+  }, 60_000);
+
+  it('a new test file the folder\'s git is told to ignore is named (#3511.80ee3c2c)', async () => {
+    const v = await claimed({ base: BASE, head: { 'price.txt': '18.00\n', 'tests/cases/skip.sh': 'exit 0\n' }, there: (_git, dir) => writeFileSync(join(dir, '.git', 'info', 'exclude'), 'tests/cases/\n') });
+    expect(v?.outcome, JSON.stringify(v)).not.toBe('PASS');
+    expect(v?.reasons).toContainEqual(expect.stringMatching(/price-approved counts as the agent's own: the claim changed tests\/cases\/skip\.sh, which it may load/));
+  }, 60_000);
+
+  it('a changed Makefile counts as the check\'s own (#3511.80ee3c2c)', async () => {
+    const v = await claimed({ base: { ...BASE, Makefile: 'check:\n\tsh tests/price_test.sh\n' }, head: { Makefile: 'check:\n\t@true\n' } });
+    expect(v?.outcome, JSON.stringify(v)).not.toBe('PASS');
+    expect(v?.reasons).toContainEqual(expect.stringMatching(/price-approved counts as the agent's own: the claim changed Makefile, which it may load/));
+  }, 60_000);
+
+  it('a code-only claim made after an earlier claim\'s check left an untracked file under a test folder passes (#3511.aeb1c56e)', async () => {
+    const v = await claimed({ base: BASE, head: { 'price.txt': '18.00\n' }, during: (dir) => writeFileSync(join(dir, 'tests/last-run.log'), 'ran\n'), next: { 'price.txt': '17.00\n' } });
+    expect(v?.outcome, JSON.stringify(v?.reasons)).toBe('PASS');
+  }, 60_000);
+
+  it('a claim that changed an untracked file an earlier check left under a test folder is named (#3511.aeb1c56e)', async () => {
+    const v = await claimed({ base: BASE, head: { 'price.txt': '18.00\n' }, during: (dir) => writeFileSync(join(dir, 'tests/last-run.log'), 'ran\n'), next: { 'tests/last-run.log': 'edited\n' } });
+    expect(v?.outcome, JSON.stringify(v)).not.toBe('PASS');
+    expect(v?.reasons).toContainEqual(expect.stringMatching(/price-approved counts as the agent's own: the claim changed tests\/last-run\.log, which it may load/));
   }, 60_000);
 
   it('a link that never answers: the stop returns at its hold with the check still to run, and the claim has no verdict yet, never PASS', async () => {

@@ -1,6 +1,7 @@
 // The gate for a session on a host (#999; design: Blocks for work on your other machines, Sessions on a host). A claim
 // made at such a session's stop is judged as a local one is, by the gate runner's verdict over its checks' runs, but
 // its checks run on the host as remote runs (#1942), in the session's folder there.
+import { ownChanges } from '@deepbuild/gate';
 import type { Changes } from './claim-changes.js';
 import type { Claim, DefinitionState, Entry, GateOptions, GateRunner } from './gate-runner.js';
 
@@ -26,8 +27,28 @@ export async function stopOnHost(g: Runner, r: Parameters<GateRunner['stop']>[0]
   g.definition(claim, r.definition ?? 'locked', r.base);
   const readyAt = g.o.now();
   const unread = (why: string): Changes => ({ changed: [], configs: new Map(), scripts: false, unread: why });
-  const changed = (g.o.changesOn?.(r.host, r.cwd, r.base, g.readMs) ?? Promise.resolve(unread(`this hub has no read of a folder on ${r.host}`)))
-    .catch((error: unknown) => unread(error instanceof Error ? error.message : String(error))).then((changes) => { claim.changes = changes; });
+  const read = (): Promise<Changes> => (g.o.changesOn?.(r.host, r.cwd, r.base, g.readMs, r.session) ?? Promise.resolve(unread(`this hub has no read of a folder on ${r.host}`)))
+    .catch((error: unknown) => unread(error instanceof Error ? error.message : String(error)));
+  const written = [...older].reverse().find((o) => o.cwd === r.cwd && o.written)?.written ?? new Map<string, string>();
+  claim.written = new Map(written);
+  let before: Changes | undefined;
+  const changed = read().then((changes) => {
+    before = changes;
+    const left = (path: string): boolean => changes.untracked?.get(path) !== undefined && changes.untracked.get(path) === written.get(path);
+    claim.changes = { ...changes, changed: changes.changed.filter((path) => !left(path)) };
+  });
+  const after = async (): Promise<void> => {
+    const now = await read();
+    if (now.unread || !before || before.unread) {
+      claim.changes = { ...claim.changes!, unread: claim.changes?.unread ?? `the read after its run couldn't be made (${now.unread ?? 'no read before it'})` };
+      return;
+    }
+    for (const [path, oid] of now.untracked ?? []) if (before.untracked?.get(path) !== oid) claim.written!.set(path, oid);
+    const tracked = (c: Changes): Changes => ({ ...c, changed: c.changed.filter((path) => !c.untracked?.has(path)) });
+    const was = new Set(ownChanges(tracked(before), null));
+    const since = ownChanges(tracked(now), null).filter((path) => !was.has(path));
+    if (since.length && !claim.changes?.unread) claim.changes = { ...claim.changes!, unread: `${since.join(', ')} changed on ${r.host} after the read, while a check ran` };
+  };
   const runs = r.checks.map(async (c) => {
     // An older claim's run of the same check is outdated by this one: the folder there may have changed since.
     for (const o of older) { const was = o.entries.get(c.check); if (was) Object.assign(was, { stale: true, newer: was.newer ?? r.claim }); }
@@ -38,6 +59,7 @@ export async function stopOnHost(g: Runner, r: Parameters<GateRunner['stop']>[0]
       const run = await g.o.start({ claim: r.claim, check: c.check, approved: c.approved, command: c.command, commit: r.base, cwd: r.cwd, lane: 'fast', expected_ms: null, deadline_ms: c.deadline_ms ?? null, host: r.host });
       e.runs.push(run);
       e.outcome = await g.o.ended(run);
+      await after();
     } catch (error) {
       e.outcome = 'missing';
       g.cantStart(e, error);

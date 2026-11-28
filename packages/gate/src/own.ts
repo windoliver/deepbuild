@@ -21,7 +21,8 @@ export const ownRead = (path: string): boolean => path.split('/').slice(0, -1).s
 
 /** A test runner's config, or pytest's conftest.py: the tool finds and loads it by its own rules, wherever it lies. */
 const LOADED_BY_TOOL = /(^|\/)((vitest|vite|jest)\.config\.[cm]?[jt]s|vitest\.workspace\.[cm]?[jt]s|pytest\.ini|conftest\.py)$/;
-export const OWN_BY_NAME = `(^|/)(${[...OWN_FOLDERS].join('|')})/|${LOADED_BY_TOOL.source.replace(/\\\//g, '/')}|^package\\.json$`;
+const SCRIPT_FILE = /^(GNUmakefile|[Mm]akefile|[Jj]ustfile|\.justfile)$/;
+export const OWN_BY_NAME = `(^|/)(${[...OWN_FOLDERS].join('|')})/|${LOADED_BY_TOOL.source.replace(/\\\//g, '/')}|^package\\.json$|${SCRIPT_FILE.source}`;
 export type ChangesPlant = 'edited-check-approved' | 'own-files-test-folders-only';
 type Changes = { changed: readonly string[]; configs: ReadonlyMap<string, string>; scripts: boolean };
 /**
@@ -45,7 +46,7 @@ function loadedByTool(changes: Changes): ReadonlySet<string> {
 export function ownChanges(changes: Changes, read: readonly string[] | null, plant?: ChangesPlant): string[] {
   if (plant === 'edited-check-approved') return [];
   const reads = read === null ? { has: () => true } : new Set(read);
-  const script = (path: string): boolean => path === 'package.json' && changes.scripts && reads.has(path);
+  const script = (path: string): boolean => ((path === 'package.json' && changes.scripts) || SCRIPT_FILE.test(path)) && reads.has(path);
   const loaded = plant === 'own-files-test-folders-only' ? undefined : loadedByTool(changes);
   return changes.changed.filter((path) => (reads.has(path) && ownRead(path)) || (loaded !== undefined && (loaded.has(path) || script(path))));
 }
