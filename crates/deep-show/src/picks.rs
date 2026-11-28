@@ -822,6 +822,7 @@ impl Hub<'_> {
     }
 
     /// A 2D frame of `doc` for the window at `t`: its session's, with the panel's viewer state.
+    #[cfg(target_os = "macos")]
     pub(crate) fn window_drawn(
         &mut self,
         doc: &str,

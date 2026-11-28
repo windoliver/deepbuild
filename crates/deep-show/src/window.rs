@@ -342,7 +342,7 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str, t: i64, scale: f6
                     .current(doc)
                     .expect("a layer on screen has a current revision")
                     .doc;
-                crate::hub::only_layer(&hub.arranged(doc, current), &row.layer)
+                crate::hub::presented::only_layer(&hub.arranged(doc, current), &row.layer)
                     .as_object()
                     .expect("a revision is an object")
                     .clone()

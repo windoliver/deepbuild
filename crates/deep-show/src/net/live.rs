@@ -344,6 +344,7 @@ impl Hub<'_> {
     /// The prompt the app's window draws over the panel, never the piece: a room's Start while
     /// the first player may press it, else the Join while nobody has clicked it. Its words, its
     /// button's word and its button in panel px.
+    #[cfg(target_os = "macos")]
     pub(crate) fn window_prompt(
         &mut self,
         panel: &str,

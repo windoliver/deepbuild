@@ -1158,7 +1158,7 @@ fn peak_rss() -> Option<f64> {
 }
 
 pub fn call(app: &mut App, out: &str, call: &Value) -> Value {
-    let mut args = match parse(call) {
+    let args = match parse(call) {
         Ok(a) => a,
         Err(e) => return e,
     };
@@ -1180,6 +1180,8 @@ pub fn call(app: &mut App, out: &str, call: &Value) -> Value {
         None
     };
     // On the main display (#177) frames latch and show on its own refresh.
+    #[cfg(target_os = "macos")]
+    let mut args = args;
     #[cfg(target_os = "macos")]
     if let (None, Some(s)) = (args.display, &screen) {
         args.display = Some(s.layer.refresh_hz());

@@ -156,6 +156,7 @@ impl Worlds {
     }
 
     /// Whether a world whose span goes on hasn't stepped to `t` (#525: the device play's count).
+    #[cfg(target_os = "macos")]
     pub fn behind(&self, t: i64) -> bool {
         self.worlds
             .iter()
