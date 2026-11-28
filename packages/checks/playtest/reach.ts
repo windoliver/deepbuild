@@ -26,18 +26,20 @@ export type Cell = [number, number];
 export type Place = Cell | string;
 /** The flow form's input. */
 export interface FlowInput { next: string; cost: string; solid?: string[]; targets: Place[]; spawns: Place[]; lag?: number }
+export interface Need { goal: Place; through: Place[]; by?: 'agent' }
 /** grid.reach's own input: the playtest it names, then the search's or the flow form's. */
-export interface ReachInput { playtest: string; starts?: Cell[]; goals?: Place[]; every?: string[]; depths?: number[]; differ?: number; flow?: FlowInput }
+export interface ReachInput { playtest: string; starts?: Cell[]; goals?: Place[]; every?: string[]; depths?: number[]; differ?: number; needs?: Need[]; flow?: FlowInput }
 
 /** A floor the search judged: its run, seed, depth and step, its cells' hash, and what it left unreached. */
 export interface FloorFound { run: string; seed: number; depth: number; step: number; hash: string; reached: boolean; unreached: Cell[]; nearest: Cell | null }
 /** A flow form failure. */
 export interface FlowFound { run: string; step: number; cell: Cell; why: 'rises' | 'solid' | 'loops' | 'unreached' }
+export interface SkippedFound { run: string; seed: number; depth: number; goal: Cell; route: Cell[] }
 /**
  * What grid.reach found, beside check.kind@1's result: every floor, the runs that generated each depth, the distinct
  * floors at each depth by hash, the flow form's failures, and the time its searches took.
  */
-export interface ReachFound { floors: FloorFound[]; coverage: Record<string, number>; distinct: Record<string, number>; flow: FlowFound[]; search_ms: number }
+export interface ReachFound { floors: FloorFound[]; coverage: Record<string, number>; distinct: Record<string, number>; flow: FlowFound[]; skipped: SkippedFound[]; search_ms: number }
 
 // ---- The grid and the search.
 
@@ -96,16 +98,17 @@ function neighbours(s: Shape, i: number, parity = false): number[] {
 }
 
 /**
- * A runner: the plug-in's own, or a planted one the kit must catch (#68): its search's neighbours, whether a locked
- * cell opens with the keys the search holds, and how many of one depth's floors, in run order, are distinct.
+ * A runner: the plug-in's own, or a planted one the kit must catch (#68): its search's neighbours, whether a locked cell
+ * opens with the keys the search holds, how many of one depth's floors, in run order, are distinct, and what a need closes.
  */
-export interface Runner { neighbours(s: Shape, i: number): number[]; opens(s: Shape, locked: number, keys: Set<number>): boolean; distinct(hashes: string[]): number }
+export interface Runner { neighbours(s: Shape, i: number): number[]; opens(s: Shape, locked: number, keys: Set<number>): boolean; distinct(hashes: string[]): number; closes(s: Shape, cells: ArrayLike<number>, through: Place[]): number[] }
 
 /** The plug-in's own runner. */
 export const OWN: Runner = {
   neighbours: (s, i) => neighbours(s, i),
   opens: (s, locked, keys) => { const k = s.locks.get(locked); return k !== undefined && keys.has(k); },
   distinct: (hashes) => new Set(hashes).size,
+  closes: (s, cells, through) => placesOf(s, cells, through),
 };
 
 /** The kit's planted runners, each wrong in one way a fixture must catch. */
@@ -126,12 +129,14 @@ export const PLANTED: Record<string, Runner> = {
   'opens-locks': { ...OWN, opens: () => true },
   // Compares each run's floor only with that of the run before it.
   'previous-run': { ...OWN, distinct: (hashes) => hashes.filter((h, i) => h !== hashes[i - 1]).length },
+  'closes-first': { ...OWN, closes: (s, cells, through) => placesOf(s, cells, through.slice(0, 1)) },
 };
 
 /** The cells the search reaches from `starts`, with key-and-door closure; `links` are (from, to, two_way). */
-function search(s: Shape, cells: ArrayLike<number>, links: [number, number, boolean][], starts: number[], r: Runner = OWN): Uint8Array {
+function search(s: Shape, cells: ArrayLike<number>, links: [number, number, boolean][], starts: number[], r: Runner = OWN, closed?: Uint8Array): { reached: Uint8Array; from: Int32Array } {
   const n = s.w * s.h * s.layers;
   const reached = new Uint8Array(n);
+  const from = new Int32Array(n).fill(-1);
   const keyValues = new Set(s.locks.values());
   const held = new Set<number>();
   // A locked cell next to a reached one, by the key value it waits on.
@@ -144,32 +149,39 @@ function search(s: Shape, cells: ArrayLike<number>, links: [number, number, bool
     if (two) join(linked, t, f);
   }
   const queue: number[] = [];
-  const reach = (i: number): void => {
+  const reach = (i: number, via: number): void => {
     if (reached[i]) return;
     reached[i] = 1;
+    from[i] = via;
     queue.push(i);
     const v = cells[i]!;
     if (keyValues.has(v) && !held.has(v)) {
       held.add(v);
-      for (const m of waiting.get(v) ?? []) reach(m);
+      for (const m of waiting.get(v) ?? []) reach(m, from[m]!);
       waiting.delete(v);
     }
   };
-  const enter = (m: number): void => {
-    if (reached[m]) return;
+  const enter = (m: number, via: number): void => {
+    if (reached[m] || closed?.[m]) return;
     const c = classOf(s, cells[m]!);
     if (c === 'locked') {
-      if (r.opens(s, cells[m]!, held)) reach(m);
-      else { const k = s.locks.get(cells[m]!); if (k !== undefined) join(waiting, k, m); }
-    } else if (PASSABLE.has(c)) reach(m);
+      if (r.opens(s, cells[m]!, held)) reach(m, via);
+      else { const k = s.locks.get(cells[m]!); if (k !== undefined) { from[m] = via; join(waiting, k, m); } }
+    } else if (PASSABLE.has(c)) reach(m, via);
   };
-  for (const st of starts) if (st >= 0 && st < n) reach(st);
+  for (const st of starts) if (st >= 0 && st < n && !closed?.[st]) reach(st, -1);
   for (let q = 0; q < queue.length; q++) {
     const i = queue[q]!;
-    for (const m of r.neighbours(s, i)) enter(m);
-    for (const m of linked.get(i) ?? []) enter(m);
+    for (const m of r.neighbours(s, i)) enter(m, i);
+    for (const m of linked.get(i) ?? []) enter(m, i);
   }
-  return reached;
+  return { reached, from };
+}
+
+function routeTo(from: Int32Array, goal: number): number[] {
+  const route: number[] = [];
+  for (let i = goal; i >= 0; i = from[i]!) route.push(i);
+  return route.reverse();
 }
 
 /** Cell i as the interface names it. */
@@ -282,16 +294,31 @@ function floorHash(cells: number[]): string {
 }
 
 const cellText = (s: Shape, i: number): string => `[${cellOf(s, i).join(', ')}]`;
+const placesText = (places: Place[]): string => places.map((p) => (typeof p === 'string' ? p : `[${p.join(', ')}]`)).join(', ');
 
 /**
  * One floor judged: every goal and every cell of an `every` class reached, from the starts. The unreached cells are in
  * the order a failure names the first: each goal as `goals` lists them, then each cell of an `every` class.
  */
-function judgeFloor(s: Shape, cells: number[], links: [number, number, boolean][], starts: number[], input: ReachInput, r: Runner = OWN): { unreached: number[]; nearest: number | null; reached: Uint8Array } {
-  const reached = search(s, cells, links, starts, r);
-  const want = [...new Set([...placesOf(s, cells, input.goals ?? ['exit']), ...placesOf(s, cells, input.every ?? [])])];
+function judgeFloor(s: Shape, cells: number[], links: [number, number, boolean][], starts: number[], input: ReachInput, r: Runner = OWN): { unreached: number[]; nearest: number | null; reached: Uint8Array; skipped: { need: Need; goal: number; route: number[] }[]; unjudged: { need: Need; place: Place }[] } {
+  const { reached } = search(s, cells, links, starts, r);
+  const needs = input.needs ?? [];
+  const want = [...new Set([...placesOf(s, cells, [...(input.goals ?? ['exit']), ...needs.map((need) => need.goal)]), ...placesOf(s, cells, input.every ?? [])])];
   const unreached = want.filter((i) => !reached[i]);
-  return { unreached, nearest: unreached.length ? nearest(s, reached, unreached[0]!) : null, reached };
+  const skipped: { need: Need; goal: number; route: number[] }[] = [];
+  const unjudged: { need: Need; place: Place }[] = [];
+  for (const need of needs) {
+    const goals = placesOf(s, cells, [need.goal]).filter((i) => reached[i]);
+    if (!goals.length) continue;
+    const absent = need.through.find((place) => !placesOf(s, cells, [place]).length);
+    if (absent !== undefined) { unjudged.push({ need, place: absent }); continue; }
+    const closed = new Uint8Array(reached.length);
+    for (const i of r.closes(s, cells, need.through)) closed[i] = 1;
+    const without = search(s, cells, links, starts, r, closed);
+    const goal = goals.find((i) => without.reached[i]);
+    if (goal !== undefined) skipped.push({ need, goal, route: routeTo(without.from, goal) });
+  }
+  return { unreached, nearest: unreached.length ? nearest(s, reached, unreached[0]!) : null, reached, skipped, unjudged };
 }
 
 /**
@@ -377,6 +404,13 @@ function differRefusal(reach: ReachInput, input: PlaytestInput): string | undefi
   return undefined;
 }
 
+function needsRefusal(reach: ReachInput): string | undefined {
+  if (!reach.needs) return undefined;
+  if (reach.flow) return 'needs with flow: the flow form reads no floors';
+  const edited = reach.needs.find((need) => need.by === 'agent');
+  return edited && `the need of ${placesText([edited.goal])} through ${placesText(edited.through)} is the working agent's (by: agent): a need comes from the brief or the definition, and a change to one is a change to the check`;
+}
+
 /** Runs played at once: a playtest's replicas are leased two at a time. */
 const AT_ONCE = 2;
 
@@ -386,9 +420,9 @@ const AT_ONCE = 2;
  * runs it read. `runner` is the plug-in's own search, or the kit's planted one.
  */
 export async function runReach(reach: ReachInput, input: PlaytestInput, play: Play, runner: Runner = OWN): Promise<CheckResult & { reach: ReachFound }> {
-  const found: ReachFound = { floors: [], coverage: {}, distinct: {}, flow: [], search_ms: 0 };
+  const found: ReachFound = { floors: [], coverage: {}, distinct: {}, flow: [], skipped: [], search_ms: 0 };
   const stop = (f: Failure): CheckResult & { reach: ReachFound } => ({ ...ended([f]), reach: found });
-  const unable = differRefusal(reach, input);
+  const unable = differRefusal(reach, input) ?? needsRefusal(reach);
   if (unable) return stop(failure('grid.reach', `refused before any run: ${unable}`, false));
   const iface = input.play;
   if (!iface) return stop(failure('grid.reach', 'refused before any run: grid.reach reads the play interface of the playtest it names, and its input gives none', false));
@@ -460,6 +494,12 @@ export async function runReach(reach: ReachInput, input: PlaytestInput, play: Pl
           const more = j.unreached.length > 1 ? ` (${j.unreached.length - 1} more unreached)` : '';
           failures.push(failure(d.test, `grid.unreached: ${d.test} (seed ${d.seed}), depth ${depth}, step ${k}: cell ${cellText(s, first)}, ${classOf(s, cells[first]!)}, is unreached${more}; nearest ${j.nearest === null ? 'none' : cellText(s, j.nearest)}, the reached cell nearest it`));
         }
+        const floor = `${d.test} (seed ${d.seed}), depth ${depth}, step ${k}`;
+        for (const { need, goal, route } of j.skipped) {
+          found.skipped.push({ run: d.test, seed: d.seed, depth, goal: cellOf(s, goal), route: route.map((i) => cellOf(s, i)) });
+          failures.push(failure(d.test, `grid.skipped: ${floor}: goal ${cellText(s, goal)}, ${classOf(s, cells[goal]!)}, is reached with ${placesText(need.through)} closed, by the route ${route.map((i) => cellText(s, i)).join(' ')}`));
+        }
+        for (const { need, place } of j.unjudged) unsure.push(failure(d.test, `INCONCLUSIVE: ${floor}: the floor holds no ${placesText([place])} cell, so the need of ${placesText([need.goal])} through ${placesText(need.through)} isn't judged there`, false));
       }
     }
     const depths = new Map<number, FloorFound[]>();

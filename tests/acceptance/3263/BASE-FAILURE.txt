@@ -1,0 +1,104 @@
+The suite at the base commit a7ae0e804 (its last merge is #3696), before any implementation, on macOS (Mac17,10,
+build 26B8119), each file once under a test grant of the machine's throttle, with the workspace packages built and
+debug deep-drive (env-plants) and deep-logic fresh in the checkout's target/ (2026-11-28T01:13Z to 01:15Z, one-minute
+load 17.5 to 19.4 on 18 cores). <checkout> is the worktree; no path under a home folder or a temporary folder is kept.
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    node scripts/throttle.mjs test --wait 30 -- npx vitest run --root tests/acceptance/3263 --testTimeout=600000 --no-file-parallelism <file>
+
+  ac01-locked-door.test.ts          1 failed (1)   12.3 s
+  ac02-two-rooms.test.ts            2 failed (2)    8.9 s
+  ac03-no-key-and-walled.test.ts    1 failed (1)    5.4 s
+  ac05-edited-need.test.ts          1 failed (1)   11.7 s
+  ac06-budget.test.ts               1 failed (1)    6.7 s
+
+Test Files  5 failed (5)
+     Tests  6 failed (6)
+
+Every test fails at an assertion it names, after this suite's own search held each drawn floor to what its criterion
+says of it and its own one-step play held each piece to publish the drawn cells. No file failed at load. Each file's
+own cargo builds found deep-drive and deep-logic fresh and compiled nothing of the workspace; the only crate compiled
+was #533's assembler from its copy (acceptance_533_wat, with its dependencies on the first run).
+
+The run the issue asks to be shown. The twin with one wall cell beside the door opened PASSES grid.reach on the
+base, with the need as without it (AC1; the assertion's message holds the base's own result for the twin with
+needs: [{goal: exit, through: [key]}]):
+
+ac01-locked-door.test.ts > AC1 #3263.07996a8a the locked 9 × 9 floor passes its need; its twin with one wall cell
+beside the door opened passes every other criterion and fails grid.skipped, naming the run, the seed, the exit and a
+route across the opened cell
+  AssertionError: the twin fails grid.reach with needs: [{goal: exit, through: [key]}]: passed, testsRun 2;
+  failures: (none); floors: bot 0 run 0 (seed 8640247471194106), depth 1, reached; bot 0 run 1 (seed
+  1430125455624297), depth 1, reached: expected 'passed' to be 'failed'
+  (after the locked floor passed with the need, which the base doesn't read, and the twin passed with no needs)
+
+ac02-two-rooms.test.ts > AC2 #3263.df7081dd the two-room floor passes with both rooms' classes in through, and fails
+grid.skipped with one, naming a route through the other room
+  AssertionError: with through: [door] run 0's floor fails grid.skipped once, naming a route through the key room:
+  expected [ Array(1) ] to deeply equal []: "the outcome is passed, not failed: passed, testsRun 2; failures: (none)"
+  (after the floor passed with through: [door, key])
+
+ac02-two-rooms.test.ts > AC2 #3263.df7081dd a planted check that closes only the first class listed finds the route
+through the second room with both named, and fails this test
+  AssertionError: the kit plants a grid.reach runner named closes-first: ["offset-even","stacked-layers",
+  "opens-locks","previous-run","ignores-flow"]: expected undefined to be defined
+
+ac03-no-key-and-walled.test.ts > AC3 #3263.d8cd5e67 a floor whose exit is walled in fails grid.unreached once with
+no grid.skipped, and a floor with no key cell reads the need INCONCLUSIVE, naming the floor and the class key, never
+PASS
+  AssertionError: run 0's floor with no key cell reads the need INCONCLUSIVE: the outcome uncounted, a failure
+  starting INCONCLUSIVE: that names the run, its seed, its depth and the class key: expected [ Array(1) ] to deeply
+  equal []: "the outcome is passed, not uncounted, which reads INCONCLUSIVE: passed, testsRun 2; failures: (none)"
+  (after the walled floor's half passed on the base, as it should: see below)
+
+ac05-edited-need.test.ts > AC5 #3263.a31661e1 a run whose need the working agent's session edited is refused, naming
+the need, where the same need from the definition passes
+  AssertionError: the run whose need the working agent's session edited (by: agent) is refused, never passed:
+  passed, testsRun 2; failures: (none): expected 'passed' not to be 'passed'
+  (after the same need with no by passed the twin, which the base passes whatever the need says)
+
+ac06-budget.test.ts > AC6 #3263.530bc8ce 200 floors of 32 × 32 with four needs: the record a budget window judges
+anywhere, and on a reference Mac at rest five readings of the searches' time under a second
+  AssertionError: the record a budget window judges this criterion by: benchmarks/budgets.json's task
+  playtest-crawler, its reach_200_floors_s of 1 s, naming #3263.530bc8ce:
+    playtest-crawler.criteria is ["#556.eb50d272"], which doesn't name #3263.530bc8ce, so no budget window judges it:
+  expected [ Array(1) ] to deeply equal []
+  (after the fixture held: this suite's own plays read 200 crawler floors of 32 × 32, and by its own search each of
+  the four needs has its goal reached, cells to close and its goal unreached with them closed on every one; and
+  after the base's grid.reach passed those floors and reported search_ms. It printed: "a reading, not a result:
+  grid.reach's own searches over 200 floors of 32 × 32 with 4 needs took 21.2 ms at a one-minute load of 19.4 to
+  19.4". On the base that time holds no need's search: the base reads none.)
+
+What passes on the base, and why it should.
+
+- The walled floor's half of AC3: the base already fails a floor whose exit is walled in with one grid.unreached a
+  floor, naming cell [7, 4], and holds no grid.skipped. It is behavior that must not change, so it shares its test
+  with the no-key floor, which fails. What proves the half can fail: its judges (judges.ts: unreachedOnceWrong,
+  noSkippedWrong) fail a result with grid.unreached twice for a floor, with an INCONCLUSIVE or a grid.skipped beside
+  it, with a third failure, with another cell named, and a pass (the phase 1 script, 78 cases over every judge).
+- The passes each test holds before its failing assertion: the locked floor with its need, the twin with no needs,
+  the two-room floor with both classes, the edited need given as a definition's, the crawler's 200 floors with four
+  needs. The base passes each because it reads no needs; on an implementation each is a need that holds.
+
+What didn't run on the base.
+
+- Past each failing assertion, nothing: no route was judged (the base names none), no INCONCLUSIVE or refusal was
+  read, the planted check wasn't run (the kit has none of that name).
+- The budget's gate and its five readings: the record's assertion comes first. Asked apart, at a load of 17.9, the
+  perf lane's judgeLimit read INCONCLUSIVE for this machine: "a reading, not a budget result: off the reference Macs
+  (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off,
+  thermal state nominal): thermal state is "fair", not "nominal"". So here the test would end INCONCLUSIVE: at its
+  gate, never a pass. No timed grant and no budget window was asked for.
+
+Other runs, none of them a retry of a result.
+
+- ac01-locked-door.test.ts ran twice. Its first run failed at the same assertion ("…: passed, testsRun 2; failures:
+  (none): expected 'passed' to be 'failed'", 62 s with the assembler's cold build). The assertion's message then
+  gained the twin's floors, so the run shown names its runs and seeds, and the file ran again as it stands. No other
+  file changed after its run.
+- One scratch test file in this folder, since deleted, ran the kit's reference fill and its opens-locks fill on the
+  two-room piece with through: [door, key]: both passed 2 runs, each floor reached, so a kit fill plays this suite's
+  piece through the kit's replica, which is what the planted test does once the kit plants closes-first.
+- node scripts/repo-rules.mjs, once: no line names this folder. It exits 1 on ten home paths in
+  tests/acceptance/3414/BASE-FAILURE.txt, which are main's, and notes this folder's 1,148 handwritten lines against
+  the guideline of about 400.

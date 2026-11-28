@@ -1,7 +1,7 @@
 {
   "id": "deepbuild/playtest",
   "version": "1.0.0",
-  "digest": "d1:69e2f794f6e942bac9fbbd08383b2d65fdd47269e1f8044d179a30ce49dd03d6",
+  "digest": "d1:f5ae26c328a0ae78cb8048b469f2be5c0d73a8082add7fa02698c889acf0595d",
   "checks": [
     "playtest",
     "rules.legal",
@@ -26,6 +26,7 @@
     "logic.trap",
     "logic.non_finite",
     "grid.unreached",
+    "grid.skipped",
     "grid.same",
     "grid.flow",
     "shell.reads",

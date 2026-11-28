@@ -133,6 +133,7 @@ export function reachPieces(): Record<string, { piece: Record<string, unknown>; 
 const REACH_RULES = {
   keys: { id: 'locks-need-keys', rule: 'A locked cell opens only once the search has reached a cell holding its key, so a key inside its own vault leaves the vault unreached.', code: 'grid.unreached', message: 'opened a lock whose key it never reached' },
   links: { id: 'layers-by-links', rule: 'A cell on another layer is reached only through a link, never as the cell stacked above or below it.', code: 'grid.unreached', message: 'stepped between stacked cells on two layers' },
+  needs: { id: 'needs-hold', rule: 'With every cell a need\'s through names closed, its goal is unreached, or grid.skipped names the run, its seed, the depth, the goal and the route.', code: 'grid.skipped', message: 'passed a goal that is reached with part of what its need names left open' },
   same: { id: 'floors-differ', rule: 'With differ, at least that share of the floors a depth\'s runs generated are distinct, each compared with every other, or grid.same names the depth, its runs and its distinct floors.', code: 'grid.same', message: 'passed a generator that repeats its floors from run to run' },
   hex: { id: 'hex-as-drawn', rule: 'A hex grid\'s neighbours are the six its board draws by its orient and offset.', code: 'grid.unreached', message: 'took a hex grid\'s neighbours by an offset the board doesn\'t draw' },
   flow: { id: 'flow-descends', rule: 'Past the lag after a grid change, every cell a target is reached from steps to an open neighbour of lower cost, and every spawn follows next to a target, or grid.flow names the run, step, cell and why.', code: 'grid.flow', message: 'passed a flow field that rises' },
@@ -168,6 +169,8 @@ function reachFixtures(): Fixture[] {
     fixture('clean-map', spec('map', 'map', 'explorer', 60, floors), { outcome: 'passed', rule: null }),
     fixture('planted-map-gate', spec('map-gate', 'map', 'explorer', 60, floors), { outcome: 'failed', rule: 'links', cell: [14, 14] }),
     fixture('clean-hex', spec('hex', 'hex', 'idle', 2, floors), { outcome: 'passed', rule: null }),
+    fixture('clean-needs', spec('two-rooms', 'two-rooms', 'idle', 2, { ...floors, needs: [{ goal: 'exit', through: ['door', 'key'] }] }), { outcome: 'passed', rule: null }),
+    fixture('planted-skip', spec('two-rooms', 'two-rooms', 'idle', 2, { ...floors, needs: [{ goal: 'exit', through: ['door'] }] }), { outcome: 'failed', rule: 'needs' }),
     fixture('clean-flow', spec('flow', 'flow', 'idle', 302, flow), { outcome: 'passed', rule: null }),
     fixture('planted-flow-rising', spec('flow-rising', 'flow', 'idle', 302, flow), { outcome: 'failed', rule: 'flow', cell: [10, 40] }),
   ];
@@ -204,7 +207,7 @@ export function reachKit(replica: (plant: string | null) => Play): SlotKitImpl<R
       return { ...r, failures, outcome: failures.length ? r.outcome : 'passed' };
     },
   });
-  const runners = { 'offset-even': 'hex', 'stacked-layers': 'links', 'opens-locks': 'keys', 'previous-run': 'same' } as const;
+  const runners = { 'offset-even': 'hex', 'stacked-layers': 'links', 'opens-locks': 'keys', 'previous-run': 'same', 'closes-first': 'needs' } as const;
   const planted: PlantedFill<ReachFill>[] = [
     ...Object.entries(runners).map(([name, rule]) => ({ name, message: REACH_RULES[rule].message, codes: [REACH_RULES[rule].code], breaks: REACH_RULES[rule].id, fill: fill(PLANTED[name]!) })),
     { name: 'ignores-flow', message: REACH_RULES.flow.message, codes: [REACH_RULES.flow.code], breaks: REACH_RULES.flow.id, fill: fill(OWN, 'grid.flow') },
