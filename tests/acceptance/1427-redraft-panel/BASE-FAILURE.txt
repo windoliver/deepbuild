@@ -1,0 +1,51 @@
+
+ RUN  v5.0.5 <base checkout fc09a09cb>/tests/acceptance/1427-redraft-panel
+
+ ✓ ac1-journeys.test.ts > #1427 AC1 on a real replica: each planted motion gives exactly one finding, named by its element's stable id #1427.44c596cb > pop_in: "Pop in" shows pop-row at full opacity in one step 2173ms
+ ✓ ac1-journeys.test.ts > #1427 AC1 on a real replica: each planted motion gives exactly one finding, named by its element's stable id #1427.44c596cb > jump: "Jump" moves jumper 180 pt of a 640 pt window, 28%, in one step, with no transition 1696ms
+ ✓ ac1-journeys.test.ts > #1427 AC1 on a real replica: each planted motion gives exactly one finding, named by its element's stable id #1427.44c596cb > overshoot: "Overshoot" walks overshooter 10 to 100 pt, on to 190 and back, with no spring declared 1185ms
+ ✓ ac1-journeys.test.ts > #1427 AC1 on a real replica: each planted motion gives exactly one finding, named by its element's stable id #1427.44c596cb > flicker: "Flicker 3" swings badge's opacity up, down, up, down, three reversals in about 100 ms 1171ms
+ ✓ ac1-journeys.test.ts > #1427 AC1 on a real replica: each planted motion gives exactly one finding, named by its element's stable id #1427.44c596cb > no_settle: "Drift long" keeps drifter moving 3.6 s after the press, past the 2 s 1152ms
+ ✓ ac1-journeys.test.ts > #1427 AC1 on a real replica: the twins that move the same way but pass give nothing #1427.44c596cb > Fade in: fade-row appears at 10% and gains 10% a tick: no pop_in 1880ms
+ ✓ ac1-journeys.test.ts > #1427 AC1 on a real replica: the twins that move the same way but pass give nothing #1427.44c596cb > Fly: flyer moves as far as jumper does, under a declared transition("left"): no jump 1706ms
+ ✓ ac1-journeys.test.ts > #1427 AC1 on a real replica: the twins that move the same way but pass give nothing #1427.44c596cb > Spring: springer goes past its target under a declared under-damped spring: no overshoot 1279ms
+ ✓ ac1-journeys.test.ts > #1427 AC1 on a real replica: the twins that move the same way but pass give nothing #1427.44c596cb > Flicker 2: badge swings up, down, up: two reversals, no flicker 1305ms
+ ✓ ac1-journeys.test.ts > #1427 AC1 on a real replica: the twins that move the same way but pass give nothing #1427.44c596cb > Drift short: drifter moves for 0.7 s, then settles: no no_settle 785ms
+ ✓ ac3-reduced.test.ts > #1427 AC3 an element that changes place over more than one step under reduced motion gives moved_under_reduced_motion #1427.de1e992b > data: a card moves 10 a step for 20 steps under reduced motion: one finding, 20 steps 7ms
+ ✓ ac3-reduced.test.ts > #1427 AC3 an element that changes place over more than one step under reduced motion gives moved_under_reduced_motion #1427.de1e992b > data: it moves over exactly two steps: more than one, so a finding, 2 steps 3ms
+ ✓ ac3-reduced.test.ts > #1427 AC3 an element that changes place over more than one step under reduced motion gives moved_under_reduced_motion #1427.de1e992b > data twin: it moves in one step, 10 at once: nothing 5ms
+ ✓ ac3-reduced.test.ts > #1427 AC3 an element that changes place over more than one step under reduced motion gives moved_under_reduced_motion #1427.de1e992b > data twin: it moves 20% of the window in one step: nothing, since reduced motion allows a move that takes one step 5ms
+ ✓ ac3-reduced.test.ts > #1427 AC3 an element that changes place over more than one step under reduced motion gives moved_under_reduced_motion #1427.de1e992b > data twin: the 20-step move with reduced motion off: nothing (it is motion, which is allowed) 6ms
+ ✓ ac3-reduced.test.ts > #1427 AC3 an element that changes place over more than one step under reduced motion gives moved_under_reduced_motion #1427.de1e992b > data: only a change of place counts: a card that fades over 20 steps under reduced motion gives nothing 19ms
+ ✓ ac3-reduced.test.ts > #1427 AC3 an element that changes place over more than one step under reduced motion gives moved_under_reduced_motion #1427.de1e992b > a real replica launched with reduced_motion: "Drift short" still moves drifter over 30 ticks: moved_under_reduced_motion 2161ms
+ ✓ ac3-reduced.test.ts > #1427 AC3 an element that changes place over more than one step under reduced motion gives moved_under_reduced_motion #1427.de1e992b > a real replica launched with reduced_motion: "Fly" goes where it goes under the declared transition, which reduced motion makes one step: nothing 1688ms
+ ✓ ac3-reduced.test.ts > #1427 AC3 an element that changes place over more than one step under reduced motion gives moved_under_reduced_motion #1427.de1e992b > the same "Drift short" with reduced motion off: nothing 1579ms
+ ✓ scope-recording.test.ts > #1427 scope: a journey records every element's bounds, opacity and text at each 1/120 s step, keyed by stable identity > the recording is 1/120 s apart, from the start of the recording to its stop, and lists each element in full 6603ms
+ ✓ scope-recording.test.ts > #1427 scope: a journey records every element's bounds, opacity and text at each 1/120 s step, keyed by stable identity > Jump: the jumper keeps one id throughout and its bounds change once, between two adjacent frames, by 180 pt (360 px) 832ms
+ ✓ scope-recording.test.ts > #1427 scope: a journey records every element's bounds, opacity and text at each 1/120 s step, keyed by stable identity > Pop in: pop-row is not in the frames before the press and is there, at opacity 1 and with its text, after 1267ms
+ ✓ scope-recording.test.ts > #1427 scope: a journey records every element's bounds, opacity and text at each 1/120 s step, keyed by stable identity > Fade in: fade-row's opacity rises a tick at a time, never more than 10% between frames 1038ms
+ ✓ scope-recording.test.ts > #1427 scope: a journey records every element's bounds, opacity and text at each 1/120 s step, keyed by stable identity > Insert above: line-b keeps its id and its text while its y moves 40 px down; the new line streams in under its own id 1620ms
+ ✓ scope-recording.test.ts > #1427 scope: a journey records every element's bounds, opacity and text at each 1/120 s step, keyed by stable identity > the transitions and springs a panel declares are listed, by element and kind: flyer a flight, springer a spring, jumper nothing 1003ms
+ ✓ scope-recording.test.ts > #1427 scope: a journey records every element's bounds, opacity and text at each 1/120 s step, keyed by stable identity > a replica launched with reduced_motion says so in the recording 786ms
+ ✓ scope-recording.test.ts > #1427 scope: a journey records every element's bounds, opacity and text at each 1/120 s step, keyed by stable identity > the same calls in two processes record the same bytes 1759ms
+ ✓ ac5-repeat.test.ts > #1427 AC5 the same journey recorded twice gives byte-equal findings #1427.3c390bf0 > data: one recording, twice, in two processes, once with the elements in another order 4830ms
+ ✓ ac5-repeat.test.ts > #1427 AC5 the same journey recorded twice gives byte-equal findings #1427.3c390bf0 > a real replica: the "Flicker 3" journey recorded twice, in two processes, gives the same recording and the same findings 4000ms
+ ✓ ac5-repeat.test.ts > #1427 AC5 the same journey recorded twice gives byte-equal findings #1427.3c390bf0 > a real replica: a different journey records differently, so the hash above is of the frames, not of a constant 3832ms
+ ✓ ac2-reader.test.ts > #1427 AC2 a streaming insert above the reader's line gives reader_moved; below it gives nothing #1427.8eb79b07 > data: text streamed in above line-b moves line-b 40 down in one step: reader_moved 8ms
+ ✓ ac2-reader.test.ts > #1427 AC2 a streaming insert above the reader's line gives reader_moved; below it gives nothing #1427.8eb79b07 > data: the same text streamed in directly below line-b, which moves only line-c: nothing 4ms
+ ✓ ac2-reader.test.ts > #1427 AC2 a streaming insert above the reader's line gives reader_moved; below it gives nothing #1427.8eb79b07 > data: the same text streamed in at the end of the transcript, which moves nothing: nothing 3ms
+ ✓ ac2-reader.test.ts > #1427 AC2 a streaming insert above the reader's line gives reader_moved; below it gives nothing #1427.8eb79b07 > a real replica: "Insert above" streams a line in above Line B and moves it 1481ms
+ ✓ ac2-reader.test.ts > #1427 AC2 a streaming insert above the reader's line gives reader_moved; below it gives nothing #1427.8eb79b07 > a real replica: "Insert below" streams a line in directly below Line B and moves only Line C: nothing 1519ms
+ ✓ ac6-pacing.test.ts > #1427 AC6 a result never reads PASS for pacing: it says "pacing not measured" #1427.388cd750 > a recording with no finding says pacing not measured 11ms
+ ✓ ac6-pacing.test.ts > #1427 AC6 a result never reads PASS for pacing: it says "pacing not measured" #1427.388cd750 > a recording with a finding says it too 4ms
+ ✓ ac6-pacing.test.ts > #1427 AC6 a result never reads PASS for pacing: it says "pacing not measured" #1427.388cd750 > an INVALID result says it too 22ms
+ ✓ ac6-pacing.test.ts > #1427 AC6 a result never reads PASS for pacing: it says "pacing not measured" #1427.388cd750 > a result whose finding a valid allowance cleared says it too 13ms
+ ✓ ac6-pacing.test.ts > #1427 AC6 a result never reads PASS for pacing: it says "pacing not measured" #1427.388cd750 > a real replica's journey that passes says it too 710ms
+ ✓ ac6-pacing.test.ts > #1427 AC6 a result never reads PASS for pacing: it says "pacing not measured" #1427.388cd750 > and a clean recording is not given a pacing verdict by a field the check made up: pacing is words, not a verdict 4ms
+
+ Test Files  6 passed (6)
+      Tests  41 passed (41)
+   Start at  17:26:13
+   Duration  83.15s (tests 99%, import 1%)
+
+exit 0
