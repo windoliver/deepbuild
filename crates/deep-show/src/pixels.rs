@@ -110,15 +110,45 @@ impl Hub<'_> {
                 let Some(document) = self.current_of(d).map(|cur| cur.doc.clone()) else {
                     continue;
                 };
-                by_doc.insert(d.clone(), self.frames_of(&document, &ts, draws));
+                by_doc.insert(d.clone(), self.frames_for(kind, &document, &ts, draws));
             }
             out.insert(r.id.clone(), by_doc);
         }
         out
     }
 
+    pub(crate) fn frames_for(
+        &mut self,
+        kind: &str,
+        document: &Value,
+        times: &[i64],
+        draws: u8,
+    ) -> Drawn {
+        if kind != deep_canvas_effects::audit::KIND {
+            return self.frames_of(document, times, draws);
+        }
+        let lowered =
+            deep_canvas::document::check_packed(document, &self.startup.sealed, &self.packs)
+                .lowered;
+        let mut at = times.to_vec();
+        at.extend(deep_canvas_effects::audit::peak_times(&lowered));
+        at.sort_unstable();
+        at.dedup();
+        self.frames_measured(document, &at, draws, true)
+    }
+
     /// `document` drawn at each of `times`, `draws` frames from each, as render-back draws it.
     pub(crate) fn frames_of(&mut self, document: &Value, times: &[i64], draws: u8) -> Drawn {
+        self.frames_measured(document, times, draws, false)
+    }
+
+    fn frames_measured(
+        &mut self,
+        document: &Value,
+        times: &[i64],
+        draws: u8,
+        passes: bool,
+    ) -> Drawn {
         let frame = document
             .get("transport")
             .and_then(deep_canvas::document::frame_rate_of)
@@ -129,13 +159,13 @@ impl Hub<'_> {
             .flat_map(|&t| (0..i64::from(draws.max(1))).map(move |k| t + k * frame))
             .collect();
         if crate::probe::draws_3d(document) {
-            self.frames_3d(document, &at)
+            self.frames_3d(document, &at, passes)
         } else {
             self.frames_2d(document, &at)
         }
     }
 
-    fn frames_3d(&mut self, document: &Value, at: &[i64]) -> Drawn {
+    fn frames_3d(&mut self, document: &Value, at: &[i64], passes: bool) -> Drawn {
         let (_, fingerprint) = crate::kit::goldens::environment(self, "gpu");
         let size = crate::snapshot::px([0, 1].map(|i| document["size"][i].as_f64().unwrap_or(1.0)));
         let short = self.planted(Planted::ReductionLeavesOutLastRows);
@@ -179,6 +209,12 @@ impl Hub<'_> {
                     json!({"code": "not_presented", "reason": "unsupported_platform", "t": t}),
                 );
             };
+            let items = deep_canvas_effects::particles::rule::items(&doc);
+            let measured = items
+                .iter()
+                .filter(|_| passes)
+                .map(|(id, _)| ((*id).clone(), gpu.effect_pass(&frame, id)))
+                .collect();
             frames.push(Frame {
                 t,
                 size: targets.size,
@@ -189,6 +225,7 @@ impl Hub<'_> {
                 picks: targets.picks,
                 roles: frame.staged.look.roles,
                 reduce: Some(reduce),
+                passes: measured,
             });
         }
         Drawn::Frames(frames, fingerprint)
@@ -312,6 +349,7 @@ impl Hub<'_> {
                 picks,
                 roles: self.look.light.clone(),
                 reduce: None,
+                passes: BTreeMap::new(),
             });
         }
         Drawn::Frames(frames, fingerprint)
@@ -319,7 +357,6 @@ impl Hub<'_> {
 
     /// #1938: a verdict read as `against`, another run's verdict on the claim, reads it here: a
     /// pixel row holds where that verdict's row names this run's fingerprint, and is INCONCLUSIVE
-    /// where it names another, naming both. Rows of checks that hold on any machine are as judged.
     pub(crate) fn read_against(&self, rows: &mut [Value], against: &Value) {
         let theirs: BTreeMap<&str, &Value> = against["requirements"]
             .as_array()
@@ -343,6 +380,14 @@ impl Hub<'_> {
             match row.get_mut("inconclusive").and_then(Value::as_array_mut) {
                 Some(list) => list.push(elsewhere),
                 None => row["inconclusive"] = json!([elsewhere]),
+            }
+            let anywhere = row["issues"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .any(|i| i["severity"] == "error" && i["actual"]["machines"] == "any");
+            if row["result"] == "FAIL" && anywhere {
+                continue;
             }
             if row["result"] != "BLOCKED" && row["result"] != "INVALID" {
                 row["result"] = json!("INCONCLUSIVE");

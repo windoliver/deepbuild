@@ -433,7 +433,7 @@ impl Hub<'_> {
             .and_then(|(_, c)| c.frames.map(|(d, _)| d));
         if let (Some(draws), Some(cur)) = (frames, self.current_of(doc).map(|c| c.doc.clone())) {
             let at = crate::pixels::times(accept);
-            drawn.insert(doc.to_string(), self.frames_of(&cur, &at, draws));
+            drawn.insert(doc.to_string(), self.frames_for(kind, &cur, &at, draws));
         }
         let Some(cur) = self.current_of(doc) else {
             return false;

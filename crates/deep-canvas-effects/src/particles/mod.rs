@@ -19,6 +19,7 @@ pub mod draws;
 pub mod eval;
 pub mod flows;
 pub mod heightmap;
+pub mod item;
 pub mod pack;
 pub mod regions;
 pub mod rule;

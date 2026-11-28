@@ -895,17 +895,121 @@ fn register_with(r: &mut Registrar, rule: deep_canvas::registry::Rule) {
     r.fixture("shadowed-box", shadowed_box(), None)
         .sidecar(json!({"codes": [], "covers": {"kinds": ["light.sun@1"], "fields": ["light.sun@1/params/shadow"]}}));
     // #1940: effects.audit is the effects module's, so the loop module depends only on scene3d
-    // and look; it reads nothing yet (#2485), so its fixture raises its unread error.
-    r.check(audit::KIND, "same", &[audit::UNREAD], audit::issues)
-        .check_report(audit::report);
+    let codes = [
+        audit::UNREAD,
+        audit::COUNT,
+        audit::BOUNDS,
+        audit::OVERDRAW,
+        audit::GPU_MS,
+    ];
+    r.check(audit::KIND, "same", &codes, audit::issues)
+        .check_report(audit::report)
+        .check_frames(1, audit::frames);
     r.code(
         audit::UNREAD,
-        "effects.audit couldn't read an effect's peak count, bounds, overdraw or GPU time.",
-        "Nothing in the document fixes it: the check's readings land with #2485.",
+        "effects.audit couldn't read a reading of an effect: the check input states no limit for it, its span is past the frames read, or no host drew and timed its own pass with particles live.",
+        "State count_peak, bounds and gpu_ms in the check input, give the document a span the check reads, and run it where a host draws the effect on a GPU and times its pass.",
         false,
     );
-    r.fixture("audit-unread", box_figure("An effects audit with nothing read", "figure", json!({})), None)
-        .sidecar(json!({"checks": [{"kind": audit::KIND}], "oracles": ["analytic"], "codes": [audit::UNREAD]}));
+    r.code(
+        audit::COUNT,
+        "An effect with more particles live at once than count_peak, read from its closed form at each frame of the span.",
+        "Scale its count, its bursts' counts and its rate by count_peak over the peak.",
+        true,
+    );
+    r.code(
+        audit::BOUNDS,
+        "An effect whose particles reach outside the box the check declares, read from its closed-form bounds at each frame of the span.",
+        "Give it a kill box of the declared box, keeping its particles inside.",
+        true,
+    );
+    r.code(
+        audit::OVERDRAW,
+        "An effect whose particles stack more fragments on one px than overdraw max (8) in the frame drawn.",
+        "Scale its count, its bursts' counts and its rate by max over the overdraw measured.",
+        true,
+    );
+    r.code(
+        audit::GPU_MS,
+        "An effect whose own pass takes longer on the GPU, by its timestamps, than the gpu_ms the check declares.",
+        "Scale its count, its bursts' counts and its rate by the declared time over the measured.",
+        false,
+    );
+    audit_fixtures(r);
+}
+
+fn audit_fixtures(r: &mut Registrar) {
+    let roomy = json!({"kind": audit::KIND, "count_peak": 4096, "bounds": [[-4, -4, -2], [4, 4, 7]],
+        "overdraw": {"max": 1000}, "gpu_ms": 1000});
+    let check = |over: Value| {
+        let mut c = roomy.clone();
+        for (k, v) in over.as_object().into_iter().flatten() {
+            c[k] = v.clone();
+        }
+        c
+    };
+    let effect = |id: &str, count: u32, radius: f64, draw: &str, size: u32, motion: Value| {
+        let shape = if radius > 0.0 {
+            json!({"shape": "sphere", "radius": radius})
+        } else {
+            json!({"shape": "point"})
+        };
+        let mut emit = shape;
+        emit["bursts"] = json!([{"t": 0, "count": count}]);
+        json!({id: {"id": id, "kind": "particles@1", "name": "Effect", "order": "a2", "at": {"pos": [0, 0, 2.5]}, "params": {
+            "count": count, "emit": emit, "life": [1, 1], "motion": {"ballistic": motion},
+            "draw": draw, "size": size, "opacity": 1, "color": [{"at": 0, "role": "accent"}], "seed": 7}}})
+    };
+    let still = json!({"velocity": [0, 0, 0], "gravity": [0, 0, 0], "drag": 0});
+    let mut planted = |name: &str, title: &str, items: Value, check: Value, code: &str| {
+        let mut doc = box_figure(title, "figure", items);
+        doc["transport"] = json!({"span": "1s"});
+        r.fixture(name, doc, None).sidecar(
+            json!({"checks": [check], "oracles": ["analytic"], "codes": [code, "unknown_kind"]}),
+        );
+    };
+    planted(
+        "audit-unread",
+        "An effects audit whose check input states no limit",
+        effect("smoke", 4, 0.0, "puff", 120, still.clone()),
+        json!({"kind": audit::KIND}),
+        audit::UNREAD,
+    );
+    planted(
+        "audit-count-peak",
+        "Sparks over the peak count the audit allows",
+        effect("sparks", 64, 1.5, "dot", 2, still.clone()),
+        check(json!({"count_peak": 16})),
+        audit::COUNT,
+    );
+    planted(
+        "audit-bounds",
+        "Embers thrown out of the box the audit declares",
+        effect(
+            "embers",
+            16,
+            0.3,
+            "dot",
+            2,
+            json!({"v0": [2, 3], "gravity": [0, 0, 0], "drag": 0}),
+        ),
+        check(json!({"bounds": [[-1, -1, 1.5], [1, 1, 3.5]]})),
+        audit::BOUNDS,
+    );
+    planted(
+        "audit-overdraw",
+        "Smoke puffs stacked past overdraw 8",
+        effect("smoke", 64, 0.0, "puff", 120, still.clone()),
+        check(json!({"overdraw": {"max": 8}})),
+        audit::OVERDRAW,
+    );
+    planted(
+        "audit-gpu-ms",
+        "Flares over the GPU time the audit declares",
+        effect("flare", 256, 1.0, "dot", 4, still),
+        check(json!({"gpu_ms": 0.0001})),
+        audit::GPU_MS,
+    );
 }
 
 /// A figure of one box, its camera and `extra` items, in budget class `class`.

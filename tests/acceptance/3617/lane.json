@@ -1,1 +1,1 @@
-{ "alone": true, "why": "binary: each file builds deep-gpu with cargo into this checkout's target/ and runs real-time GPU windows at 1936 x 1584; ac2-onepass.test.ts is a timed file" }
+{ "alone": true, "why": "binary: each file builds deep-gpu with cargo into this checkout's target/ and runs real-time GPU windows at 1936 x 1584; ac2-onepass.test.ts judges the five-run draw-and-finish p95 on a reference Mac", "timed": ["ac2-onepass.test.ts"] }

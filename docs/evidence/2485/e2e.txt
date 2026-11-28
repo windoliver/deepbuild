@@ -1,0 +1,22 @@
+#2485 e2e hand run, branch head bbb95efd2, Mac18,1, 2026-11-25 20:14
+Machine A: each planted effect and its clean twin
+  deep-show run: exit 0, ok true, 8 verdicts in 4.0 s
+  FAIL         an effect over its peak count (planted)        effects.count_peak [sparks] error, fix 2 op(s); fingerprint "gpu/Apple M6/deep-test-os-a/deep-test-driver-a"
+  PASS         an effect over its peak count: its twin        nothing raised; fingerprint "gpu/Apple M6/deep-test-os-a/deep-test-driver-a"
+  FAIL         an effect leaving its declared box (planted)   effects.bounds [embers] error, fix 1 op(s); fingerprint "gpu/Apple M6/deep-test-os-a/deep-test-driver-a"
+  PASS         an effect leaving its declared box: its twin   nothing raised; fingerprint "gpu/Apple M6/deep-test-os-a/deep-test-driver-a"
+  FAIL         an effect over overdraw 8 (planted)            effects.overdraw [smoke] error, fix 2 op(s); fingerprint "gpu/Apple M6/deep-test-os-a/deep-test-driver-a"
+  PASS         an effect over overdraw 8: its twin            nothing raised; fingerprint "gpu/Apple M6/deep-test-os-a/deep-test-driver-a"
+  FAIL         an effect over its declared GPU time (planted) effects.gpu_ms [flare] error, fix 2 op(s); fingerprint "gpu/Apple M6/deep-test-os-a/deep-test-driver-a"
+  PASS         an effect over its declared GPU time: its twin nothing raised; fingerprint "gpu/Apple M6/deep-test-os-a/deep-test-driver-a"
+Machine B, against machine A's verdicts
+  deep-show run: exit 0, ok true, 8 verdicts in 0.5 s
+  FAIL         an effect over its peak count (planted)        effects.count_peak [sparks] error, fix 2 op(s); fingerprint "gpu/Apple M6/deep-test-os-b/deep-test-driver-b"
+  INCONCLUSIVE an effect over its peak count: its twin        nothing raised; fingerprint "gpu/Apple M6/deep-test-os-b/deep-test-driver-b"
+  FAIL         an effect leaving its declared box (planted)   effects.bounds [embers] error, fix 1 op(s); fingerprint "gpu/Apple M6/deep-test-os-b/deep-test-driver-b"
+  INCONCLUSIVE an effect leaving its declared box: its twin   nothing raised; fingerprint "gpu/Apple M6/deep-test-os-b/deep-test-driver-b"
+  INCONCLUSIVE an effect over overdraw 8 (planted)            effects.overdraw [smoke] error, fix 2 op(s); fingerprint "gpu/Apple M6/deep-test-os-b/deep-test-driver-b"
+  INCONCLUSIVE an effect over overdraw 8: its twin            nothing raised; fingerprint "gpu/Apple M6/deep-test-os-b/deep-test-driver-b"
+  INCONCLUSIVE an effect over its declared GPU time (planted) effects.gpu_ms [flare] error, fix 2 op(s); fingerprint "gpu/Apple M6/deep-test-os-b/deep-test-driver-b"
+  INCONCLUSIVE an effect over its declared GPU time: its twin nothing raised; fingerprint "gpu/Apple M6/deep-test-os-b/deep-test-driver-b"
+e2e exit 0

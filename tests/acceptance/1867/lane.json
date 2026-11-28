@@ -1,1 +1,1 @@
-{ "alone": true, "why": "timing: each file starts hubs of its own whose hooks answer within deep-hook's deadlines, and two files read a put-back against the criterion's second" }
+{ "alone": true, "why": "timing: each file starts hubs of its own whose hooks answer within deep-hook's deadlines, and codex-watch.test.ts and claude-json.test.ts read a put-back against the criterion's second and read INCONCLUSIVE past it while the load is over the cores", "timed": ["codex-watch.test.ts", "claude-json.test.ts"] }

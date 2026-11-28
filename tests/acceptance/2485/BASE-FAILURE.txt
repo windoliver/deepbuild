@@ -1,0 +1,59 @@
+At base 1b4929ae7 ("Merge pull request #3436 …"), on 2026-11-24, on an arm64 Mac (macOS, Metal), one-minute load about 110.
+deep-show was built with `cargo build --locked --bin deep-show --no-default-features --features full` (24 min, fresh
+target/), then the file ran (11 s; the binary was already built).
+
+Commands (from ~/private/deepbuild-core/.claude/worktrees/<this worktree>):
+
+  npm ci && npm run build --workspaces
+  NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/2485 --no-file-parallelism
+  npx tsc -p tests/acceptance/2485/tsconfig.json      -> exit 0
+
+Result: Test Files 1 failed (1); Tests 6 failed (6); none passed or skipped. Every scenario was accepted (exit 0,
+ok: true); every test fails at its first verdict assertion (`none(...)`), not at load. Each effects.audit row at the
+base is:
+
+  {"id":"req:…","kind":"effects.audit","issues":[],"machines":"same","determinism":"exact","results":[],
+   "timing":{"check_ms":…},"result":"BLOCKED",
+   "blocked":[{"code":"not_run","kind":"effects.audit","ids":[],"unread":["count_peak","bounds","overdraw","gpu_ms"],
+               "why":"effects.audit reads no peak, bounds, overdraw or GPU time yet (#2485)","doc":"01JB2485D…"},
+              {"code":"unknown_kind","kind":"particles@1","ids":["<effect>"]}]}
+
+(rows abbreviated as {row} below)
+
+ × #2485.7e5188e4 … > #2485.7e5188e4 an effect over its peak count fails effects.audit with its code, the item's ID and a fix as patch ops, and its clean twin passes
+   AssertionError: an effect over its peak count fails effects.audit with its code, the item's ID and a fix as patch ops, and its clean twin passes:
+     effects.audit on an effect over its peak count is BLOCKED, not FAIL: {row}
+     effects.audit on an effect over its peak count raises no issue with a code by effects.audit naming sparks; it raises: nothing
+     effects.audit on an effect over its peak count's clean twin is BLOCKED, not PASS: {row}: expected [ …(3) ] to deeply equal []
+ × #2485.7e5188e4 … > #2485.7e5188e4 an effect leaving its declared box fails effects.audit with its code, the item's ID and a fix as patch ops, and its clean twin passes
+     effects.audit on an effect leaving its declared box is BLOCKED, not FAIL: {row}
+     effects.audit on an effect leaving its declared box raises no issue with a code by effects.audit naming embers; it raises: nothing
+     effects.audit on an effect leaving its declared box's clean twin is BLOCKED, not PASS: {row}: expected [ …(3) ] to deeply equal []
+ × #2485.7e5188e4 … > #2485.7e5188e4 an effect over overdraw 8 fails effects.audit with its code, the item's ID and a fix as patch ops, and its clean twin passes
+     effects.audit on an effect over overdraw 8 is BLOCKED, not FAIL: {row}
+     effects.audit on an effect over overdraw 8 raises no issue with a code by effects.audit naming smoke; it raises: nothing
+     effects.audit on an effect over overdraw 8's clean twin is BLOCKED, not PASS: {row}: expected [ …(3) ] to deeply equal []
+ × #2485.7e5188e4 … > #2485.7e5188e4 an effect over its declared GPU time fails effects.audit with its code, the item's ID and a fix as patch ops, and its clean twin passes
+     effects.audit on an effect over its declared GPU time is BLOCKED, not FAIL: {row}
+     effects.audit on an effect over its declared GPU time raises no issue with a code by effects.audit naming flare; it raises: nothing
+     effects.audit on an effect over its declared GPU time's clean twin is BLOCKED, not PASS: {row}: expected [ …(3) ] to deeply equal []
+ × #2485.dac550b5 … > #2485.dac550b5 the peak count and the bounds give the same results on machine B as on machine A
+   AssertionError: on machine A each planted effect is caught and each twin passes:
+     an effect over its peak count (planted) on machine A is BLOCKED, not FAIL: {row}
+     an effect over its peak count (planted) on machine A raises no issue with a code by effects.audit naming sparks; it raises: nothing
+     an effect leaving its declared box (planted) on machine A is BLOCKED, not FAIL: {row}
+     an effect leaving its declared box (planted) on machine A raises no issue with a code by effects.audit naming embers; it raises: nothing
+     an effect over its peak count: its clean twin on machine A is BLOCKED, not PASS: {row}
+     an effect leaving its declared box: its clean twin on machine A is BLOCKED, not PASS: {row}: expected [ …(6) ] to deeply equal []
+ × #2485.dac550b5 … > #2485.dac550b5 overdraw and GPU time hold on machine A and report INCONCLUSIVE on machine B, naming both fingerprints
+   AssertionError: on machine A each planted effect is caught, and each row names the fingerprint it was measured under:
+     an effect over overdraw 8 (planted) on machine A is BLOCKED, not FAIL: {row}
+     an effect over overdraw 8 (planted) on machine A raises no issue with a code by effects.audit naming smoke; it raises: nothing
+     an effect over its declared GPU time (planted) on machine A is BLOCKED, not FAIL: {row}
+     an effect over its declared GPU time (planted) on machine A raises no issue with a code by effects.audit naming flare; it raises: nothing
+     an effect over overdraw 8 (planted) on machine A carries no fingerprint: {row}
+     an effect over its declared GPU time (planted) on machine A carries no fingerprint: {row}: expected [ …(6) ] to deeply equal []
+
+ Test Files  1 failed (1)
+      Tests  6 failed (6)
+   Duration  11.35s

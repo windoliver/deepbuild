@@ -7,9 +7,10 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
-use deep_canvas_effects::particles::bake::{self, Inputs};
+use deep_canvas_effects::particles::bake;
 use deep_canvas_effects::particles::draws::Ribbon;
 use deep_canvas_effects::particles::eval::{self, Baked};
+use deep_canvas_effects::particles::item;
 use deep_canvas_effects::particles::pack::{self, Tables};
 use deep_canvas_effects::particles::{self as closed, bounds, rule, spec::Refusal, Planted};
 use deep_canvas_scene3d::scene::{Other, Scene};
@@ -17,10 +18,7 @@ use serde_json::{json, Map, Value};
 
 use crate::docops::item_seed;
 use crate::frame::Settings;
-use crate::scene::{effect_seed, item_pos, resampled, Seeding};
-
-/// Flicks a second (Units and axes: time).
-const FLICKS: f64 = 705_600_000.0;
+use crate::scene::{effect_seed, Seeding};
 
 /// What a frame's host adds to its particles: nothing, or a proof surface's planted programs and
 /// its report on each item.
@@ -122,7 +120,8 @@ const KEPT: usize = 16;
 static ANCHORS: Mutex<BTreeMap<String, eval::Anchors>> = Mutex::new(BTreeMap::new());
 
 /// Item `id`'s bake: kept, or baked now with every particles item it bursts at baked first; a
-/// chain of `emit.on.particles` that comes back to an item is refused, naming its items.
+/// chain of `emit.on.particles` that comes back to an item is refused, naming its items. The
+/// orchestration is the effects crate's (#2485, `particles::item`); this keeps bakes by key.
 pub fn baked(
     doc: &Value,
     scene: &Scene,
@@ -131,44 +130,11 @@ pub fn baked(
     plants: Planted,
     chain: &mut Vec<String>,
 ) -> Result<Held, Refusal> {
-    if chain.iter().any(|c| c == id) {
-        chain.push(id.to_string());
-        return Err(Refusal::new(
-            "cycle",
-            format!("items/{id}/params/emit/on/particles"),
-            format!(
-                "bursts at particles come back to {id}: {}",
-                chain.join(" → ")
-            ),
-        ));
-    }
-    let o = scene
-        .others
-        .iter()
-        .find(|o| o.id == id && o.kind == "particles@1")
-        .ok_or_else(|| {
-            Refusal::new(
-                "ref_unresolved",
-                format!("items/{id}"),
-                format!("{id} is no particles item"),
-            )
-        })?;
-    let p = &o.params;
-    let origin = p["emit"]["anchor"]
-        .as_str()
-        .and_then(|a| item_pos(scene, a))
-        .unwrap_or(o.pos);
-    let curve_id = p["motion"]["along"]["curve"]
-        .as_str()
-        .or(p["emit"]["shape"]["along"].as_str());
-    let curve = curve_id
-        .and_then(|c| scene.curves.get(c))
-        .map(|pts| resampled(pts))
-        .unwrap_or((Vec::new(), 0.0));
+    item::cycle(chain, id)?;
+    let p = item::prepare(doc, scene, id)?;
     chain.push(id.to_string());
-    let parent_id = p["emit"]["on"]["particles"].as_str();
     let doc_seed = doc["seed"].as_u64().unwrap_or(0);
-    let parent = match parent_id {
+    let parent = match p.parent {
         Some(pid) => Some(baked(
             doc,
             scene,
@@ -180,91 +146,32 @@ pub fn baked(
         None => None,
     };
     chain.pop();
-    let inputs = Inputs {
-        doc,
-        scene,
-        id,
-        params: p,
-        seed,
-        origin,
-        curve,
-        parent: parent_id.zip(parent.as_ref().map(|h| &h.0)),
-        planted: plants,
-    };
-    let spec = closed::spec::read(doc, id, p)?;
-    // #451: a world-space emitter reads its anchor at every birth bucket, so its bake is keyed by
-    // the whole document that moves the anchor, and a flow by the curves it runs along.
-    let world = p["emit"]["anchor"]
-        .as_str()
-        .filter(|_| spec.space == closed::spec::Space::World);
-    // #451: a flow along many curves, each as the scene lays it out.
-    let flows = match &spec.motion {
-        closed::spec::Motion::Along { many: Some(m), .. } => {
-            let names: Vec<String> = match &m.collection {
-                Some(c) => doc["collections"][c]["members"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .filter_map(Value::as_str)
-                    .map(str::to_string)
-                    .collect(),
-                None => m.curves.clone(),
-            };
-            names
-                .iter()
-                .map(|n| {
-                    scene
-                        .curves
-                        .get(n)
-                        .map(|pts| closed::flows::Curve::new(pts.clone()))
-                        .ok_or_else(|| {
-                            Refusal::new(
-                                "ref_unresolved",
-                                format!("items/{id}/params/motion/along/curves"),
-                                format!("{id}: along.curves names {n}, which is no curve"),
-                            )
-                        })
-                })
-                .collect::<Result<Vec<_>, _>>()?
-        }
-        _ => Vec::new(),
-    };
-    let mut h = deep_canvas::schedule::Hasher::new("particles.flows");
-    if world.is_some() {
-        h.bytes(doc.to_string().as_bytes());
-    }
-    for x in flows.iter().flat_map(|c| c.points.iter().flatten()) {
-        h.bytes(&x.to_le_bytes());
-    }
-    let moved = h.finish().hex();
-    let key = format!("{}{:?}{moved}", bake::key(&inputs, &spec), plants);
+    let inputs = p.inputs(doc, scene, seed, plants, parent.as_ref().map(|h| &h.0));
+    let key = format!("{}{:?}{}", bake::key(&inputs, &p.spec), plants, p.moved);
     if let Some(h) = BAKED.lock().unwrap_or_else(|e| e.into_inner()).get(&key) {
         return Ok(h.clone());
     }
-    let mut b = bake::bake(&inputs)?;
-    b.flows = flows;
-    if let Some(anchor) = world {
+    let (span, moved) = (p.spec.span, &p.moved);
+    let b = item::finish(&inputs, &p, &mut |anchor| {
         // #265: the anchors are the document's, whatever frame asks: kept by its hash, so a
         // moving anchor that rekeys the bake each frame never reads its buckets again.
-        let kept = format!("{id}#{anchor}#{}#{moved}", spec.span);
+        let kept = format!("{id}#{anchor}#{span}#{moved}");
         let held = ANCHORS
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .get(&kept)
             .cloned();
-        b.anchors = Some(match held {
-            Some(a) => a,
-            None => {
-                let a = anchors(doc, id, anchor, spec.span)?;
-                let mut all = ANCHORS.lock().unwrap_or_else(|e| e.into_inner());
-                if all.len() >= KEPT {
-                    all.clear();
-                }
-                all.insert(kept, a.clone());
-                a
-            }
-        });
-    }
+        if let Some(a) = held {
+            return Ok(a);
+        }
+        let a = item::anchors(doc, id, anchor, span)?;
+        let mut all = ANCHORS.lock().unwrap_or_else(|e| e.into_inner());
+        if all.len() >= KEPT {
+            all.clear();
+        }
+        all.insert(kept, a.clone());
+        Ok(a)
+    })?;
     let tables = pack::tables(&b);
     let held: Held = Arc::new((b, tables));
     let mut kept = BAKED.lock().unwrap_or_else(|e| e.into_inner());
@@ -273,43 +180,6 @@ pub fn baked(
     }
     kept.insert(key, held.clone());
     Ok(held)
-}
-
-/// A world-space emitter's anchor at each birth bucket of the document's span: its place at
-/// each whole multiple of its frame interval, through the chain a trail reads (channels, drivers
-/// reading a logic bake, constraints, a physics bake's outputs), never a pose kept from a frame
-/// and never a whole scene evaluated for it (#265).
-fn anchors(doc: &Value, id: &str, anchor: &str, emits: f64) -> Result<eval::Anchors, Refusal> {
-    let (p, q) = doc
-        .get("transport")
-        .and_then(deep_canvas::document::frame_rate_of)
-        .unwrap_or((60, 1));
-    let per = i64::from(q) * FLICKS as i64 / i64::from(p);
-    let span = doc
-        .pointer("/transport/span")
-        .and_then(|v| deep_canvas::document::duration(doc, v).ok())
-        .map_or(10.0, |f| f as f64 / FLICKS)
-        .min(emits);
-    let step = per as f64 / FLICKS;
-    let n = ((span / step).ceil() as usize + 1).min(1 << 16);
-    let bad = |what: String| {
-        Refusal::new(
-            "ref_unresolved",
-            format!("items/{id}/params/emit/anchor"),
-            what,
-        )
-    };
-    let map = doc
-        .as_object()
-        .ok_or_else(|| bad(format!("{id}: the document isn't an object")))?;
-    let times: Vec<i64> = (0..n as i64).map(|k| k * per).collect();
-    let at = deep_canvas_scene3d::trail::places(map, anchor, &times).map_err(|r| {
-        bad(format!(
-            "{id}: emit.anchor names {anchor}, which isn't placed ({}: {})",
-            r.code, r.path
-        ))
-    })?;
-    Ok(eval::Anchors { step, at })
 }
 
 /// Whether `bx`, grown by `reach` m and by `pad` px across the view, lies wholly outside what

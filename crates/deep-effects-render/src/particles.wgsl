@@ -207,6 +207,19 @@ fn color_at(l: f32) -> vec3<f32> {
 
 @fragment
 fn fs(in: Out) -> @location(0) vec4<f32> {
+    return shaded(in);
+}
+
+@fragment
+fn count_fs(in: Out) -> @location(0) vec4<f32> {
+    let c = shaded(in);
+    if c.r + c.g + c.b + c.a <= 0.0 {
+        discard;
+    }
+    return vec4<f32>(1.0, 0.0, 0.0, 0.0);
+}
+
+fn shaded(in: Out) -> vec4<f32> {
     var at = in.at;
     // A ribbon's newest segment (#450): its distance to the segment over its radius there, the
     // end at the particle round, the far end left to the next segment.

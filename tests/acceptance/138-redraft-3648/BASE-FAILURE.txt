@@ -1,0 +1,147 @@
+Base commit: e9c601b (#138's base, as tests/acceptance/138/BASE-FAILURE.txt)
+Command: NO_COLOR=1 npx vitest run --root tests/acceptance/138-redraft-3648 --no-file-parallelism --reporter=verbose
+Date: 2026-11-27T04:41Z  Node v24.22.0  vitest 5.0.5  Darwin arm64
+One run in a fresh GitHub clone at the base, with only tests/acceptance/138/ (first draft) and this folder added, and npm ci.
+The base does not build (deep-canvas: cannot find function `cell`, rows.rs:256), so every test fails at the helpers'
+"the binary builds" assertion before it reaches the manifest or kit call, which the base doesn't have.
+
+ RUN  v5.0.5 ~/mac-runs/r138-redraft-base/tests/acceptance/138-redraft-3648
+ × manifest-keys.test.ts > #138.230a6b92 every fixture is a document with a sidecar of existing check kinds and named oracles, and no sidecar holds a formula or code > #138.230a6b92 each fixture holds a document and a sidecar of sidecar keys, existing check kinds with their common and own fields, listed oracles, no formula or code, and no may-fail mark 6ms
+   → the binary builds: deep-show with features full: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+ × manifest-keys.test.ts > #138.230a6b92 every fixture is a document with a sidecar of existing check kinds and named oracles, and no sidecar holds a formula or code > #138.230a6b92 the same scan catches test.kit.formula's formula, made-up check kind and unlisted oracle, naming each fixture, and nothing else 1ms
+   → the binary builds: deep-show with features full,test-kit-formula: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+ × manifest-rest.test.ts > #138.230a6b92 every fixture is a document with a sidecar of existing check kinds and named oracles, and no sidecar holds a formula or code > #138.230a6b92 one category list of 21 and one naming scheme, parity/<category>/<name>.<profile>, covering every module's fixtures and the issue's three scenes 11ms
+   → the binary builds: deep-show with features full: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+ × manifest-rest.test.ts > #138.230a6b92 every fixture is a document with a sidecar of existing check kinds and named oracles, and no sidecar holds a formula or code > #138.230a6b92 the kit fails a sidecar with a formula, one with a check kind no registry holds and one with an oracle off the list, naming each fixture 1ms
+   → the binary builds: deep-show with features full,test-kit-formula: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+ × manifest-rest.test.ts > #138.230a6b92 every fixture is a document with a sidecar of existing check kinds and named oracles, and no sidecar holds a formula or code > #138.230a6b92 the shipped build's fixtures pass the same part 1ms
+   → the binary builds: deep-show with features full: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  manifest-keys.test.ts > #138.230a6b92 every fixture is a document with a sidecar of existing check kinds and named oracles, and no sidecar holds a formula or code > #138.230a6b92 each fixture holds a document and a sidecar of sidecar keys, existing check kinds with their common and own fields, listed oracles, no formula or code, and no may-fail mark
+AssertionError: the binary builds: deep-show with features full: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+- Expected
++ Received
++ cargo build --locked --bin deep-show --no-default-features --features full failed:
++ error[E0425]: cannot find function `cell` in this scope
++    --> crates/deep-canvas/src/document/rows.rs:256:31
++     |
++ 256 |     if (0..n).any(|i| printed(cell(&cells, i)) == sub) {
++     |                               ^^^^
++     |
++ help: a local variable with a similar name exists
++     |
++ 256 |     if (0..n).any(|i| printed(cells(&cells, i)) == sub) {
++     |                                   +
++
++ For more information about this error, try `rustc --explain E0425`.
++ error: could not compile `deep-canvas` (lib) due to 1 previous error
++ warning: build failed, waiting for other jobs to finish...
++
+ ❯ Object.bin ../138/helpers.ts:145:107
+    143|       const entry = made.get(buildName(build));
+    144|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    145|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    146|       return entry.bin;
+    147|     },
+ ❯ manifestOf manifest-keys.test.ts:54:26
+ ❯ manifest-keys.test.ts:112:20
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+ FAIL  manifest-keys.test.ts > #138.230a6b92 every fixture is a document with a sidecar of existing check kinds and named oracles, and no sidecar holds a formula or code > #138.230a6b92 the same scan catches test.kit.formula's formula, made-up check kind and unlisted oracle, naming each fixture, and nothing else
+AssertionError: the binary builds: deep-show with features full,test-kit-formula: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+- Expected
++ Received
++ cargo build --locked --bin deep-show --no-default-features --features full,test-kit-formula failed:
++ error: none of the selected packages contains this feature: test-kit-formula
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-marks-render, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+ ❯ Object.bin ../138/helpers.ts:145:107
+    143|       const entry = made.get(buildName(build));
+    144|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    145|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    146|       return entry.bin;
+    147|     },
+ ❯ manifestOf manifest-keys.test.ts:54:26
+ ❯ manifest-keys.test.ts:127:31
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+ FAIL  manifest-rest.test.ts > #138.230a6b92 every fixture is a document with a sidecar of existing check kinds and named oracles, and no sidecar holds a formula or code > #138.230a6b92 one category list of 21 and one naming scheme, parity/<category>/<name>.<profile>, covering every module's fixtures and the issue's three scenes
+AssertionError: the binary builds: deep-show with features full: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+- Expected
++ Received
++ cargo build --locked --bin deep-show --no-default-features --features full failed:
++ error[E0425]: cannot find function `cell` in this scope
++    --> crates/deep-canvas/src/document/rows.rs:256:31
++     |
++ 256 |     if (0..n).any(|i| printed(cell(&cells, i)) == sub) {
++     |                               ^^^^
++     |
++ help: a local variable with a similar name exists
++     |
++ 256 |     if (0..n).any(|i| printed(cells(&cells, i)) == sub) {
++     |                                   +
++
++ For more information about this error, try `rustc --explain E0425`.
++ error: could not compile `deep-canvas` (lib) due to 1 previous error
++ warning: build failed, waiting for other jobs to finish...
++
+ ❯ Object.bin ../138/helpers.ts:145:107
+    143|       const entry = made.get(buildName(build));
+    144|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    145|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    146|       return entry.bin;
+    147|     },
+ ❯ manifest manifest-rest.test.ts:18:39
+ ❯ manifest-rest.test.ts:24:32
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+ FAIL  manifest-rest.test.ts > #138.230a6b92 every fixture is a document with a sidecar of existing check kinds and named oracles, and no sidecar holds a formula or code > #138.230a6b92 the kit fails a sidecar with a formula, one with a check kind no registry holds and one with an oracle off the list, naming each fixture
+AssertionError: the binary builds: deep-show with features full,test-kit-formula: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+- Expected
++ Received
++ cargo build --locked --bin deep-show --no-default-features --features full,test-kit-formula failed:
++ error: none of the selected packages contains this feature: test-kit-formula
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-marks-render, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+ ❯ Object.bin ../138/helpers.ts:145:107
+    143|       const entry = made.get(buildName(build));
+    144|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    145|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    146|       return entry.bin;
+    147|     },
+ ❯ manifest-rest.test.ts:55:26
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+ FAIL  manifest-rest.test.ts > #138.230a6b92 every fixture is a document with a sidecar of existing check kinds and named oracles, and no sidecar holds a formula or code > #138.230a6b92 the shipped build's fixtures pass the same part
+AssertionError: the binary builds: deep-show with features full: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+- Expected
++ Received
++ cargo build --locked --bin deep-show --no-default-features --features full failed:
++ error[E0425]: cannot find function `cell` in this scope
++    --> crates/deep-canvas/src/document/rows.rs:256:31
++     |
++ 256 |     if (0..n).any(|i| printed(cell(&cells, i)) == sub) {
++     |                               ^^^^
++     |
++ help: a local variable with a similar name exists
++     |
++ 256 |     if (0..n).any(|i| printed(cells(&cells, i)) == sub) {
++     |                                   +
++
++ For more information about this error, try `rustc --explain E0425`.
++ error: could not compile `deep-canvas` (lib) due to 1 previous error
++ warning: build failed, waiting for other jobs to finish...
++
+ ❯ Object.bin ../138/helpers.ts:145:107
+    143|       const entry = made.get(buildName(build));
+    144|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    145|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    146|       return entry.bin;
+    147|     },
+ ❯ manifest-rest.test.ts:66:26
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+ Test Files  2 failed (2)
+      Tests  5 failed (5)
+   Start at  20:40:49
+   Duration  14.57s (tests 100%)

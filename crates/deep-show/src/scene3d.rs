@@ -8,12 +8,12 @@ pub(crate) mod look;
 
 use std::sync::{Arc, Mutex};
 
-use deep_canvas::registry::{LightQuery, LightSums, Reduce};
+use deep_canvas::registry::{ItemPass, LightQuery, LightSums, Reduce};
 use deep_canvas_marks::scene::Palette;
 use deep_canvas_scene3d::contributed::Fills;
 use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::scene::{evaluate_any, Labels, Scene};
-use deep_effects_render::frame::{Effects, Shared};
+use deep_effects_render::frame::{effect_label, pass_ms, profiler, Effects, Shared, SPARKS};
 use deep_effects_render::look_ops::Finish;
 use deep_effects_render::scene::Staged;
 use deep_gpu::device::{Backend, Device, Gpu};
@@ -328,8 +328,16 @@ impl Gpu3 {
     /// A frame drawn offscreen over its look's ground: straight RGBA, rows top-down. When it has
     /// readouts or card lines, the picture is the draw with them as labels (#419, #504).
     pub fn draw(&mut self, frame: &Frame3d) -> Option<Vec<u8>> {
+        self.draw_edited(frame, |_| {})
+    }
+
+    fn draw_edited(&mut self, frame: &Frame3d, edit: impl FnOnce(&mut Effects)) -> Option<Vec<u8>> {
         let Staged { scene, look, .. } = &frame.staged;
-        (self.fx.lock().unwrap_or_else(|e| e.into_inner())).stage(&frame.staged);
+        {
+            let mut fx = self.fx.lock().unwrap_or_else(|e| e.into_inner());
+            fx.stage(&frame.staged);
+            edit(&mut fx);
+        }
         *self.drawn.lock().unwrap_or_else(|e| e.into_inner()) = frame.drawn.clone();
         self.renderer.core.want = frame.staged.want;
         let over = if scene.readouts.is_empty() {
@@ -350,6 +358,34 @@ impl Gpu3 {
             .ok()?;
         deep_gpu::surface::swap_red_blue(&mut bytes);
         Some(bytes)
+    }
+
+    pub fn effect_pass(&mut self, frame: &Frame3d, id: &str) -> ItemPass {
+        let Some(sp) = frame.staged.settings.sparks.iter().find(|s| s.item == id) else {
+            return ItemPass::default();
+        };
+        let label = sp.effect.as_deref().map_or(SPARKS, effect_label);
+        let alone = |fx: &mut Effects| fx.settings.sparks.retain(|s| s.item == id);
+        let counted = self.draw_edited(frame, |fx| {
+            alone(fx);
+            fx.settings.overdraw = true;
+        });
+        let fx = self.fx.clone();
+        let lock = || fx.lock().unwrap_or_else(|e| e.into_inner());
+        let overdraw = counted
+            .and_then(|_| lock().read_overdraw(&self.device))
+            .map(f64::from);
+        let timer = profiler(&self.device);
+        let timed = timer.as_ref().and_then(|p| {
+            self.draw_edited(frame, |fx| {
+                alone(fx);
+                fx.profiler = Some(p.clone());
+            })?;
+            Some(pass_ms(&self.device, p))
+        });
+        lock().profiler = None;
+        let gpu_ms = timed.and_then(|ms| ms.get(label).copied());
+        ItemPass { overdraw, gpu_ms }
     }
 
     /// `scene` drawn offscreen, through the post stage set when `post` says.

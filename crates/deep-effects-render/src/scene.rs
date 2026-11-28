@@ -188,43 +188,8 @@ fn pair(v: Option<&Value>, default: [f64; 2]) -> [f64; 2] {
     }
 }
 
-/// Where an item stands in world metres: a solid's origin, another module's item's, or none.
-pub fn item_pos(scene: &Scene, id: &str) -> Option<[f64; 3]> {
-    let id = id.split('#').next().unwrap_or(id);
-    scene
-        .layers
-        .iter()
-        .flat_map(|l| &l.solids)
-        .find(|s| s.id == id)
-        .map(|s| [s.model[0][3], s.model[1][3], s.model[2][3]])
-        .or_else(|| scene.others.iter().find(|o| o.id == id).map(|o| o.pos))
-}
-
-/// A curve's samples resampled to [`shipped::CURVE_POINTS`] points evenly by arc length, and
-/// its length.
-pub fn resampled(points: &[[f64; 3]]) -> (Vec<[f64; 3]>, f64) {
-    let n = shipped::CURVE_POINTS as usize;
-    let seg = |a: [f64; 3], b: [f64; 3]| {
-        ops::sqrt((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2) + (b[2] - a[2]).powi(2))
-    };
-    let total: f64 = points.windows(2).map(|w| seg(w[0], w[1])).sum();
-    let mut out = Vec::with_capacity(n);
-    for k in 0..n {
-        let mut left = total * k as f64 / (n - 1) as f64;
-        let mut at = *points.last().unwrap_or(&[0.0; 3]);
-        for w in points.windows(2) {
-            let d = seg(w[0], w[1]);
-            if left <= d && d > 0.0 {
-                let f = left / d;
-                at = [0, 1, 2].map(|i| w[0][i] + (w[1][i] - w[0][i]) * f);
-                break;
-            }
-            left -= d;
-        }
-        out.push(at);
-    }
-    (out, total)
-}
+/// #2485: where an item stands, and a curve resampled, as the effects crate's bake reads them.
+pub use deep_canvas_effects::particles::item::{item_pos, resampled};
 
 /// A channel over life (Particles: `size, opacity: channels over life`): a number, `[birth,
 /// death]`, or keys `[{at, value}]`, as its values at birth and at death.
@@ -514,6 +479,7 @@ pub fn settings(
         emits,
         hazes: Vec::new(),
         checks: false,
+        overdraw: false,
         selection: selection.to_vec(),
         outline_width: 2,
         bloom,
