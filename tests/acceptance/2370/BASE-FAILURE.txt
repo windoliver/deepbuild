@@ -1,0 +1,46 @@
+Acceptance tests for #2370 on the base commit 254bdc87c, its host unmodified.
+node node_modules/vitest/vitest.mjs run --root tests/acceptance/2370 --no-file-parallelism --testTimeout=600000 --reporter=verbose
+Relevant lines, in the order Vitest ran the files: each request with its answer and the package's count, and each
+criterion test's result with its failing assertion. The wrong-program tests' lines are in TWINS-RUN.txt.
+
+AC6
+ ✓ inbound.test.ts > AC12 #348.fad7f4f9 ... > AC12 a loaded plug-in you haven't turned on opens nothing: ...
+ ✓ inbound.test.ts > AC12 #348.fad7f4f9 ... > AC12 turned on with POST /v1/traces chosen: one listener on 127.0.0.1 serves that route to the plug-in; ...
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+ ✓ ac6-348-ac12.test.ts > AC6 #2370 #348's AC12 runs unchanged and passes > AC6 #2370 #348's inbound.test.ts and its inbound fixture are as at the base, and its two AC12 tests pass: ...
+
+AC5
+record event count before 8, after 1000 refused requests 8; added by kind {}; answers {"200":1000}
+package count after 1000 refused requests: 1000
+ × ac5-record.test.ts > AC5 #2370 a refusal appends nothing to the record > AC5 #2370 1,000 refused requests in a row leave the record's event count as it was and the package's count at 0 3048ms
+   → none of the 1000 reached the package: expected 1000 to be +0 // Object.is equality
+
+AC3
+GET /status Host 127.0.0.1:51036 Sec-Fetch-Site cross-site -> 200
+GET /status Host 127.0.0.1:51036 Sec-Fetch-Site same-site -> 200
+GET /status Host 127.0.0.1:51036 Sec-Fetch-Site none -> 200
+package count before 0, after the three Sec-Fetch-Site requests 3
+ × ac3-sec-fetch.test.ts > AC3 #2370 ... > AC3 #2370 GET /status with the listener's Host and Sec-Fetch-Site cross-site, same-site or none is answered 403 and the count stays; the same GET with only Sec-Fetch-Mode: cors reaches the package
+   → GET /status with Sec-Fetch-Site cross-site, same-site and none is refused before the package: expected { Object (statuses, seen) } to deeply equal { statuses: [ 403, 403, 403 ], …(1) }
+
+AC4
+POST /never-registered (a path the package never registered) Origin https://example.test -> 404
+ × ac4-before-route.test.ts > AC4 #2370 the browser checks run before the route is matched > AC4 #2370 a POST carrying an Origin to a path never registered, to a registered route you didn't choose and to the chosen route are each answered 403 1377ms
+   → POST /never-registered, a path the package never registered, carrying an Origin is answered as a chosen route is: expected 404 to be 403 // Object.is equality
+
+AC2
+GET /status Host example.test:51082 -> 200
+POST /set Host example.test:51082 -> 200
+package count after Host example.test:51082: 2
+ × ac2-host.test.ts > AC2 #2370 a request whose Host isn't the listener's never reaches the package > AC2 #2370 GET /status and POST /set with Host example.test:<port> are answered 403 and the count stays 0; ...
+   → GET /status and POST /set with Host example.test:51082 and no Origin are refused before the package: expected { statuses: [ 200, 200 ], seen: 2 } to deeply equal { statuses: [ 403, 403 ], seen: +0 }
+
+AC1
+POST /v1/traces Host 127.0.0.1:51089 Origin https://example.test -> 200, package count 1
+ × ac1-origin.test.ts > AC1 #2370 a POST carrying a browser Origin never reaches #348's inbound fixture > AC1 #2370 POST /v1/traces with Origin: https://example.test is answered 403 and the fixture counts 0; ...
+   → POST /v1/traces with Origin: https://example.test is refused by the host before the package: expected { status: 200, seen: 1 } to deeply equal { status: 403, seen: +0 }
+
+ Test Files  5 failed | 1 passed (6)
+      Tests  5 failed | 4 passed (9)
+(The 4 passed are AC6 and the three wrong-program tests.)
