@@ -33,7 +33,7 @@ export const SUPPORTED = [MODERN, ...HELD];
 export type Obj = Record<string, unknown>;
 export type Line = { [key: string]: any };
 export interface Tool { name: string; inputSchema?: unknown; [key: string]: unknown }
-export const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+export const pollStep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)); // deadline: one step of a poll, which its caller bounds by a limit
 export const tag = (n = 4) => randomBytes(n).toString('hex');
 export const parseObject = (raw: string): Line | undefined => {
   try { const v: unknown = JSON.parse(raw); return typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Line) : undefined; } catch { return undefined; }
@@ -55,7 +55,7 @@ export async function cleanup(): Promise<void> {
   for (const close of closers.splice(0)) try { close(); } catch {}
   for (const pid of owned) try { process.kill(pid, 'SIGTERM'); } catch {}
   const end = Date.now() + 3000;
-  while ([...owned].some(alive) && Date.now() < end) await sleep(50);
+  while ([...owned].some(alive) && Date.now() < end) await pollStep(50);
   for (const pid of owned) try { process.kill(pid, 'SIGKILL'); } catch {}
   owned.clear();
   for (const d of made.splice(0)) rmSync(d, { recursive: true, force: true });
@@ -145,7 +145,7 @@ export class Mcp {
       if (Date.now() > due || this.child.exitCode !== null) throw Error(`BLOCKED: ${this.label} gave no reply to ${method} in ${timeoutMs} ms (exit ${this.child.exitCode}); stderr: ${this.err}`);
       await new Promise<void>((resolve) => {
         const done = (): void => { clearTimeout(timer); this.wakers.delete(done); resolve(); };
-        const timer = setTimeout(done, 200);
+        const timer = setTimeout(done, 200); // deadline: a reply wakes the wait at once; this only rechecks the due time and the server's exit
         this.wakers.add(done);
       });
     }
@@ -274,7 +274,7 @@ export function run(command: string, args: readonly string[], o: { env?: NodeJS.
     let stderr = '';
     child.stdout.setEncoding('utf8').on('data', (d: string) => (stdout += d));
     child.stderr.setEncoding('utf8').on('data', (d: string) => (stderr += d));
-    const timer = setTimeout(() => child.kill('SIGKILL'), o.timeoutMs ?? 120_000);
+    const timer = setTimeout(() => child.kill('SIGKILL'), o.timeoutMs ?? 120_000); // deadline: a command that hangs is killed and shown
     child.on('error', (e) => { clearTimeout(timer); resolve({ code: null, stdout, stderr: `${stderr}${e.message}`, ms: performance.now() - t0 }); });
     child.on('close', (code) => { clearTimeout(timer); resolve({ code, stdout, stderr, ms: performance.now() - t0 }); });
     child.stdin.on('error', () => undefined);
@@ -291,7 +291,7 @@ export async function startHub(w: World): Promise<Hub> {
   let out = '';
   child.stderr!.setEncoding('utf8').on('data', (d: string) => (out += d));
   const ready = await new Promise<Line | undefined>((resolve) => {
-    const timer = setTimeout(() => resolve(undefined), 120_000);
+    const timer = setTimeout(() => resolve(undefined), 120_000); // deadline: a hub that never prints its ready line is BLOCKED
     let first = '';
     child.stdout!.setEncoding('utf8').on('data', (d: string) => { out += d; first += d; if (first.includes('\n')) { clearTimeout(timer); resolve(parseObject(first.split('\n')[0]!)); } });
     child.on('exit', () => { clearTimeout(timer); resolve(undefined); });
@@ -310,7 +310,7 @@ export function control(hub: Hub, method: string, params: Line = {}, timeoutMs =
     const sock = net.connect(hub.socket);
     let buffer = '';
     let step = 0;
-    const timer = setTimeout(() => { sock.destroy(); reject(Error(`BLOCKED: no reply to ${method} within ${timeoutMs} ms`)); }, timeoutMs);
+    const timer = setTimeout(() => { sock.destroy(); reject(Error(`BLOCKED: no reply to ${method} within ${timeoutMs} ms`)); }, timeoutMs); // deadline: a silent hub is BLOCKED
     sock.setEncoding('utf8');
     sock.on('error', (e) => { clearTimeout(timer); reject(e); });
     sock.on('data', (chunk: string) => {
@@ -343,7 +343,7 @@ export async function within<T>(ms: number, probe: () => Promise<T | undefined |
     const v = await probe();
     if (v) return v;
     if (Date.now() > end) return undefined;
-    await sleep(250);
+    await pollStep(250);
   }
 }
 
@@ -485,7 +485,7 @@ export class FakeServer {
     return new Promise((resolve) => {
       const child = spawn(NODE, [FAKE, this.mode, this.name, this.toolsFile, this.log], { env: childEnv(this.w.home), stdio: ['pipe', 'pipe', 'ignore'] });
       own(child.pid);
-      const timer = setTimeout(() => { child.kill('SIGKILL'); resolve(undefined); }, 30_000);
+      const timer = setTimeout(() => { child.kill('SIGKILL'); resolve(undefined); }, 30_000); // deadline: a fake server that never answers the call reads as no answer
       createInterface({ input: child.stdout }).on('line', (raw) => { const l = parseObject(raw); if (l?.id === 3) { clearTimeout(timer); child.stdin.end(); resolve(l); } });
       child.stdin.on('error', () => undefined);
       const send = (m: Line) => child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', ...m })}\n`);

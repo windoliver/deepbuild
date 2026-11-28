@@ -108,8 +108,8 @@ minutes of real time).
   <tools.json> <log.jsonl>`. `tools.json` (`{version, tools}`) is read again at each request, so a test updates the
   server by rewriting it. `modern` answers a request with no `_meta` version -32600 and another version -32022.
   An allowed call is run on the fake server as each era's client would (`FakeServer.runCall`).
-- AC4: the second Codex thread starts 10 s after the first, so the two session starts don't share the hub's first
-  second; `deep mcp` connects at its first call and keeps the connection, so each thread opens it with `deep_status`
+- AC4: the second Codex thread starts once the first has passed PreToolUse for its deep_ask, so the two session starts
+  don't overlap; `deep mcp` connects at its first call and keeps the connection, so each thread opens it with `deep_status`
   calls, a second apart, for up to 90 s, and one that never connects is BLOCKED with the load reading.
 - AC5: each listing round waits up to 45 s for `tracker`'s listing and 5 s more for `forge`'s; an ask holding
   `delete_repo` gets 60 s.
@@ -183,7 +183,7 @@ The implementer writes the twins (AGENTS.md); these are the plants the criteria 
   the turn, each thread's `deep mcp` opens its hub connection with `deep_status` calls (carrying `_meta` for the
   `_meta` client), retried for up to 90 s: its connect has one second, which `ps` for the parent's start can use up at
   load 50 to 70, and a call that never connects is BLOCKED rather than read as the wait. The second thread starts
-  10 s after the first.
+  once the first is about to send its deep_ask.
 - **"Says it took no handshake"** (AC5): the field isn't named. Read as: beside `tools` and `server`, the event holds
   the value `"2026-07-28"`, or a field whose name has "handshake" set to `false`, or a string saying "no handshake" /
   "without a handshake" / "handshakeless". An implementer who names it otherwise should take it to a redraft.

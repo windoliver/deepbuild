@@ -28,7 +28,7 @@ function hook({ binary, args, payload, cwd, timeoutMs }) {
     let stderr = '';
     child.stdout.setEncoding('utf8').on('data', (d) => (stdout += d));
     child.stderr.setEncoding('utf8').on('data', (d) => (stderr += d));
-    const timer = setTimeout(() => child.kill('SIGKILL'), timeoutMs ?? 90_000);
+    const timer = setTimeout(() => child.kill('SIGKILL'), timeoutMs ?? 90_000); // deadline: a hook that hangs is killed and reported
     const done = (code, signal, extra = '') => { clearTimeout(timer); children.delete(child); resolve({ code, signal, stdout, stderr: stderr + extra, ms: performance.now() - t0, ended: Date.now() }); };
     child.on('error', (e) => done(null, null, e.message));
     child.on('close', done);
@@ -53,7 +53,7 @@ function mcpLine({ argv, line, timeoutMs }) {
   if (line.id === undefined) { mcp.child.stdin.write(`${JSON.stringify(line)}\n`); return Promise.resolve({ reply: null, pid: mcp.child.pid, ms: 0 }); }
   return new Promise((resolve) => {
     const key = JSON.stringify(line.id);
-    const timer = setTimeout(() => { mcp.wait.delete(key); resolve({ reply: null, pid: mcp.child.pid, ms: performance.now() - t0 }); }, timeoutMs ?? 150_000);
+    const timer = setTimeout(() => { mcp.wait.delete(key); resolve({ reply: null, pid: mcp.child.pid, ms: performance.now() - t0 }); }, timeoutMs ?? 150_000); // deadline: a request never answered resolves with no reply
     mcp.wait.set(key, (reply) => { clearTimeout(timer); mcp.wait.delete(key); resolve({ reply, pid: mcp.child.pid, ms: performance.now() - t0 }); });
     mcp.child.stdin.write(`${JSON.stringify(line)}\n`);
   });
