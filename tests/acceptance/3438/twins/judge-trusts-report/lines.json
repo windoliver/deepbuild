@@ -1,0 +1,10 @@
+{
+  "benchmarks/hub-launchd.mjs": [
+    {
+      "find": [
+        "  if (hub.ppid !== 1) return { status: 'FAIL', reason: `the ${what}, process ${hub.pid}, is a child of process ${hub.ppid} (${hub.parent}), where launchd, process 1, was to start it` };"
+      ],
+      "wrong": []
+    }
+  ]
+}

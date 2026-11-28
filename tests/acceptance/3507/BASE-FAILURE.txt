@@ -1,0 +1,193 @@
+# #3507's acceptance tests at the base
+
+Base: 5a81b58de3991a17df22dc966914c8f1e7eb9ffd (origin/main; its last merge is #3353), with what #3031 lands laid
+over it, uncommitted (docs/spikes/3031/, spikes/3031/, tests/acceptance/3031/, its entry in scripts/repo-rules.json).
+Host: this job's Mac (Mac17,10, Apple M5 Max, macOS), shared with many other sessions. Its one-minute load ran from
+15 to 300 over the night; each run's own load is beside it.
+Built once by this job's caller, under the machine's build queue: cargo build --locked -j 8 --bin deep-gpu and
+--bin deep-show, debug, CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 (cargo 1.99.1, Node 24.22.0).
+  target/debug/deep-gpu   sha256 639e5c44620950dc4beb0a3b32ffff8fe9d76f18ace0e196074127221adf756e
+  target/debug/deep-show  sha256 390bc0738583c134e2235627dea9b139023d259c0c9a06334b34ba85d6b09de8
+Run November 26, 2026, each file once, each with its own command, through the machine's throttle:
+
+  node scripts/throttle.mjs test --wait 60 -- node --test tests/acceptance/3507/<file>
+
+No DEEP_3507_BASE was given, and no DEEP_BIN_DIR: each file's own build step ran cargo in the checkout.
+
+## Summary
+
+| File | Criterion | At the base |
+|---|---|---|
+| ac1-two-walls.test.mjs, first test | #3507.f9beb02c | FAIL at its assertion, in both orders: the overdraw view gives no count of what the geometry pass shades |
+| ac1-two-walls.test.mjs, second test | #3507.f9beb02c | BLOCKED, a plain error: the build has no planted `shaded_count_skips_depth_test`. Not the planted count failing |
+| ac2-classes.test.mjs | #3507.42414ff7 | FAIL at its assertion, at frame 0 of core_view: no count |
+| ac3-report.test.mjs | #3507.dc916f1d | FAIL at its assertion, at frame 0 of every_pass: no count |
+| ac3-branch.test.mjs | #3507.dc916f1d | FAIL at its assertion: the report is not there. Draws nothing |
+| ac3-timing.test.mjs | #3507.dc916f1d | FAIL at its assertion: the report is not there. Loads, times nothing, draws nothing |
+| ac4-hashes-418, -424, -428, -465, -1637.test.mjs | #3507.f3ae7c70 | BLOCKED, a plain error: DEEP_3507_BASE names no merge base. The side it wasn't given; nothing built, nothing drawn |
+| ac5-unedited.test.mjs | #3507.25e79c7f | PASS: behaviour that must not change |
+
+ac2-classes.test.mjs ran here under the name and the ID it then had, for criterion 2 as first written. The owner
+reworded that criterion on 2026-11-26. The file has since lost the ID (in its test's name and two messages; nothing
+it asserts or runs changed), is by hand only, and the criterion's test is tests/acceptance/3507-redraft-ac2/'s.
+
+No run started a compile of a workspace crate: each file's process tree was watched for a rustc of a `deep_*`
+crate, and each file's own `cargo build --locked --bin deep-show` found its binary fresh. No file read BLOCKED on the
+GPU lease; each that drew took the file ~/.cache/deepbuild-gpu/lease and let it go, and the folder was empty after.
+No test passes at the base that should fail there, and none fails at load or outside its own check.
+
+## How the grants went
+
+The first request, for ac1-two-walls.test.mjs alone, got no grant:
+
+  $ node scripts/throttle.mjs test --wait 60 -- node --test tests/acceptance/3507/ac1-two-walls.test.mjs
+  (asked 02:33:29 EST)
+  INCONCLUSIVE no grant: no test grant came within 60 min
+    Fix: Wait for the other sessions' builds and proofs on this machine, then run again.
+  (exit 3, 03:33:29 EST)
+
+That was a wait, not a run. So that eleven requests would not each wait an hour, the eleven files were then asked for
+under one test grant, as #3262's base run asked for its files: a scratch script that starts each file's own command
+(`node --test tests/acceptance/3507/<file>`) in turn, one at a time, keeps its output, and watches its process tree.
+Asked 03:34:43 EST, granted 03:51:03, ended 03:51:34. Each file ran once.
+
+## ac1-two-walls.test.mjs
+
+  $ node --test tests/acceptance/3507/ac1-two-walls.test.mjs
+  14 s; one-minute load 17.8 at the start, 17.4 at the end; exit 1
+
+  ✖ AC1 #3507.f9beb02c on two walls that face the camera, one wholly behind the other, the count is 1 a covered
+    pixel with the nearer drawn first and 2 with the farther drawn first (8070 ms)
+  ℹ the nearer drawn first: FAIL; the farther drawn first: FAIL
+    AssertionError [ERR_ASSERTION]: AC1 #3507.f9beb02c: 2 findings:
+      FAIL: two walls, the nearer drawn first: the overdraw view gives no count of what the geometry pass shades:
+        its frame row is {"id":"frame","what":"overdraw","max":4}, with no whole numbers "shaded" (fragments) and
+        "covered" (pixels) beside "max"
+      FAIL: two walls, the farther drawn first: the overdraw view gives no count of what the geometry pass shades:
+        its frame row is {"id":"frame","what":"overdraw","max":4}, with no whole numbers "shaded" (fragments) and
+        "covered" (pixels) beside "max"
+        at settle (tests/acceptance/3507/drive.mjs:42:10)
+        at TestContext.<anonymous> (tests/acceptance/3507/ac1-two-walls.test.mjs:36:3)
+
+  ✖ AC1 #3507.f9beb02c a planted count that leaves the depth test out reads 2 both ways and fails the same check,
+    naming the order (6264 ms)
+    Error: BLOCKED: this build has no planted program `shaded_count_skips_depth_test` to run (deep-show run (two
+      walls, the nearer drawn first, 1 frames, planted shaded_count_skips_depth_test) answered
+      {"ok":false,"code":"bad_input"}), so the planted run wasn't made; that is not the planted program failing the
+      check
+
+The first test fails for the reason its criterion names: the view gives no such count. Both documents were
+presented and drawn in the overdraw mode, whose own count is 4 on them: two walls, both faces, depth ignored. The
+second test names a wrong program the base doesn't have; it is BLOCKED by a plain error, not an assertion failure,
+so no lane reads it as the planted count failing.
+
+## ac2-classes.test.mjs
+
+  $ node --test tests/acceptance/3507/ac2-classes.test.mjs
+  7 s; one-minute load 17.4 at the start, 17.2 at the end; exit 1
+
+  ✖ AC2 #3507.42414ff7 on each class's fixture, where no bar hides another, the count is 1 a covered pixel in every
+    one of the 300 frames (6695 ms)
+    AssertionError [ERR_ASSERTION]: AC2 #3507.42414ff7: 1 finding:
+      FAIL: core_view, frame 0: the overdraw view gives no count of what the geometry pass shades: its frame row is
+        {"id":"frame","what":"overdraw","max":2}, with no whole numbers "shaded" (fragments) and "covered" (pixels)
+        beside "max"
+        at settle (tests/acceptance/3507/drive.mjs:42:10)
+        at tests/acceptance/3507/ac2-classes.test.mjs:24:5
+
+The first class's first frame is read before the rest, so the base fails at once and the 1,800 frames aren't drawn.
+
+## ac3-report.test.mjs
+
+  $ node --test tests/acceptance/3507/ac3-report.test.mjs
+  8 s; one-minute load 17.2 at the start, 17.3 at the end; exit 1
+
+  ✖ AC3 #3507.dc916f1d the report gives the count for #3031's every-pass fixture: past 1.1 a covered pixel the
+    change brings it to at most 1.05 there, and at 1.1 or under the report says no pass changed (7917 ms)
+    AssertionError [ERR_ASSERTION]: AC3 #3507.dc916f1d: 1 finding:
+      FAIL: every_pass, frame 0: the overdraw view gives no count of what the geometry pass shades: its frame row is
+        {"id":"frame","what":"overdraw","max":9}, with no whole numbers "shaded" (fragments) and "covered" (pixels)
+        beside "max"
+        at settle (tests/acceptance/3507/drive.mjs:42:10)
+        at tests/acceptance/3507/ac3-report.test.mjs:29:5
+
+Frame 0 at 3456 × 2234 is read before the rest; the other 299 frames and the report aren't reached.
+
+## ac3-branch.test.mjs and ac3-timing.test.mjs
+
+  $ node --test tests/acceptance/3507/ac3-branch.test.mjs          (under a second; exit 1)
+  ✖ AC3 #3507.dc916f1d the report says whether a pass changed, and a run shows it: unchanged, the every-pass
+    frames' passes and draws are the merge base's; changed, the merge base's pass shades past 1.1 a covered pixel
+    there
+    AssertionError [ERR_ASSERTION]: AC3 #3507.dc916f1d (the report is docs/evidence/3507/README.md): 1 finding:
+      FAIL: the report, docs/evidence/3507/README.md, is not there: nothing gives the count for #3031's every-pass
+        fixture or says whether a pass changed
+        at settle (tests/acceptance/3507/drive.mjs:42:10)
+        at TestContext.<anonymous> (tests/acceptance/3507/ac3-branch.test.mjs:32:3)
+
+  $ node --test tests/acceptance/3507/ac3-timing.test.mjs          (under a second; exit 1)
+  ✖ AC3 #3507.dc916f1d where a pass changed, the geometry pass's p50 on the every-pass fixture, over five rounds
+    that alternate with the merge base, is no higher than the merge base's
+    AssertionError [ERR_ASSERTION]: AC3 #3507.dc916f1d (the report is docs/evidence/3507/README.md): 1 finding:
+      FAIL: the report, docs/evidence/3507/README.md, is not there: nothing gives the count for #3031's every-pass
+        fixture or says whether a pass changed
+        at settle (tests/acceptance/3507/drive.mjs:42:10)
+        at TestContext.<anonymous> (tests/acceptance/3507/ac3-timing.test.mjs:30:3)
+
+Both read the report first, and the base has none: the criterion's first sentence, "the PR's report gives the
+count". Neither builds or draws there. ac3-timing judges a time only where a report names a way a pass changed, on
+a machine that can judge one, with a merge base: none of that was run, and the timing file was not run past this.
+
+## ac4-hashes-418, -424, -428, -465 and -1637.test.mjs
+
+  $ node --test tests/acceptance/3507/ac4-hashes-418.test.mjs      (each under a second; exit 1)
+  ✖ AC4 #3507.f3ae7c70 on Metal, every frame of tests/acceptance/418/ hashes the same as on the merge base
+    Error: BLOCKED: DEEP_3507_BASE names no built checkout of the merge base, so nothing was drawn on the merge base
+        at mergeBase (tests/acceptance/3507/drive.mjs)
+        at sameFrames (tests/acceptance/3507/ac4.mjs:80:16)
+
+The same for -424, -428, -465 and -1637, each naming its suite. A test of behaviour that must not change, given one
+side: BLOCKED for the side it wasn't given, by a plain error, before it builds, runs a suite or draws. The base is
+its own merge base, and another built checkout of it was not this job's to make. What shows the comparison can fail
+is in the probes below.
+
+## ac5-unedited.test.mjs
+
+  $ node --test tests/acceptance/3507/ac5-unedited.test.mjs        (under a second; exit 0)
+  ✔ AC5 #3507.25e79c7f no acceptance test is edited: every file under tests/acceptance/ that the merge base holds
+    is as the merge base has it
+  ℹ against the merge base 5a81b58de: 0 files under tests/acceptance/ differ, 0 of them added
+
+It passes at the base and should: the checkout's merge base with origin/main is the base itself, and no file the
+base holds under tests/acceptance/ differs (this suite and #3031's are untracked additions). That it can fail: its
+judge, `editedProblems`, on planted lists of changes fails an `M`, a `D` and a `T` line, each naming the file.
+
+## What the probes showed, before the runs
+
+Scratch scripts, not kept, that drive the base's two binaries as drive.mjs does, under the GPU lease's file. No
+probe showed a fixture, the driver or a judge wrong, and no test file, helper or fixture changed after it.
+
+- deep_show presents every fixture as the driver sends it, with `issues: []`: both wall documents, the six class
+  fixtures and the every-pass fixture, the last seven with their looks named by asset. The overdraw mode then draws
+  each at its own size. The base's row is `max` alone: 4 on the walls; 2 on each class's fixture at frames 0, 150
+  and 299; 9 or 7 on the every-pass fixture.
+- The walls' picture in the overdraw mode: 19,200 of 76,800 pixels are off the ground, x 80 to 239 and y 60 to 179,
+  in both documents. That is the 160 × 120 the documents give.
+- The walls' order: `view3d` with `counts` reports one draw of two instances for both walls, named by its first
+  record: `near` in the nearer-first document, `far` in the farther-first. The object-ID target shows the nearer
+  wall on all 19,200 pixels of both, and both documents hash the same.
+- `view3d` draws the every-pass fixture at 3456 × 2234 under its look, with `from`, `timings` and `counts`: the
+  reply has `passes`, and each frame has `passes_ms` with 16 passes (`scene3d.geometry` at 4.2 to 7.3 ms),
+  `draws`, `indirect_draws` and `encoded`. Frames 0, 75, 150 and 225 drawn twice by the base are one program to
+  `samePassProblems`; with a pass added to one side's frame it fails.
+- The walls through `view3d` hash the same twice as shipped, and otherwise under the base's `--planted
+  draws_black`; `hashProblems` fails that pair, naming frame 0 and both hashes.
+- The recorder on the base's real `deep-gpu`, with the base standing in for the merge base: a copy of the build is
+  known by its bytes, its six frames are drawn again and hash the same, and a `--planted` child's six are left out.
+- Times, at a one-minute load of 70 to 230: a class's frame in the overdraw mode, 0.05 s at 480 × 270 and 0.12 to
+  0.16 s at 1280 × 800; an every-pass frame, 1.4 s in one run and 0.72 s with four runs side by side; four
+  every-pass frames through `view3d`, 2 to 4 s. A first run of either binary takes 3 to 8 s more.
+
+Not shown at the base, where nothing can show it: any count, so nothing here says what the count reads on any
+fixture; an ac4 file's run of a whole suite, and how long one takes with each frame drawn twice; ac3-branch past
+its reading of the report; ac3-timing's rounds.

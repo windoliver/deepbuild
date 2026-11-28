@@ -95,6 +95,9 @@ pub use crate::tone::tone;
 
 /// The 3D writer layers' linear target: what the output pass reads.
 pub const LINEAR: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
+/// The label of the image motion blur, the depth of field and the local tone map resolve into
+/// (#3506).
+pub const RESOLVED: &str = "scene3d resolved";
 /// The object-ID target: each pixel the pick ID of the item drawn there, 0 for none.
 pub const IDS: wgpu::TextureFormat = wgpu::TextureFormat::R32Uint;
 pub const DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
@@ -2825,6 +2828,7 @@ impl Renderer {
             sways: sway::Sways::default(),
             motion: motion::MotionPass::default(),
             motion_frame: None,
+            resolved: None,
             core: targets::Core::default(),
             velocity_frame: None,
             emission_frame: None,
@@ -2997,6 +3001,38 @@ impl Renderer {
             output_bind,
             drawn,
         });
+    }
+
+    /// The image motion blur, the depth of field and the local tone map resolve into (#3506),
+    /// made at the targets' size while `wanted` and let go otherwise. Motion blur and the depth
+    /// of field each copy it into the linear target before the next pass starts, and the local
+    /// tone map, which the output then reads, runs after both, so one image serves all three.
+    /// On Metal a texture with all three's usages holds what one with either's does.
+    fn ensure_resolved(&mut self, device: &Device, wanted: bool) {
+        let size = self.targets.as_ref().filter(|_| wanted).map(|t| t.size);
+        let Some(size) = size else {
+            self.resolved = None;
+            return;
+        };
+        if self
+            .resolved
+            .as_ref()
+            .is_some_and(|(t, _)| [t.width(), t.height()] == size)
+        {
+            return;
+        }
+        let texture = texture2d(
+            &device.device,
+            RESOLVED,
+            size,
+            LINEAR,
+            wgpu::TextureUsages::STORAGE_BINDING
+                | wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_SRC,
+        );
+        let view = texture.create_view(&Default::default());
+        self.resolved = Some((texture, view));
     }
 
     /// The output pass's bind group: `linear` and the tone uniform.
@@ -4319,10 +4355,14 @@ impl Renderer {
         self.count_draws(scene);
         self.update_culls(device);
         self.ensure_casters(device, scene);
-        self.motion_frame = self.targets.as_ref().and_then(|t| {
-            self.motion
-                .prepare(device, scene, &self.meshes, &t.linear_view, t.size)
-        });
+        self.motion_frame = self
+            .targets
+            .as_ref()
+            .zip(self.resolved.as_ref())
+            .and_then(|(t, r)| {
+                self.motion
+                    .prepare(device, scene, &self.meshes, &t.linear_view, r, t.size)
+            });
         self.prepare_core(device, scene);
         // #465: the mirror's view at t, drawn whole each frame.
         self.mirroring = match &scene.mirror {
@@ -5213,13 +5253,16 @@ impl Renderer {
                 });
             if let Some(t) = self.targets.as_ref().filter(|_| culled) {
                 let samples = self.families.samples;
-                if self
-                    .pyramid
-                    .as_ref()
-                    .is_none_or(|p| p.size != t.size || p.samples != samples)
-                {
+                // The occluders draw into the geometry pass's depth, which that pass clears
+                // after the pyramid reads it (#3506).
+                let depth = &t.drawn.depth_ms;
+                let own = self.planted.occluders_own_depth;
+                if self.pyramid.as_ref().is_none_or(|p| {
+                    p.size != t.size || p.samples != samples || (&p.depth != depth) != own
+                }) {
                     self.pyramid = Some(Arc::new(deep_gpu::alloc::outside(|| {
-                        cull::Pyramid::new(&device.device, &rows.kernels, t.size, samples)
+                        let k = &rows.kernels;
+                        cull::Pyramid::new(&device.device, k, t.size, samples, depth, own)
                     })));
                 }
             }
@@ -5740,6 +5783,8 @@ impl Renderer {
                 false
             }
         };
+        let resolves = scene.motion.is_some() || scene.dof.is_some() || self.toning;
+        self.ensure_resolved(device, resolves);
         // #3034: under water, a ray that meets nothing ends in deep water's color.
         let [r, g, b] = water::far(scene, self.sky).unwrap_or(scene.ground.map(decode));
         self.ground = [r, g, b, 1.0];
@@ -7028,6 +7073,39 @@ impl Renderer {
         out
     }
 
+    /// Whether the geometry pass draws a set from the rows a cull kept (#3507).
+    pub(crate) fn draws_culled(&self) -> bool {
+        let sets = self.order.iter().filter_map(|id| self.batches.get(id));
+        self.rows.is_some()
+            && sets
+                .flat_map(|b| b.solids.values())
+                .any(|s| s.cull.is_some())
+    }
+
+    /// The opaque solids the geometry pass draws, by ID in the order it draws them, each with the
+    /// faces its draw culls (0 none, 1 back, 2 front), read once the frame has drawn (#3507): a
+    /// culled set as the camera's list kept it. Nothing a frame draws reads this.
+    pub(crate) fn opaque_order(&self, device: &Device) -> Vec<(String, u32)> {
+        let mut out = Vec::new();
+        for batch in self.order.iter().filter_map(|id| self.batches.get(id)) {
+            let (detailed, lower): (Vec<_>, Vec<_>) =
+                batch.solids.iter().partition(|(_, set)| !set.lower);
+            for (key, set) in detailed.into_iter().chain(lower) {
+                let owners = &set.owners[..set.count.min(set.owners.len())];
+                let kept = set.cull.as_ref().filter(|_| self.rows.is_some());
+                let drawn: Vec<&String> = match kept.and_then(|c| c.views[cull::CAMERA].as_ref()) {
+                    Some(view) => read_list(device, view)
+                        .iter()
+                        .filter_map(|r| owners.get(*r as usize))
+                        .collect(),
+                    None => owners.iter().collect(),
+                };
+                out.extend(drawn.into_iter().map(|o| (o.clone(), key.1 >> CULL_SHIFT)));
+            }
+        }
+        out
+    }
+
     /// Under the planted program that culls the probes' captures by the camera's occlusion test,
     /// the solids that test hid this frame: in the camera's frustum list and not in its list.
     fn hidden_from_camera(&self, device: &Device) -> BTreeSet<String> {
@@ -7674,13 +7752,18 @@ impl Renderer {
             }
         }
         // #468: the depth of field over the linear image, before the effects read it.
-        if let (true, Some(d), Some(t)) = (self.dofing, self.doffer.as_mut(), self.targets.as_ref())
-        {
+        if let (true, Some(d), Some(t), Some(r)) = (
+            self.dofing,
+            self.doffer.as_mut(),
+            self.targets.as_ref(),
+            self.resolved.as_ref(),
+        ) {
             let job = d.job(
                 device,
                 t.size,
                 (&t.linear, &t.linear_view),
                 &t.depth_view,
+                r,
                 &self.profiler,
             );
             jobs.push((dof::DOF_PASS.into(), job));
@@ -7747,12 +7830,14 @@ impl Renderer {
         }
         // #971: the local tone map over the linear image the output would read; the output
         // reads the image it resolves instead.
-        if let (true, Some(l)) = (self.toning, self.toner.as_mut()) {
+        if let (true, Some(l), Some(into)) =
+            (self.toning, self.toner.as_mut(), self.resolved.as_ref())
+        {
             let source = self
                 .pre_tone
                 .clone()
                 .unwrap_or_else(|| t.linear_view.clone());
-            let (job, resolved) = l.job(device, t.size, &source, &self.profiler);
+            let (job, resolved) = l.job(device, t.size, &source, into, &self.profiler);
             jobs.push((local_tone::LOCAL_TONE_PASS.into(), job));
             let kept = match &self.toned_bind {
                 Some((r, c, b)) if *r == resolved && *c == self.covered.1 => Some(b.clone()),

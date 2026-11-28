@@ -1,7 +1,7 @@
 // The lane lists, moved out of scripts/lanes.mjs whole (#2360): the files the unit lane runs alone, slow, exclusive,
 // by hand or under a timed grant, each suite's entries in them, and the blind redrafts that run in their originals' place.
 // scripts/lanes.mjs re-exports each list and is still the one entry every reader imports them from.
-import { existsSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -44,21 +44,36 @@ export const alone = ['tests/acceptance/149/', 'tests/acceptance/1523/', 'tests/
   'tests/acceptance/1334-redraft-2565/'];
 
 /**
- * A suite's own lane file (#1327): `tests/acceptance/<issue>/lane.json` says its folder runs alone, and why, as
- * `{ "alone": true, "why": "<reason>" }` and nothing else. Running alone only makes a run stricter, so a new one lands
- * with its suite with no approval; anything else a lane decides (a skip, by hand, a timed grant, leaving a lane) stays
- * in this file. The folder runs alone while the disk holds the file, whatever it holds, so nothing in it can loosen a
- * run; the guard refuses any other shape or place, and the edit or removal of a landed one
- * (docs/parallel-proof.md, section 7).
+ * A suite's own lane file (#1327, #3419), in `tests/acceptance/<issue>/`, a redraft or oracle folder `<issue>-<suffix>/`
+ * or a redraft or oracle subfolder: `{ "alone": true, "why": "<reason>" }`, with `timed` and `slow` lists of its own
+ * folder's files. The folder runs alone while the disk holds the file, whatever it holds; its lists count only in that
+ * shape. Anything else a lane decides stays in this file; the guard refuses any other shape or place, and the edit or
+ * removal of a landed one (docs/parallel-proof.md, section 7).
  */
-export const LANE_FILE = /^tests\/acceptance\/(\d+)\/lane\.json$/;
-// A copy of scripts/ with no suites beside it reads none.
-const suites = join(root, 'tests/acceptance');
-for (const folder of existsSync(suites) ? readdirSync(suites, { withFileTypes: true }) : []) {
-  if (!folder.isDirectory() || !LANE_FILE.test(`tests/acceptance/${folder.name}/lane.json`)) continue;
-  // As the disk finds it, so a name it folds to lane.json counts too and can't stand in for one.
-  if (statSync(join(suites, folder.name, 'lane.json'), { throwIfNoEntry: false })?.isFile()) alone.push(`tests/acceptance/${folder.name}/`);
+export const LANE_FILE = /^tests\/acceptance\/(\d+)(-[a-z0-9-]*(?:redraft|oracle)[a-z0-9-]*)?\/(?:([a-z0-9-]*(?:redraft|oracle)[a-z0-9-]*)\/)?lane\.json$/;
+function laneLists(text, folder, isFile) {
+  let lane;
+  try { lane = JSON.parse(text); } catch { return null; }
+  if (!lane || typeof lane !== 'object' || Array.isArray(lane) || lane.alone !== true || typeof lane.why !== 'string' || !lane.why.trim()) return null;
+  if (Object.keys(lane).some((key) => !['alone', 'why', 'timed', 'slow'].includes(key))) return null;
+  const names = (key) => lane[key] ?? [];
+  const fits = (list) => Array.isArray(list) && list.every((name) => typeof name === 'string' && /^(?!\.{1,2}(?:\/|$))(?:[\w.-]+\/)*[\w.-]+\.test\.(?:ts|mjs|js)$/.test(name) && !name.split('/').includes('..') && isFile(`${folder}${name}`));
+  return fits(names('timed')) && fits(names('slow')) ? { timed: names('timed').map((name) => `${folder}${name}`), slow: names('slow').map((name) => `${folder}${name}`) } : null;
 }
+// As the disk finds them, so a name it folds to lane.json counts too. A copy of scripts/ with no suites reads none.
+const suites = join(root, 'tests/acceptance');
+const isFile = (path) => statSync(join(root, path), { throwIfNoEntry: false })?.isFile() ?? false;
+const laneFolders = [];
+export const fromLaneFiles = { alone: [], timed: [], slow: [] };
+for (const folder of existsSync(suites) ? readdirSync(suites, { withFileTypes: true }) : []) {
+  if (!folder.isDirectory() || !/^\d+(?:-[a-z0-9-]*(?:redraft|oracle)[a-z0-9-]*)?$/.test(folder.name)) continue;
+  const at = `tests/acceptance/${folder.name}/`;
+  const subfolders = readdirSync(join(suites, folder.name), { withFileTypes: true }).filter((sub) => sub.isDirectory()).map((sub) => `${at}${sub.name}/`);
+  for (const entry of [at, ...subfolders]) if (LANE_FILE.test(`${entry}lane.json`) && isFile(`${entry}lane.json`)) laneFolders.push(entry);
+}
+// Landed where lanes.mjs read none before #3419, so it stays unread until an approved edit takes it out of here.
+const unread = ['tests/acceptance/231-oracle/'];
+for (const entry of laneFolders) if (!unread.includes(entry) && !alone.includes(entry)) alone.push(entry), fromLaneFiles.alone.push(entry);
 
 /**
  * Files whose recorded run takes over two minutes on this machine, by the fastest run each that vitest's results caches
@@ -1269,6 +1284,10 @@ byHand.push('tests/acceptance/2760/budgets.test.ts');
 timed.push('tests/acceptance/2386/ac6-budget.test.ts');
 // Its blind redraft of the pixel-hash test (tests/acceptance/2386-redraft-ac6-hashes/DISPUTE.md) builds deep-canvas-render.
 alone.push('tests/acceptance/2386-redraft-ac6-hashes/');
+// #2039's folder (blind) runs alone by its lane.json; ac4-budget.test.ts times 500 nine-part atlas rows on a release
+// deep-show. Its Oracle lane builds deep-canvas-render.
+timed.push('tests/acceptance/2039/ac4-budget.test.ts');
+alone.push('tests/acceptance/2039-oracle/');
 // #1456's first-draft AC2 and AC4 tests: their twins widen Plant to string, which builds neither at the base nor on the
 // work, so they can't be proven. Their blind redraft (tests/acceptance/1456-redraft-ac2-ac4/DISPUTE.md) runs in their
 // place, alone: its hubs run deep-hook from target/, and #992's suite it runs builds deep-drive with cargo.
@@ -1376,6 +1395,9 @@ timed.push('tests/acceptance/1255/ac5-budget.test.ts');
 // #1181's folder (blind) runs alone by its lane.json; ac09-budget.test.ts times a 64-node, 128-part circuit's step with
 // judgeLimit.
 timed.push('tests/acceptance/1181/ac09-budget.test.ts');
+// #3604's folder (blind) runs alone by its lane.json; ac15-budget.test.ts times a 64-node, 128-part board with breakers, RCDs,
+// changeovers and a transformer with judgeLimit.
+timed.push('tests/acceptance/3604/ac15-budget.test.ts');
 
 // #2898's files (blind) each start real hubs, plug-ins and jobs and hold 40 s deep_wait calls; no timing.
 alone.push('tests/acceptance/2898/');
@@ -1605,6 +1627,10 @@ timed.push('tests/acceptance/3257/ac7-budget.test.ts');
 // child's peak on the reference Mac.
 timed.push('tests/acceptance/1857/cap.test.ts', 'tests/acceptance/1857/budgets.test.ts');
 
+// #1867's folder (blind) runs alone by its lane.json: each file starts hubs of its own. Two of its files read a
+// put-back against the criterion's second, and read INCONCLUSIVE past it while the load is over the cores.
+timed.push('tests/acceptance/1867/codex-watch.test.ts', 'tests/acceptance/1867/claude-json.test.ts');
+
 // #2750's folder (blind) runs alone by its lane.json: each test starts real hubs, a forge on 127.0.0.1 and git
 // repositories. budgets.test.ts times a rebuild from the event log on the reference Mac.
 timed.push('tests/acceptance/2750/budgets.test.ts');
@@ -1618,3 +1644,50 @@ byHand.push('tests/acceptance/3461/once.test.ts');
 // #3467's folder (blind) runs alone by its lane.json: each file draws on Metal and decodes on the hardware decoder.
 // players.test.ts judges #499's five players' frames a second on the real clock on a reference Mac.
 timed.push('tests/acceptance/3467/players.test.ts');
+
+// #3549 makes the build number a ceiling, 4 on the Mac and 6 on the Spark, so these files, which fill the build class
+// with the old 1 and 2, no longer hold their scene on the right program (tests/acceptance/<issue>/DISPUTE-3549.md).
+// Each, kept as written, maps to its blind redraft, which reads the count from throttle.mjs's LIMITS line and runs in
+// its place with every test of the file; the originals run by hand until the owner rules on the swap.
+Object.assign(redrafted, Object.fromEntries([['1113', 'cli'], ['3238', 'serial'], ['3238', 'no-grant'], ['3240', 'line'], ['3334', 'stall'], ['3334', 'far-stalled'], ['3567', 'grant'], ['2820', 'failures']]
+  .map(([issue, file]) => [`tests/acceptance/${issue}/${file}.test.mjs`, `tests/acceptance/${issue}-redraft-3549/`])));
+byHand.push(...Object.keys(redrafted).filter((path) => redrafted[path].endsWith('-redraft-3549/')));
+
+// #3694 admits a plain test request without the load and gives it a turn on the pool, so these files, whose scene held
+// such a request on the load or ran its command beside a pool all held, no longer hold it on the right program
+// (tests/acceptance/<issue>/DISPUTE-3694.md). Each, kept as written, maps to its blind redraft, which runs in its place
+// with every test of the file; the originals run by hand until the owner rules on the swap.
+Object.assign(redrafted, Object.fromEntries([['2924', 'test-grants'], ['2924', 'blocked'], ['2924', 'log'], ['3238', 'inherited'], ['3549', 'passes'], ['3549', 'timed'], ['3549', 'window']]
+  .map(([issue, file]) => [`tests/acceptance/${issue}/${file}.test.mjs`, `tests/acceptance/${issue}-redraft-3694/`])));
+byHand.push(...Object.keys(redrafted).filter((path) => redrafted[path].endsWith('-redraft-3694/')));
+
+// #3507's folder (blind) runs alone by its lane.json: its files build deep-show and deep-gpu and draw on Metal.
+// ac3-timing.test.mjs times the geometry pass against the merge base's on the reference Mac, where a pass changed.
+timed.push('tests/acceptance/3507/ac3-timing.test.mjs');
+
+// #3507's criterion 2 was reworded by the owner (2026-11-26: the class fixtures count from 1 to 2 a covered pixel).
+// ac2-classes.test.mjs, written for the criterion as it was, is kept as written, by hand only; its blind redraft
+// runs in its place, alone: it draws on Metal under the machine's GPU lease.
+Object.assign(redrafted, { 'tests/acceptance/3507/ac2-classes.test.mjs': 'tests/acceptance/3507-redraft-ac2/' });
+byHand.push('tests/acceptance/3507/ac2-classes.test.mjs');
+alone.push('tests/acceptance/3507-redraft-ac2/');
+
+// #3617's folder (blind) runs alone by its lane.json: each file builds deep-gpu and runs GPU surface frames at 1936 x 1584.
+// ac2-onepass.test.ts judges the five-run draw-and-finish p95 on a reference Mac.
+timed.push('tests/acceptance/3617/ac2-onepass.test.ts');
+
+// #3402: #1352's section, routes and taste-call files find the section as the one heading holding its words and read
+// Decided rows under ### Decided alone, so they fail since #3138. Kept as written, by hand only; their blind redraft,
+// which finds the section by its anchor and reads every Decided table under Decisions, runs in their place.
+for (const name of ['ac1-section', 'ac3-agent-routes', 'ac5-taste-call']) {
+  redrafted[`tests/acceptance/1352/${name}.test.mjs`] = 'tests/acceptance/1352-redraft-3402/';
+  byHand.push(`tests/acceptance/1352/${name}.test.mjs`);
+}
+
+for (const entry of laneFolders.filter((folder) => !unread.includes(folder))) {
+  let text = '';
+  try { text = readFileSync(join(root, entry, 'lane.json'), 'utf8'); } catch {}
+  const lists = laneLists(text, entry, isFile);
+  for (const file of lists?.timed ?? []) if (!timed.includes(file)) timed.push(file), fromLaneFiles.timed.push(file);
+  for (const file of lists?.slow ?? []) if (!slow.includes(file)) slow.push(file), fromLaneFiles.slow.push(file);
+}

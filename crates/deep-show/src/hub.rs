@@ -484,6 +484,9 @@ pub enum Planted {
     DeviationOneWay,
     /// #427: normals draws each vertex's line along a face normal of a face using it.
     NormalsFromFaces,
+    /// #3507: the overdraw mode's count of what the geometry pass shades leaves the depth test
+    /// out.
+    ShadedCountSkipsDepthTest,
     /// #854, on #1551's shown window: the frame clock arms a frame each vsync once settled.
     ArmsEachVsync,
     /// #1551: the window's display link keeps running while it is still.
@@ -1147,20 +1150,17 @@ impl<'a> Hub<'a> {
         dir: &std::path::Path,
         session: Option<&str>,
     ) -> Value {
-        let sealed = &self.startup.sealed;
-        let sandbox = &mut self.sandbox;
-        let evidence = &self.scenario.evidence;
         let reply = crate::packs::install(
             &mut self.packs,
             &mut self.pack_rows,
-            sealed,
-            id,
-            dir,
-            self.scenario.pack_planted.as_deref(),
-            &mut |manifest, pack| {
-                let (rows, mut issues) = sandbox.vet(manifest, pack, sealed);
-                issues.extend(crate::packs::kind_meshes(pack, sealed, evidence));
-                (rows, issues)
+            &self.startup.sealed,
+            &mut self.sandbox,
+            crate::packs::Offer {
+                id,
+                dir,
+                twin: self.scenario.pack_planted.as_deref(),
+                evidence: &self.scenario.evidence,
+                kept: self.scenario.pack_checks.as_ref(),
             },
         );
         // #200: a pack installed through a session is that agent's own: its entries are listed
@@ -1185,6 +1185,7 @@ impl<'a> Hub<'a> {
                 crate::scene3d::Gpu3::open(
                     &self.startup.sealed,
                     self.scenario.module_planted.clone(),
+                    self.scenario.planted == Some(Planted::ShadedCountSkipsDepthTest),
                 )
             })
             .as_mut()
@@ -1550,6 +1551,7 @@ impl<'a> Hub<'a> {
                 "checks": self.sandbox.checks, "links": self.sandbox.links,
                 "rewrites": self.sandbox.rewrites, "runs": self.sandbox.runs,
             }),
+            Call::Count(name) => json!({name.as_str(): count(name)}),
             Call::Validate { layout, path } => {
                 self.sandbox.validate(&self.startup.sealed, layout, path)
             }

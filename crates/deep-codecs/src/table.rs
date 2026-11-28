@@ -12,12 +12,10 @@ pub const MAX_BYTES: usize = 16 * 1024 * 1024;
 
 /// The narrowest type every cell of a column reads as: `i64`, `f64` or `str`.
 fn dtype(texts: &[String]) -> &'static str {
-    if texts.iter().all(|t| t.parse::<i64>().is_ok()) {
+    let held = || texts.iter().filter(|t| !t.is_empty());
+    if held().all(|t| t.parse::<i64>().is_ok()) {
         "i64"
-    } else if texts
-        .iter()
-        .all(|t| t.parse::<f64>().is_ok_and(f64::is_finite))
-    {
+    } else if held().all(|t| t.parse::<f64>().is_ok_and(f64::is_finite)) {
         "f64"
     } else {
         "str"
@@ -123,5 +121,12 @@ mod tests {
         assert_eq!(unique.unwrap()["table"]["rows"], 100_000);
         let refusal = probe(table(7).as_bytes(), "key").unwrap_err();
         assert_eq!(refusal["refused"]["code"], "key_not_unique");
+    }
+
+    #[test]
+    fn an_empty_cell_in_a_number_column_keeps_its_numeric_type() {
+        let p = probe(b"key,workers,share\n1,120,0.5\n2,,1.25\n3,40,\n", "key").unwrap();
+        assert_eq!(p["table"]["columns"][1]["dtype"], "i64");
+        assert_eq!(p["table"]["columns"][2]["dtype"], "f64");
     }
 }

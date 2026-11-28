@@ -1,0 +1,12 @@
+{
+  "#2818.c386fb21": [
+    "omit-head",
+    "keep-closed-issue"
+  ],
+  "#2818.1e81ba0c": [
+    "list-flaky"
+  ],
+  "#2818.b6e45261": [
+    "skip-approves"
+  ]
+}

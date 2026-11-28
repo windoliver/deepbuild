@@ -694,6 +694,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
             return Some(Call::Kinds(Value::Object(args)));
         }
         "sandbox" => return Some(Call::Sandbox),
+        "piece_checks" | "compiles" => return Some(Call::Count(name.into())),
         "provided" => return Some(Call::Provided(c.get("doc")?.as_str()?.to_string())),
         "validate" => {
             return Some(Call::Validate {
@@ -1322,7 +1323,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || deep_canvas_loop::PLANTED.contains(p)
                 || deep_canvas_media::PLANTED.contains(p)
                 // #1732's wrong programs live in the motion module's arrangement solve.
-                || deep_canvas_motion::arrange::PLANTED.contains(p)
+                || deep_canvas_motion::arrange::PLANTED.contains(p) || deep_canvas_motion::relations::PLANTED.contains(p)
                 || *p == deep_canvas_motion::module::UNDECLARED_KIND_ACCEPTED
                 || deep_canvas_motion::module::PLANTED.contains(p)
                 || deep_canvas_motion::cues::planted(p)
@@ -1361,6 +1362,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 // #466's boil and blur in deep-show's frames.
                 || films::PLANTED.contains(p) || sandbox::PLANTED.contains(p) || *p == frames::VALIDATED_PER_FRAME
                 || caption_design::PLANTED.contains(p) || scene3d::PLANTED.contains(p) || kit::lease::PLANTED.contains(p) || packs::PLANTED.contains(p)
+                || packs::checked::PLANTED.iter().any(|(name, _)| name == p)
         })
         .map(str::to_string);
     // #433's wrong programs are twins of the familiar@1 pack.
@@ -1589,6 +1591,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "checker_fits_surface" => Planted::CheckerFitsSurface,
                 "deviation_one_way" => Planted::DeviationOneWay,
                 "normals_from_faces" => Planted::NormalsFromFaces,
+                "shaded_count_skips_depth_test" => Planted::ShadedCountSkipsDepthTest,
                 // #499: the mix's wrong programs.
                 "reverb_restores_without_tail" => Planted::ReverbRestoresWithoutTail,
                 "ring_drops_oldest" => Planted::RingDropsOldest,
@@ -1765,6 +1768,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         quiet_hours,
         evidence: PathBuf::from(input.get("evidence")?.as_str()?),
         packs,
+        pack_checks: packs::checked::given(input)?,
         job_tools: export::tools::parse(input.get("job_tools"))?,
         notes,
         installed,
@@ -2658,7 +2662,10 @@ fn start_args(args: &[String]) -> Result<StartArgs, ()> {
     let mut rest = args.get(1..).unwrap_or_default();
     while let [flag, value, more @ ..] = rest {
         match flag.as_str() {
-            "--planted" if planted.is_none() => planted = Some(planted_named(value)?),
+            "--planted" if planted.is_none() => {
+                planted = Some(planted_named(value)?);
+                packs::checked::started(value);
+            }
             "--costs" if costs.is_none() => costs = Some(value.clone()),
             // #1901: the folder kept output lives in across processes.
             "--cache" if cache.is_none() => cache = Some(PathBuf::from(value)),

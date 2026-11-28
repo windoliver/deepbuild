@@ -1,0 +1,32 @@
+// A planted tool's entry (issue #3569 acceptance; README: The planted programs). The hub runs it as it runs any job
+// tool of this machine: `node <entry>` in the tool's own folder, one JSON object on stdin and one on stdout,
+// {outputs}, each output's bytes in base64 (#1922). It runs the right tool's own entry, which lies beside it in this
+// folder, on the same request, and hands on what that wrote: byte for byte when its plan has no edits or they don't
+// apply, and otherwise with the plan's cells of the derived table (`outputs.table`, a CSV) rewritten
+// (deep-3569-spoil.mjs). Its lineage and receipt are the right tool's. Anything else the right tool writes, a
+// refusal say, is handed on as it is.
+import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { spoil } from './deep-3569-spoil.mjs';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const plan = JSON.parse(readFileSync(join(here, 'deep-3569-plan.json'), 'utf8'));
+const chunks = [];
+for await (const chunk of process.stdin) chunks.push(chunk);
+const ran = spawnSync(process.execPath, [join(here, plan.entry)], { cwd: here, input: Buffer.concat(chunks), maxBuffer: 1024 * 1024 * 1024 });
+if (ran.stderr?.length) process.stderr.write(ran.stderr);
+const said = ran.stdout ?? Buffer.alloc(0);
+if (ran.error || ran.status !== 0) {
+  if (said.length) process.stdout.write(said);
+  process.exitCode = ran.status || 1;
+} else {
+  let answer;
+  try { answer = JSON.parse(said.toString('utf8')); } catch { answer = undefined; }
+  const outputs = answer?.outputs;
+  const table = typeof outputs === 'object' && outputs !== null && typeof outputs.table === 'string' ? Buffer.from(outputs.table, 'base64').toString('utf8') : null;
+  const after = table === null ? null : spoil(table, plan);
+  if (after === null) process.stdout.write(said);
+  else process.stdout.write(`${JSON.stringify({ ...answer, outputs: { ...outputs, table: Buffer.from(after, 'utf8').toString('base64') } })}\n`);
+}

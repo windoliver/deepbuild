@@ -1,0 +1,261 @@
+{
+  "name": "leak",
+  "item": {
+    "kind": "logic@1",
+    "params": {
+      "program": "9358ed55552ca183014a76a0a2ffbe5c3ceb8e2b0461ee65848653b9643c5fff",
+      "step_rate": 1000,
+      "reads": [
+        "fault"
+      ],
+      "writes": {
+        "v": {
+          "type": "f64",
+          "count": 5
+        },
+        "i_rms": {
+          "type": "f64",
+          "count": 5
+        },
+        "i": {
+          "type": "f64",
+          "count": 5
+        },
+        "p": {
+          "type": "f64",
+          "count": 5
+        },
+        "r": {
+          "type": "f64",
+          "count": 5
+        },
+        "on": {
+          "type": "i32",
+          "count": 5
+        },
+        "energy": {
+          "type": "f64",
+          "count": 5
+        },
+        "kwh": {
+          "type": "f64",
+          "count": 5
+        },
+        "drift": {
+          "type": "f64",
+          "count": 5
+        },
+        "drift_x": {
+          "type": "f64",
+          "count": 5
+        },
+        "heat": {
+          "type": "f64",
+          "count": 5
+        },
+        "residual": {
+          "type": "f64",
+          "count": 5
+        },
+        "i2_rms": {
+          "type": "f64",
+          "count": 5
+        },
+        "i2": {
+          "type": "f64",
+          "count": 5
+        }
+      },
+      "circuit": {
+        "nodes": [
+          "neutral",
+          "live",
+          "load_live",
+          "load_neutral",
+          "earth"
+        ],
+        "parts": [
+          {
+            "id": "mains",
+            "kind": "source_ac",
+            "from": "neutral",
+            "to": "live",
+            "v_rms": 230,
+            "f": 50
+          },
+          {
+            "id": "rcd",
+            "kind": "rcd",
+            "live": [
+              "live",
+              "load_live"
+            ],
+            "neutral": [
+              "neutral",
+              "load_neutral"
+            ],
+            "rating": 0.03
+          },
+          {
+            "id": "lamp",
+            "kind": "load",
+            "from": "load_live",
+            "to": "load_neutral",
+            "p_rated": 60,
+            "v_rated": 230
+          },
+          {
+            "id": "fault",
+            "kind": "fault",
+            "from": "load_live",
+            "to": "earth",
+            "r": 2000,
+            "on_by": "fault"
+          },
+          {
+            "id": "earth",
+            "kind": "resistor",
+            "from": "earth",
+            "to": "neutral",
+            "r": 0
+          }
+        ]
+      },
+      "budget": {
+        "fuel": 10000000
+      }
+    }
+  },
+  "controls": {
+    "fault": {
+      "kind": "slider"
+    }
+  },
+  "track": [
+    {
+      "t": 0,
+      "seq": 1,
+      "control": "fault",
+      "value": 0,
+      "writer": "you",
+      "player": 1
+    },
+    {
+      "t": 3528000,
+      "seq": 2,
+      "control": "fault",
+      "value": 1,
+      "writer": "you",
+      "player": 1
+    }
+  ],
+  "steps": 64,
+  "expect": {
+    "arrays": {
+      "4": {
+        "i_rms": [
+          0.2608695652173913,
+          0.2608695652173913,
+          0.2608695652173913,
+          0,
+          0
+        ],
+        "i2_rms": [
+          0,
+          0.2608695652173913,
+          0,
+          0,
+          0
+        ],
+        "residual": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "on": [
+          1,
+          1,
+          1,
+          0,
+          1
+        ]
+      },
+      "5": {
+        "i_rms": [
+          0.3758695652173913,
+          0.3758695652173913,
+          0.2608695652173913,
+          0.115,
+          0.115
+        ],
+        "i2_rms": [
+          0,
+          0.2608695652173913,
+          0,
+          0,
+          0
+        ],
+        "residual": [
+          0,
+          0.115,
+          0,
+          0,
+          0
+        ],
+        "on": [
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "57": {
+        "on": [
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "58": {
+        "i_rms": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "i2_rms": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "residual": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "on": [
+          1,
+          0,
+          1,
+          1,
+          1
+        ]
+      }
+    },
+    "tolerance": {
+      "abs": 1e-12,
+      "rel": 1e-9
+    }
+  },
+  "answer": "The lamp is 230² ÷ 60 = 881.67 Ω: 0.26087 A out through the live pole and back through the neutral pole, so the poles' currents, each from the supply side, sum to 0. From step 5 the fault puts 2,000 Ω from the load-side live to the earth, joined to neutral with no resistance: 0.115 A leaves by the earth, so the live pole carries 0.37587 A, the neutral pole still 0.26087 A, and the residual is 0.115 A, 3.8333 times the 30 mA rating. The count rises by 1 ms ÷ (0.2 s × 0.03 ÷ 0.115) = 0.019167 a step and reaches 1 after 52.17 steps, so both poles open at step 5 + 53 = 58. An RCD that read its live pole alone would see 0.26087 A, 8.7 times its rating, and open after 23 ms."
+}

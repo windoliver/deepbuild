@@ -1,0 +1,14 @@
+{
+  "#3466.8e1d6afc": [
+    "stale-worktree-proposed"
+  ],
+  "#3466.13da4cdd": [
+    "kept-in-memory"
+  ],
+  "#3466.e6689637": [
+    "worktree-file-once-kept"
+  ],
+  "#3466.dc3e4e56": [
+    "worktree-file-while-none-kept"
+  ]
+}

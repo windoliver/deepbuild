@@ -14,6 +14,7 @@
 //! nothing read from the machine, as the canvas lint requires.
 
 mod bare;
+mod check_kinds;
 pub mod core_lists;
 pub mod fields;
 mod implementation;
@@ -29,6 +30,7 @@ use crate::kinds::Entry;
 use serde_json::{json, Value};
 
 use bare::BARE_MODULE_KINDS;
+use check_kinds::MODULE_CHECK_KINDS;
 pub use implementation::{Equivalence, Implementation, Pin, StateClass};
 pub use semver::{Range, Semver};
 use shapes::module_shapes;
@@ -36,6 +38,12 @@ use shapes::module_shapes;
 /// The core's version, as `core@<version>` names it in every reply; it is the `deep-canvas`
 /// crate's version, written here since the lint keeps `env!` out of a scope crate.
 pub const CORE_VERSION: &str = "0.0.0";
+
+/// The build's core as a version: what a document's and a pack's `requires.core` are compared
+/// with (#2058), and a canvas module's core range at the seal.
+pub(crate) fn core_semver() -> Semver {
+    Semver::parse(CORE_VERSION).expect("CORE_VERSION is major.minor.patch")
+}
 
 /// `core@<version>`.
 pub fn core_name() -> String {
@@ -716,27 +724,6 @@ pub const CORE_CHECK_KINDS: [&str; 13] = [
     "film.layout",
     "honest_numbers",
     "kind_rules",
-];
-
-/// The check kinds the design names for a canvas module, with that module, so a check input
-/// naming one in a build without it is `module_missing` naming the module (canvas primitives:
-/// Check input).
-const MODULE_CHECK_KINDS: &[(&str, &str)] = &[
-    ("record_replay", "record"),
-    ("input.replay", "input"),
-    ("export", "export"),
-    ("physics.determinism", "physics"),
-    ("physics.audit", "physics"),
-    ("physics.query", "physics"),
-    ("nav.reach", "physics"),
-    ("logic.determinism", "logic"),
-    ("logic.budget", "logic"),
-    ("logic.layout", "logic"),
-    ("logic.tuning", "logic"), // #194's tuning rows.
-    ("net.rollback", "net"),
-    ("net.desync", "net"),
-    ("net.budget", "net"),
-    ("net.feel", "net"), // #280's readings of a seeded network.
 ];
 
 /// An entry in an existing agent tool.
@@ -1569,14 +1556,7 @@ impl Sealed {
                 k.entry.versions.len() > 1
                     && k.entry.steps_from(k.entry.versions[0].major).is_some()
             });
-        migrating
-            && (1..m.version.major).any(|major| {
-                range.matches(Semver {
-                    major,
-                    minor: 0,
-                    patch: 0,
-                })
-            })
+        migrating && (1..m.version.major).any(|major| range.admits_major(major))
     }
 
     /// The missing module that keeps `module`'s `operator` out of the plan: the module itself
@@ -1976,7 +1956,7 @@ impl Registry {
     pub fn seal(mut self) -> Result<Sealed, Box<SealError>> {
         self.modules
             .sort_by(|a, b| a.manifest.name.cmp(&b.manifest.name));
-        let core = Semver::parse(CORE_VERSION).expect("CORE_VERSION is major.minor.patch");
+        let core = core_semver();
 
         // One implementation per interface, before names: two implementations of one interface
         // may register under its one module name.
@@ -2568,11 +2548,10 @@ impl Registry {
                 }
             }
             for c in &r.checks {
-                // One registry: a module's check kind is neither the core's nor another's.
+                // One registry: a check kind is the core's or one module's, registered once.
+                let registered = shapes.iter().flat_map(|(_, o)| &o.checks);
                 let taken = CORE_CHECK_KINDS.contains(&c.kind.as_str())
-                    || shapes.iter().any(|(other, o)| {
-                        other != name && o.checks.iter().any(|x| x.kind == c.kind)
-                    });
+                    || registered.filter(|x| x.kind == c.kind).count() > 1;
                 if taken {
                     return Err(SealError::of(
                         "duplicate_check_kind",
@@ -3110,7 +3089,7 @@ impl Registry {
                         return Err(SealError::new(
                             "unresolved_read",
                             &[name],
-                            &[],
+                            &[read],
                             format!(
                                 "check `{}` of `{name}` reads `{read}`, which no operator writes",
                                 c.kind
@@ -3121,7 +3100,7 @@ impl Registry {
                         return Err(SealError::new(
                             "not_exact",
                             &[name],
-                            &[],
+                            &[read],
                             format!("check `{}` of `{name}` says machines any but reads `{read}`, which is {class}", c.kind),
                         ));
                     }

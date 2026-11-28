@@ -11,9 +11,11 @@
 //! `tile + frame`: [`apply`] resolves it at the record's time before the frame is built, as the
 //! parallax fields do, so seeking equals playing.
 
+use deep_canvas::document::Issue;
 use serde_json::{json, Map, Value};
 
 use crate::data::Column;
+use crate::key::KeyBuilder;
 use crate::paint::Adjust;
 use crate::scene::{num, ImageFit, ImageSampling, Mark, Planted, Refused};
 use crate::story::Rows;
@@ -31,6 +33,129 @@ pub struct AtlasCell {
     pub flip: u8,
     /// #536, #2386: a grid row's hit area in place of its quad: its cell.
     pub hit: Option<CellArea>,
+    /// #2039: what a sliced row draws of the cell.
+    pub cut: Option<Cut>,
+}
+
+/// #2039: how a nine-part frame's edges and centre fill their runs (`fill`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SliceFill {
+    Stretch,
+    Tile,
+    TileFit,
+}
+
+/// #2039: a cell cut in nine parts (`slice`): its left, top, right and bottom sides in px of the
+/// cell, how its edges and centre fill their runs, whether its centre draws, and the row's
+/// `scale`, which its corners draw at.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Slice {
+    pub sides: [f64; 4],
+    pub fill: SliceFill,
+    pub center: bool,
+    pub scale: f64,
+}
+
+/// #2039: what a sliced row draws of its cell: all of it, cut in nine, or one of those parts,
+/// `[x, y, w, h]` px inside the cell as the atlas holds it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Cut {
+    Nine(Slice),
+    Part([f64; 4]),
+}
+
+/// #2039: one draw of an image mark: the cell it shows, the rect one copy of it draws at, the
+/// rect it covers, and whether it repeats along x and along y to cover it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Part {
+    pub cell: Option<AtlasCell>,
+    pub to: [f64; 4],
+    pub over: [f64; 4],
+    pub repeat: [bool; 2],
+}
+
+/// #2039: what an image mark with `tile` draws in `bounds`: itself, or, for a row whose cell is
+/// cut in nine, each part that has pixels and a place: the corners at their own size times the
+/// row's scale, each edge along its axis and the centre in the rest, stretched, tiled from the
+/// run's start with the last tile cut at its end, or tiled a whole number of times.
+pub fn parts(tile: Option<&AtlasCell>, bounds: [f64; 4]) -> impl Iterator<Item = Part> {
+    let nine = tile.and_then(|t| match t.cut {
+        Some(Cut::Nine(s)) => Some((*t, s)),
+        _ => None,
+    });
+    let whole = nine.is_none().then(|| Part {
+        cell: tile.copied(),
+        to: bounds,
+        over: bounds,
+        repeat: [false; 2],
+    });
+    whole
+        .into_iter()
+        .chain(nine.into_iter().flat_map(move |(cell, s)| {
+            // The cell as the row draws it: turned a quarter (4), then flipped across (1) and down
+            // (2), its sides with it.
+            let [mut l, mut t, mut r, mut b] = s.sides;
+            let [mut cw, mut ch] = cell.cell;
+            if cell.flip & 4 != 0 {
+                (l, t, r, b) = (t, l, b, r);
+                (cw, ch) = (ch, cw);
+            }
+            if cell.flip & 1 != 0 {
+                (l, r) = (r, l);
+            }
+            if cell.flip & 2 != 0 {
+                (t, b) = (b, t);
+            }
+            // Along one axis: where the three runs start and end in the drawn cell, px, and in the
+            // box.
+            let runs = |near: f64, far: f64, size: f64, at: f64, len: f64| {
+                (
+                    [0.0, near, size - far, size],
+                    [at, at + near * s.scale, at + len - far * s.scale, at + len],
+                )
+            };
+            let [bx, by, bw, bh] = bounds;
+            let ((px, ux), (py, uy)) = (runs(l, r, cw, bx, bw), runs(t, b, ch, by, bh));
+            (0..9).filter_map(move |k: usize| {
+                let (i, j) = (k % 3, k / 3);
+                let (mut x, mut y, mut w, mut h) =
+                    (px[i], py[j], px[i + 1] - px[i], py[j + 1] - py[j]);
+                let over = [ux[i], uy[j], ux[i + 1] - ux[i], uy[j + 1] - uy[j]];
+                if w <= 0.0 || h <= 0.0 || over[2] <= 0.0 || over[3] <= 0.0 || (k == 4 && !s.center)
+                {
+                    return None;
+                }
+                // One copy's length along a run of `u` u that shows `px` px, and whether it repeats.
+                let copy = |middle: bool, px: f64, u: f64| match s.fill {
+                    SliceFill::Tile if middle => (px * s.scale, true),
+                    SliceFill::TileFit if middle => {
+                        (u / (u / (px * s.scale)).round().max(1.0), true)
+                    }
+                    _ => (u, false),
+                };
+                let ((tw, across), (th, down)) =
+                    (copy(i == 1, w, over[2]), copy(j == 1, h, over[3]));
+                // Back to the cell as the atlas holds it.
+                if cell.flip & 2 != 0 {
+                    y = ch - y - h;
+                }
+                if cell.flip & 1 != 0 {
+                    x = cw - x - w;
+                }
+                if cell.flip & 4 != 0 {
+                    (x, y, w, h) = (y, x, h, w);
+                }
+                Some(Part {
+                    cell: Some(AtlasCell {
+                        cut: Some(Cut::Part([x, y, w, h])),
+                        ..cell
+                    }),
+                    to: [over[0], over[1], tw, th],
+                    over,
+                    repeat: [across, down],
+                })
+            })
+        }))
 }
 
 /// #2386: a grid cell's own outline, the hit area of the row on it: a square cell's square, an
@@ -107,7 +232,32 @@ impl AtlasCell {
         let (col, row) = (self.index % columns, self.index / columns);
         let x = self.margin[0] + col as f64 * step[0];
         let y = self.margin[1] + row as f64 * step[1];
-        (y + ch <= f64::from(height)).then_some([x, y, cw, ch])
+        (y + ch <= f64::from(height)).then_some(self.cut_of([x, y, cw, ch]))
+    }
+
+    /// What the cell adds to its mark's content key: its place in the atlas, its flip and
+    /// (#2039) the nine parts it is cut in.
+    pub(crate) fn feed(&self, k: &mut KeyBuilder) {
+        k.text("tile")
+            .int(self.index as i64)
+            .int(i64::from(self.flip));
+        for v in [self.cell, self.margin, self.separation].iter().flatten() {
+            k.number(*v);
+        }
+        if let Some(Cut::Nine(s)) = self.cut {
+            k.text("slice").int(s.fill as i64).int(i64::from(s.center));
+            for v in s.sides.into_iter().chain([s.scale]) {
+                k.number(v);
+            }
+        }
+    }
+
+    /// #2039: what this draws of its cell at `[x, y, w, h]`: all of it, or its one part.
+    pub fn cut_of(&self, [x, y, w, h]: [f64; 4]) -> [f64; 4] {
+        match self.cut {
+            Some(Cut::Part([px, py, pw, ph])) => [x + px, y + py, pw, ph],
+            _ => [x, y, w, h],
+        }
     }
 }
 
@@ -361,6 +511,71 @@ pub struct Tile {
     pub flip: u8,
     pub angle: f64,
     pub scale: f64,
+    /// #2039: a sliced row's box, `[w, h]`.
+    pub size: Option<[f64; 2]>,
+}
+
+impl Slice {
+    /// `params`' `slice`, with its `fill` and `center`, on a set whose atlas cell is `cell` px;
+    /// `None` without one. Refused: on a set whose rows aren't free, a side that isn't a whole
+    /// number of px, and sides that leave no texel between them.
+    fn read(
+        params: &Map<String, Value>,
+        cell: [f64; 2],
+        path: &str,
+    ) -> Result<Option<Slice>, Refused> {
+        let Some(slice) = params.get("slice") else {
+            return Ok(None);
+        };
+        if params.get("place").and_then(Value::as_str) != Some("free") {
+            return Err(refused("bad_doc", format!("{path}/slice")));
+        }
+        let mut sides = [0.0; 4];
+        for (side, name) in sides.iter_mut().zip(["left", "top", "right", "bottom"]) {
+            *side = match num(slice.get(name)) {
+                Some(px) if px >= 0.0 && px.fract() == 0.0 => px,
+                Some(_) => return Err(refused("out_of_range", format!("{path}/slice/{name}"))),
+                None => return Err(refused("bad_doc", format!("{path}/slice/{name}"))),
+            };
+        }
+        if sides[0] + sides[2] >= cell[0] || sides[1] + sides[3] >= cell[1] {
+            return Err(refused("out_of_range", format!("{path}/slice")));
+        }
+        let fill = match params.get("fill") {
+            None | Some(Value::Null) => SliceFill::Stretch,
+            Some(Value::String(f)) if f == "stretch" => SliceFill::Stretch,
+            Some(Value::String(f)) if f == "tile" => SliceFill::Tile,
+            Some(Value::String(f)) if f == "tile_fit" => SliceFill::TileFit,
+            Some(_) => return Err(refused("bad_doc", format!("{path}/fill"))),
+        };
+        let center = match params.get("center") {
+            None | Some(Value::Null) => true,
+            Some(Value::Bool(center)) => *center,
+            Some(_) => return Err(refused("bad_doc", format!("{path}/center"))),
+        };
+        Ok(Some(Slice {
+            sides,
+            fill,
+            center,
+            scale: 1.0,
+        }))
+    }
+
+    /// The smallest box a row at `scale` fills: its corners side by side, `[w, h]`.
+    pub fn least(&self, scale: f64) -> [f64; 2] {
+        let [l, t, r, b] = self.sides;
+        [(l + r) * scale, (t + b) * scale]
+    }
+}
+
+/// #2039: the frame's refusal of a sliced row smaller than its corners, as the check says it: the
+/// row named, and the smallest size in its message. `None` for any other refusal.
+pub(crate) fn short_row(id: &str, r: &Refused) -> Option<Issue> {
+    let (path, said) = r.path.split_once(": ")?;
+    let (row, _) = said.rsplit_once(" is ")?;
+    let ours = path.starts_with(&format!("items/{id}/params/columns/"))
+        && row.starts_with(&format!("{id}#"));
+    ours.then(|| Issue::error(r.code, row, path.to_string(), json!(row), said))
 }
 
 fn whole(c: Option<&Column>, i: usize, default: f64, max: f64, path: &str) -> Result<f64, Refused> {
@@ -404,6 +619,8 @@ pub fn tiles(
     }
     let column = |name: &str| rows.columns.get(name);
     let col = |name: &str| format!("{path}/columns/{name}");
+    // #2039: a sliced row takes its box from `w` and `h`.
+    let sliced = params.contains_key("slice");
     let mut out = Vec::new();
     for (i, key) in rows.keys.iter().enumerate() {
         // #539: a row at opacity 0 (its common `opacity` column, as a fog array writes it)
@@ -454,6 +671,10 @@ pub fn tiles(
             flip: whole(column("flip"), i, 0.0, 7.0, &col("flip"))? as u8,
             angle: or("angle", 0.0)?,
             scale,
+            size: match sliced {
+                true => Some([at("w", false)?, at("h", false)?]),
+                false => None,
+            },
         });
     }
     if planted != Planted::AtlasRowOrder {
@@ -517,10 +738,29 @@ pub fn marks(
     );
     // A free row isn't a grid cell, and hits its quad, turned as it is.
     let free = params.get("place").and_then(Value::as_str) == Some("free");
-    Ok(tiles(id, params, rows, planted)?
+    // #2039: a sliced row fills its own box, which holds at least its corners side by side.
+    let slice = Slice::read(params, cell, &format!("items/{id}/params"))?;
+    let tiles = tiles(id, params, rows, planted)?;
+    for t in &tiles {
+        let (Some(size), Some(slice)) = (t.size, slice) else {
+            break;
+        };
+        let least = slice.least(t.scale);
+        for (k, (name, long)) in [("w", "wide"), ("h", "tall")].into_iter().enumerate() {
+            if size[k] < least[k] {
+                let row = format!("{id}#{} is {} u {long}", t.key, size[k]);
+                let said = format!("{row}, and its corners take {} u", least[k]);
+                return Err(refused(
+                    "out_of_range",
+                    format!("items/{id}/params/columns/{name}: {said}"),
+                ));
+            }
+        }
+    }
+    Ok(tiles
         .into_iter()
         .map(|t| {
-            let size = [draw[0] * t.scale, draw[1] * t.scale];
+            let size = t.size.unwrap_or([draw[0] * t.scale, draw[1] * t.scale]);
             let on = [pos[0] + t.centre[0], pos[1] + t.centre[1]];
             let quad = [on[0] - anchor[0] * size[0], on[1] - anchor[1] * size[1]];
             // The quad turns about the point its anchor sits on.
@@ -558,6 +798,12 @@ pub fn marks(
                 separation,
                 flip: t.flip,
                 hit,
+                cut: slice.map(|s| {
+                    Cut::Nine(Slice {
+                        scale: t.scale,
+                        ..s
+                    })
+                }),
             }),
             grid: None,
         })
@@ -976,5 +1222,183 @@ mod tests {
                 "{params:?}"
             );
         }
+    }
+
+    /// One part as it draws: its px of the cell, one copy's rect, the rect it covers and the axes
+    /// it repeats along.
+    type Drawn = ([f64; 4], [f64; 4], [f64; 4], [bool; 2]);
+
+    /// #2039: what a row of a 20 × 30 px cell cut 2, 4, 6 and 8 px from its left, top, right and
+    /// bottom draws in `bounds`, part by part, line by line.
+    fn cut(flip: u8, fill: SliceFill, center: bool, scale: f64, bounds: [f64; 4]) -> Vec<Drawn> {
+        let slice = Slice {
+            sides: [2.0, 4.0, 6.0, 8.0],
+            fill,
+            center,
+            scale,
+        };
+        let cell = AtlasCell {
+            index: 0,
+            cell: [20.0, 30.0],
+            margin: [0.0; 2],
+            separation: [0.0; 2],
+            flip,
+            hit: None,
+            cut: Some(Cut::Nine(slice)),
+        };
+        parts(Some(&cell), bounds)
+            .map(|p| match p.cell.and_then(|c| c.cut) {
+                Some(Cut::Part(px)) => (px, p.to, p.over, p.repeat),
+                _ => unreachable!("a part"),
+            })
+            .collect()
+    }
+
+    /// #2039: a sliced row's corners draw at their own size times its scale, each edge runs along
+    /// one axis and the centre fills the rest: stretched; tiled at the tile's own size from the
+    /// run's start, the last one cut at its end; or tiled a whole number of times, at least once.
+    /// A flipped row's sides turn with its cell.
+    #[test]
+    fn a_sliced_row_draws_its_cell_in_nine_parts() {
+        let (stretch, tile, fit) = (SliceFill::Stretch, SliceFill::Tile, SliceFill::TileFit);
+        let b = [10.0, 20.0, 100.0, 60.0];
+        let once = |px: [f64; 4], at: [f64; 4]| (px, at, at, [false; 2]);
+        let nine = cut(0, stretch, true, 1.0, b);
+        assert_eq!(nine.len(), 9);
+        assert_eq!(nine[0], once([0.0, 0.0, 2.0, 4.0], [10.0, 20.0, 2.0, 4.0]));
+        assert_eq!(
+            nine[1],
+            once([2.0, 0.0, 12.0, 4.0], [12.0, 20.0, 92.0, 4.0])
+        );
+        assert_eq!(
+            nine[4],
+            once([2.0, 4.0, 12.0, 18.0], [12.0, 24.0, 92.0, 48.0])
+        );
+        assert_eq!(
+            nine[8],
+            once([14.0, 22.0, 6.0, 8.0], [104.0, 72.0, 6.0, 8.0])
+        );
+        assert_eq!(cut(0, stretch, false, 1.0, b).len(), 8);
+        // At scale 2 a corner is 4 × 8 u, and a tile of the top edge's 12 px is 24 u: three and
+        // a half across the 84 u between the corners.
+        let tiled = cut(0, tile, true, 2.0, b);
+        assert_eq!(tiled[0], once([0.0, 0.0, 2.0, 4.0], [10.0, 20.0, 4.0, 8.0]));
+        let (top, left) = ([14.0, 20.0, 84.0, 8.0], [10.0, 28.0, 4.0, 36.0]);
+        assert_eq!(
+            tiled[1],
+            (
+                [2.0, 0.0, 12.0, 4.0],
+                [14.0, 20.0, 24.0, 8.0],
+                top,
+                [true, false]
+            )
+        );
+        assert_eq!(tiled[3], ([0.0, 4.0, 2.0, 18.0], left, left, [false, true]));
+        assert_eq!(tiled[4].1, [14.0, 28.0, 24.0, 36.0]);
+        assert_eq!(tiled[4].3, [true, true]);
+        // Fitted, the 90 u between the corners of a row 106 u wide hold four tiles of 22.5 u,
+        // and the 2 u of a row 18 u wide hold one.
+        let fitted = cut(0, fit, true, 2.0, [10.0, 20.0, 106.0, 60.0]);
+        assert_eq!(
+            (fitted[1].1, fitted[1].2),
+            ([14.0, 20.0, 22.5, 8.0], [14.0, 20.0, 90.0, 8.0])
+        );
+        let least = cut(0, fit, true, 2.0, [10.0, 20.0, 18.0, 60.0]);
+        assert_eq!(
+            (least[1].1, least[1].3),
+            ([14.0, 20.0, 2.0, 8.0], [true, false])
+        );
+        // Turned a quarter and flipped across, the cell's bottom left corner draws top left, 8
+        // u wide and 2 u tall, and its left edge runs along the top.
+        let flipped = cut(5, stretch, true, 1.0, b);
+        assert_eq!(
+            flipped[0],
+            once([0.0, 22.0, 2.0, 8.0], [10.0, 20.0, 8.0, 2.0])
+        );
+        assert_eq!(
+            flipped[1],
+            once([0.0, 4.0, 2.0, 18.0], [18.0, 20.0, 88.0, 2.0])
+        );
+    }
+
+    /// #2039: `slice` is refused on a set whose rows sit on cells, without `w` or `h`, and with
+    /// sides that leave no texel between them; a row smaller than its corners is refused naming
+    /// the row and the smallest size, and one of exactly that size is taken.
+    #[test]
+    fn a_slice_that_cant_draw_is_refused_naming_it() {
+        let refusal = |place: &str, sides: [u8; 4], columns: &[(&str, f64)]| {
+            let [left, top, right, bottom] = sides;
+            let params = json!({"mark": "image", "place": place, "grid": {"cell": [24, 24]},
+                "slice": {"left": left, "top": top, "right": right, "bottom": bottom},
+                "atlas": {"asset": "a".repeat(64), "cell": [24, 24]}});
+            let rows = Rows {
+                keys: vec!["k".into()],
+                columns: (columns.iter())
+                    .map(|(k, v)| (k.to_string(), Column::Numbers(vec![*v])))
+                    .collect(),
+                ..Rows::default()
+            };
+            let params = params.as_object().expect("an object");
+            marks("s", params, &rows, [0.0, 0.0], Planted::None)
+                .err()
+                .map(|r| (r.code, r.path))
+        };
+        let named = |code: &'static str, path: &str| Some((code, path.to_string()));
+        let free = [("x", 50.0), ("y", 50.0), ("w", 16.0), ("h", 40.0)];
+        assert_eq!(refusal("free", [8; 4], &free), None);
+        let on_cells = [("cx", 0.0), ("cy", 0.0), ("w", 16.0), ("h", 40.0)];
+        assert_eq!(
+            refusal("cell", [8; 4], &on_cells),
+            named("bad_doc", "items/s/params/slice")
+        );
+        assert_eq!(
+            refusal("free", [8; 4], &free[..3]),
+            named("bad_column", "items/s/params/columns/h")
+        );
+        assert_eq!(
+            refusal("free", [12, 8, 12, 8], &free),
+            named("out_of_range", "items/s/params/slice")
+        );
+        let short = [("x", 50.0), ("y", 50.0), ("w", 16.0), ("h", 15.0)];
+        let said = "items/s/params/columns/h: s#k is 15 u tall, and its corners take 16 u";
+        assert_eq!(refusal("free", [8; 4], &short), named("out_of_range", said));
+        // At check the row is the issue's ID, and its message holds the smallest size.
+        let frame = |path: &str| Refused {
+            code: "out_of_range",
+            path: path.into(),
+        };
+        let issue = short_row("s", &frame(said)).expect("a short row");
+        assert_eq!(
+            (issue.ids, issue.path.as_str(), issue.what.as_str()),
+            (
+                vec!["s#k".to_string()],
+                "items/s/params/columns/h",
+                "s#k is 15 u tall, and its corners take 16 u"
+            )
+        );
+        assert!(short_row("s", &frame("items/s/params/slice")).is_none());
+    }
+
+    /// #2039: a row's content key holds its slice, so a set whose `fill` alone changes is drawn
+    /// again.
+    #[test]
+    fn a_rows_key_holds_its_slice() {
+        let key = |fill: &str| {
+            let params = json!({"mark": "image", "place": "free", "grid": {"cell": [24, 24]},
+                "slice": {"left": 8, "top": 8, "right": 8, "bottom": 8}, "fill": fill,
+                "atlas": {"asset": "a".repeat(64), "cell": [24, 24]}});
+            let rows = Rows {
+                keys: vec!["k".into()],
+                columns: [("x", 50.0), ("y", 50.0), ("w", 40.0), ("h", 40.0)]
+                    .into_iter()
+                    .map(|(k, v)| (k.to_string(), Column::Numbers(vec![v])))
+                    .collect(),
+                ..Rows::default()
+            };
+            let params = params.as_object().expect("an object");
+            marks("s", params, &rows, [0.0, 0.0], Planted::None).expect("drawn")[0].key(0)
+        };
+        assert_eq!(key("tile"), key("tile"));
+        assert_ne!(key("tile"), key("stretch"));
     }
 }

@@ -108,6 +108,8 @@ export type Plant =
   // counting every accepted taste call as seen, or giving a run's whole median for both its halves.
   | 'unseen-reads-as-card' | 'folds-seen-unseen' | 'one-median-per-run'
   | 'bundle-raw-logs' | 'doctor-hides-token' | 'doctor-not-checked-first' | 'doctor-takes-any-flag' | 'stop-hold-wide-margin'
+  // #3548's: a hub that starts a new log file at each start and keeps the old ones.
+  | 'log-new-file-each-start'
   | 'answer-skips-held-stop' | 'stop-hold-releases-without-answer' | 'both-routes' | 'stop-hold-polls' | 'no-stop-count' | 'stop-count-never-resets'
   | 'waiter-never-wakes' | 'waiter-outlives-session' | 'waiter-gives-up-at-600s' | 'waiter-per-stop' | 'waiter-under-stop-only' | 'waiter-polls' | 'waiter-checks-every-5s'
   | 'delivered-on-waiter-exit' | 'wake-assumed' | 'delivered-to-dead-waiter' | 'routes-from-settings' | 'routes-kept-across-sessions'
@@ -192,6 +194,8 @@ export type Plant =
   | 'whose-running-sessions-only'
   // #2648's: a hub that reads gates.json, notices.json and the agents' settings once, at its start.
   | 'reads-files-at-start-only'
+  // #1853's: an extension host that publishes a method with no case, which the walk through a running hub names.
+  | 'unwired-method'
   // #824's per-session reading: deep mcp loading the whole hub package, a waiter keeping its session's transcript, and
   // a platform that reads no process's memory.
   | 'mcp-loads-hub' | 'waiter-keeps-transcript' | 'sessions-no-memory-read'
@@ -363,8 +367,10 @@ export type Plant =
   | 'reads-every-row' | 'page-hook-frame-per-event' | 'query-per-row'
   // #2060's: a key with no reading of the programs its check's command names, one that holds the run's own link to each,
   // one whose base run's holds none, and a reader that skips a program it can't find.
-  | 'key-leaves-out-programs' | 'key-holds-program-link' | 'program-readings-head-only' | 'skips-absent-program';
+  | 'key-leaves-out-programs' | 'key-holds-program-link' | 'program-readings-head-only' | 'skips-absent-program'
+  | 'loop-holds-receiver-alone' | 'names-other-session-for-unreported-address' | 'channel-without-count';
 const PLANTS: readonly string[] = [
+  'loop-holds-receiver-alone', 'names-other-session-for-unreported-address', 'channel-without-count',
   'asks-every-registry-run',
   'statusline-user-settings-only', 'window-unknown-as-zero', 'window-carried-from-other-repo', 'sends-block-whole',
   'doctor-sums-per-file', 'doctor-counts-lines-only',
@@ -390,6 +396,7 @@ const PLANTS: readonly string[] = [
   'hooks-order-ours-first', 'log-raw-command',
   'matches-text', 'fail-closed-only-rules', 'installs-unchecked', 'trusts-hints', 'warn-as-block', 'unknown-as-block',
   'bundle-raw-logs', 'doctor-hides-token', 'doctor-not-checked-first', 'doctor-takes-any-flag', 'stop-hold-wide-margin',
+  'log-new-file-each-start',
   'answer-skips-held-stop', 'stop-hold-releases-without-answer', 'both-routes', 'stop-hold-polls', 'no-stop-count', 'stop-count-never-resets',
   'waiter-never-wakes', 'waiter-outlives-session', 'waiter-gives-up-at-600s', 'waiter-per-stop', 'waiter-under-stop-only', 'waiter-polls', 'waiter-checks-every-5s',
   'delivered-on-waiter-exit', 'wake-assumed', 'delivered-to-dead-waiter', 'routes-from-settings', 'routes-kept-across-sessions',
@@ -424,6 +431,7 @@ const PLANTS: readonly string[] = [
   'failures-never-cleared',
   'whose-running-sessions-only',
   'reads-files-at-start-only',
+  'unwired-method',
   'mcp-loads-hub', 'waiter-keeps-transcript', 'sessions-no-memory-read',
   'repeat-reaches-you',
   'deep-wait-polls', 'stop-answers-waiting',

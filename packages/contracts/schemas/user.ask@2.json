@@ -85,16 +85,29 @@
             "scheduled",
             "subagent",
             "session",
+            "channel",
             "continuation",
             "app",
             "unknown"
           ],
-          "description": "Where the prompt came from; app is your words DeepBuild delivered from the app, matched by request; unknown is one the adapter cannot place, and opens no ask.",
+          "description": "Where the prompt came from; app is your words DeepBuild delivered from the app, matched by request; channel is a channel's event, which a server pushed into the session (a minor of user.ask@2, #3405); unknown is one the adapter cannot place, and opens no ask.",
           "x-closure": {
             "closed": "the values come from agents and tools that add new ones; a reader at an earlier minor reads a value it does not know as unknown",
             "reopens": "a minor that adds a member; a reader at the earlier minor takes it for unknown",
             "mark": "extensible"
           }
+        },
+        "sender": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "For from: session, the session whose message started the prompt: the live session that reported the inbox address the prompt's transcript entry names, never read from the message's text. Absent when no live session reported it, as for a sender on another machine or one with no hook of ours (a minor of user.ask@2, #3405)."
+        },
+        "server": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "For from: channel, the channel's server, as the prompt's transcript entry names it (a minor of user.ask@2, #3405)."
         },
         "request": {
           "type": "string",
