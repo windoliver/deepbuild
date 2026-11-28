@@ -1,0 +1,77 @@
+{
+  "inputs": {
+    "counties.csv": "8b1181cb1ba1e7d6614d576739335e0c675688334464a043cc73c8c7b202e3f8",
+    "metros.csv": "65e3d5d869f7c1f7c69673793c66a4fcc12849465d99b440052dbee932e5551d",
+    "counties-changed.csv": "8fe32e4b328b6bf214534c5c7c6738e633f308bd85bc84b40d4f369557868507"
+  },
+  "first": {
+    "outputs": {
+      "table": "3708e196e44986f5366fbbff264a1cdac29e8ce5edcb4deccaa6b15dc4fe160b",
+      "lineage": "2ea8179b8c0b51b589bdb4449204e8d90dff166eb5823d68d0a6b68c4632908e",
+      "receipt": "33e45da4dd3818b5b249d972a9cfe8a5521604ce59fe106e9ab0e6476af45650",
+      "record": "5af6819146326126c61d5229173d6f30e3c58274ea036472c67d6079665ee323"
+    },
+    "key": "a54327295a36545954b35dc61a78c3751ddbad03d930b149152dc916f13228f3",
+    "receipt": {
+      "kind": "table.derive",
+      "tool": "table-derive@1.0.0",
+      "key": "a54327295a36545954b35dc61a78c3751ddbad03d930b149152dc916f13228f3",
+      "build": "d1:bb1110963db3ecba683429e679661a420620f02ef81d1fc2c75ebaf6f6ee2e04",
+      "cache": "miss",
+      "inputs": {
+        "county": "8b1181cb1ba1e7d6614d576739335e0c675688334464a043cc73c8c7b202e3f8",
+        "metro": "65e3d5d869f7c1f7c69673793c66a4fcc12849465d99b440052dbee932e5551d",
+        "#tables": "5d6852e2c328fb55beadd37e09520d5c3c5920e6176b2b978b1434abba061a47"
+      },
+      "used": {
+        "memory_peak_mb": null,
+        "cpu_s": null
+      }
+    }
+  },
+  "second": {
+    "outputs": {
+      "table": "3708e196e44986f5366fbbff264a1cdac29e8ce5edcb4deccaa6b15dc4fe160b",
+      "lineage": "2ea8179b8c0b51b589bdb4449204e8d90dff166eb5823d68d0a6b68c4632908e",
+      "receipt": "33e45da4dd3818b5b249d972a9cfe8a5521604ce59fe106e9ab0e6476af45650",
+      "record": "5af6819146326126c61d5229173d6f30e3c58274ea036472c67d6079665ee323"
+    },
+    "receipt": {
+      "kind": "table.derive",
+      "tool": "table-derive@1.0.0",
+      "key": "a54327295a36545954b35dc61a78c3751ddbad03d930b149152dc916f13228f3",
+      "build": "d1:bb1110963db3ecba683429e679661a420620f02ef81d1fc2c75ebaf6f6ee2e04",
+      "cache": "miss",
+      "inputs": {
+        "county": "8b1181cb1ba1e7d6614d576739335e0c675688334464a043cc73c8c7b202e3f8",
+        "metro": "65e3d5d869f7c1f7c69673793c66a4fcc12849465d99b440052dbee932e5551d",
+        "#tables": "5d6852e2c328fb55beadd37e09520d5c3c5920e6176b2b978b1434abba061a47"
+      },
+      "used": {
+        "memory_peak_mb": 0,
+        "cpu_s": 0.032
+      }
+    }
+  },
+  "changed": {
+    "outputs": {
+      "table": "90c6ceff220914155a77c733073132afd0d3d851e6b981572966d91dd408dcbf",
+      "lineage": "6fe751e6671d384662657400afd3e15551bf18e6f6aab6ce6a38f74930cc0d7b",
+      "receipt": "33e45da4dd3818b5b249d972a9cfe8a5521604ce59fe106e9ab0e6476af45650",
+      "record": "9d4176a5810d668a882c3a19375bb080096c39ce27004ad23429fca2279b2eab"
+    },
+    "key": "508e658f9c0882e5238f8293f88c81d7dba687f3533ff23da1088861a22a87de"
+  },
+  "rerun": {
+    "kind": "table.derive",
+    "tool": "table-derive@1.0.0",
+    "key": "a54327295a36545954b35dc61a78c3751ddbad03d930b149152dc916f13228f3",
+    "build": "d1:bb1110963db3ecba683429e679661a420620f02ef81d1fc2c75ebaf6f6ee2e04",
+    "cache": "hit",
+    "inputs": {
+      "county": "8b1181cb1ba1e7d6614d576739335e0c675688334464a043cc73c8c7b202e3f8",
+      "metro": "65e3d5d869f7c1f7c69673793c66a4fcc12849465d99b440052dbee932e5551d",
+      "#tables": "5d6852e2c328fb55beadd37e09520d5c3c5920e6176b2b978b1434abba061a47"
+    }
+  }
+}

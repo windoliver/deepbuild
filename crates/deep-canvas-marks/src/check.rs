@@ -129,9 +129,6 @@ fn adjust_issue(
     None
 }
 
-/// Whether a table's source is an agent's word: a table an agent wrote, or one a job wrote from a
-/// file the hub fetched none of (#3570: `job {kind, tool, input}`, each input `origin: agent` where
-/// no fetch of the hub's brought it).
 fn agents_word(origin: &Value) -> bool {
     if origin == "agent" {
         return true;
@@ -164,7 +161,10 @@ pub fn numbers(doc: &Map<String, Value>) -> (Vec<Value>, Vec<Issue>) {
                 Some(row) => format!("{id}#{row}"),
                 None => id.clone(),
             };
-            if binds && agents_word(&n["source"]["origin"]) && !named.contains(&name) {
+            if binds
+                && (agents_word(&n["source"]["origin"]) || n["source"]["weakest"] == "agent")
+                && !named.contains(&name)
+            {
                 issues.push(Issue::error(
                     "number_unsourced",
                     &name,

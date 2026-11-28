@@ -1,0 +1,76 @@
+# Base run of tests/acceptance/1896 at d303e2b649c275e6ae96e71ad28648bc5681536f (nothing of #1896 implemented), 2026-11-27T05:24Z, Node v24.22.0, macOS 27.2.1 (arm64), load { 34.81 32.80 38.05 }
+# node node_modules/vitest/vitest.mjs run tests/acceptance/1896 --reporter=verbose (after npm ci && npm run build --workspaces)
+
+ RUN  v5.0.5 <repo>
+
+ × tests/acceptance/1896/one-mapping.test.ts > #1896.ab6a2c22 packages/proof/src holds exactly one mapping from a runner's name, and a planted second switch makes two 231ms
+   → the places in packages/proof/src that map from a runner's name: packages/proof/src/check.ts:10 comparison, packages/proof/src/check.ts:11 comparison, packages/proof/src/index.ts:47 comparison, packages/proof/src/kit.ts:43 comparison, packages/proof/src/kit.ts:45 comparison, packages/proof/src/kit.ts:47 comparison, packages/proof/src/run.ts:100 comparison: expected { mappingsFromRunnerName: 7, …(1) } to deeply equal { mappingsFromRunnerName: 1, …(1) }
+ × tests/acceptance/1896/added-kind.test.ts > #1896.6e954ac7 a fifth work kind added to checks-work alone is offered by the hub, on the route its other work kinds have 745ms
+   → added at packages/checks-work/src/index.ts:20, packages/checks-work/src/kit.ts:97; the hub offers command, review, numbers, service, data, document, message: expected { addedToChecksWorkAlone: true, …(4) } to deeply equal { addedToChecksWorkAlone: true, …(4) }
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1896/added-kind.test.ts > #1896.6e954ac7 a fifth work kind added to checks-work alone is offered by the hub, on the route its other work kinds have
+AssertionError: added at packages/checks-work/src/index.ts:20, packages/checks-work/src/kit.ts:97; the hub offers command, review, numbers, service, data, document, message: expected { addedToChecksWorkAlone: true, …(4) } to deeply equal { addedToChecksWorkAlone: true, …(4) }
+
+- Expected
++ Received
+
+  {
+-   "aDefinitionMayNameParcel": true,
++   "aDefinitionMayNameParcel": false,
+    "addedToChecksWorkAlone": true,
+    "checksWorkRegisters": [
+      "data",
+      "document",
+      "message",
+      "parcel",
+      "service",
+    ],
+-   "parcelIsRouted": "as message is",
+-   "workKindsTheHubLacks": [],
++   "parcelIsRouted": "not offered",
++   "workKindsTheHubLacks": [
++     "parcel",
++   ],
+  }
+
+ ❯ tests/acceptance/1896/added-kind.test.ts:112:127
+    110|     aDefinitionMayNameParcel: named?.kind === ADDED,
+    111|   };
+    112|   expect(summary, `added at ${copy.added.join(', ') || 'no place'}; th…
+       |                                                                                                                               ^
+    113|     addedToChecksWorkAlone: true,
+    114|     checksWorkRegisters: [...FOUR, ADDED].sort(),
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/1896/one-mapping.test.ts > #1896.ab6a2c22 packages/proof/src holds exactly one mapping from a runner's name, and a planted second switch makes two
+AssertionError: the places in packages/proof/src that map from a runner's name: packages/proof/src/check.ts:10 comparison, packages/proof/src/check.ts:11 comparison, packages/proof/src/index.ts:47 comparison, packages/proof/src/kit.ts:43 comparison, packages/proof/src/kit.ts:45 comparison, packages/proof/src/kit.ts:47 comparison, packages/proof/src/run.ts:100 comparison: expected { mappingsFromRunnerName: 7, …(1) } to deeply equal { mappingsFromRunnerName: 1, …(1) }
+
+- Expected
++ Received
+
+  {
+-   "mappingsFromRunnerName": 1,
+-   "withAPlantedSecondSwitch": 2,
++   "mappingsFromRunnerName": 7,
++   "withAPlantedSecondSwitch": 8,
+  }
+
+ ❯ tests/acceptance/1896/one-mapping.test.ts:89:115
+     87|   const planted = mappings('packages/proof/src/planted-1896.ts', PLANT…
+     88|   const summary = { mappingsFromRunnerName: held.length, withAPlantedS…
+     89|   expect(summary, `the places in packages/proof/src that map from a ru…
+       |                                                                                                                   ^
+     90| }, 30_000);
+     91|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  2 failed (2)
+   Start at  21:24:24
+   Duration  1.68s (tests 53%, import 35%, transform 11%, setup 1%)
+

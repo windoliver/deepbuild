@@ -15,6 +15,7 @@ use crate::hub::EvalTime;
 use crate::hub::Hub;
 
 pub(crate) mod attributes;
+pub(crate) mod relations;
 pub(crate) mod shape;
 
 /// `geometry`: which items, at what time, which stage, and whether to count only.
