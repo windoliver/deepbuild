@@ -3,6 +3,7 @@
 // them here, so both say the same.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { say } from './row-sentences.js';
 
 type Query = (sql: string) => Promise<unknown[]>;
 
@@ -24,10 +25,10 @@ const ORDER: readonly WatchCause[] = ['off', 'version', 'hooks', 'checks'];
  */
 export function watchWords(w: Watch, agent: string | null): { why: string; short: string; fix: string } {
   switch (w.cause) {
-    case 'off': return { why: '`deep off` turned holds off: no stop is held and no verdict blocks', short: 'deep off', fix: 'Run `deep on`.' };
-    case 'version': return { why: `it runs ${agent ?? 'its agent'}${w.version ? ` ${w.version}` : ''}, not a version its facts cover`, short: `${w.version ?? 'its version'} not in its facts`, fix: 'Install a version the facts cover, or update DeepBuild.' };
-    case 'hooks': return { why: "its hooks don't reach DeepBuild", short: "hooks don't reach DeepBuild", fix: 'Run `deep setup`, which writes them back beside yours.' };
-    case 'checks': return { why: "this repo's checks aren't approved, so none of its claims holds or passes", short: 'checks not approved', fix: 'Trust the repo in Needs you, or in Claude Code or Codex.' };
+    case 'off': return { why: say('watch_off'), short: 'deep off', fix: say('watch_off_fix') };
+    case 'version': return { why: agent === null ? (w.version ? say('watch_version_unnamed_at', w.version) : say('watch_version_unnamed')) : say('watch_version', w.version ? `${agent} ${w.version}` : agent), short: `${w.version ?? 'its version'} not in its facts`, fix: say('watch_version_fix') };
+    case 'hooks': return { why: say('watch_hooks'), short: "hooks don't reach DeepBuild", fix: say('hook_entries_missing_fix') };
+    case 'checks': return { why: say('watch_checks'), short: 'checks not approved', fix: say('watch_checks_fix') };
   }
 }
 

@@ -1,0 +1,69 @@
+{
+ "criterion": "#3472.822bbdc5",
+ "who": "the owner, by leaving the call to the coding agent that drafted the text: shown the text, the six sentences and what went beyond the issue's drafted answers, the owner answered in session on November 25, 2026 to do whatever it recommends",
+ "when": "2026-11-25T13:46:37Z",
+ "call": "reads_right",
+ "text": [
+  {
+   "file": "docs/technical-design.md",
+   "anchor": "states-people-see",
+   "sha256": [
+    "573753eec954788511850baced0b577f271b220184d28bcd82bd5f465eeb9367",
+    "b4b1c12009805ada5e922d4aa5a957182b44b8fcbf53234eac0cbe57c6d86863",
+    "57e377c077b6e260a20b17f2f8f62dce8f1aca4b721961a796ec387ad480f2a3",
+    "6f760fd20bb61a52c662850226ea7d7d849021faa79b9295eb574c195252969f",
+    "e1ecdf1b247b74c81d46794cabc94f4916385f23987c1d27ab08c7b4b9ada4de",
+    "081b5577b960a16f9958eeb475ed535337e380d7b54972ad8c44ad71e75fffd7",
+    "acd43298dc1e31dfe81eac44f4268802f355ed16459c6ec2b23f7a4bb0e86f94",
+    "4bb4cc34a4c3c4b4823f25a7f9633cfe487116292b16399b4add073f1618a720",
+    "15b4fd159fe41b811a8d8184306315b712f28ef5477947517a7841ee0808d13c",
+    "cbe568f714242be456f90d2c297ecaff48e0fc7a7f2e02e8ac40e8b76548fe9e",
+    "625eee198602306700baf23e43ba6fa843c3e1625fdc9ad3460bc87d5aaf484f",
+    "ae099ba838ddf23c57b65b3597087e53a9430465800ee26626e9f3fe451e2ddd",
+    "ebead3bdf5d380e1b88b919a38d1495606aab3b0d0b89e821a3dce7c388622e2",
+    "cc1f13d89f855e1c9876b4e966f15e14f5f5f8119df91cf7d4fca4d72df748c5",
+    "a254b4349a6b285a7bd6cb1c1d1a9cace33ac17a280b67a6d8fb0a4a46f599a1",
+    "f459bfbed1ddafe9fbc359cf6976a69ddc17c729e0f28b052c50b44361ab6f35",
+    "25b4f46439337fae4d5ac1ae76199de336663ca89faf3962423596e7873f7e11",
+    "815e04160c9f72fcd4e68b43532cdb1277b3ab8dfc21ef0a6054efd6300256bc",
+    "99f43d227ccabb6b7b4f515b3fe948f35f8c019f830445783b0172483da41299",
+    "df1cfe2164193287fee597fc7ac32122c4e4e7ddbe1a99fb8c770ec46195a080",
+    "0e71457c87d8f3d57eac6fef1a217c4fe0fa2433b95b46371a1713b237608d3e",
+    "46df7555e9fe301c5f1eb0fa02c7c4e21bdcb25a4d74c2b927c47bdb7decddba",
+    "fb191a62396f1e3b36d66bc29244190f122aa35a9c04eb90849c3a32a1b34a99",
+    "feb3dac8a9efadde1a2765f9aeddb15982a260a695c07dec85e8d78bb5c00658",
+    "6366b32a53f9558588a6ff0918f5c19eb6c4358d06bd552a04aa10e794ddeb1c",
+    "02d2eba0448191467fac66b22d218d0b2cdf77268fce8abf4060fcecfb6fbbf9",
+    "de74e3e19f9702cf8be2a2f738fc38ca5b17beb2ad4e7cda2888fe0781ee068f",
+    "62726d86236a62b3189f73d25748f78de9cb874e7504f48dd13b2953a617da9c",
+    "d5c7322ac29359d39db4f881881f16005d72c2b09a48f0986239f3ee415a057e",
+    "3a2860ece5a4ee0b48b41ee96dd8054cf9bc6f113249ec601478b2582d72ead4",
+    "ec6c06a72bc405dc71425f04dd45da5ff7d918e1c37e2d3804bb81dd8778fd87",
+    "4e110899933d30218344c578731ece853db8692209a3ad5c0caf6111549d5e7b",
+    "cbceecee3c7a0d6f7c815adfc769ffe1f146561056deeef7585988a2fcc0c965",
+    "9e41de5f465eb5df972d049df637235e361775bf77d4998f0c8120e49697f67b",
+    "d6bae37d07b9d279a29d47895790e0d8912d31beadb8e95c822c6539730fba81",
+    "a84ccaacf31889cef828afb9008d6bd75f891455b1c0cb64ef47c1cb98133b86",
+    "29b7380715e7a16718b4531eb8b752fea8fa3368a5e1a3d4e3cd4290c87ed56e",
+    "4addf44f25af09676064d68d850ec50fde133a9c2343974ca7071a141212f040",
+    "607c21016e29c588d7374e80b7653300185244aa9d99d39c9ab255fc5ed8692e",
+    "b66329774e3ccb2acf98e01e32c686b78cc05cffc6651a589106675b376a475f",
+    "dcee8a4ff6b6d35c6d332856ea3e94b3c173892e0bf5aa74ac05f7e6a2dc12ca",
+    "88c08bc90767049a23174c9297e09e55d33618f468328b7a5b1444123ed42f50",
+    "d620c92ae6fa3fbd88b13f9b55ffd9e23f184e9302d55787b8bb790f40819b64",
+    "c2c05e5a4396f85b5ea0c2f011937330799c4176dd44afa88a1ba32628ac0e22",
+    "4aba72b6c627be702c3399772c4961cd7f628e4e92c41c05fff7b77e2625206a",
+    "f2ac35a9e2c928dcd2c1b9c6319dc125cb3a09e0222102b875d4d97a06cbd747"
+   ]
+  },
+  {
+   "file": "docs/technical-design.md",
+   "anchor": "later-as-extensions",
+   "sha256": [
+    "53802de4432be3ffd24cc2fc02df13d9660ae068433aec0bb0ae53274ecc77f4",
+    "49ef94cd6428bc88533b6a402c9925bed87922ae2b64829439e9652d16b84556"
+   ]
+  }
+ ],
+ "note": "Made by the agent that drafted the text, on the owner's word, as #1336's and #1352's calls were made; the owner did not go through it sentence by sentence. Read whole against the issue's five Scope decisions: each is answered in one list item with its own Not taken, the six sentences are the issue's word for word and none uses a word its state's row says never to call it or a word the list of plain words replaces, and the other nine words each say why they read as they are. Beyond the issue's drafted answers, and so most open to another reading: the nine words that read as they are (flagged and queued most of all), the verdict line in the chat named as detail, the sentence's place in the list's one-line row, attempt and run kept to detail views, a thread read as its name, and both ends holding a row's sentence. The line under Later, as extensions names the same six surfaces. Anyone on the project can overrule this call on #3472; a judged sentence reworded after it is no longer covered."
+}

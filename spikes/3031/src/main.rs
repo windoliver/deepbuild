@@ -1,26 +1,3 @@
-//! Spike #3031: what a 3D frame holds and how often it draws depth, read without a change to the
-//! renderer.
-//!
-//! Usage: spike-3031 frames|overdraw --doc FILE --look FILE --frames N --fps F --out DIR
-//!                   [--lease-wait S]
-//!
-//! `frames` draws the document's frames offscreen through the scene renderer's public entry
-//! (`draw_offscreen_texture`), on a device opened as the app's is but with wgpu's API trace on,
-//! and with the Metal device's own texture and buffer calls listed. It writes, under DIR:
-//! `trace/trace.ron` (every call the frames made of the device, a buffer named
-//! `spike3031 frame <k>` marking where frame k starts), `frames.jsonl` (each frame's time, camera,
-//! the device's allocated size after it and the renderer's own draw counts), `resources.json`
-//! (what the device held after the last frame, that frame's snapshot still held, beside the
-//! device's allocated size read in the same moment) and `solids.json` (the first frame's solids).
-//!
-//! `overdraw` draws each frame in the renderer's own overdraw view (`draw_offscreen_diag`) and
-//! writes `overdraw.jsonl`: the view's own largest count and, from the buffer the view read its
-//! count target back into, how many pixels took each count.
-//!
-//! Frame k is at k ÷ F seconds of the document's clock. Both modes take the machine's GPU lease,
-//! waiting up to `--lease-wait` seconds (600), and say so when they ran without it. Prints one
-//! JSON summary; exits 0 when the run finished, 1 with `BLOCKED` and why when it could not.
-
 mod held;
 
 use std::collections::BTreeMap;
@@ -40,7 +17,6 @@ use deep_gpu::seam::{self, Startup};
 use deep_scene3d_render::{draw_offscreen_diag, draw_offscreen_texture, Diag, Planted, Renderer};
 use serde_json::{json, Value};
 
-/// Flicks a second: the unit of a document's time.
 const FLICKS: i64 = 705_600_000;
 
 struct Args {
@@ -92,8 +68,6 @@ fn args() -> Args {
     }
 }
 
-/// The machine's GPU lease (`~/.cache/deepbuild-gpu/lease`, as the kit and exports take it with
-/// no hub): `Err` names the live GPU job that still held it when the wait ended.
 struct Lease(Option<PathBuf>);
 
 impl Lease {
@@ -114,7 +88,6 @@ impl Lease {
                 std::process::Command::new("kill").args(["-0", &pid.to_string()]).status().is_ok_and(|s| s.success())
             });
             if !alive {
-                // A lease whose holder is gone was left by a killed run.
                 let _ = std::fs::remove_file(&file);
                 continue;
             }
@@ -134,7 +107,6 @@ impl Drop for Lease {
     }
 }
 
-/// How a run's summary names its lease: `file`, or who held it instead.
 fn leased(lease: &Result<Lease, String>) -> String {
     match lease {
         Ok(_) => "file".to_string(),
@@ -142,7 +114,6 @@ fn leased(lease: &Result<Lease, String>) -> String {
     }
 }
 
-/// A document played frame by frame.
 struct Play {
     frames: Frames,
     labels: Labels,
@@ -175,15 +146,12 @@ impl Play {
         i64::from(k) * FLICKS / i64::from(self.fps)
     }
 
-    /// The scene at `t`.
     fn at(&mut self, t: i64) -> Result<Scene, String> {
         let scene = self.frames.at(t, self.size, &Offsets::default(), &mut self.labels);
         let scene = scene.map_err(|r| format!("the frame at {t} is refused: {}: {}", r.code, r.path))?;
         Ok(scene.clone())
     }
 
-    /// Frame `k`'s scene as a view draws it: under a look that blurs by velocity, with the travel
-    /// between the evaluations at t − s/2 and t + s/2, paired as the shipped view pairs them.
     fn scene(&mut self, k: u32) -> Result<Scene, String> {
         let t = self.time(k);
         let blur = self.look.blur.clone().filter(|b| b.method == Method::Velocity);
@@ -200,8 +168,6 @@ impl Play {
     }
 }
 
-/// The Mac the run was on, as the reference Macs are named, with when, its power source and its
-/// load.
 fn host() -> Value {
     let read = |cmd: &str, args: &[&str]| {
         let out = std::process::Command::new(cmd).args(args).output().ok()?;
@@ -231,8 +197,6 @@ fn line(f: &mut std::fs::File, row: &Value) -> Result<(), String> {
     writeln!(f, "{row}").map_err(|e| e.to_string())
 }
 
-/// The scene's solids as the renderer names them: each one's layer, ID, feature set and what
-/// decides which depth passes draw it.
 fn solids(scene: &Scene) -> Vec<Value> {
     let mut out = Vec::new();
     for layer in &scene.layers {
@@ -248,10 +212,7 @@ fn solids(scene: &Scene) -> Vec<Value> {
     out
 }
 
-/// Has the Metal device under `device` list every texture and buffer it makes from now on; the
-/// calls it could not swap, which go unlisted.
 fn listed(device: &Device) -> Result<Vec<&'static str>, String> {
-    // SAFETY: only reads the raw device's address, to find its class.
     let hal = unsafe { device.device.as_hal::<wgpu::hal::api::Metal>() };
     let hal = hal.ok_or("the device is not Metal's, so nothing reports what it holds")?;
     let object: *const c_void = std::ptr::from_ref(&**hal.raw_device()).cast();
@@ -267,7 +228,6 @@ fn frames_mode(args: &Args) -> Result<Value, String> {
     let mut play = Play::open(args)?;
     let trace = args.out.join("trace");
     std::fs::create_dir_all(&trace).map_err(|e| format!("{}: {e}", trace.display()))?;
-    // The app's device, as `deep_gpu::device::Device::open` asks for it, with the API trace on.
     let choice = seam::pick(&Startup::default()).map_err(|r| format!("no GPU: {}", r.reason))?;
     let limits = choice.raw.limits();
     let (raw, queue) = pollster::block_on(choice.raw.request_device(&wgpu::DeviceDescriptor {
@@ -300,7 +260,6 @@ fn frames_mode(args: &Args) -> Result<Value, String> {
             let first = json!({"size": scene.size, "solids": solids(&scene)});
             line(&mut file(&args.out, "solids.json")?, &first)?;
         }
-        // The frame before lets go of its snapshot inside its own part of the trace.
         drop(held_frame.take());
         held::frame(i64::from(k));
         drop(device.device.create_buffer(&wgpu::BufferDescriptor {
@@ -327,8 +286,6 @@ fn frames_mode(args: &Args) -> Result<Value, String> {
         line(&mut rows, &row)?;
         held_frame = Some((texture, scene));
     }
-    // What the device holds for the last frame, its snapshot among it, beside the device's own
-    // total read in the same moment.
     deep_gpu::memory::drain(&device);
     let allocated = deep_gpu::memory::allocated(&device);
     let resources = held::live();
@@ -355,7 +312,6 @@ fn frames_mode(args: &Args) -> Result<Value, String> {
     }))
 }
 
-/// A half float's value.
 fn half(bits: u16) -> f32 {
     let (sign, exp, frac) = (bits >> 15, (bits >> 10) & 0x1f, bits & 0x3ff);
     let v = match exp {
@@ -377,8 +333,6 @@ fn overdraw_mode(args: &Args) -> Result<Value, String> {
     let unlisted = listed(&device)?;
     let lease = Lease::take(args.lease_wait);
     let mut renderer = Renderer::new(&device, Planted::default());
-    // The view reads its count target (a half float a pixel) back into a buffer of this many
-    // bytes: rows padded to the copy's alignment, as the renderer's read-back lays them out.
     let [w, h] = play.size.map(|v| v as usize);
     let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as usize;
     let padded = (w * 2).div_ceil(align) * align;
