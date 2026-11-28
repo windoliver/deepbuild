@@ -1,0 +1,145 @@
+The #3530 acceptance tests at the base, f0a816405340a65f86db3d17f29eb2f904f0895a (origin/main when the job started).
+
+All runs are of November 27, 2026, in <checkout>, on a MacBook Pro Mac17,10 (18 cores) shared with other sessions,
+Node v24.22.0, with CPATH and CARGO_TARGET_DIR unset, CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 and no
+DEEP_BIN_DIR. Each file was run alone, through the machine's throttle:
+
+  node scripts/throttle.mjs test --wait 10 -- node node_modules/vitest/vitest.mjs run --root tests/acceptance/3530 <file>
+
+Results, of the files as delivered:
+
+  ac1-pages.test.ts      3 tests, 2 pass, 1 fail   6.3 s   16:59, load 9 to 40
+  ac2-fixtures.test.ts   1 test,  1 pass           0.4 s   16:42, load 17 to 23 (118 s with its build of deep-logic)
+  ac3-writes.test.ts     1 test,  1 fail           1.4 s   17:01, load 14.6, on battery, thermal state fair
+  ac4-metering.test.ts   1 test,  1 fail           5.1 s   17:01, load 14.6, on battery, thermal state fair
+
+The five tests that hold new behaviour or a budget fail at an assertion of this suite's own. The three that hold what
+stays as it is pass, as they must on the merge base (section 2).
+
+
+1. The tests that fail, each at its own assertion
+--------------------------------------------------
+
+ac1-pages.test.ts (criterion 1, #3530.5321d459)
+× AC1 #3530.5321d459 a planted rewrite that skips the mark of a store whose page was marked last
+  (store_skips_page_marked_last) fails, naming the page
+  AssertionError: AC1 #3530.5321d459: deep-logic --planted store_skips_page_marked_last runs the planted rewrite and
+  answers each of the 1000 bakes; it exited 2 after 1 answer, the last {"ok":false,"code":"bad_input"}, so this binary
+  holds no such planted rewrite (#3530.5321d459): expected false to be true
+      at ac1-pages.test.ts:75:353
+
+  The merge base knows no such planted rewrite and says so. That is as near as it comes to the criterion's second
+  sentence: the planted rewrite is the work's with one fault, and the merge base has neither.
+
+ac3-writes.test.ts (criterion 3, #3530.9355f915)
+× AC3 #3530.9355f915 #3445's twin that mostly writes, as a logic item's program, costs at most twice the record's ns
+  per fuel unit in the app; the merge base's 2.5 times fails
+  AssertionError: AC3 #3530.9355f915: the twin's cost and its budget (its reading here: the twin that mostly writes,
+  as a logic item's program: 0.6216, 0.6244, 0.6229, 0.6218, 0.6212 ns per fuel unit against 0.5 (twice the record's
+  0.25), one-minute load at each run's start and end 14.6/14.6 (five times), on Mac17,10: INCONCLUSIVE (a reading, not
+  a budget result: … power (mains) is "battery", not "ac"; thermal state is "fair", not "nominal")): 4 problems
+    benchmarks/budgets.json holds no task logic-writes, so no budget window measures #3530.9355f915 (it holds 178
+      tasks; 0 name the criterion)
+    scripts/lanes.mjs doesn't list tests/acceptance/3530/ac3-writes.test.ts in timed, so it would run without a timed
+      grant
+    benchmarks/canvas-world.mjs doesn't run tests/acceptance/3530/ac3-writes.test.ts: it runs use
+      tests/acceptance/1868/canvas-cells.test.mjs or … or judge (JSON on stdin)
+    the twin is still rewritten to the merge base's bytes (SHA-256
+      fb03507b351f1177983117aee2676f4ad210bb89b5361bbdeaab84bd2a257557): the program #3445 read at 2.49 times the
+      record's ns per fuel unit, a call to the tracker after each of its 64 stores
+      at none (helpers.ts:37:144)
+      at ac3-writes.test.ts:141:3
+
+  Parts 1 and 2 of the file passed before it: the judge on planted readings, and the twin's fuel (4,790,807 a step and
+  210 for its one-iteration twin). The reading is the merge base's own, through the release deep-logic: a median of
+  0.6218 ns per fuel unit, 2.49 times the record's 0.25, the number the criterion gives for the merge base. It was
+  taken on battery, so the repo's judge reads it INCONCLUSIVE and the test fails on what holds on any machine. On a
+  reference Mac at rest the same five readings fail the judge too (FAIL: all five over 0.5 by more than the 5% margin).
+
+ac4-metering.test.ts (criterion 4, #3530.80a29246)
+× AC4 #3530.80a29246 the metering benchmark's ns per fuel unit reads within its margin of the merge base's record, in
+  the app and in headless Chrome
+  AssertionError: AC4 #3530.80a29246: the metering benchmark's reading and its budget (its readings here: the metering
+  benchmark in the app: 0.2548, 0.2617, 0.2548, 0.2553, 0.2478 ns per fuel unit against 1.5 times the record's 0.25,
+  one-minute load at each run's start and end 14.6/14.4 (five times), on Mac17,10: INCONCLUSIVE (… power (mains) is
+  "battery", not "ac"; thermal state is "fair", not "nominal") | the metering benchmark in headless Chrome: 0.2667,
+  0.2552, 0.2573, 0.2552, 0.2573 ns per fuel unit against 1.5 times the record's 0.391, …: INCONCLUSIVE (…)): 3 problems
+    benchmarks/budgets.json holds no task logic-metering, so no budget window measures #3530.80a29246 (it holds 178
+      tasks; 0 name the criterion)
+    scripts/lanes.mjs doesn't list tests/acceptance/3530/ac4-metering.test.ts in timed, so it would run without a
+      timed grant
+    benchmarks/canvas-world.mjs doesn't run tests/acceptance/3530/ac4-metering.test.ts: it runs use … or judge
+      at none (helpers.ts:37:144)
+      at ac4-metering.test.ts:113:3
+
+  The merge base runs the metering benchmark, and its readings are within the bound; no task of its budgets holds the
+  criterion, which is what the test fails on there. Headless Chrome read 0.26 here against the record's 0.391: a
+  reading, taken on battery.
+
+
+2. The tests that pass at the base, and why they should
+--------------------------------------------------------
+
+✓ AC1 #3530.5321d459 in wasmtime, for 1,000 seeded programs of stores, fills and copies, the pages the bitmap holds
+  after each step equal the pages whose bytes changed (3.1 s)
+✓ AC1 #3530.5321d459 in headless Chrome, for the same 1,000 programs as the app rewrote them, the pages the bitmap
+  holds after each step equal the pages whose bytes changed (2.1 s)
+
+  Criterion 1's first sentence holds on the merge base: its tracker marks every page a store, a fill or a copy
+  writes. Their wrong program is the twin store_skips_page_marked_last (twins.json), which this job did not build.
+  The judge they share was held to wrong rewrites the base can run, through the same debug deep-logic and the same
+  1,000 bakes (a probe, not a test):
+    no planted program            0 findings
+    tracker_skips_memory_copy   984 findings in 173 programs, each a page whose bytes changed and the bitmap doesn't
+                                hold, each in a program with a copy; first: seeded program 11, step 0: page 3
+    tracker_skips_memory_fill 2,313 findings in 315 programs, each in a program with a fill; first: seeded program 0,
+                                step 0: page 16
+
+✓ AC2 #3530.1f0dfd22 every fixture of #531 reaches the step hashes and full-state hashes it reached on the merge base,
+  and each step is charged the fuel it was charged there (0.4 s)
+
+  Criterion 2 says what stays as it is, and base.json is the merge base's own bake. Its wrong program is the twin
+  step_fuel_reads_one_more (twins.json), not built. As a stand-in, the judge was given the recording with every step
+  that ended charged one more unit: it failed each of the 12 fixtures that end a step, naming its step ("fixture
+  tally, step 0: it was charged 5 fuel on the merge base and is charged 6"). recurse and start_forever end no step;
+  the twin itself would also move recurse's step 0, which runs and traps.
+
+
+3. The recording
+-----------------
+
+node tests/acceptance/3530/record.mjs wrote base.json from the base's debug deep-logic: 14 fixtures, 60 steps. A
+second bake (--check), and a third after that binary was built again, gave no difference. Every step's hash and fuel
+and every checkpoint equal what #2324's suite recorded for the same piece at its own base.
+
+
+4. Probes of the base
+----------------------
+
+- A piece of one item with no reads and no writes bakes, a 65-page one with budget.memory 5 among them; its read
+  region is the seed's 8 bytes at address 0, and page 0 is in every step's pages.
+- The twin's bytes are #3445's, and the base rewrites them to the SHA-256 #3445's kept reading names: fb03507b… for
+  the twin, 69a328a7… for its one-iteration twin. So the check that the twin is no longer rewritten to those bytes
+  fails at the base, as above, and stays.
+- view, then frame, then frame with play: true: each frame runs one step (want 1, 2, 3; steps 1) and reports eval_ns.
+- deep-logic --planted store_skips_page_marked_last prints {"ok":false,"code":"bad_input"} and exits 2 before it reads
+  its input; given 1,000 calls it leaves the writer a broken pipe, which the helper reads as the exit it is.
+
+
+5. What these runs found in the suite, and what was run twice
+--------------------------------------------------------------
+
+- ac1-pages.test.ts was run twice. Its first run got no test grant within 10 minutes (08:33 to 08:43, "INCONCLUSIVE
+  no grant") and was run once directly (10:56, load 80 to 270). This checkout's target/ no longer held the caller's
+  build by then, so the file's own cargo build compiled deep-logic inside the first test, which passed after 825 s of
+  its 900 s limit; the other two took 3.5 s, with the same results as above. The suite was corrected for that: every
+  file now builds its binary before its tests, under a limit of its own (helpers.ts, prebuild), and the file was run
+  again as delivered (16:53, granted after 6.5 minutes).
+- target/ was emptied twice by something outside this job, between 03:11 and 10:56 and between 11:10 and 16:40. So
+  ac2-fixtures.test.ts built the debug deep-logic itself (118 s), and the release one the caller built at 03:11 was
+  gone: it was built once more through a build grant, node scripts/throttle.mjs build --wait 20 -- cargo build
+  --locked --release -p deep-logic --bin deep-logic (67 s, granted at once), before the two timed files ran.
+- ac2-fixtures.test.ts, ac3-writes.test.ts and ac4-metering.test.ts were each run once, each with a grant.
+- Each timed file took one reading. The Mac was on battery with a fair thermal state at 17:01, at a load under its
+  cores; nothing was waited for and neither file was run again.
+- Linux x86_64, the third host of the Runs on: line, is BLOCKED: no such host was run.

@@ -1,0 +1,8 @@
+{
+  "crates/deep-logic/src/world/world_impl.rs": [
+    {
+      "find": ["        let fuel = (item.fuel - left).clamp(0, item.fuel);"],
+      "wrong": ["        let fuel = (item.fuel - left + 1).clamp(0, item.fuel);"]
+    }
+  ]
+}
