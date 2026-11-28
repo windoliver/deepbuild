@@ -869,7 +869,7 @@ class LocalRunner implements Runner {
     const git = gitBinary();
     if (!git) return 'no git binary outside the xcrun shim';
     const repo = realpathSync(at.repo);
-    const read = [repo, ...gitDirs(repo), dirname(dirname(dirname(git)))];
+    const read = [repo, ...gitDirs(repo), ...(process.platform === 'darwin' ? [dirname(dirname(dirname(git)))] : [])];
     const env = { PATH: '/usr/bin:/bin', HOME: folder, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_TERMINAL_PROMPT: '0' };
     const run = async (argv: string[], grant: Grant, input?: Buffer): Promise<Buffer> => {
       const r = await this.step(argv, folder, grant, env, input);
