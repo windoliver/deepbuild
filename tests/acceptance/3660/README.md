@@ -70,10 +70,26 @@ table, and the line test held its 8 s turns with over 3 s to spare beside the re
   `INCONCLUSIVE` line with `not started: the run reached its bound of 3 min` and no other state, no `timed-ran` note,
   the binary never put back in the watched `DEEP_BIN_DIR`, a `FAIL affected:` summary and exit 1, within 4 minutes of
   the run's start (its own limit stops it at 4 min 20 s).
-- **Criterion 5** is held through `scripts/lanes.mjs`' `redrafted` and `byHand` (it re-exports lanes-lists'): the three
-  files map to `tests/acceptance/3549-redraft-3660/`, are kept by hand, the redraft holds a `.test.mjs` file and isn't
-  by hand, and every other file of `tests/acceptance/3549/` is neither redrafted nor by hand. Not tested: that the
-  redraft, `3334`, `3221` and `3588-redraft-3549` pass (their own runs show that) or what the redraft holds.
+- **Criterion 5** is held through `scripts/lanes.mjs`' `redrafted` and `byHand` (it re-exports lanes-lists'). The file
+  was redrafted blind on 2026-11-28 on the base `9bbe0f24c`, which holds #3694. There the lists already keep 3549's
+  `passes`, `timed` and `window` files by hand with `tests/acceptance/3549-redraft-3694/` in their place, so the first
+  draft's "every other file is neither redrafted nor by hand" failed on the base's own lists. It now holds:
+  - `turn`, `window` and `compiles` of `tests/acceptance/3549/` map to `tests/acceptance/3549-redraft-3660/` and are by
+    hand. Each redraft file is there, is not by hand and is mapped no further.
+  - `passes` and `timed` map to `tests/acceptance/3549-redraft-3694/` and are by hand, and that folder's `passes` and
+    `timed` files are not by hand, as on the base.
+  - `admission`, `log` and `design` are neither redrafted nor by hand, as on the base.
+  - `tests/acceptance/3549-redraft-3694/window.test.mjs` is by hand, and if `redrafted` names it, it names
+    `tests/acceptance/3549-redraft-3660/`. **This is my choice.** `redrafted` gives a file one folder, so 3549's
+    `window` file now names the #3660 redraft and no longer the #3694 one. But the #3694 folder's window file is a
+    test file the lanes would still run. Its third test has a build asked with `--wait 0.05` wait for its turn past
+    that wait, which option A reverses: the criterion's own reason for the three originals. So it must not run as it
+    is. It is kept as written, by hand only, as the originals are, and `3549-redraft-3660/window.test.mjs` holds its
+    three tests under both #3694 and option A. The folder as a whole can't go by hand: its `passes` and `timed` files
+    still run.
+
+  Not tested: that the redrafts, `3334`, `3221` and `3588-redraft-3549` pass (their own runs show that) or what the
+  redrafts hold.
 - **Criterion 6** is matched by words, clause by clause (backticked code is not split): the grant-wait row "An
   admitted build, for its turn" gives no `no limit`/`unbounded`-like wording and names the caller's `--wait`/`--stall`,
   a bound, a deadline or a stall; "Builds on the pool" has no turn clause with such wording, no "a stall … bounds only
@@ -89,7 +105,7 @@ table, and the line test held its 8 s turns with over 3 s to spare beside the re
 | 2 `#3660.85d33ca3` | `stall.test.mjs` | The same with `--stall 0.5`: the line `INCONCLUSIVE no grant: no build grant changed hands within 0.5 min`, the `timeout` entry's `stall: 0.5`. |
 | 3 `#3660.79e21baf` | `line.test.mjs` | Pool of 1, three stub builds of 8 s each in line, then a build `--stall 0.2` (12 s). It ends with 0, never INCONCLUSIVE, its command started after the third's ended and ran; each holder exited 0 in turn; it waited more than 12 s. |
 | 4 `#3660.e8808b70` | `hour.test.mjs` | #3588's fixture, `affected.mjs --timed`, `DEEP_AFFECTED_MIN=3`, the scene above. The run exits within 4 min with 1; untimed `FAIL`, timed `INCONCLUSIVE … not started: the run reached its bound of 3 min`, the timed test never ran, the binary absent. |
-| 5 `#3660.a7f3d0fa` | `lanes.test.mjs` | The lists, as above. |
+| 5 `#3660.a7f3d0fa` | `lanes.test.mjs` | The lists, as above (redrafted 2026-11-28 on a base that holds #3694). |
 | 6 `#3660.388d9ec0` | `design.test.mjs` | The three places' wording, as above. |
 
 ## Wrong programs
@@ -103,7 +119,8 @@ Each is the right program with one fault, to plant from; the twins (`twins.json`
 | 2 | The base, as for 1. | `stall.test.mjs`: "… was still waiting 90 s after it asked: admitted, it waits for its turn of the pool past its own --stall 0.5". |
 | 3 | The stall doesn't start again when a turn changes hands: in the turn wait its clock runs from the last change before admission. | `line.test.mjs`: "the build asked with --stall 0.2, `…` (throttle pid …), ended INCONCLUSIVE before its turn came, though a turn of the pool changed hands about every 8 s: its stall didn't start again when a turn was taken or given back". |
 | 4 | The rebuild's turn wait has no bound (the base); or one of 30 min whatever time is left. | `hour.test.mjs`: "affected.mjs was still running 260 s after its start, past the 4 minutes it must exit within at a bound of 3 min: its rebuild, admitted, was still waiting for its turn of the pool behind the stub build". |
-| 5 | The three files stay as they are in the lists. | `lanes.test.mjs`: "scripts/lanes-lists.mjs maps tests/acceptance/3549/turn.test.mjs to nothing, not to its redraft tests/acceptance/3549-redraft-3660/" (on the base, first: "… holds no test file to run in their place"). |
+| 5 | The three files stay as they are in the lists. | `lanes.test.mjs`: "scripts/lanes-lists.mjs maps tests/acceptance/3549/turn.test.mjs to nothing, not to its redraft tests/acceptance/3549-redraft-3660/" (the base `9bbe0f24c` fails so). |
+| 5 | The three files are mapped and by hand, and `3549-redraft-3694/window.test.mjs` is left to run. | `lanes.test.mjs`: "scripts/lanes-lists.mjs doesn't keep tests/acceptance/3549-redraft-3694/window.test.mjs by hand only: …". Not run as a plant. |
 | 6 | The doc as the base has it. | `design.test.mjs`: "section 6's grant-wait table still gives an admitted build's turn no bound: \| An admitted build, for its turn (#3549) \| no limit \|". |
 
 ## What I ran
@@ -129,6 +146,12 @@ worktrees of the base under `/var/tmp`, since removed.
 - **Lints**: `node scripts/wait-ratchet.mjs`, `node scripts/comment-ratchet.mjs` and `node scripts/repo-rules.mjs`
   report nothing in this folder (on the Mac; they report findings elsewhere in the tree that predate this suite).
 
+- **`lanes.test.mjs`, redrafted** (2026-11-28, on the Mac, node v24.22.0, once each). On the base `9bbe0f24c` it fails
+  with "scripts/lanes-lists.mjs maps tests/acceptance/3549/turn.test.mjs to nothing, not to its redraft
+  tests/acceptance/3549-redraft-3660/". It passes on a copy of the base's `scripts/` whose `lanes-lists.mjs` adds the
+  three mappings, puts them by hand and puts `tests/acceptance/3549-redraft-3694/window.test.mjs` by hand. The other
+  files of this folder were not run again and are as first drafted, on the base `3359cc775`.
+
 The throwaway program and its wrong versions were deleted. **Not run**: the suite on the Mac (its disk hold forbids
 the cargo build); a lane, `affected.mjs` over this folder, a twin in its line form, or a preflight.
 
@@ -145,4 +168,5 @@ the cargo build); a lane, `affected.mjs` over this folder, a twin in its line fo
   machine where a stub build's handover takes over 4 s would fail the right program; the test prints the timeline.
 - **Criterion 4's pool switch** and its reading of the run's process group are this suite's (The surface); the
   criterion's pool of 1 holds from before the stub build asks to the run's end.
-- **Criterion 5** checks the lists, not that the redraft or the other suites pass.
+- **Criterion 5** checks the lists, not that the redrafts or the other suites pass. It states the lists for 3549's
+  other files as `9bbe0f24c` has them, so a later change to those lists is a dispute here.
