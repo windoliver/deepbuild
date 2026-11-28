@@ -56,6 +56,7 @@ One page per module topic. Each decision names the file and the symbol it govern
 - [0015](0015-table-import-and-launchd-benchmark.md): the table import tool and the launchd hub benchmark
 - [0016](0016-scene-renderer-shared-targets.md): the scene renderer's shared depth and resolved image
 - [0017](0017-logic-circuit-and-shell.md): the logic module's circuit judge and its course shell
+- [0018](0018-moved-for-size-canvas.md): what the canvas code moved for size said in comments: deep-show, deep-canvas, deep-gpu-layer and deep-scene3d-render
 
 ## Open
 
