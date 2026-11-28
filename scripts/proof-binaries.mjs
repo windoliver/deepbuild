@@ -67,10 +67,10 @@ function sourceSlice(file, source, requested) {
 // package, which reaches the hub through ../src.
 const HUB_BINARIES = ['deep-hook', 'deep-show'];
 const HUB_ENTRY = /(?<![\w.@-])packages\/(?:hub|cli)(?![\w-]|\.\w)|(?<![\w./@-])@deepbuild\/(?:hub|cli)(?![\w-]|\.\w)/;
-// A test file named as a path from the checkout's root, which a test may run in a child Vitest, as #3178's meta-test
-// runs its rows (#3293): followed as an import is.
 const TARGET_DEBUG = /(?<![\w./@-])target\/debug\/([\w-]+)(?![\w-]|\.\w)/g;
 const PLACED = '.deep-placed';
+// A test file named as a path from the checkout's root, which a test may run in a child Vitest, as #3178's meta-test
+// runs its rows (#3293): followed as an import is.
 const TEST_FILE = /^(?:tests|packages\/[^/]+\/test)\/(?:[^/]+\/)*[^/]+\.test\.(?:[cm]?[jt]s|tsx)$/;
 
 /** Selected tests' DEEP_BIN_DIR binaries, for a run in the checkout itself, which keeps its own target/. */
@@ -94,8 +94,9 @@ export function binaryPlan(cwd, patterns) {
 
 /**
  * Selected tests and the helper declarations they reach: `bin`, the binaries their DEEP_BIN_DIR consumers name,
- * `target`, the hub's binaries when one of them names the hub's or the CLI's package, `hub`, the selected paths
- * that do, which alone may find `target` in place (#2817), and with `findBuilds` `builds`, their own `cargo build`s
+ * `target`, the hub's binaries when one of them names the hub's or the CLI's package and each workspace binary one
+ * reads at target/debug/<bin> without building it (#3720), `hub`, the selected paths that do either, which alone may
+ * find `target` in place (#2817), and with `findBuilds` `builds`, their own `cargo build`s
  * (binaryPlan).
  */
 export function selectBinaries(cwd, patterns, hubBinaries = true, findBuilds = false) {
@@ -153,9 +154,12 @@ export function selectBinaries(cwd, patterns, hubBinaries = true, findBuilds = f
               const args = list.elements.map((element) => ts.isStringLiteralLike(element) ? element.text : null);
               // The test's profile: the acceptance helpers default these to 0 where their file names them (#2820).
               const profile = Object.fromEntries(PROFILE.filter((key) => source.includes(key)).map((key) => [key, '0']));
-              if (args[0] === 'build') buildsItself = true;
               if (findBuilds && args[0] === 'build') builds.push({ args: args.slice(1).filter((arg) => arg !== '-q' && arg !== '--quiet'), profile });
             }
+          }
+          if (ts.isCallExpression(node) && node.arguments.length > 1 && ts.isStringLiteralLike(node.arguments[0]) && node.arguments[0].text === 'cargo' && ts.isArrayLiteralExpression(node.arguments[1])) {
+            const [first] = node.arguments[1].elements;
+            if (first && ts.isStringLiteralLike(first) && first.text === 'build') buildsItself = true;
           }
           if (ts.isCallExpression(node) && /^(?:join|resolve)$/.test(node.expression.getText().split('.').at(-1))) names(node.arguments.filter(ts.isStringLiteralLike).map((arg) => arg.text).join('/'));
           if (ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node)) names(node.text);
