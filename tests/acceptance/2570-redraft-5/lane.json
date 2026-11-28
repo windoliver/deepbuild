@@ -1,0 +1,1 @@
+{ "alone": true, "why": "shared: each test starts real hubs and a service manager stand-in under /tmp/d2570-* or /tmp/b2570-*, holds a stopped hub mid-exit and judges 15 s waits, which parallel files would slow past their bounds" }

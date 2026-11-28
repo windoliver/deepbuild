@@ -1,0 +1,301 @@
+Runs of #2570's criteria 1 and 2 tests for tests/acceptance/2570-redraft-5 (REDRAFT.md), 2026-11-28.
+
+Machine: the Linux Spark (aarch64, 20 cores, Ubuntu, Node 24.22.0). A fresh GitHub clone checked out at the base
+254bdc87c7f2fc34676193463ee2e685b67a43df, with npm ci, npm rebuild better-sqlite3,
+npm run build --workspaces --if-present and cargo build --locked -p deep-hook (debug). Each run was one systemd user
+unit, one at a time, each file run as node --test --test-concurrency=1. Nothing was retried. The 1-minute load was
+95 to 290 throughout: other sessions' builds and proofs shared the machine.
+
+Runs:
+  1. dispute: the earlier drafts' files, on the base, before this folder was laid in.
+  2. base:    this folder, on the base.
+  3-6. tw1..tw4: this folder on a cp -a copy of the clone with one twin's service.ts laid over it and
+     npm run build --workspaces --if-present run again (tsc passed for every twin).
+
+Summary
+  run 1 (dispute): 2570/exiting 0/2; 2570/start 4/5 (the never-finishes test fails); 2570-redraft-ac1/exiting 0/4;
+    2570-redraft-4/exiting 0/1; 2570-redraft-4/start 1/2. Every failure is the scene's own step: the installed hub
+    refuses hub.stop by token ("unconfirmed ... names no process for the peer check"), or deep hub stop --root
+    exits 3 after about 15 s beside a held hub.
+  run 2 (base): 14/14 pass. The installed hub's stop is the real deep hub stop, run as the test's direct child; it
+    exited 0 every time (no refusal as an agent's).
+  tw1 start-ignores-exiting (#2570.0ed54a91): all 5 tests of that tag fail at their AC1 assertion (exit 3 after
+    about 15 s); every #2570.03ae960a test and both scene: tests pass.
+  tw2 no-lock-is-exiting (#2570.03ae960a): start.test.mjs's two "starts one" tests and linger's "starts one as
+    today" fail at their AC2 assertion; linger's "never answers" fails at its AC2 assertion ("never asked the
+    service manager"); every other test fails in the scene's own first start (the twin breaks every start).
+  tw3 held-exits-1 (#2570.03ae960a): start.test.mjs's never-finishes test fails at "must exit 3" (exit 1); all
+    others pass.
+  tw4 waits-10-s (#2570.03ae960a): the two never-answers tests of start.test.mjs and linger's never-answers test
+    fail at "today's message"; linger's AC1 test fails too (10 s is too short there); the others pass.
+  So every tagged test fails at its own tag's assertion on at least one twin of its tag:
+    #2570.0ed54a91: exiting x2, slow-stop x2, linger AC1 -> tw1.
+    #2570.03ae960a: start "starts one" x2 -> tw2; start "never answers" x2 -> tw4; start never-finishes -> tw3;
+                    linger "starts one as today" -> tw2; linger "never answers" -> tw4 (and tw2).
+
+Output, as each run printed it (test lines, counts, the first line of each failure, loads):
+
+===== dispute
+machine: Linux 7.0.0-1025-nvidia aarch64 spark-c89f, 20 cores
+commit: 254bdc87c7f2fc34676193463ee2e685b67a43df
+1-min load at start: 142.79 (2026-11-28T09:02:18Z)
+### tests/acceptance/2570/exiting.test.mjs
+✖ #2570.0ed54a91 a dev hub: deep hub start --root, asked for while the stopped hub's process is still exiting, ends with a hub answering, exit 0 (25082 ms)
+✖ #2570.0ed54a91 the installed hub: deep hub start, asked for while the stopped job is still exiting under the service manager, ends with a hub answering, exit 0 (9136 ms)
+ℹ tests 2
+ℹ pass 0
+ℹ fail 2
+  AssertionError [ERR_ASSERTION]: the scene's own step, deep hub stop --root, failed: exit 3 after 15284 ms
+  AssertionError [ERR_ASSERTION]: the scene's own step: hub.stop was refused: {"code":"unconfirmed","retryable":false,"remediation":"deep hub stop changed nothing: the call names no process for the peer check; run the deep command itself.","path":"/method","actual":"deep hub stop","evidence":[]}
+### exit 1 for tests/acceptance/2570/exiting.test.mjs
+### tests/acceptance/2570/start.test.mjs
+✔ #2570.03ae960a a dev hub: with no hub and none exiting, deep hub start --root starts one, exit 0 (7996 ms)
+✔ #2570.03ae960a the installed hub: with no hub and none exiting, deep hub start asks the service manager once and a hub answers, exit 0 (5717 ms)
+✔ #2570.03ae960a a dev hub that never answers: deep hub start --root fails at 15 s with today's message and exit 3 (15101 ms)
+✔ #2570.03ae960a an installed hub that never answers: deep hub start fails at 15 s with today's message and exit 3 (15488 ms)
+✖ #2570.03ae960a beside an old hub that never finishes exiting, deep hub start --root ends by itself with exit 3 and leaves that hub alone (20242 ms)
+ℹ tests 5
+ℹ pass 4
+ℹ fail 1
+  AssertionError [ERR_ASSERTION]: the scene's own step, deep hub stop --root, failed: exit 3 after 15109 ms
+### exit 1 for tests/acceptance/2570/start.test.mjs
+### tests/acceptance/2570-redraft-ac1/exiting.test.mjs
+✖ #2570.0ed54a91 a dev hub: deep hub start --root, asked for while the stopped hub's process is still exiting, ends with a hub answering, exit 0 (21889 ms)
+✖ #2570.0ed54a91 the installed hub: deep hub start, asked for while the stopped job is still exiting under the service manager, ends with a hub answering, exit 0 (7574 ms)
+✖ scene: a dev hub kept exiting for the scene's longest hold, with no start asked for, ends by its own exit 0 (20011 ms)
+✖ scene: the installed hub's job kept exiting for the scene's longest hold, with no start asked for, ends by its own exit 0 (7287 ms)
+ℹ tests 4
+ℹ fail 4
+  AssertionError [ERR_ASSERTION]: the scene's own step, deep hub stop --root, failed: exit 3 after 15068 ms
+  AssertionError [ERR_ASSERTION]: the scene's own step, deep hub stop --root, failed: exit 3 after 15085 ms
+### exit 1 for tests/acceptance/2570-redraft-ac1/exiting.test.mjs
+### tests/acceptance/2570-redraft-4/exiting.test.mjs
+✖ #2570.0ed54a91 deep hub start asked for while a stopped hub's process is still exiting ends with a hub answering, exit 0 (5182 ms)
+ℹ tests 1
+  Error: hub.stop: {"code":"unconfirmed","retryable":false,"remediation":"deep hub stop changed nothing: the call names no process for the peer check; run the deep command itself.","path":"/method","actual":"deep hub stop","evidence":[]}
+### exit 1 for tests/acceptance/2570-redraft-4/exiting.test.mjs
+### tests/acceptance/2570-redraft-4/start.test.mjs
+✖ #2570.03ae960a with no hub and none exiting, deep hub start starts one as today: exit 0, a hub answering (6825 ms)
+✔ #2570.03ae960a a hub that never answers still fails at 15 s with today's message and exit 3 (17470 ms)
+ℹ pass 1
+### exit 1 for tests/acceptance/2570-redraft-4/start.test.mjs
+1-min load at end: 95.65 (2026-11-28T09:07:04Z)
+RUN-DONE
+===== base
+machine: Linux 7.0.0-1025-nvidia aarch64 spark-c89f, 20 cores
+commit: 254bdc87c7f2fc34676193463ee2e685b67a43df
+1-min load at start: 116.63 (2026-11-28T09:07:46Z)
+### tests/acceptance/2570-redraft-5/exiting.test.mjs
+✔ #2570.0ed54a91 a dev hub: deep hub start --root, asked for while the stopped hub's process is still exiting, ends with a hub answering, exit 0 (16664 ms)
+✔ #2570.0ed54a91 the installed hub: deep hub start, asked for while the stopped job is still exiting under the service manager, ends with a hub answering, exit 0 (13751 ms)
+ℹ tests 2
+ℹ pass 2
+ℹ fail 0
+### exit 0 for tests/acceptance/2570-redraft-5/exiting.test.mjs
+### tests/acceptance/2570-redraft-5/start.test.mjs
+✔ #2570.03ae960a a dev hub: with no hub and none exiting, deep hub start --root starts one, exit 0 (3013 ms)
+✔ #2570.03ae960a the installed hub: with no hub and none exiting, deep hub start asks the service manager once and a hub answers, exit 0 (4491 ms)
+✔ #2570.03ae960a a dev hub that never answers: deep hub start --root fails at 15 s with today's message and exit 3 (15575 ms)
+✔ #2570.03ae960a an installed hub that never answers: deep hub start fails at 15 s with today's message and exit 3 (15737 ms)
+✔ #2570.03ae960a beside an old hub that never finishes exiting, deep hub start --root ends by itself with exit 3 and leaves that hub alone (22752 ms)
+ℹ tests 5
+ℹ pass 5
+### exit 0 for tests/acceptance/2570-redraft-5/start.test.mjs
+### tests/acceptance/2570-redraft-5/slow-stop.test.mjs
+✔ #2570.0ed54a91 a dev hub: deep hub start --root, asked for while the stopped hub's process is still exiting, ends with a hub answering, exit 0 (15924 ms)
+✔ #2570.0ed54a91 the installed hub: deep hub start, asked for while the stopped job is still exiting under the service manager, ends with a hub answering, exit 0 (16707 ms)
+✔ scene: a dev hub kept exiting for the scene's longest hold, with no start asked for, ends by its own exit 0 (18498 ms)
+✔ scene: the installed hub's job kept exiting for the scene's longest hold, with no start asked for, ends by its own exit 0 (18069 ms)
+ℹ tests 4
+ℹ pass 4
+### exit 0 for tests/acceptance/2570-redraft-5/slow-stop.test.mjs
+### tests/acceptance/2570-redraft-5/linger.test.mjs
+✔ #2570.0ed54a91 deep hub start asked for while a stopped hub's process is still exiting ends with a hub answering, exit 0 (30798 ms)
+✔ #2570.03ae960a with no hub and none exiting, deep hub start starts one as today: exit 0, a hub answering (11669 ms)
+✔ #2570.03ae960a a hub that never answers still fails at 15 s with today's message and exit 3 (17243 ms)
+ℹ tests 3
+ℹ pass 3
+### exit 0 for tests/acceptance/2570-redraft-5/linger.test.mjs
+1-min load at end: 227.55 (2026-11-28T09:12:07Z)
+RUN-DONE
+===== tw1
+twin start-ignores-exiting laid:  M packages/hub/src/service.ts 
+build ok (tsc passes)
+machine: Linux 7.0.0-1025-nvidia aarch64 spark-c89f, 20 cores
+commit: 254bdc87c7f2fc34676193463ee2e685b67a43df
+1-min load at start: 156.30 (2026-11-28T09:23:18Z)
+### tests/acceptance/2570-redraft-5/exiting.test.mjs
+✖ #2570.0ed54a91 a dev hub: deep hub start --root, asked for while the stopped hub's process is still exiting, ends with a hub answering, exit 0 (19447 ms)
+✖ #2570.0ed54a91 the installed hub: deep hub start, asked for while the stopped job is still exiting under the service manager, ends with a hub answering, exit 0 (21197 ms)
+ℹ tests 2
+ℹ pass 0
+ℹ fail 2
+  AssertionError [ERR_ASSERTION]: #2570.0ed54a91 deep hub start, asked for while the stopped hub (pid 2600476) was still exiting, must end with exit 0; no hub answers on unix:/tmp/d2570-0lcSuy/dev/hub.sock afterwards. exit 3 after 15205 ms
+  AssertionError [ERR_ASSERTION]: #2570.0ed54a91 deep hub start, asked for while the stopped hub (pid 2608156) was still exiting, must end with exit 0; no hub answers on unix:/tmp/d2570-HPs8Y7/h/.deepbuild/hub.sock afterwards. exit 3 after 15432 ms
+### exit 1 for tests/acceptance/2570-redraft-5/exiting.test.mjs
+### tests/acceptance/2570-redraft-5/start.test.mjs
+✔ #2570.03ae960a a dev hub: with no hub and none exiting, deep hub start --root starts one, exit 0 (8289 ms)
+✔ #2570.03ae960a the installed hub: with no hub and none exiting, deep hub start asks the service manager once and a hub answers, exit 0 (9570 ms)
+✔ #2570.03ae960a a dev hub that never answers: deep hub start --root fails at 15 s with today's message and exit 3 (15341 ms)
+✔ #2570.03ae960a an installed hub that never answers: deep hub start fails at 15 s with today's message and exit 3 (15691 ms)
+✔ #2570.03ae960a beside an old hub that never finishes exiting, deep hub start --root ends by itself with exit 3 and leaves that hub alone (20489 ms)
+ℹ tests 5
+ℹ pass 5
+ℹ fail 0
+### exit 0 for tests/acceptance/2570-redraft-5/start.test.mjs
+### tests/acceptance/2570-redraft-5/slow-stop.test.mjs
+✖ #2570.0ed54a91 a dev hub: deep hub start --root, asked for while the stopped hub's process is still exiting, ends with a hub answering, exit 0 (21211 ms)
+✖ #2570.0ed54a91 the installed hub: deep hub start, asked for while the stopped job is still exiting under the service manager, ends with a hub answering, exit 0 (20802 ms)
+✔ scene: a dev hub kept exiting for the scene's longest hold, with no start asked for, ends by its own exit 0 (20075 ms)
+✔ scene: the installed hub's job kept exiting for the scene's longest hold, with no start asked for, ends by its own exit 0 (16423 ms)
+ℹ tests 4
+ℹ pass 2
+  AssertionError [ERR_ASSERTION]: #2570.0ed54a91 deep hub start, asked for while the stopped hub (pid 2636554) was still exiting, must end with exit 0; no hub answers on unix:/tmp/d2570-atYIAo/dev/hub.sock afterwards. exit 3 after 15250 ms
+  AssertionError [ERR_ASSERTION]: #2570.0ed54a91 deep hub start, asked for while the stopped hub (pid 2643569) was still exiting, must end with exit 0; no hub answers on unix:/tmp/d2570-yF8ty8/h/.deepbuild/hub.sock afterwards. exit 3 after 15696 ms
+### exit 1 for tests/acceptance/2570-redraft-5/slow-stop.test.mjs
+### tests/acceptance/2570-redraft-5/linger.test.mjs
+✖ #2570.0ed54a91 deep hub start asked for while a stopped hub's process is still exiting ends with a hub answering, exit 0 (20994 ms)
+✔ #2570.03ae960a with no hub and none exiting, deep hub start starts one as today: exit 0, a hub answering (15998 ms)
+✔ #2570.03ae960a a hub that never answers still fails at 15 s with today's message and exit 3 (17134 ms)
+ℹ tests 3
+ℹ fail 1
+  AssertionError [ERR_ASSERTION]: #2570.0ed54a91 deep hub start, asked for while the stopped hub's process (pid 2664967) was still exiting, didn't end with a hub answering:
+### exit 1 for tests/acceptance/2570-redraft-5/linger.test.mjs
+1-min load at end: 204.37 (2026-11-28T09:28:01Z)
+RUN-DONE
+===== tw2
+twin no-lock-is-exiting laid:  M packages/hub/src/service.ts 
+build ok (tsc passes)
+machine: Linux 7.0.0-1025-nvidia aarch64 spark-c89f, 20 cores
+commit: 254bdc87c7f2fc34676193463ee2e685b67a43df
+1-min load at start: 284.03 (2026-11-28T09:37:29Z)
+### tests/acceptance/2570-redraft-5/exiting.test.mjs
+✖ #2570.0ed54a91 a dev hub: deep hub start --root, asked for while the stopped hub's process is still exiting, ends with a hub answering, exit 0 (421 ms)
+✖ #2570.0ed54a91 the installed hub: deep hub start, asked for while the stopped job is still exiting under the service manager, ends with a hub answering, exit 0 (359 ms)
+ℹ tests 2
+ℹ pass 0
+ℹ fail 2
+  AssertionError [ERR_ASSERTION]: the scene's own step: the first hub didn't start: exit 3 after 344 ms
+  AssertionError [ERR_ASSERTION]: the scene's own step: the first hub didn't start: exit 3 after 243 ms
+### exit 1 for tests/acceptance/2570-redraft-5/exiting.test.mjs
+### tests/acceptance/2570-redraft-5/start.test.mjs
+✖ #2570.03ae960a a dev hub: with no hub and none exiting, deep hub start --root starts one, exit 0 (453 ms)
+✖ #2570.03ae960a the installed hub: with no hub and none exiting, deep hub start asks the service manager once and a hub answers, exit 0 (553 ms)
+✖ #2570.03ae960a a dev hub that never answers: deep hub start --root fails at 15 s with today's message and exit 3 (164 ms)
+✖ #2570.03ae960a an installed hub that never answers: deep hub start fails at 15 s with today's message and exit 3 (454 ms)
+✖ #2570.03ae960a beside an old hub that never finishes exiting, deep hub start --root ends by itself with exit 3 and leaves that hub alone (165 ms)
+ℹ tests 5
+ℹ fail 5
+  AssertionError [ERR_ASSERTION]: #2570.03ae960a with no hub and none exiting, deep hub start must exit 0: exit 3 after 388 ms
+  AssertionError [ERR_ASSERTION]: #2570.03ae960a with no hub and none exiting, deep hub start must exit 0: exit 3 after 511 ms
+  AssertionError [ERR_ASSERTION]: the scene's own step: deep hub start must have started a hub: exit 3 after 123 ms
+  AssertionError [ERR_ASSERTION]: the scene's own step: deep hub start must have started a hub: exit 3 after 400 ms
+  AssertionError [ERR_ASSERTION]: the scene's own step: the first hub didn't start: exit 3 after 99 ms
+### exit 1 for tests/acceptance/2570-redraft-5/start.test.mjs
+### tests/acceptance/2570-redraft-5/slow-stop.test.mjs
+✖ #2570.0ed54a91 a dev hub: deep hub start --root, asked for while the stopped hub's process is still exiting, ends with a hub answering, exit 0 (580 ms)
+✖ #2570.0ed54a91 the installed hub: deep hub start, asked for while the stopped job is still exiting under the service manager, ends with a hub answering, exit 0 (307 ms)
+✖ scene: a dev hub kept exiting for the scene's longest hold, with no start asked for, ends by its own exit 0 (325 ms)
+✖ scene: the installed hub's job kept exiting for the scene's longest hold, with no start asked for, ends by its own exit 0 (294 ms)
+ℹ tests 4
+ℹ fail 4
+  AssertionError [ERR_ASSERTION]: the scene's own step: the first hub didn't start: exit 3 after 483 ms
+  AssertionError [ERR_ASSERTION]: the scene's own step: the first hub didn't start: exit 3 after 224 ms
+  AssertionError [ERR_ASSERTION]: the scene's own step: the first hub didn't start: exit 3 after 312 ms
+  AssertionError [ERR_ASSERTION]: the scene's own step: the first hub didn't start: exit 3 after 260 ms
+### exit 1 for tests/acceptance/2570-redraft-5/slow-stop.test.mjs
+### tests/acceptance/2570-redraft-5/linger.test.mjs
+✖ #2570.0ed54a91 deep hub start asked for while a stopped hub's process is still exiting ends with a hub answering, exit 0 (1892 ms)
+✖ #2570.03ae960a with no hub and none exiting, deep hub start starts one as today: exit 0, a hub answering (2138 ms)
+✖ #2570.03ae960a a hub that never answers still fails at 15 s with today's message and exit 3 (1813 ms)
+ℹ tests 3
+ℹ fail 3
+  AssertionError [ERR_ASSERTION]: the scene's first deep hub start, with no hub and none exiting, didn't bring one up:
+  AssertionError [ERR_ASSERTION]: #2570.03ae960a deep hub start in a home with no hub didn't start one:
+  AssertionError [ERR_ASSERTION]: #2570.03ae960a deep hub start never asked the service manager:
+### exit 1 for tests/acceptance/2570-redraft-5/linger.test.mjs
+1-min load at end: 288.65 (2026-11-28T09:37:41Z)
+RUN-DONE
+===== tw3
+twin held-exits-1 laid:  M packages/hub/src/service.ts 
+build ok (tsc passes)
+machine: Linux 7.0.0-1025-nvidia aarch64 spark-c89f, 20 cores
+commit: 254bdc87c7f2fc34676193463ee2e685b67a43df
+1-min load at start: 192.42 (2026-11-28T09:46:12Z)
+### tests/acceptance/2570-redraft-5/exiting.test.mjs
+✔ #2570.0ed54a91 a dev hub: deep hub start --root, asked for while the stopped hub's process is still exiting, ends with a hub answering, exit 0 (16063 ms)
+✔ #2570.0ed54a91 the installed hub: deep hub start, asked for while the stopped job is still exiting under the service manager, ends with a hub answering, exit 0 (15215 ms)
+ℹ tests 2
+ℹ pass 2
+ℹ fail 0
+### exit 0 for tests/acceptance/2570-redraft-5/exiting.test.mjs
+### tests/acceptance/2570-redraft-5/start.test.mjs
+✔ #2570.03ae960a a dev hub: with no hub and none exiting, deep hub start --root starts one, exit 0 (4437 ms)
+✔ #2570.03ae960a the installed hub: with no hub and none exiting, deep hub start asks the service manager once and a hub answers, exit 0 (6249 ms)
+✔ #2570.03ae960a a dev hub that never answers: deep hub start --root fails at 15 s with today's message and exit 3 (15165 ms)
+✔ #2570.03ae960a an installed hub that never answers: deep hub start fails at 15 s with today's message and exit 3 (15555 ms)
+✖ #2570.03ae960a beside an old hub that never finishes exiting, deep hub start --root ends by itself with exit 3 and leaves that hub alone (20193 ms)
+ℹ tests 5
+ℹ pass 4
+ℹ fail 1
+  AssertionError [ERR_ASSERTION]: #2570.03ae960a deep hub start, with no hub answering, must exit 3: exit 1 after 15094 ms
+### exit 1 for tests/acceptance/2570-redraft-5/start.test.mjs
+### tests/acceptance/2570-redraft-5/slow-stop.test.mjs
+✔ #2570.0ed54a91 a dev hub: deep hub start --root, asked for while the stopped hub's process is still exiting, ends with a hub answering, exit 0 (13204 ms)
+✔ #2570.0ed54a91 the installed hub: deep hub start, asked for while the stopped job is still exiting under the service manager, ends with a hub answering, exit 0 (14174 ms)
+✔ scene: a dev hub kept exiting for the scene's longest hold, with no start asked for, ends by its own exit 0 (18793 ms)
+✔ scene: the installed hub's job kept exiting for the scene's longest hold, with no start asked for, ends by its own exit 0 (17404 ms)
+ℹ tests 4
+### exit 0 for tests/acceptance/2570-redraft-5/slow-stop.test.mjs
+### tests/acceptance/2570-redraft-5/linger.test.mjs
+✔ #2570.0ed54a91 deep hub start asked for while a stopped hub's process is still exiting ends with a hub answering, exit 0 (20529 ms)
+✔ #2570.03ae960a with no hub and none exiting, deep hub start starts one as today: exit 0, a hub answering (10462 ms)
+✔ #2570.03ae960a a hub that never answers still fails at 15 s with today's message and exit 3 (17014 ms)
+ℹ tests 3
+ℹ pass 3
+### exit 0 for tests/acceptance/2570-redraft-5/linger.test.mjs
+1-min load at end: 196.64 (2026-11-28T09:50:14Z)
+RUN-DONE
+===== tw4
+twin waits-10-s laid:  M packages/hub/src/service.ts 
+build ok (tsc passes)
+machine: Linux 7.0.0-1025-nvidia aarch64 spark-c89f, 20 cores
+commit: 254bdc87c7f2fc34676193463ee2e685b67a43df
+1-min load at start: 289.76 (2026-11-28T09:59:53Z)
+### tests/acceptance/2570-redraft-5/exiting.test.mjs
+✔ #2570.0ed54a91 a dev hub: deep hub start --root, asked for while the stopped hub's process is still exiting, ends with a hub answering, exit 0 (14768 ms)
+✔ #2570.0ed54a91 the installed hub: deep hub start, asked for while the stopped job is still exiting under the service manager, ends with a hub answering, exit 0 (14776 ms)
+ℹ tests 2
+ℹ pass 2
+ℹ fail 0
+### exit 0 for tests/acceptance/2570-redraft-5/exiting.test.mjs
+### tests/acceptance/2570-redraft-5/start.test.mjs
+✔ #2570.03ae960a a dev hub: with no hub and none exiting, deep hub start --root starts one, exit 0 (6719 ms)
+✔ #2570.03ae960a the installed hub: with no hub and none exiting, deep hub start asks the service manager once and a hub answers, exit 0 (4495 ms)
+✖ #2570.03ae960a a dev hub that never answers: deep hub start --root fails at 15 s with today's message and exit 3 (10531 ms)
+✖ #2570.03ae960a an installed hub that never answers: deep hub start fails at 15 s with today's message and exit 3 (10937 ms)
+✔ #2570.03ae960a beside an old hub that never finishes exiting, deep hub start --root ends by itself with exit 3 and leaves that hub alone (14502 ms)
+ℹ tests 5
+ℹ pass 3
+ℹ fail 2
+  AssertionError [ERR_ASSERTION]: #2570.03ae960a deep hub start must fail with today's message
+### exit 1 for tests/acceptance/2570-redraft-5/start.test.mjs
+### tests/acceptance/2570-redraft-5/slow-stop.test.mjs
+✔ #2570.0ed54a91 a dev hub: deep hub start --root, asked for while the stopped hub's process is still exiting, ends with a hub answering, exit 0 (18008 ms)
+✔ #2570.0ed54a91 the installed hub: deep hub start, asked for while the stopped job is still exiting under the service manager, ends with a hub answering, exit 0 (15369 ms)
+✔ scene: a dev hub kept exiting for the scene's longest hold, with no start asked for, ends by its own exit 0 (16581 ms)
+✔ scene: the installed hub's job kept exiting for the scene's longest hold, with no start asked for, ends by its own exit 0 (17671 ms)
+ℹ tests 4
+ℹ pass 4
+### exit 0 for tests/acceptance/2570-redraft-5/slow-stop.test.mjs
+### tests/acceptance/2570-redraft-5/linger.test.mjs
+✖ #2570.0ed54a91 deep hub start asked for while a stopped hub's process is still exiting ends with a hub answering, exit 0 (17945 ms)
+✔ #2570.03ae960a with no hub and none exiting, deep hub start starts one as today: exit 0, a hub answering (9334 ms)
+✖ #2570.03ae960a a hub that never answers still fails at 15 s with today's message and exit 3 (13056 ms)
+ℹ tests 3
+ℹ pass 1
+  AssertionError [ERR_ASSERTION]: #2570.0ed54a91 deep hub start, asked for while the stopped hub's process (pid 3555290) was still exiting, didn't end with a hub answering:
+  AssertionError [ERR_ASSERTION]: #2570.03ae960a deep hub start's failure isn't today's message:
+### exit 1 for tests/acceptance/2570-redraft-5/linger.test.mjs
+1-min load at end: 218.95 (2026-11-28T10:03:44Z)
+RUN-DONE
