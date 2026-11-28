@@ -1,5 +1,6 @@
 // #1018's scope beyond its criteria: the readings sharing makes per repo (runs saved and their slot time, runs that
 // waited on another session's run and how long), and a result pruned with its evidence never carrying.
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -46,6 +47,11 @@ function world(o: {
     dirs.push(checkout);
     mkdirSync(join(checkout, 'src'));
     writeFileSync(join(checkout, 'src/a.ts'), 'a\n');
+    const git = (...args: string[]) => execFileSync('git', ['-c', 'user.name=T', '-c', 'user.email=t@example.test', '-c', 'commit.gpgsign=false', ...args], { cwd: checkout, stdio: 'ignore' });
+    git('init', '-q');
+    git('add', '-A');
+    git('commit', '-qm', 'b');
+    git('tag', 'b');
   }
   const checkouts = {
     budget: () => ({ since: 0 }),
