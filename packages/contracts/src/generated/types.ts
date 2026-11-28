@@ -4088,6 +4088,7 @@ export type AdapterFactsV9OriginRule = {
   prompt?: AdapterFactsV9Text;
   match?: { [key: string]: unknown };
   from: AdapterFactsV9Text;
+  data?: { [key: string]: AdapterFactsV9Text };
 };
 
 export type AdapterFactsV9HookRule = {
@@ -8750,7 +8751,7 @@ export interface DocPatchedV2 {
 
 /** doctor.item@1 */
 export interface DoctorItem {
-  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "telemetry_unreadable" | "not_checked" | "hub_unreachable" | "disk_low" | "ports_taken" | "billing_api_key" | "binary_differs" | "token_expiring" | "prompt_failed" | "deprecated_used" | "gpu_unsupported" | "render_failed" | "job_failing" | "hook_program_missing" | "notifications_off" | "service_unpromoted" | "statusline_shadowed" | "pack_refused" | "polkit_action_missing" | "hooks_modified" | "mod_overrides_guard" | "not_loaded" | "handler_set_aside" | "footprint_unknown" | "proofs_unreadable" | "hook_outside_contract" | "unknown";
+  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "telemetry_unreadable" | "not_checked" | "hub_unreachable" | "disk_low" | "ports_taken" | "billing_api_key" | "binary_differs" | "token_expiring" | "prompt_failed" | "deprecated_used" | "gpu_unsupported" | "render_failed" | "job_failing" | "hook_program_missing" | "notifications_off" | "service_unpromoted" | "statusline_shadowed" | "pack_refused" | "polkit_action_missing" | "hooks_modified" | "mod_overrides_guard" | "not_loaded" | "handler_set_aside" | "footprint_unknown" | "proofs_unreadable" | "hook_outside_contract" | "source_unresolved" | "unknown";
   level: "ok" | "warn" | "fail" | "skip";
   evidence: string;
   fix: string;
@@ -9186,6 +9187,7 @@ export interface HookRequestV3 {
   payload: unknown;
   late?: boolean;
   billing?: { [key: string]: boolean };
+  inbox?: string;
 }
 
 /** hook.template@1 */
@@ -12332,6 +12334,7 @@ export interface SessionStartV3 {
     branch: string | null;
     thread: string;
     billing?: { [key: string]: boolean };
+    inbox?: string;
     loads: Array<{
       kind: "instructions" | "skill" | "hooks" | "mcp";
       name: string;
@@ -12366,6 +12369,7 @@ export interface SessionStartV4 {
     branch: string | null;
     thread: string;
     billing?: { [key: string]: boolean };
+    inbox?: string;
     loads: Array<{
       kind: "instructions" | "skill" | "hooks" | "mcp";
       name: string;
@@ -14169,7 +14173,9 @@ export interface UserAskV2 {
     msg: number;
     text: string;
     tasks: Array<string>;
-    from: "person" | "scheduled" | "subagent" | "session" | "continuation" | "app" | "unknown";
+    from: "person" | "scheduled" | "subagent" | "session" | "channel" | "continuation" | "app" | "unknown";
+    sender?: string;
+    server?: string;
     request?: string;
     disposition?: "handled";
   };

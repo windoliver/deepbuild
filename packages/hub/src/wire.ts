@@ -154,6 +154,7 @@ export interface HookMeta {
   rules?: { notices: string[]; before?: { file: string; scope: string; rules: string[] }[] };
   /** A shell call's command line; only the matches-text plant reads it. */
   command?: string;
+  inbox?: string;
   /** The agent version the session's transcript names; unset until it holds an entry. */
   version?: string;
   /** Set for a session on a version its facts don't cover: recorded unverified, its holds and every block but the floor watch-only (#1501). */

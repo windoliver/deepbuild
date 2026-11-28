@@ -15,8 +15,8 @@ const sources = (dir) => readdirSync(dir).flatMap((name) => {
   if (statSync(path).isDirectory()) return name === 'node_modules' || name === 'dist' ? [] : sources(path);
   return /\.(ts|mts|mjs|js)$/.test(name) && !/\.test\.[mc]?[jt]s$/.test(name) ? [path] : [];
 });
-// A literal that names the folder from a package's source: '../../../adapters/…', or join(REPO, 'adapters', …).
-const REACH = /['"`](?:\.\.\/)+adapters\/|join\([^)]*['"]adapters['"]/;
+// A literal that names the folder from a package's source: '../../../adapters/…', join(REPO, 'adapters', …) or join(REPO, 'adapters/…').
+const REACH = /['"`](?:\.\.\/)+adapters\/|join\([^)]*['"]adapters[/'"]/;
 
 test("no package but adapters and the CLI reads the repo's adapters/ folder by path", () => {
   const found = [];
