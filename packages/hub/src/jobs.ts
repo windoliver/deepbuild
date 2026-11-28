@@ -81,10 +81,8 @@ export interface JobDeps {
   charge(run: string, usd: number): Promise<void>;
   /** Your yes to a paid run's ask, approving a budget of that run's price for its tool (#509). */
   approve(ask: string, budget: BudgetInput): Promise<unknown>;
-  /** A file the hub fetched through the Source block, by its hash: the URL and the time it fetched it (#1820), else undefined. */
   fetched?(sha: string): { url: string; fetched: number } | undefined;
   readTable?(sha: string): Obj | undefined;
-  /** Writes a table output's record beside its bytes in the evidence store, `tables/<sha256>.json` (#3570). */
   table?(sha: string, record: Record<string, unknown>): Promise<void>;
   plant?: string | undefined;
 }
@@ -430,7 +428,6 @@ export class Jobs {
     } finally {
       this.d.row(job, false);
     }
-    // A tool writes the kind's outputs its format names (#3570), or all of them.
     const outputs = pinned.descriptor.outputs ?? Object.keys(held.descriptor.outputs);
     const absent = outputs.filter((n) => !wrote[n]);
     if (absent.length) return { status: 'failed', reason: `${tool} wrote no ${absent.join(', ')}, which ${kind} declares; nothing was kept`, receipt: receipt(pinned.build, 'miss') };
@@ -453,8 +450,6 @@ export class Jobs {
     }
     const kept: Record<string, string> = {};
     for (const n of outputs) kept[n] = await this.d.keep(wrote[n]!, `job:${kind}/${tool}#${n}`);
-    // A table output is a table asset (#3570): its record names the job and its inputs, each with the URL and fetch time
-    // the hub recorded, so a number read from it traces through the job to the file the hub fetched.
     if (tables !== undefined && isObj(record)) {
       await this.d.table?.(kept.table!, { ...record, sha256: kept.table!, kind: 'table', source: { job: { kind, tool, input: params[tables] ?? null } }, lineage: kept.lineage! });
     } else if (kept['table']) {
@@ -465,7 +460,6 @@ export class Jobs {
     this.saved.cache[key] = { outputs: kept, build: pinned.build };
     this.save();
     const answer = done(kept, pinned.build, 'miss');
-    // What the tool's run used, as the supervisor read it (#3220), never the tool's word.
     if (used && isObj(answer.receipt)) answer.receipt.used = used;
     return answer;
   }

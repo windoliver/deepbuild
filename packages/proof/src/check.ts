@@ -1,6 +1,5 @@
 // One proof check run (#685): the spec's runner, Lean 4 or Kani. The fault is the kit's alone: the fill the
-// plug-in registers always runs with none. RUNNERS is the one place a runner's name maps to what it does (#1896): a
-// name it doesn't hold is missing, for a run and for its mutants alike.
+// plug-in registers always runs with none.
 import type { CheckContext } from '@deepbuild/conformance';
 import { kani, kaniMutants } from './kani.js';
 import { lean, leanMutants } from './lean.js';
@@ -22,7 +21,6 @@ export function check(spec: ProofSpec, ctx: CheckContext, fault: Fault = 'none')
   return runnerOf(spec)?.check(spec, ctx, fault) ?? missingRun({}, unheld(spec));
 }
 
-/** Each theorem re-checked on mutants of its targets, by the spec's runner. */
 export function runMutants(spec: ProofSpec, ctx: CheckContext): MutantReport {
   const runner = runnerOf(spec);
   if (runner) return runner.mutants(spec, ctx);

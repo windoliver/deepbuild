@@ -41,7 +41,6 @@ interface CaseInput { spec: ProofSpec; checkout: string; deadline: number }
 
 // ---- The fixtures.
 
-/** Each fixture's runner, with its toolchain pin, its folder under fixtures/ and how its statements are found. */
 interface Side { runner: ProofSpec['runner']; toolchain: string; dir: string; locate: Locate }
 const KANI_SIDE: Side = { runner: 'kani', toolchain: KANI, dir: 'kani', locate: locateKani };
 const LEAN_SIDE: Side = { runner: 'lean4', toolchain: LEAN, dir: 'lean', locate: locateLean };
