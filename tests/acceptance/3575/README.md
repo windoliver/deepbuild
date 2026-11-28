@@ -17,8 +17,9 @@ two planted wrong programs the Proof line names.
   asset, the fetch's one authority ask and its plan, the fetched asset's record in the fetch's reply),
   `packages/hub/src/inbox.ts` (`deep inbox` prints an ask's question and its plan's steps),
   `packages/hub/src/jobs.ts` and `table-record.ts` (a job's table output and its record `tables/<sha256>.json`, each
-  input file with the URL and time the hub fetched it, or `origin: agent`), `packages/hub/src/tools.ts` (`deep_kinds`,
-  `deep_job`), `packages/jobs/import` and `packages/jobs/asset-tools` (the table import and `table.derive`),
+  input file with the URL and time the hub fetched it, or `origin: agent`), `packages/hub/src/tools.ts` (`deep_job`,
+  and the fetch, which was `deep_kinds`' at the base), `packages/jobs/import` and `packages/jobs/asset-tools` (the
+  table import and `table.derive`),
   `crates/deep-marks-render/src/lib.rs` (`deep-canvas-render check`, its `issues`, `numbers` and `planted`),
   `crates/deep-canvas-marks/src/{check.rs,data.rs}` and `crates/deep-marks-vello/src/tables.rs` (`{from, column}`,
   the trace of a derived table, `number_unsourced`), `crates/deep-marks-raster/src/lib.rs` (the draw list the replica's
@@ -27,6 +28,8 @@ two planted wrong programs the Proof line names.
   `<out>/<launch>/evidence`). The suites `3569` and `3570` (the hub world, the fetch, the import, `twins.json`, `lane.json`),
   `1820` (the fetch's ask), `397`, `406` and `392` (`check`, `numbers`, a bound reading), `1498` and `124` (the
   replica, its clipboard, a taste call) as patterns; their helpers are copied and cut down here, never imported.
+- For the fetch's move, on `origin/main` after #3525 and nothing else there: `deep_job`'s schema in
+  `packages/hub/src/tools.ts` and `tests/acceptance/1820-redraft-3525/REDRAFT.md`.
 
 ## Run them
 
@@ -99,9 +102,12 @@ implementer builds to it**, or a dispute goes to a blind redraft.
 
 1. **The fetch** is the base's: a data pack installed with `deep install <folder>` lists each file in `assets` by
    `path`, `url`, `sha256`, `size`, `license {id, terms, shareable, credit}` and `upstream`;
-   `deep_kinds {op: "fetch", pack, asset}` holds on one authority ask, your yes is `deep inbox answer`, and the call
-   then answers `{status: "fetched", asset}`. **Chosen:** a listed asset may also carry `title`, `publisher` and
-   `edition`, strings, each optional; they are what the fetch's plan shows and what your yes stores.
+   `deep_job {op: "fetch", pack, asset}` holds on one authority ask, your yes is `deep inbox answer`, and the call
+   then answers `{status: "fetched", asset}`. At the base `94eacba01` that call was `deep_kinds {op: "fetch", pack,
+   asset}`; main moved it to `deep_job` in #3525, with the same fields and replies, and refuses the old one with
+   `enum`, so the suite calls the new form (`BASE-FAILURE.txt`, the note of November 27, 2026). **Chosen:** a listed
+   asset may also carry `title`, `publisher` and `edition`, strings, each optional; they are what the fetch's plan
+   shows and what your yes stores.
 2. **The ask as shown** is what `deep inbox` prints for it: its line and the indented lines under it (the plan's
    steps). The test reads the file's size and license ID there, as at the base, and its title, publisher and edition.
 3. **The asset's record** is `asset` in the fetch's reply. Read: `sha256`, `license.id`, `license.credit`,
@@ -173,7 +179,8 @@ Every name is made up. Each license's terms are a file of the pack, so no fetch 
 
 ## Readings where the issue leaves a choice
 
-- **"Fetched files, replayed from a recording"**: the files are served by the test process, the same bytes each run.
+- **"Fetched files, replayed from a recording"**: the files are served by the test process, the same bytes each run,
+  and each is fetched with `deep_job {op: "fetch", pack, asset}`.
 - **A table and its file share a hash here**: the import writes each fixture file's own bytes as its table, so
   `assets.population` names the third file's SHA-256 too. The list's rows are the fetched files either way.
 - **"A label shows a cell"**: a text mark set of one row over a table of one row, the base's only reader of a column.

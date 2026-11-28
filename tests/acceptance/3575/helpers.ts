@@ -348,7 +348,7 @@ export async function fetchFile(w: World, file: Published): Promise<Fetched | st
   const authority = async (): Promise<Line[]> => (await events(w)).filter((e) => e.kind === 'ask.created' && dataOf(e).kind === 'authority');
   const before = (await authority()).length;
   const asked = Date.now();
-  let o = await tool(w, 'deep_kinds', args);
+  let o = await tool(w, 'deep_job', args);
   let ask: AskShown | null = null;
   if (o.value.status === 'held') {
     const raised = (await authority()).slice(before);
@@ -363,7 +363,7 @@ export async function fetchFile(w: World, file: Published): Promise<Fetched | st
     if (answered.code !== 0) return `BLOCKED: your yes to the fetch of ${file.path} wasn't taken: ${said(answered).trim().slice(-400)}; this is not a pass`;
     await sent(w.files, new URL(file.url).pathname);
     const last = Date.now() + 600_000;
-    do { o = await tool(w, 'deep_kinds', args); } while (o.value.status === 'held' && Date.now() < last);
+    do { o = await tool(w, 'deep_job', args); } while (o.value.status === 'held' && Date.now() < last);
   }
   const landed = Date.now();
   const record = o.value.asset;

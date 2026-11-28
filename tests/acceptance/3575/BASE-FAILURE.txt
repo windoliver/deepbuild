@@ -85,3 +85,14 @@ FAILED  AC8 #3575.723dcdab  ac8-shown.test.ts:22
 # see, probe {item}, the marker on the clipboard, your drag with the option key across the item's box and your copy
 # (the clipboard then held the item's whole text), the pointer over it, a second of the replica's clock, a picture of
 # the window, another session's page, and stored. At the base see's tree holds no node for a document's item.
+
+# Note of November 27, 2026, after the run above. Main moved while this suite was written: since #3525 (merge
+# f11dcfe02) deep_kinds {op: "fetch", ...} is refused with the code enum at /params/arguments/op, and the fetch is
+# deep_job {op: "fetch", pack, asset}, with the same fields and the same replies. The suite's fetch (helpers.ts,
+# fetchFile) was moved to deep_job's fetch for main, its two calls only; no assertion, expected value, fixture, name or
+# criterion ID changed. The run recorded above was on 94eacba01 with the old call, deep_kinds {op: "fetch", pack,
+# asset}, which is what that base takes. It was not rerun, and nothing was built or run for this note. On 94eacba01
+# deep_job's schema takes only list and run (packages/hub/src/tools.ts there), so the moved suite can't fetch on it.
+# At main's head, as reported to this job and not observed by it, deep install packages/jobs/import is refused, because
+# that plug-in's envelope digest went stale in #3715, a defect of main and not of this issue, so a run there can't get
+# past the world's setup. No base run on main is recorded.
