@@ -187,6 +187,28 @@
             "skipping": {
               "$ref": "#/$defs/texts"
             },
+            "skippingBy": {
+              "type": "object",
+              "description": "Per version, every other flag or setting that starts the agent in a mode that skips its prompts, besides the launch argument, each as its words in order (#3235). A version not listed names none.",
+              "properties": {
+                "readBy": {
+                  "$ref": "#/$defs/text"
+                },
+                "versions": {
+                  "type": "object",
+                  "propertyNames": {
+                    "pattern": "^[0-9A-Za-z][0-9A-Za-z.+-]*$"
+                  },
+                  "additionalProperties": {
+                    "$ref": "#/$defs/texts"
+                  }
+                }
+              },
+              "required": [
+                "versions"
+              ],
+              "additionalProperties": false
+            },
             "nested": {
               "$ref": "#/$defs/texts"
             },

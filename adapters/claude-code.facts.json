@@ -58,6 +58,7 @@
       "asks": "default",
       "modes": { "default": "default", "acceptEdits": "acceptEdits", "plan": "plan", "dontAsk": "dontAsk", "bypassPermissions": "bypassPermissions" },
       "skipping": ["bypassPermissions"],
+      "skippingBy": { "readBy": "the skill audit (#3235): per version, every other flag or setting that starts the agent in a mode that skips its prompts, besides the launch argument above, each as its words in order; seen in 2.1.332's --help and its settings' defaultMode, not run on 2.1.308", "versions": { "2.1.308": ["--dangerously-skip-permissions", "--allow-dangerously-skip-permissions", "defaultMode bypassPermissions"] } },
       "nested": ["CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_SSE_PORT", "CLAUDE_PROJECT_DIR"],
       "home": "CLAUDE_CONFIG_DIR",
       "defaultHome": "~/.claude",

@@ -1,0 +1,1 @@
+{ "alone": true, "why": "shared: every file starts real hubs from this checkout's packages/cli/dist and needs target/debug/deep-hook built; table.test.ts copies the checkout to /tmp and rebuilds the package that holds the table with tsc, and ac9-budget.test.ts runs the perf lane's task and times a 200-file skill's audit", "timed": ["ac9-budget.test.ts"] }

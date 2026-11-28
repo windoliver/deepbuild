@@ -7,6 +7,7 @@ import type { JsonValue } from '@deepbuild/contracts';
 import type { EvidenceStore } from '@deepbuild/evidence';
 import type { Statement } from 'better-sqlite3';
 import { compareReplay, type Comparison, type ReplayResult } from './replay.js';
+import { switchOffIn } from './switches-off.js';
 import type { Db } from './storage.js';
 import { StringDecoder } from 'node:string_decoder';
 
@@ -278,14 +279,6 @@ const GUARD_FIELD = /^guard\.[^.\s]+\.(match|scope|mode|reason|next_step|fail_cl
 /** Each order runs from the narrowest to the widest permission mode, and from the weakest to the strongest guard. */
 const MODES = ['plan', 'default', 'acceptEdits', 'bypassPermissions'];
 const STRENGTH: Record<string, string[]> = { mode: ['watch', 'warn', 'block'], fail_closed: ['false', 'true'] };
-/** Flags known to switch verification off, in a line a change adds to any target. */
-const VERIFY_OFF: [RegExp, string][] = [
-  [/(^|\s)--insecure(?=[\s=]|$)/, '--insecure'],
-  [/\bcurl\b[^|;&\n]*?\s-[A-Za-z]*k[A-Za-z]*(?=\s|$)/, 'curl -k'],
-  [/\bNODE_TLS_REJECT_UNAUTHORIZED\s*=\s*['"]?0/, 'NODE_TLS_REJECT_UNAUTHORIZED=0'],
-  [/\bGIT_SSL_NO_VERIFY\b/, 'GIT_SSL_NO_VERIFY'],
-  [/\bverify\s*=\s*False\b/, 'verify=False'],
-];
 interface Field { line: string; field: string | undefined; value: string }
 const fieldsOf = (lines: string[]): Field[] => lines.map((line) => {
   const m = /^([^\s:]+): ?(.*)$/.exec(line);
@@ -301,7 +294,10 @@ const fieldsOf = (lines: string[]): Field[] => lines.map((line) => {
 function loosens(target: string, diff: string): string | undefined {
   const say = (line: string, why: string): string => `${clip(target, 200)} is held for you: "${clip(line, 4000)}" ${why}`;
   const added = linesOf(diff, '+');
-  for (const line of added) for (const [flag, name] of VERIFY_OFF) if (flag.test(line)) return say(line, `switches verification off (${name})`);
+  for (const line of added) {
+    const off = switchOffIn(line);
+    if (off) return say(line, `switches verification off (${off.name})`);
+  }
   const step = STEPS.some((p) => target.startsWith(p));
   if (!step && !target.startsWith('ext:')) return undefined;
   const plus = fieldsOf(added);

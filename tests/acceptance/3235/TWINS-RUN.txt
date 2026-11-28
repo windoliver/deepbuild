@@ -1,0 +1,52 @@
+#3235: the planted wrong programs, 2026-11-28, Node v24.22.2, vitest 5.0.5, each run under one throttle test grant after
+`npm run build -w @deepbuild/record -w @deepbuild/hub` under a build grant, in this worktree, the base's files put back after.
+
+The throwaway. With no implementation to plant a twin in, this job wrote a throwaway third reason over the base, kept nowhere:
+- packages/record/src/learned.ts: the loosening read's flag list exported as one table, CHECKS_OFF, with three rows added
+  (git commit, push or merge with --no-verify; core.hooksPath set to /dev/null, '' or nothing; deep off and
+  deep setup --undo), read by `loosens` as before; packages/record/src/index.ts exports it.
+- packages/hub/src/agents.ts: the audit imports CHECKS_OFF from @deepbuild/record and reads it on code lines only (a page's
+  fenced code, and every line of a script); it reads each agent's started.args and skipping modes from its facts to find a
+  line that starts the agent in a prompt-skipping mode; each finding is "<file> line <n>: <text> (switches approval or checks
+  off: <what>) [line <n-1>: <text> | line <n+1>: <text>]"; for an agent started in the code whose facts name no skipping mode,
+  each of its versions gets "<name> <version>: its facts name no flag that skips its prompts for this version, so the audit
+  cannot tell whether this line skips them."; the card adds a line that the audit reads code, never prose; agents.read's skill
+  rows carry `readings`, the findings in the installed files.
+
+The throwaway, before 04:33 UTC, all of audit.test.ts, update.test.ts, before.test.ts and table.test.ts: Tests 8 passed (8).
+After AC2's sentence was changed (below), audit.test.ts again, 05:25:35 to 05:25:43 UTC, load 57: Tests 5 passed (5).
+
+Each twin is the throwaway with one fault. Trimmed to each failure's own words.
+
+twins: reads-prose (AC2 #3235.7eeb122b): codeLines reads every line of a page, prose too
+  first run, before 04:33 UTC: ✓ AC2. The prose sentence then was "When you commit the notes, never use --no-verify: the hooks
+    check them." The throwaway's row needs `git` and `commit`, so a prose-reading audit with that table passes it: the test
+    couldn't fail the twin. The sentence is now "Never use git commit --no-verify for the notes: the hooks check them.", the
+    same words as the fenced code, in a sentence (base rerun in BASE-FAILURE.txt).
+  second run, 04:33:33 to 04:33:43 UTC, load 48, -t AC2:
+  FAIL AC2 the sentence outside code: SKILL.md line 6, "Never use git commit --no-verify for the notes: the hooks check them.",
+       is prose and no finding, but the card quotes it: expected 'authority\ntrusted_path\nInstall the …' not to contain
+       'Never use git commit --no-verify for …'
+
+twins: line-alone (AC3 #3235.72ad896b): a finding quotes its own line and no line around it
+  05:21:06 to 05:21:09 UTC, load 61, -t AC3:
+  FAIL AC3 the card shows SKILL.md line 9, the line above the finding: "# never run this: it skips the repo's hooks":
+       expected 'authority\ntrusted_path\nInstall the …' to contain '# never run this: it skips the repo\'…'
+  The finding itself (SKILL.md line 10, its text and its reason) held.
+
+twins: reads-clean (AC5 #3235.ab296727): for an agent version whose facts name no skipping mode, the card says
+  "<name> <version>: clean of flags that skip prompts."
+  05:33:35 to 05:33:37 UTC, load 80, -t AC5:
+  FAIL AC5 the card reports, for Cursor 2026.10.1, that its facts name no skipping flag: it says the facts name none:
+       expected 'authority\ntrusted_path\nInstall the …' to match /\bfacts?\b[^\n]{0,80}\b(no|none|noth…/i
+  FAIL AC5 the card never reads Cursor 2026.10.1 as clean: expected 'authority\ntrusted_path\nInstall the …' not to match /\bclean\b/i
+
+twins: second-list (AC8 #3235.27b56b06): the audit keeps its own copy of the rows in agents.ts, the record stays the base's
+  05:36:10 to 05:36:29 UTC, load 78, table.test.ts:
+  FAIL AC8 one table, not a second list: GIT_SSL_NO_VERIFY is in packages/hub/src/agents.ts, packages/record/src/learned.ts:
+       expected [ 'packages/hub/src/agents.ts', …(1) ] to have a length of 1 but got 2
+  FAIL AC8 the learned layer's loosening read holds a step that adds DEEP_AC3235_CHECKS_OFF=1 npm test once DEEP_AC3235_CHECKS_OFF
+       is in packages/hub/src/agents.ts (no reason): expected 'applied' to be 'held'
+  The row went into the first file in path order, the audit's list, so the audit stopped the line and the learned layer missed
+  it: the failure names the reader. The base is the mirror case (BASE-FAILURE.txt): the row goes into learned.ts, the learned
+  layer holds it and the failure names the audit.

@@ -4251,6 +4251,10 @@ export interface AdapterFactsV9 {
       asks: AdapterFactsV9Text;
       modes: AdapterFactsV9TextMap;
       skipping: AdapterFactsV9Texts;
+      skippingBy?: {
+        readBy?: AdapterFactsV9Text;
+        versions: { [key: string]: AdapterFactsV9Texts };
+      };
       nested: AdapterFactsV9Texts;
       home: AdapterFactsV9Text;
       defaultHome: AdapterFactsV9Text;

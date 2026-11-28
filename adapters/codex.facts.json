@@ -45,6 +45,7 @@
       "asks": "on-request",
       "modes": { "on-request": "\"on-request\"", "never": "\"never\"" },
       "skipping": ["never"],
+      "skippingBy": { "readBy": "the skill audit (#3235): per version, every other flag or setting that starts the agent in a mode that skips its prompts, besides the launch argument above, each as its words in order; seen in 0.170.0's --help, not run on 0.166.0-alpha.5.1", "versions": { "0.166.0-alpha.5.1": ["--dangerously-bypass-approvals-and-sandbox", "--ask-for-approval never", "-a never"] } },
       "nested": ["CODEX_SANDBOX", "CODEX_SANDBOX_NETWORK_DISABLED", "CODEX_THREAD_ID"],
       "home": "CODEX_HOME",
       "defaultHome": "~/.codex"
