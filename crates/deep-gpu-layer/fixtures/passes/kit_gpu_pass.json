@@ -1,0 +1,16 @@
+{
+  "pass": "kit_gpu_pass",
+  "inputs": "deep-show's test.kit.gpu GPU_PASS over an 8 × 4 rgba8unorm frame cleared to white (255, 255, 255, 255), no blending, drawn as the kit draws its quads (two triangles, a vertex [x, y, r, g, b, a] with x = px / 8 × 2 − 1, y = 1 − py / 4 × 2 and each color code ÷ 255): one quad, the ink box, at px (2, 1, 4, 2) colored (100, 50, 150, 255)",
+  "size": [8, 4],
+  "channels": 4,
+  "items": [
+    { "id": "kit_gpu_pass.ground", "at": [0, 0, 8, 4] },
+    { "id": "kit_gpu_pass.box", "at": [2, 1, 4, 2] }
+  ],
+  "expect": [
+    { "at": [3, 1], "value": [100, 50, 150, 255], "why": "centre (3.5, 1.5) lies inside px (2, 1, 4, 2); GPU_PASS returns the vertex color, (100, 50, 150, 255) ÷ 255 written back as (100, 50, 150, 255)" },
+    { "at": [5, 2], "value": [100, 50, 150, 255], "why": "centre (5.5, 2.5) lies inside px (2, 1, 4, 2), its far corner pixel" },
+    { "at": [0, 0], "value": [255, 255, 255, 255], "why": "centre (0.5, 0.5) lies outside the box, so the clear's white stays" },
+    { "at": [6, 1], "value": [255, 255, 255, 255], "why": "centre (6.5, 1.5) lies right of the box's edge at x = 6" }
+  ]
+}

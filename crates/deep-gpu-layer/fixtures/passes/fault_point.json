@@ -1,0 +1,15 @@
+{
+  "pass": "fault_point",
+  "inputs": "faults.rs's SHADER (vs returns clip (0, 0, 0, 1); fs returns (1, 1, 1, 1)), one vertex drawn as a point list into a 5 × 5 rgba8unorm target cleared to transparent",
+  "size": [5, 5],
+  "channels": 4,
+  "items": [
+    { "id": "fault_point.clear", "at": [0, 0, 5, 5] },
+    { "id": "fault_point.point", "at": [2, 2, 1, 1] }
+  ],
+  "expect": [
+    { "at": [2, 2], "value": [255, 255, 255, 255], "why": "clip (0, 0) maps to window ((0 + 1) / 2 × 5, (1 − 0) / 2 × 5) = (2.5, 2.5), the centre of pixel (2, 2); a 1-pixel point there covers that pixel alone, and fs writes 1.0 = 255 in every channel" },
+    { "at": [3, 2], "value": [0, 0, 0, 0], "why": "the point covers pixel (2, 2) only, so its right neighbour keeps the transparent clear" },
+    { "at": [0, 0], "value": [0, 0, 0, 0], "why": "a corner pixel, outside the point: the transparent clear" }
+  ]
+}

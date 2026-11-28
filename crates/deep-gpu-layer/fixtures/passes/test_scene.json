@@ -1,0 +1,22 @@
+{
+  "pass": "test_scene",
+  "inputs": "scene.wgsl's region_vertex/region_fragment drawing a test.scene@1 scene at frame 5 into a 16 × 8 bgra8unorm target cleared to the background BGRA (96, 64, 32, 255), one draw per region in order, each clipped to its rect by the scissor: ramp at (−96, 0) 108 × 4, step 2, alpha 255 (visible x 0–11); color at (0, 0) 4 × 4, BGRA (0, 0, 255, 255); stamp at (0, 4) 8 × 4, 4 bits, cell 2, one (255, 255, 255, 255), zero (0, 0, 0, 255); texture at (8, 4) 4 × 4 over texels BGRA (x, y, x ^ y, 255). Values are the target's bytes, in BGRA order",
+  "size": [16, 8],
+  "channels": 4,
+  "items": [
+    { "id": "test_scene.background", "at": [0, 0, 16, 8] },
+    { "id": "test_scene.ramp", "at": [0, 0, 12, 4] },
+    { "id": "test_scene.color", "at": [0, 0, 4, 4] },
+    { "id": "test_scene.stamp", "at": [0, 4, 8, 4] },
+    { "id": "test_scene.texture", "at": [8, 4, 4, 4] }
+  ],
+  "expect": [
+    { "at": [1, 1], "value": [0, 0, 255, 255], "why": "the color region, drawn after the ramp, replaces it: BGRA (0, 0, 255, 255); bgra() returns (R, G, B, A) = (255, 0, 0, 255) / 255 and bgra8unorm stores it back as (0, 0, 255, 255)" },
+    { "at": [6, 1], "value": [51, 51, 51, 255], "why": "the ramp: dx = 6 − (−96) = 102, v = min(255, 102 / 2) = 51, not bgra so alpha is c = 255" },
+    { "at": [11, 2], "value": [53, 53, 53, 255], "why": "the ramp's last visible column: dx = 107, v = 107 / 2 = 53 (integer division)" },
+    { "at": [2, 5], "value": [255, 255, 255, 255], "why": "the stamp: value = 5 mod 16 = 0b0101; dx = 2, k = 2 / 2 = 1, bit 4 − 1 − 1 = 2 of 0b0101 is 1: one" },
+    { "at": [5, 6], "value": [0, 0, 0, 255], "why": "the stamp: dx = 5, k = 2, bit 4 − 1 − 2 = 1 of 0b0101 is 0: zero" },
+    { "at": [11, 5], "value": [3, 1, 2, 255], "why": "the texture: dx = 3, dy = 1, texel [3, 1, 3 ^ 1 = 2, 255]" },
+    { "at": [14, 2], "value": [96, 64, 32, 255], "why": "no region reaches x = 14: the background BGRA (96, 64, 32, 255)" }
+  ]
+}

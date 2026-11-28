@@ -1,0 +1,14 @@
+{
+  "pass": "depth_upload",
+  "inputs": "deep-effects-render's DEPTH_WGSL (depth_texture's upload) drawn as depth_texture draws it: a full-screen triangle into a 4 × 4 depth32float target cleared to 0, depth compare always, reading a 4 × 4 r32float source whose texel (x, y) holds (x + 4y) / 15, so each pixel writes its own texel's value through frag_depth; the depth read back × 255",
+  "size": [4, 4],
+  "channels": 1,
+  "items": [{ "id": "depth_upload.depth", "at": [0, 0, 4, 4] }],
+  "expect": [
+    { "at": [1, 0], "value": [17], "why": "texel (1, 0) holds (1 + 0) / 15, and 255 / 15 = 17" },
+    { "at": [2, 1], "value": [102], "why": "texel (2, 1) holds (2 + 4) / 15 = 0.4, 0.4 × 255 = 102" },
+    { "at": [1, 2], "value": [153], "why": "texel (1, 2) holds (1 + 8) / 15 = 0.6, 0.6 × 255 = 153" },
+    { "at": [3, 3], "value": [255], "why": "texel (3, 3) holds (3 + 12) / 15 = 1, the far plane, 255" },
+    { "at": [0, 0], "value": [0], "why": "texel (0, 0) holds 0, the clear's own value, 0" }
+  ]
+}

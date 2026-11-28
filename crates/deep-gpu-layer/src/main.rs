@@ -55,6 +55,7 @@ mod marks2d;
 mod op_transition;
 mod opframe;
 mod parity;
+mod passes;
 mod particles;
 mod physics;
 mod plugin;
@@ -64,6 +65,7 @@ mod reference;
 mod regions;
 mod relation;
 mod reseed;
+mod saved_frame;
 mod scene;
 mod sea;
 mod seam;
@@ -1050,6 +1052,7 @@ impl Planted {
                     named
                         .chain(particles::PLANTED)
                         .chain(frames::PLANTED)
+                        .chain(passes::planted_names())
                         .find(|p| *p == name)?,
                 )
             }

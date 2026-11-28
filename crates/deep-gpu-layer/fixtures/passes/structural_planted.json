@@ -1,0 +1,17 @@
+{
+  "pass": "structural_planted",
+  "inputs": "planted.wgsl's two entry points over n = 8 words 10, 20, …, 80: `reverse` into 8 words, then `append` with flags 1, 0, 1, 1, 0, 0, 1, 0 into 8 words and a counter at 0. The output is 13 elements, each a word as its code: the 8 reversed words, the counter, and the first 4 appended words sorted, since `append` keeps them in whatever order the adds land",
+  "size": [13, 1],
+  "channels": 1,
+  "items": [
+    { "id": "structural_planted.reverse", "at": [0, 0, 8, 1] },
+    { "id": "structural_planted.append", "at": [8, 0, 5, 1] }
+  ],
+  "expect": [
+    { "at": [0, 0], "value": [80], "why": "reversed, the first word is the last, 80" },
+    { "at": [7, 0], "value": [10], "why": "and the last is the first, 10" },
+    { "at": [8, 0], "value": [4], "why": "four flags are set" },
+    { "at": [9, 0], "value": [10], "why": "the flagged words sorted: 10, 30, 40, 70" },
+    { "at": [12, 0], "value": [70], "why": "the largest flagged word, 70" }
+  ]
+}

@@ -1,0 +1,176 @@
+{
+  "passes": [
+    {
+      "pass": "fill",
+      "file": "crates/deep-effects-render/src/fill.wgsl",
+      "fixture": "crates/deep-gpu-layer/fixtures/passes/fill.json",
+      "twin": "fill_twin"
+    },
+    {
+      "pass": "mips",
+      "file": "crates/deep-effects-render/src/mips.wgsl",
+      "fixture": "crates/deep-gpu-layer/fixtures/passes/mips.json",
+      "twin": "mips_twin"
+    },
+    {
+      "pass": "structural_planted",
+      "file": "crates/deep-effects-render/src/planted.wgsl",
+      "fixture": "crates/deep-gpu-layer/fixtures/passes/structural_planted.json",
+      "twin": "structural_planted_twin"
+    },
+    {
+      "pass": "strokes",
+      "file": "crates/deep-effects-render/src/strokes.wgsl",
+      "fixture": "crates/deep-gpu-layer/fixtures/passes/strokes.json",
+      "twin": "strokes_twin"
+    },
+    {
+      "pass": "particles_draw",
+      "file": "crates/deep-effects-render/src/particles.wgsl",
+      "fixture": "crates/deep-gpu-layer/fixtures/passes/particles_draw.json",
+      "twin": "particles_draw_twin"
+    },
+    {
+      "pass": "particles_kernel",
+      "file": "crates/deep-effects-render/src/closed.wgsl",
+      "fixture": "crates/deep-gpu-layer/fixtures/passes/particles_kernel.json",
+      "twin": "particles_kernel_twin"
+    },
+    {
+      "pass": "depth_upload",
+      "file": "crates/deep-effects-render/src/reference.rs",
+      "fixture": "crates/deep-gpu-layer/fixtures/passes/depth_upload.json",
+      "twin": "depth_upload_twin"
+    },
+    {
+      "pass": "structural_stub",
+      "file": "crates/deep-effects-render/src/compile.rs",
+      "fixture": "crates/deep-gpu-layer/fixtures/passes/structural_stub.json",
+      "twin": "structural_stub_twin"
+    },
+    {
+      "pass": "tick",
+      "file": "crates/deep-gpu-layer/src/tick.wgsl",
+      "fixture": "crates/deep-gpu-layer/fixtures/passes/tick.json",
+      "twin": "tick_step_off_by_a_tenth"
+    },
+    {
+      "pass": "burn",
+      "file": "crates/deep-gpu-layer/src/burn.wgsl",
+      "fixture": "crates/deep-gpu-layer/fixtures/passes/burn.json",
+      "twin": "burn_twin"
+    },
+    {
+      "pass": "regions",
+      "file": "crates/deep-gpu-layer/src/regions.wgsl",
+      "fixture": "crates/deep-gpu-layer/fixtures/passes/regions.json",
+      "twin": "regions_twin"
+    },
+    {
+      "pass": "regions_bounds",
+      "file": "crates/deep-gpu-layer/src/regions_bounds.wgsl",
+      "fixture": "crates/deep-gpu-layer/fixtures/passes/regions_bounds.json",
+      "twin": "regions_bounds_twin"
+    },
+    {
+      "pass": "live_effects",
+      "file": "crates/deep-gpu-layer/src/effects.wgsl",
+      "fixture": "crates/deep-gpu-layer/fixtures/passes/live_effects.json",
+      "twin": "live_effects_twin"
+    },
+    {
+      "pass": "test_scene",
+      "file": "crates/deep-gpu-layer/src/scene.wgsl",
+      "fixture": "crates/deep-gpu-layer/fixtures/passes/test_scene.json",
+      "twin": "test_scene_twin"
+    },
+    {
+      "pass": "test_gpu",
+      "file": "crates/deep-gpu-layer/src/testgpu.wgsl",
+      "fixture": "crates/deep-gpu-layer/fixtures/passes/test_gpu.json",
+      "twin": "test_gpu_twin"
+    },
+    {
+      "pass": "scene_pipeline",
+      "file": "crates/deep-gpu-layer/src/scene.rs",
+      "fixture": "crates/deep-gpu-layer/fixtures/passes/scene_pipeline.json",
+      "twin": "scene_pipeline_twin"
+    },
+    {
+      "pass": "fault_point",
+      "file": "crates/deep-gpu-layer/src/faults.rs",
+      "fixture": "crates/deep-gpu-layer/fixtures/passes/fault_point.json",
+      "twin": "fault_point_twin"
+    },
+    {
+      "pass": "handoff_fixtures",
+      "file": "crates/deep-gpu-layer/src/fixtures.rs",
+      "fixture": "crates/deep-gpu-layer/fixtures/passes/handoff_fixtures.json",
+      "twin": "handoff_fixtures_twin"
+    },
+    {
+      "pass": "operator_vertex",
+      "file": "crates/deep-gpu-layer/src/effects/check_operator.rs",
+      "fixture": "crates/deep-gpu-layer/fixtures/passes/operator_vertex.json",
+      "twin": "operator_vertex_twin"
+    },
+    {
+      "pass": "operator_emit",
+      "file": "crates/deep-canvas-effects/src/emit.rs",
+      "fixture": "crates/deep-gpu-layer/fixtures/passes/operator_emit.json",
+      "twin": "operator_emit_twin"
+    },
+    {
+      "pass": "efficiency_marks",
+      "file": "crates/deep-show/src/efficiency.rs",
+      "fixture": "crates/deep-gpu-layer/fixtures/passes/efficiency_marks.json",
+      "twin": "efficiency_marks_twin"
+    },
+    {
+      "pass": "kit_fill",
+      "file": "crates/deep-show/src/kit/gpu.rs",
+      "fixture": "crates/deep-gpu-layer/fixtures/passes/kit_fill.json",
+      "twin": "kit_fill_twin"
+    },
+    {
+      "pass": "kit_gpu_pass",
+      "file": "crates/deep-show/src/kit/modules.rs",
+      "fixture": "crates/deep-gpu-layer/fixtures/passes/kit_gpu_pass.json",
+      "twin": "kit_gpu_pass_twin"
+    },
+    {
+      "pass": "spans_mark",
+      "file": "crates/deep-gpu/src/spans.rs",
+      "fixture": "crates/deep-gpu-layer/fixtures/passes/spans_mark.json",
+      "twin": "spans_mark_twin"
+    },
+    {
+      "pass": "player_blit",
+      "file": "crates/deep-player/src/gpu.rs",
+      "fixture": "crates/deep-gpu-layer/fixtures/passes/player_blit.json",
+      "twin": "player_blit_twin"
+    }
+  ],
+  "oracles": [
+    {
+      "file": "crates/deep-scene3d-render/src/glass.rs",
+      "oracle": "tests/acceptance/428: transmission's mip copy, against its reference"
+    },
+    {
+      "file": "crates/deep-scene3d-render/src/lib.rs",
+      "oracle": "tests/acceptance/432: the planted per-item warm-up, a module with no pass"
+    },
+    {
+      "file": "crates/deep-scene3d-render/src/local.rs",
+      "oracle": "tests/acceptance/446: cached local shadow maps, each equal to a clean rebuild"
+    },
+    {
+      "file": "crates/deep-scene3d-render/src/sss.rs",
+      "oracle": "tests/acceptance/481: subsurface's share pass, against its reference"
+    },
+    {
+      "file": "crates/deep-scene3d-render/src/targets.rs",
+      "oracle": "tests/acceptance/431: the velocity and emission targets, against their reference"
+    }
+  ]
+}

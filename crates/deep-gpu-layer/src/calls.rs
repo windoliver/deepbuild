@@ -5,8 +5,8 @@ use crate::allocations;
 use crate::{
     budget, calibrate, columns, compare, compile, conformance, effects, envelope, film, fix,
     frames, full_lane, golden, guard, host, interp_suite, live, marks2d, opframe, parity,
-    particles, plugin, records, refused, relation, seam, simplify, steps_ref, textures, timing,
-    tone, trails, validation, view3d, App,
+    particles, passes, plugin, records, refused, relation, seam, simplify, steps_ref, textures,
+    timing, tone, trails, validation, view3d, App,
 };
 
 impl App {
@@ -73,6 +73,10 @@ impl App {
             Some("budget_fix") => fix::call(self, out, call),
             Some("adapter") => timing::adapter(self),
             Some("tick") => timing::tick(self, call),
+            Some("save_frame") => crate::saved_frame::save(self, out, call),
+            Some("replay_frame") => crate::saved_frame::replay(self, out, call),
+            Some("passes") => passes::passes(),
+            Some("pass_fixture") => passes::fixture(self, call),
             #[cfg(feature = "test-meter")]
             Some("allocate") => allocations::allocate(self, call),
             #[cfg(feature = "test-meter")]

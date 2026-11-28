@@ -1,0 +1,16 @@
+{
+  "pass": "spans_mark",
+  "inputs": "deep-gpu's spans MARK dispatched once over a 2 × 2 rgba8unorm start texture whose texels are (200, 100, 50, 255), (10, 20, 30, 40) in row 0 and (60, 70, 80, 90), (0, 128, 255, 64) in row 1, its vec4 sink read back × 255; and the spans test's SPIN with LOOPS = 1u over a 4 × 4 rgba8unorm target, x = fract(fract(px.x × 0.001 + px.y × 0.002) × 3.7 + 0.1234) at each pixel centre px, written (x, x, x, 1). The output is one row of 17 elements: SPIN's 16 pixels row by row (element 4y + x), then MARK's sink",
+  "size": [17, 1],
+  "channels": 4,
+  "items": [
+    { "id": "spans_mark.spin", "at": [0, 0, 16, 1] },
+    { "id": "spans_mark.mark", "at": [16, 0, 1, 1] }
+  ],
+  "expect": [
+    { "at": [16, 0], "value": [200, 100, 50, 255], "why": "MARK loads texel (0, 0) into the sink: (200, 100, 50, 255) ÷ 255, read back × 255" },
+    { "at": [0, 0], "value": [33, 33, 33, 255], "why": "pixel (0, 0): x = 0.0005 + 0.001 = 0.0015, 0.0015 × 3.7 + 0.1234 = 0.12895, 32.88 of 255" },
+    { "at": [3, 0], "value": [36, 36, 36, 255], "why": "pixel (3, 0): x = 0.0035 + 0.001 = 0.0045, 0.0045 × 3.7 + 0.1234 = 0.14005, 35.71 of 255" },
+    { "at": [15, 0], "value": [41, 41, 41, 255], "why": "pixel (3, 3): x = 0.0035 + 0.007 = 0.0105, 0.0105 × 3.7 + 0.1234 = 0.16225, 41.37 of 255" }
+  ]
+}

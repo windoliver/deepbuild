@@ -1,0 +1,137 @@
+{
+  "pass": "regions_bounds",
+  "inputs": "regions_bounds.wgsl's cs_bounds on regions.wgsl's seen and covered, over the regions fixture's frame: 16 × 16 px in 2D (page = [1, 0, 0, 1]), one side of look 0, one straight-edged box region of look 1, the 2D volume of rect@1 [4.25, 4, 8, 8]; the bounds start at [u32 max, u32 max, 0, 0] per look. A pixel counts for its region's look when clamp(0.5 − sd, 0, 1) > 0, sd = max(|x + 0.5 − 8.25| − 4, |y + 0.5 − 8| − 4) inside. Output: one row per look index (0..3), its words [x0, y0, x1, y1] as integer codes.",
+  "size": [
+    4,
+    4
+  ],
+  "channels": 1,
+  "items": [
+    {
+      "id": "regions_bounds.look0",
+      "at": [
+        0,
+        0,
+        4,
+        1
+      ]
+    },
+    {
+      "id": "regions_bounds.look1",
+      "at": [
+        0,
+        1,
+        4,
+        1
+      ]
+    },
+    {
+      "id": "regions_bounds.look2",
+      "at": [
+        0,
+        2,
+        4,
+        1
+      ]
+    },
+    {
+      "id": "regions_bounds.look3",
+      "at": [
+        0,
+        3,
+        4,
+        1
+      ]
+    }
+  ],
+  "expect": [
+    {
+      "at": [
+        0,
+        1
+      ],
+      "value": [
+        4
+      ],
+      "why": "x0 of look 1: column 4 has sd = |4.5 − 8.25| − 4 = −0.25, m = 0.75 > 0; column 3 has sd = |3.5 − 8.25| − 4 = 0.75, m = clamp(−0.25) = 0"
+    },
+    {
+      "at": [
+        1,
+        1
+      ],
+      "value": [
+        4
+      ],
+      "why": "y0 of look 1: row 4 has |4.5 − 8| − 4 = −0.5, m = 1 at x = 8; row 3 has 0.5 or more, m = 0"
+    },
+    {
+      "at": [
+        2,
+        1
+      ],
+      "value": [
+        12
+      ],
+      "why": "x1 of look 1: column 12 has sd = |12.5 − 8.25| − 4 = 0.25, m = 0.25 > 0; column 13 has sd = 1, m = 0"
+    },
+    {
+      "at": [
+        3,
+        1
+      ],
+      "value": [
+        11
+      ],
+      "why": "y1 of look 1: row 11 has |11.5 − 8| − 4 = −0.5, m = 1 at x = 8; row 12 has 0.5 or more, m = 0"
+    },
+    {
+      "at": [
+        0,
+        0,
+        2,
+        1
+      ],
+      "value": [
+        4294967295
+      ],
+      "why": "look 0 is the side's own look with no region of it: its x0 and y0 keep their start, u32 max"
+    },
+    {
+      "at": [
+        2,
+        0,
+        2,
+        1
+      ],
+      "value": [
+        0
+      ],
+      "why": "look 0's x1 and y1 keep their start, 0"
+    },
+    {
+      "at": [
+        0,
+        2,
+        2,
+        2
+      ],
+      "value": [
+        4294967295
+      ],
+      "why": "looks 2 and 3 aren't in the frame: their x0 and y0 keep their start, u32 max"
+    },
+    {
+      "at": [
+        2,
+        2,
+        2,
+        2
+      ],
+      "value": [
+        0
+      ],
+      "why": "looks 2 and 3's x1 and y1 keep their start, 0"
+    }
+  ]
+}

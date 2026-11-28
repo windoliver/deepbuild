@@ -1,0 +1,17 @@
+{
+  "pass": "kit_fill",
+  "inputs": "deep-show's kit FILL over an 8 × 4 rgba8unorm frame cleared to the ground (30, 30, 30, 255), no blending, drawn as the kit draws its quads (two triangles each, a vertex [x, y, r, g, b, a] with x = px / 8 × 2 − 1, y = 1 − py / 4 × 2 and each color code ÷ 255): a quad at px (0, 0, 4, 4) colored (10, 200, 90, 255), then a quad at px (4, 2, 4, 2) colored (240, 120, 60, 200)",
+  "size": [8, 4],
+  "channels": 4,
+  "items": [
+    { "id": "kit_fill.ground", "at": [0, 0, 8, 4] },
+    { "id": "kit_fill.left", "at": [0, 0, 4, 4] },
+    { "id": "kit_fill.corner", "at": [4, 2, 4, 2] }
+  ],
+  "expect": [
+    { "at": [1, 1], "value": [10, 200, 90, 255], "why": "centre (1.5, 1.5) lies inside px (0, 0, 4, 4) only; FILL returns the vertex color, the same at every corner: (10, 200, 90, 255) ÷ 255 written back as (10, 200, 90, 255)" },
+    { "at": [6, 3], "value": [240, 120, 60, 200], "why": "centre (6.5, 3.5) lies inside px (4, 2, 4, 2); with no blending its color is written as it is, alpha 200 included" },
+    { "at": [6, 0], "value": [30, 30, 30, 255], "why": "centre (6.5, 0.5) lies inside neither quad, so the clear's ground (30, 30, 30, 255) stays" },
+    { "at": [0, 0, 4, 4], "value": [10, 200, 90, 255], "why": "every centre (x + 0.5, y + 0.5) with x, y < 4 lies inside px (0, 0, 4, 4) and outside the second quad" }
+  ]
+}

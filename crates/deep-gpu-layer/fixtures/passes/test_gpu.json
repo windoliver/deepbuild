@@ -1,0 +1,21 @@
+{
+  "pass": "test_gpu",
+  "inputs": "testgpu.wgsl with frame.clip the identity and one instance at = (0, 0, 0.5), each entry pair drawn into its own 8 × 8 rgba16float target cleared to transparent and stacked (rows 0–7 quad, 8–15 mesh). quad: quad_vs/quad_fs, 6 vertices, sampling a 2 × 2 rgba8unorm texture (row 0 red (255, 0, 0), green (0, 255, 0); row 1 blue (0, 0, 255), white (255, 255, 255)) through a linear, clamp-to-edge sampler. mesh: mesh_vs/mesh_fs, two triangles over the square (±0.5, ±0.5, 0) with w = 0.25 at every vertex",
+  "size": [8, 16],
+  "channels": 4,
+  "items": [
+    { "id": "test_gpu.quad_clear", "at": [0, 0, 8, 8] },
+    { "id": "test_gpu.quad", "at": [2, 2, 4, 4] },
+    { "id": "test_gpu.mesh_clear", "at": [0, 8, 8, 8] },
+    { "id": "test_gpu.mesh", "at": [2, 10, 4, 4] }
+  ],
+  "expect": [
+    { "at": [2, 2], "value": [255, 0, 0, 255], "why": "the quad spans clip ±0.5, window pixels 2–5; pixel (2, 2) has c = (0.125, 0.875), uv = (0.125, 1 − 0.875 = 0.125); texel coordinates 0.125 × 2 − 0.5 = −0.25 clamp onto texel (0, 0), red; quad_fs writes rgb and alpha 1" },
+    { "at": [3, 2], "value": [191, 64, 0, 255], "why": "uv = (0.375, 0.125): u texel coordinate 0.25, so 0.75 red + 0.25 green = (0.75, 0.25, 0) × 255 = (191.25, 63.75, 0)" },
+    { "at": [5, 5], "value": [255, 255, 255, 255], "why": "uv = (0.875, 0.875): texel coordinate 1.25 in both, clamped onto texel (1, 1), white" },
+    { "at": [2, 5], "value": [0, 0, 255, 255], "why": "uv = (0.125, 0.875): texel (0, 1), blue" },
+    { "at": [0, 0], "value": [0, 0, 0, 0], "why": "outside the quad: the transparent clear" },
+    { "at": [3, 11], "value": [64, 128, 191, 255], "why": "mesh pixel (3, 3) of its panel lies inside the square (window 2–6); mesh_vs's color is (w, 0.5, 1 − w) = (0.25, 0.5, 0.75) × 255 = (63.75, 127.5, 191.25), alpha 1" },
+    { "at": [7, 15], "value": [0, 0, 0, 0], "why": "outside the mesh's square: the transparent clear" }
+  ]
+}

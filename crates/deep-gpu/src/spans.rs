@@ -87,7 +87,7 @@ impl Drop for Armed {
     }
 }
 
-const MARK: &str = "
+pub const MARK: &str = "
     @group(0) @binding(0) var read: texture_2d<f32>;
     @group(0) @binding(1) var<storage, read_write> sink: vec4f;
     @compute @workgroup_size(1) fn mark() { sink = textureLoad(read, vec2u(0u), 0); }";

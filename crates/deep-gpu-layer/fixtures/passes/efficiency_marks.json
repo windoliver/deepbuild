@@ -1,0 +1,18 @@
+{
+  "pass": "efficiency_marks",
+  "inputs": "deep-show's bench SHADER over an 8 × 8 rgba8unorm target cleared to (0, 0, 0, 0), View size (8, 8), premultiplied-alpha blending, a 4-vertex triangle strip per instance in draw order: the ground rect (0, 0, 8, 8) radius 0 color (16, 32, 48); a rect (1, 1, 4, 4) radius 0 color (200, 100, 50); a rect (3, 3, 4, 4) radius 2 color (20, 220, 120), every color with alpha 255. At a pixel centre p inside a rect with half size h and centre c: r = min(radius, h), q = |p − c| − h + r, d = |max(q, 0)| + min(max(q.x, q.y), 0) − r, a = clamp(0.5 − d, 0, 1), and the target becomes color × a + target × (1 − a) with alpha a + alpha × (1 − a)",
+  "size": [8, 8],
+  "channels": 4,
+  "items": [
+    { "id": "efficiency_marks.ground", "at": [0, 0, 8, 8] },
+    { "id": "efficiency_marks.square", "at": [1, 1, 4, 4] },
+    { "id": "efficiency_marks.disc", "at": [3, 3, 4, 4] }
+  ],
+  "expect": [
+    { "at": [2, 2], "value": [200, 100, 50, 255], "why": "the square's centre is (3, 3), half 2, radius 0: q = (0.5, 0.5) − 2 = (−1.5, −1.5), d = −1.5, a = 1, so its color covers the ground exactly; the disc starts at x = 3" },
+    { "at": [0, 0], "value": [16, 32, 48, 255], "why": "only the ground reaches (0.5, 0.5): q = (3.5, 3.5) − 4 = (−0.5, −0.5), d = −0.5, a = 1, so (16, 32, 48, 255)" },
+    { "at": [4, 4], "value": [20, 220, 120, 255], "why": "the disc's centre is (5, 5), half 2, r = 2: q = (0.5, 0.5) − 2 + 2 = (0.5, 0.5), d = √0.5 − 2 = −1.29, a = 1, so its color covers the square" },
+    { "at": [6, 4], "value": [20, 205, 114, 255], "why": "q = (1.5, 0.5) − 2 + 2 = (1.5, 0.5), d = √2.5 − 2 = −0.4189, a = 0.9189 over the ground: 20a + 16(1 − a) = 19.68, 220a + 32(1 − a) = 204.75, 120a + 48(1 − a) = 114.16, alpha a + (1 − a) = 1" },
+    { "at": [3, 3], "value": [132, 145, 77, 255], "why": "the disc's corner: q = (1.5, 1.5), d = √4.5 − 2 = 0.1213, a = 0.3787 over the square: 200 − 180a = 131.84, 100 + 120a = 145.44, 50 + 70a = 76.51, alpha 1" }
+  ]
+}
