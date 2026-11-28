@@ -237,7 +237,7 @@ export function cadenceOf(c: unknown): Cadence {
  * A `deep.schedule` call, held to the package's manifest: a name of its own, a cadence, a deadline, and what its job
  * may do, each source, notice kind and store kind one its manifest declares.
  */
-export function declareSchedule(name: unknown, declared: unknown, own: { plugin: string; sources: string[]; notices: string[]; stores: string[] }): ScheduleDecl {
+function declareSchedule(name: unknown, declared: unknown, own: { plugin: string; sources: string[]; notices: string[]; stores: string[] }): ScheduleDecl {
   const refuse = (why: string): never => { throw Error(`deep.schedule: ${String(name)} ${why}`); };
   if (typeof name !== 'string' || !NAME.test(name) || !name.startsWith(`ext.${own.plugin.slice(own.plugin.indexOf('/') + 1)}.`)) refuse(`isn't a name of ${own.plugin}'s own, ext.<plugin>.<name>`);
   const d = (typeof declared === 'object' && declared !== null ? declared : {}) as Record<string, unknown>;

@@ -39,7 +39,7 @@ export interface Made { tool: string; input: unknown; answered: boolean }
 /** A run's end: with the outside calls it made. */
 export interface AgentResult { ok: boolean; result?: string; usage?: { input: number; output: number }; calls?: Made[] }
 /** One outside call a replayed agent made, as the replay recorded it: `answered` false got the not-in-the-recording error. */
-export interface ReplayCall { task: string; side: 'base' | 'change'; repeat: number; tool: string; input: unknown; answered: boolean }
+interface ReplayCall { task: string; side: 'base' | 'change'; repeat: number; tool: string; input: unknown; answered: boolean }
 export interface JudgeRequest { model: string; prompt: string; outputs: { label: string; text: string }[] }
 /** A score from 0 to 1. */
 export interface Grade { label: string; score: number }

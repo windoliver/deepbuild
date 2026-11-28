@@ -11,7 +11,7 @@ export { ADAPTERS, factsAdapter, factsFiles, readFacts } from './facts.js';
 
 export type {
   Adapter, AdapterCaps, AdapterEvent, AdapterParts, AdapterRegistry, DoctorItem, Drift, HookOutput, HookRequestLine, JsonObject, Mapped, PermissionAnswer, Reading,
-  SessionRoute, Skill, StopCause, StopReading, TurnUsage, Unsupported,
+  SessionRoute, StopCause, TurnUsage,
 } from './types.js';
 
 const NAME = /^[a-z][a-z0-9-]*$/;

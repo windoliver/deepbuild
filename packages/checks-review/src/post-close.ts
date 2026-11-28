@@ -18,7 +18,7 @@ export interface PostClosePass {
   scope?: string[];
   found: { pr: number; base: string; head: string; bugs: { file: string; line: number }[] }[];
 }
-export interface PassReading { measure: 'post-close review pass'; pass: string; found: number; of: number; prs: number[] }
+interface PassReading { measure: 'post-close review pass'; pass: string; found: number; of: number; prs: number[] }
 export interface PostCloseReport {
   /** Each pass on the claim's diff: what its reviewer answered, and that answer judged: the item sent back, under the pass's ID, the pre-existing findings and the dropped ones. */
   claim: { pass: string; findings: PassFinding[]; sendBack: SendBackItem | null; followUps: ReviewFinding[]; dropped: DroppedFinding[] }[];

@@ -15,7 +15,7 @@ const run = promisify(execFile);
 export const WORKSPACE_FILE = '.deepbuild/workspace.json';
 /** What a workspace touches: an ID, the state source that reads it and that source's settings. */
 export interface Touch { id: string; source: string; [setting: string]: unknown }
-export interface WorkspaceFile { id: string; name: string; touches: Touch[] }
+interface WorkspaceFile { id: string; name: string; touches: Touch[] }
 type Items = Record<string, JsonValue>;
 type Source = Omit<StateSource, 'fixture'>;
 

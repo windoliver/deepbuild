@@ -6,34 +6,34 @@
 // task serves a line of the brief, or it's left out naming it. The hub keeps the record, raises the card and applies it.
 
 /** What it makes, read from your words; never asked. */
-export const MAKES = ['document', 'deck', 'film', 'plan', 'budget', 'report', 'site', 'game', 'app'] as const;
-export type Makes = (typeof MAKES)[number];
+const MAKES = ['document', 'deck', 'film', 'plan', 'budget', 'report', 'site', 'game', 'app'] as const;
+type Makes = (typeof MAKES)[number];
 /** What is software, and so gets a private code project instead of a workspace. */
 const SOFTWARE: ReadonlySet<string> = new Set(['site', 'game', 'app']);
 /** The kinds of check a promise maps to; taste is a call that takes its recommended answer and never stops the run. */
-export const KINDS = ['document', 'data', 'message', 'money', 'code', 'taste'] as const;
-export type Kind = (typeof KINDS)[number];
+const KINDS = ['document', 'data', 'message', 'money', 'code', 'taste'] as const;
+type Kind = (typeof KINDS)[number];
 /** The brief's fields, one page in plain words; `fact` is a source's own text, shown with it, which adds nothing. */
-export const FIELDS = ['makes', 'for', 'holds', 'leaves_out', 'proves', 'goes'] as const;
-export type Field = (typeof FIELDS)[number] | 'fact';
+const FIELDS = ['makes', 'for', 'holds', 'leaves_out', 'proves', 'goes'] as const;
+type Field = (typeof FIELDS)[number] | 'fact';
 /** Your own words, as a line's cite names them. */
 export const WORDS = 'words';
 
 /** A source as a line cites it: your words, a link as you gave it, or a file's path as you gave it, and the exact words there. */
-export interface Cite { at: string; quote: string }
-export interface Line { id: string; field: Field; text: string; cites: Cite[]; /** A strong default you didn't choose: no source. */ default?: true }
-export interface Task { title: string; serves: string[]; criteria: string[]; blocked_by: string[] }
+interface Cite { at: string; quote: string }
+interface Line { id: string; field: Field; text: string; cites: Cite[]; /** A strong default you didn't choose: no source. */ default?: true }
+interface Task { title: string; serves: string[]; criteria: string[]; blocked_by: string[] }
 /** A step that buys, books, posts or sends: never in the card's plan, and asked once when it's due. */
 export interface Held { does: string; usd: number; due: string | null; at: string }
-export interface Promised { line: string; kind: Kind; /** A taste call's recommended answer. */ recommended?: string }
-export type Cadence = 'hour' | 'day' | 'week' | 'month' | 'year';
+interface Promised { line: string; kind: Kind; /** A taste call's recommended answer. */ recommended?: string }
+type Cadence = 'hour' | 'day' | 'week' | 'month' | 'year';
 /** An input as a wake test reads it before and after a change, under the name a refusal gives it. */
-export interface Planted { name: string; before: string; after: string }
+interface Planted { name: string; before: string; after: string }
 /**
  * A repeat job's wake test (#1527): a small script the hub runs with `sh <test> <before> <after>` on each fire, with no
  * model, whose first line answers `new` or `nothing new`. At approval it must wake on `planted` and stay quiet on `twin`.
  */
-export interface Wake { test: string; planted: Planted; twin: Planted }
+interface Wake { test: string; planted: Planted; twin: Planted }
 /** A repeat job's costs in US dollars: its dry run's, the line one run may spend, and what a month comes to at most. */
 export interface Cost { dry_usd: number; run_usd: number; month_usd: number }
 export interface Brief {
@@ -272,8 +272,8 @@ export function pageOf(brief: Brief, heading: string): string {
   return `${out.join('\n').trim()}\n`;
 }
 
-export interface Step { does: string; changes: string[]; undo: string | null; public: boolean; cost: number }
-export interface CardOptions { page: string; folder: string; fits: { id: string; name: string } | null; read: { name: string; text: string }[] }
+interface Step { does: string; changes: string[]; undo: string | null; public: boolean; cost: number }
+interface CardOptions { page: string; folder: string; fits: { id: string; name: string } | null; read: { name: string; text: string }[] }
 /** The one card: the question, the plan your yes applies, and its answers. Held steps are never in the plan. */
 export function cardOf(brief: Brief, o: CardOptions): { question: string; steps: Step[]; options: { id: string; label: string; decision: 'allow' | 'deny' }[] } {
   const read = o.read.length ? ['', '**What your links and files say, as their own text (it adds nothing to the brief):**', ...o.read.map((r) => `- ${r.name}: “${r.text.replace(/\s+/g, ' ').slice(0, 400)}”`)].join('\n') : '';

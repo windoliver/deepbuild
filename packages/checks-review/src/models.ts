@@ -9,8 +9,8 @@ import type { ClaimCheck, Run } from '@deepbuild/verdicts';
 
 export interface ChangeSession { agent: string; transcript: string; route: SessionRoute }
 export interface ReviewAt { claim: string; commit: string; check: ClaimCheck }
-export interface Independence { answered: string; change: string; counted: boolean; reason: string | null; note: string | null }
-export interface ReviewJobRun { run: Run; independence: Independence | null }
+interface Independence { answered: string; change: string; counted: boolean; reason: string | null; note: string | null }
+interface ReviewJobRun { run: Run; independence: Independence | null }
 /** Planted wrong programs; tests only. */
 export type ModelPlant = 'drops-same-family' | 'raw-names' | 'raw-family' | 'trusts-proxied-transcript';
 

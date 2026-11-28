@@ -6,7 +6,7 @@
 import type { HookReply, SetAside } from '@deepbuild/extension-host';
 
 type Obj = Record<string, unknown>;
-export interface HandlerFailuresOptions {
+interface HandlerFailuresOptions {
   appendCore(kind: string, data: Obj, extra?: { subject?: string }, who?: { session?: string; agent?: string }): Promise<void>;
   appendReading(session: string, agent: string, reading: string): Promise<void>;
 }

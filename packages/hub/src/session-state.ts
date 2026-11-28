@@ -55,7 +55,7 @@ import { CODEX_BINARY, CLAUDE_BINARY, JOB_ROW_MS, sql, letters, QUIET_MS, CALL_G
 /** How long a call with no end yet keeps its session at work through quiet hooks (#2021): Claude Code's Bash tool's own limit. */
 const CALL_RUNS_MS = 10 * 60_000;
 
-export interface SessionStateOptions {
+interface SessionStateOptions {
   settings: CoreOptions;
   services: {
     readonly gate: GateRunner;

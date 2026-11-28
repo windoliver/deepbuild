@@ -4,14 +4,14 @@ import { matches } from './glob.js';
 import { attributeStack, type Served, type StackRecords, type Trees } from './stack.js';
 import type { ClaimSource } from './claims.js';
 
-export type Agent = 'claude' | 'codex-observed' | 'codex-woken';
+type Agent = 'claude' | 'codex-observed' | 'codex-woken';
 export type Origin = 'human' | 'app' | 'answer' | 'continuation' | 'scheduled' | 'subagent' | 'session' | 'unknown';
-export interface Config { budget_ms: number; hold_ms: number; slots: number; grace_ms: number; stop_timeout_ms: number }
-export const DEFAULTS: Config = { budget_ms: 10_000, hold_ms: 60_000, slots: 4, grace_ms: 60_000, stop_timeout_ms: 600_000 };
+interface Config { budget_ms: number; hold_ms: number; slots: number; grace_ms: number; stop_timeout_ms: number }
+const DEFAULTS: Config = { budget_ms: 10_000, hold_ms: 60_000, slots: 4, grace_ms: 60_000, stop_timeout_ms: 600_000 };
 /** The longest background work holds a stop's slow checks, from that stop (#907). */
 const BACKGROUND_MS = 30 * 60_000;
 export interface Needs { cores: number; memory_mb: number; stack_slot: number; gpus: number }
-export interface StackStep { name: string; median_ms: number; inputs: string[] }
+interface StackStep { name: string; median_ms: number; inputs: string[] }
 export interface StackDef { steps: StackStep[]; per_run_ms: number; wait_ms?: number; kept: boolean; start(ctx: { attempt: number; kept_product: boolean; checkout: string; worktree: string }): StackRecords }
 export interface RunContext { snapshot: string; attempt: number; run: number; started_ms: number; load: number; worktree_at(ms: number): string }
 export interface CheckDef {
@@ -26,9 +26,9 @@ export interface CheckDef {
   timing?: boolean;
   run(ctx: RunContext): { took_ms: number; outcome: 'passed' | 'failed'; load?: number };
 }
-export type SortedAs = 'proceed' | 'provisional_ask' | 'completion_prompt' | 'deep_ask' | 'question_holds';
+type SortedAs = 'proceed' | 'provisional_ask' | 'completion_prompt' | 'deep_ask' | 'question_holds';
 /** `background`: the commands and subagents the session started in the background that still run, as its row names them. */
-export interface LoopFacts { goal: 'none' | 'active' | 'paused' | 'complete'; heartbeat_due: number | null; wakeup_due: number | null; cron_due: number | null; subagent_report_due: number | null; background: string[] }
+interface LoopFacts { goal: 'none' | 'active' | 'paused' | 'complete'; heartbeat_due: number | null; wakeup_due: number | null; cron_due: number | null; subagent_report_due: number | null; background: string[] }
 export type ScriptEvent =
   | { at: number; kind: 'prompt'; origin: Origin }
   | { at: number; kind: 'words'; via: 'typed' | 'app' | 'answer' }
@@ -48,7 +48,7 @@ export type SchedulerPlant =
   | 'one-reason-per-record' | 'takes-environments-word' | 'sizes-lane-by-run-alone' | 'leaves-host-empty' | 'fast-lane-waits'
   | 'holds-background-without-limit';
 
-export interface Held { total: number; question: number; slow: number; fast: number; snapshot_start: number; queue_wait: number }
+interface Held { total: number; question: number; slow: number; fast: number; snapshot_start: number; queue_wait: number }
 export interface StopReply {
   session: string; stop: string; at: number; reply_at: number; ends_turn: boolean;
   kind: 'ends_turn' | 'send_back' | 'proceed' | 'provisional_ask' | 'completion_prompt' | 'deep_ask' | 'question_holds';
@@ -70,11 +70,11 @@ export interface RunRecord {
   ran_in: 'checkout' | 'worktree';
   result_snapshot: string;
 }
-export interface QueueEvent { at: number; session: string; check: string; snapshot: string; op: 'queued' | 'replaced' | 'emptied' | 'held' | 'started'; by?: string }
-export interface HeldRecord { session: string; check: string; snapshot: string; held_at: number; reason: string; started_at: number | null; started_by: 'loop_paused' | 'claim' | 'words' | 'answer' | null; replaced_by: string | null }
-export interface Delivery { at: number; session: string; claim: string; check: string; snapshot: string; result: Result; how: 'woke' | 'sent_back' | 'held_reply' | 'next_tool_call' | 'next_prompt' | 'recorded_only'; stale: boolean; carried: boolean }
+interface QueueEvent { at: number; session: string; check: string; snapshot: string; op: 'queued' | 'replaced' | 'emptied' | 'held' | 'started'; by?: string }
+interface HeldRecord { session: string; check: string; snapshot: string; held_at: number; reason: string; started_at: number | null; started_by: 'loop_paused' | 'claim' | 'words' | 'answer' | null; replaced_by: string | null }
+interface Delivery { at: number; session: string; claim: string; check: string; snapshot: string; result: Result; how: 'woke' | 'sent_back' | 'held_reply' | 'next_tool_call' | 'next_prompt' | 'recorded_only'; stale: boolean; carried: boolean }
 type NeverStarted = 'quick_check_failed' | 'kept_working' | 'loop' | 'newer_claim';
-export interface CheckOnClaim { outcome: Result; runs: string[]; carried_from: string | null; carried_runs: string[]; stale: boolean; never_started: NeverStarted | null; late: { snapshot: string; outcome: Result; stops_back: number } | null }
+interface CheckOnClaim { outcome: Result; runs: string[]; carried_from: string | null; carried_runs: string[]; stale: boolean; never_started: NeverStarted | null; late: { snapshot: string; outcome: Result; stops_back: number } | null }
 export interface ClaimRecord { claim: string; session: string; source: ClaimSource; snapshot: string; at: number; stale: boolean; verdict: Result; checks: Record<string, CheckOnClaim>; line_at_reply: string; line: string }
 export interface Trace {
   stops: StopReply[]; runs: RunRecord[]; queue: QueueEvent[]; held: HeldRecord[]; deliveries: Delivery[]; claims: ClaimRecord[];

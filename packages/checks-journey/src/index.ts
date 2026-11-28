@@ -58,13 +58,13 @@ export interface JourneyRunOptions {
   environment?: { plant: 'swap-partway'; to: string };
   plant?: Plant;
 }
-export type Locator = JourneyLocator;
-export interface Control { role: string; name: string; testId?: string }
-export type PageError =
+type Locator = JourneyLocator;
+interface Control { role: string; name: string; testId?: string }
+type PageError =
   | { kind: 'uncaught'; message: string; step: string }
   | { kind: 'request'; url: string; status: number | null; unfinished: boolean; step: string };
-export interface Animation { target: Control; property: string; from: string; to: string; duration: number; delay: number; easing: string }
-export interface StepRecord {
+interface Animation { target: Control; property: string; from: string; to: string; duration: number; delay: number; easing: string }
+interface StepRecord {
   id: string;
   outcome: 'passed' | 'failed' | 'overran' | 'stopped' | 'unrun';
   startMs: number; endMs: number;
@@ -77,7 +77,7 @@ export interface StepRecord {
   animations: Animation[];
   firstFrame: { opacity: number; transform: string } | null;
 }
-export interface EndStateRecord {
+interface EndStateRecord {
   id: string;
   oracle: 'code' | 'model' | 'person';
   outcome: 'passed' | 'failed' | 'reading';
@@ -106,12 +106,11 @@ export interface JourneyRun extends CheckResult {
   redaction: Redaction;
   timing: { total: number; playwright: number };
 }
-export type Review = { ok: true } | { ok: false; reasons: string[] };
-export interface Feature { feature: string; name: string; files: string[]; journeys: string[] }
-export interface Requirement { req: string; depth: Depth; oracle: 'code' | 'model' | 'person' }
-export interface TasteAsk { kind: 'taste'; screenshot: string; reading: string }
+interface Feature { feature: string; name: string; files: string[]; journeys: string[] }
+interface Requirement { req: string; depth: Depth; oracle: 'code' | 'model' | 'person' }
+interface TasteAsk { kind: 'taste'; screenshot: string; reading: string }
 /** What the core would make of the run for a requirement: the checks that count, and the verdict row that applies. */
-export interface Cover { counted: string[]; wouldBe: 'PASS' | 'FAIL' | 'INVALID' | 'BLOCKED' | 'INCONCLUSIVE'; reasons: string[]; ask?: TasteAsk; sendBack: boolean }
+interface Cover { counted: string[]; wouldBe: 'PASS' | 'FAIL' | 'INVALID' | 'BLOCKED' | 'INCONCLUSIVE'; reasons: string[]; ask?: TasteAsk; sendBack: boolean }
 export interface ScreenOptions {
   host: Host; evidence: EvidenceStore;
   journey: string;
@@ -135,8 +134,8 @@ export interface ScreenResult {
   renders: { base: number; head: number };
   spec: string;
 }
-export interface Latency { outcome: 'passed' | 'failed'; base: number[]; head: number[]; shown: string }
-export interface Motion { normal: JourneyRun; reduced: JourneyRun; outcome: 'passed' | 'failed' | 'inconclusive'; named: string[] }
+interface Latency { outcome: 'passed' | 'failed'; base: number[]; head: number[]; shown: string }
+interface Motion { normal: JourneyRun; reduced: JourneyRun; outcome: 'passed' | 'failed' | 'inconclusive'; named: string[] }
 
 /** The environment profile every run is keyed by, and the tool versions. */
 const environmentOf = (profile: Profile): Record<string, string> => ({ browser: 'chromium', viewport: `${profile.width}x${profile.height}`, locale: profile.locale, timezone: profile.timezone, color_scheme: profile.colorScheme, reduced_motion: profile.reducedMotion, service_workers: 'off', scale: '1' });

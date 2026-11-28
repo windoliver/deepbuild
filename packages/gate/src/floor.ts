@@ -10,7 +10,7 @@ export interface DefinitionParts {
   deliverables: string[];
   files: Record<string, string>;
 }
-export interface Lock { hash: string; parts: Record<string, string> }
+interface Lock { hash: string; parts: Record<string, string> }
 
 const digest = (v: unknown): string => sha256Hex(canonicalize(v as JsonValue));
 function partsOf(d: DefinitionParts): Record<string, string> {
@@ -113,7 +113,7 @@ export function validityReads(input: Pick<ValidityInput, 'claim' | 'deliverables
   return [...new Set([...input.deliverables, 'package.json', 'Makefile', 'makefile', 'justfile', 'Justfile', ...cited.filter((path): path is string => !!path)])];
 }
 
-export interface ValidityInput { claim: { claim: string; message: string }; checkout: string; deliverables: string[]; session: SessionLog }
+interface ValidityInput { claim: { claim: string; message: string }; checkout: string; deliverables: string[]; session: SessionLog }
 export function validityGate(input: ValidityInput, plant?: FloorPlant): Finding[] {
   const { checkout, session } = input;
   const found: Finding[] = [];

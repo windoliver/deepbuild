@@ -23,7 +23,7 @@ export interface Snapshot { commit: string; wrote: boolean; tree: string }
  * One claim's budget for its snapshot and its checkout together: 8 s of git work from `since`, and no stage restarts
  * the clock. Past it, every git process it started is stopped by its PID and the work ends with an `OverBudget`.
  */
-export interface Budget { readonly since: number }
+interface Budget { readonly since: number }
 /** The snapshot's budget ran out: the message names the reason and the count of untracked files, as the claim's reason. */
 export class OverBudget extends Error {
   constructor(message = 'snapshot over budget') { super(message); this.name = 'OverBudget'; }
@@ -40,12 +40,12 @@ export type DeclaredSurface =
   | { check: string; kind: string };
 export interface StandIn { check: string; kind: string; hash: string; port?: number; run?: string; bin?: string }
 export interface BaseCheckout extends TempCheckout { standIns: StandIn[] }
-export interface ClaimCheckInput { check: string; spec: CheckSpec; deadline: number; on_base: 'fails' | 'passes'; own: string[]; asserts?: string[] }
+interface ClaimCheckInput { check: string; spec: CheckSpec; deadline: number; on_base: 'fails' | 'passes'; own: string[]; asserts?: string[] }
 export interface ClaimInput { claim: string; worktree: string; onto: string; checks: ClaimCheckInput[]; dependencies?: string[]; baseDependencies?: string[]; earlier?: ClaimRun[] }
-export interface BaseRun extends CheckResult { checkout: string; on_assertion: boolean }
-export interface ClaimCheckRun { check: string; digest: string; carried: boolean; head: CheckResult; base: BaseRun | null }
+interface BaseRun extends CheckResult { checkout: string; on_assertion: boolean }
+interface ClaimCheckRun { check: string; digest: string; carried: boolean; head: CheckResult; base: BaseRun | null }
 export interface ClaimRun { claim: string; snapshot: string; verdict: Result; reasons: string[]; smallest: string | null; checks: ClaimCheckRun[] }
-export interface Cited { open_claims: string[]; open_asks: string[]; kept_evidence: { snapshot: string; behind_decision: boolean }[] }
+interface Cited { open_claims: string[]; open_asks: string[]; kept_evidence: { snapshot: string; behind_decision: boolean }[] }
 export interface Checkouts {
   /** A claim's budget, counted from now: `snapshot` and `checkout` under it share its 8 s of git work. */
   budget(): Budget;

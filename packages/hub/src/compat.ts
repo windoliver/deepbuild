@@ -1,8 +1,8 @@
 // Whether the hub's hello (its contract version and the methods it lists) covers what an app or the CLI calls (#41).
 // A mismatch is one screen that names the older side and the one step that fixes it, never a failure call by call.
 export interface Hello { contract?: string; features?: readonly string[] }
-export interface Needs { contract: string; features: readonly string[] }
-export type Compat = { ok: true } | { ok: false; older: 'hub' | 'client'; screen: string; fix: string };
+interface Needs { contract: string; features: readonly string[] }
+type Compat = { ok: true } | { ok: false; older: 'hub' | 'client'; screen: string; fix: string };
 
 const parts = (contract: string): [number, number] => {
   const [major = '0', minor = '0'] = contract.split('.');

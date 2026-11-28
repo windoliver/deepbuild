@@ -9,7 +9,7 @@ import { packageDigest } from './digest.js';
 
 type Texts = Record<string, string>;
 type FixtureFile = string | { base64: string };
-export interface JobFixture { name: string; params: Record<string, JsonValue>; inputs: Record<string, FixtureFile>; expect: Texts }
+interface JobFixture { name: string; params: Record<string, JsonValue>; inputs: Record<string, FixtureFile>; expect: Texts }
 export interface JobKind {
   /** Each input by name; one declared `many` (#154) takes zero or more files, in order, all of them in the key. */
   schema: { params: Schema; inputs: Record<string, { media?: string; many?: boolean }>; tables?: string };

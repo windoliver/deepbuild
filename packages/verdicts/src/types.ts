@@ -67,7 +67,7 @@ export interface ClaimCheck {
   never_started?: 'quick_check_failed' | 'kept_working' | 'loop' | 'newer_claim';
 }
 
-export interface Frame { file: string; line: number }
+interface Frame { file: string; line: number }
 /** One failed test of a run, read from the tool's report. */
 export interface Failure {
   test: string;
@@ -123,7 +123,7 @@ export interface Run {
   stand_ins?: { table: string; by: string }[];
 }
 /** The paths that changed from an earlier commit to the claim's commit. */
-export interface Change { from: string; paths: string[] }
+interface Change { from: string; paths: string[] }
 /** A known failure, accepted by its exact error text. */
 export interface Waiver {
   check: string;
@@ -160,7 +160,7 @@ export interface ClaimInput {
   cites?: Cite[];
 }
 /** One thing a claim cites, by its handle. */
-export interface Cite { kind: 'file' | 'line' | 'test' | 'run' | 'link' | 'cell_grid' | 'screen'; handle: string }
+interface Cite { kind: 'file' | 'line' | 'test' | 'run' | 'link' | 'cell_grid' | 'screen'; handle: string }
 
 export interface CheckResult {
   check: string;
@@ -235,7 +235,7 @@ export interface Verdict {
 }
 
 export type Outputs = Record<string, readonly number[]>;
-export interface OutputTolerance { output: string; size: number; atol: number; rtol: number; unit: string }
+interface OutputTolerance { output: string; size: number; atol: number; rtol: number; unit: string }
 export interface NumericContract {
   reference: { precision: Precision };
   accumulate: Precision;

@@ -11,7 +11,6 @@
 // fetch time, kept with the asset; one DeepBuild doesn't know is BLOCKED with one unblock ask, never taken as free, and
 // offline a fetch is BLOCKED with one unblock ask. A library ships off: you turn each on once, and off removes it from
 // search and refuses its fetches, naming it. An asset.game@1 item may name only a fetched asset, by its file's hash.
-import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { readFile, rm } from 'node:fs/promises';
 import { basename, join } from 'node:path';
@@ -20,26 +19,25 @@ import type { ExtensionHost } from '@deepbuild/extension-host';
 import type { PlanInput } from '@deepbuild/asks';
 import { freeBytes } from './disk.js';
 import { forbiddenLicense, Packs, PUBLICATION_FIELDS } from './packs.js';
-import { isRecord as isObj } from '@deepbuild/contracts';
+import { isRecord as isObj, sha256Hex } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
-const sha256 = (b: Uint8Array | string): string => createHash('sha256').update(b).digest('hex');
 const BUNDLED_TERMS: Record<string, string> = { 'https://creativecommons.org/publicdomain/zero/1.0/': 'CC0-1.0', 'https://creativecommons.org/licenses/by/4.0/': 'CC-BY-4.0' };
 
 export type AssetKind = 'model' | 'hdri' | 'texture';
 const KINDS: readonly AssetKind[] = ['model', 'hdri', 'texture'];
 /** A license as a library's record states it, read by its fill: an SPDX ID or a LicenseRef, its terms, sharing and credit. */
-export interface AssetLicense { id: string; terms: string; shareable: boolean; credit: string | null }
+interface AssetLicense { id: string; terms: string; shareable: boolean; credit: string | null }
 /** One row of a search: the fill's, its thumbnail as the hash the hub keeps it by, and where it came from. */
-export interface AssetRow {
+interface AssetRow {
   id: string; name: string; kind: AssetKind; license: AssetLicense; size_m: number | null; triangles: number | null;
   thumbnail: string | null; url: string; from: { library: string } | { pack: string }; stale?: true; age_ms?: number;
 }
-export interface FileRef { path: string; bytes: number; sha256: string }
-export interface Publication { title?: string; publisher?: string; edition?: string }
-export interface FetchedFile extends Publication { url: string; fetched: number; bytes: number; license: AssetLicense }
+interface FileRef { path: string; bytes: number; sha256: string }
+interface Publication { title?: string; publisher?: string; edition?: string }
+interface FetchedFile extends Publication { url: string; fetched: number; bytes: number; license: AssetLicense }
 /** A fetched asset as the store keeps it: its main file's hash, its files, its license and its upstream. */
-export interface AssetRecord {
+interface AssetRecord {
   sha256: string; library?: string; pack?: string; id: string; license: AssetLicense; upstream: { url: string; version: string; modified: string }; files: FileRef[];
   fetched?: { url: string; at: number };
   source?: { url: string; fetched: number } & Publication;
@@ -62,7 +60,7 @@ const DAY = 86_400_000;
 export const libraryHosts = (m: { sources?: { variant?: string; host?: string }[] | undefined }): string[] =>
   [...new Set((m.sources ?? []).filter((s) => s.variant === 'library' && typeof s.host === 'string').map((s) => s.host!))];
 
-export interface LibraryDeps {
+interface LibraryDeps {
   /** The hub's folder: libraries.json keeps which libraries are on, your standing rules and the fetched assets. */
   root: string;
   now(): number;
@@ -80,7 +78,7 @@ type Fetch =
   | { state: 'fetching'; ask: string | null }
   | { state: 'fetched'; asset: AssetRecord }
   | { state: 'refused'; reason: string };
-export type FetchReply =
+type FetchReply =
   | { status: 'held'; ask: string | null }
   | { status: 'fetched'; asset: AssetRecord }
   | { status: 'refused'; reason: string }
@@ -300,7 +298,7 @@ export class Libraries {
       return { status: 'BLOCKED', cause: `${id}'s license ${license} is unknown`, ask };
     }
     const bytes = [picked.file, ...picked.sidecars].reduce((n, f) => n + f.bytes, 0);
-    const ref = sha256(`${library}\n${id}\n${JSON.stringify(picked)}`);
+    const ref = sha256Hex(Buffer.from(`${library}\n${id}\n${JSON.stringify(picked)}`));
     if (rule || this.allowed.has(ref)) {
       if (rule && !rule.includes(license)) {
         const reason = `${id} from ${library} is under ${license}, which your standing rule for ${library} doesn't allow (it allows ${rule.join(', ') || 'none'}); nothing was fetched`;
@@ -343,7 +341,7 @@ export class Libraries {
   private async unblock(cause: string, a: { question: string; steps: string[]; where: string; why: string; proves: string }): Promise<string> {
     const known = this.unblocks.get(cause);
     if (known) return known;
-    const ref = sha256(cause);
+    const ref = sha256Hex(Buffer.from(cause));
     const ask = await this.d.raise('library.unblock', {
       kind: 'unblock', may_answer: 'verified_channel', question: a.question, options: [{ id: 'done', label: 'I did it', decision: 'none' }], recommended: 'done', default: 'done', deadline: this.d.now() + DAY,
       steps: a.steps, where: a.where, why: a.why, unblocks: [`req:${ref.slice(0, 16)}`], proves: a.proves,
@@ -371,7 +369,7 @@ export class Libraries {
       return true;
     }
     const [library, id] = [key.slice(0, key.indexOf('#')), key.slice(key.indexOf('#') + 1)];
-    this.allowed.add(sha256(`${library}\n${id}\n${JSON.stringify(f.picked)}`));
+    this.allowed.add(sha256Hex(Buffer.from(`${library}\n${id}\n${JSON.stringify(f.picked)}`)));
     this.saved.allowed = [...this.allowed];
     this.save();
     this.fetches.set(key, { state: 'fetching', ask });
@@ -402,7 +400,7 @@ export class Libraries {
         if (stated === 'CC-BY-4.0' && !picked.license.credit) throw Error(`${id}: CC-BY-4.0 requires attribution; the pack lists no credit`);
       }
       for (const ref of files) {
-        const file = join(this.d.root, 'downloads', `${sha256(`${key}\n${ref.path}\n${ref.sha256}`)}.part`);
+        const file = join(this.d.root, 'downloads', `${sha256Hex(Buffer.from(`${key}\n${ref.path}\n${ref.sha256}`))}.part`);
         staged.push(file);
         await this.d.host()!.assetFile(picked.pack ? { pack: picked.pack.ref, url: picked.pack.url } : { library, path: ref.path }, { file, sha256: ref.sha256, size: ref.bytes, kept: join(this.d.root, 'evidence', ref.sha256.slice(0, 2), ref.sha256.slice(2)) });
       }

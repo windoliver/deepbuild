@@ -8,8 +8,8 @@ import { beginsTurn, countTexts } from './usage.js';
 
 /** A window's ends are times in ms or dates. */
 export interface BaselineMeasure { id: string; kind: string; window: { from: number | string; to: number | string }; transcripts: { sha256: string }[]; copied_from_doc?: number }
-export interface BaselineMeasureResult { id: string; window: { from: number; to: number }; transcripts: string[]; value: number | null; status: 'recomputed' | 'missing'; why?: string }
-export interface BaselineResult {
+interface BaselineMeasureResult { id: string; window: { from: number; to: number }; transcripts: string[]; value: number | null; status: 'recomputed' | 'missing'; why?: string }
+interface BaselineResult {
   baseline_sha256: string;
   script: { sha256: string; text: string };
   output: { sha256: string; text: string };

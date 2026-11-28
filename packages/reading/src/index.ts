@@ -9,7 +9,7 @@ import type { Server } from 'node:http';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { validate } from '@deepbuild/contracts';
+import { isRecord as isObj, validate } from '@deepbuild/contracts';
 import { ulid, type Connection, type RecordStore } from '@deepbuild/record';
 import type { Agent, JobRecord, Runner } from '@deepbuild/runner';
 import { knownOf, withoutQueries, type Candidate, type Known, type Wiki } from '@deepbuild/wiki';
@@ -18,10 +18,10 @@ import { usedBetween, type WindowReading } from './plan.js';
 import { CAP, NotFound, openSlicer, type Found, type Slice, type Slicer } from './slices.js';
 
 export { CAP, NotFound, claimId, openSlicer };
-export type { Found, Slice, Slicer };
+export type { Slice, Slicer };
 
-export type ReadingKind = 'install' | 'replay' | 'premise' | 'summary';
-export interface ReadingOptions {
+type ReadingKind = 'install' | 'replay' | 'premise' | 'summary';
+interface ReadingOptions {
   record: RecordStore;
   /** Every job of it starts here, of kind `read`. */
   runner: Runner;
@@ -40,8 +40,8 @@ export interface ReadingSpec {
   agent?: Agent;
 }
 /** A citation kept: its handle, its quote, how its source knew it and, for a transcript, its message's role. */
-export interface Cited { at: string; quote: string; known: Known; role?: string }
-export interface Finding { text: string; cites: Cited[] }
+interface Cited { at: string; quote: string; known: Known; role?: string }
+interface Finding { text: string; cites: Cited[] }
 export interface ReadingResult {
   /** `reading:<ULID>`. */
   reading: string;
@@ -88,7 +88,6 @@ const INSTALL = 'What should DeepBuild remember about each project from these se
 /** Text as quotes are compared: NFC, each whitespace run one space (design: Reading by reference). */
 const norm = (text: string): string => text.normalize('NFC').replace(/\s+/g, ' ');
 type Obj = { [key: string]: unknown };
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 function prompt(kind: ReadingKind, question: string, handles: readonly string[]): string {
   return [
@@ -384,7 +383,7 @@ const usage = (command: string): string => command === 'read'
  * Asks the hub at a root for one slice or one find, for a process that can't read the evidence store itself: a started
  * session's sandbox closes it (#3229). Undefined when no hub answers there.
  */
-export type AskHub = (root: string, params: { read: string; cursor?: string } | { find: string; cursor?: string; file?: { path: string; cwd: string } }) => Promise<unknown>;
+type AskHub = (root: string, params: { read: string; cursor?: string } | { find: string; cursor?: string; file?: { path: string; cwd: string } }) => Promise<unknown>;
 const readable = (root: string): boolean => { try { accessSync(join(root, 'evidence', 'records.jsonl'), constants.R_OK); return true; } catch { return false; } };
 /** `deep read <handle> --slice [<cursor>]`: one slice; a cut one ends with the command that continues it. `first` asks the hub whatever this process can read: the planted CLI's alone. */
 export async function readCommand(args: readonly string[], hub?: AskHub, first = false): Promise<number> {

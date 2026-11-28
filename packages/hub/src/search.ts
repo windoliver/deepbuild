@@ -17,7 +17,7 @@ interface Hit {
   history?: true; agent?: string | null; date?: string | null; from?: 'you' | 'agent' | 'outside'; task?: string; changed?: string[];
 }
 /** What the record and the branch head say of a past session (#1515). */
-export interface PastSession { agent: string | null; date: number | null; changed: string[]; task?: string }
+interface PastSession { agent: string | null; date: number | null; changed: string[]; task?: string }
 
 type Raw = (sql: string, params: readonly (string | number | bigint | null)[]) => Promise<unknown[]>;
 const REVERTS = /This reverts commit ([0-9a-f]{7,40})/g;

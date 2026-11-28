@@ -4,7 +4,7 @@ import type { ExtensionHost } from '@deepbuild/extension-host';
 import type { LeaseTable } from '@deepbuild/leases';
 import type { RunFacts } from '@deepbuild/gate';
 
-export interface SeedRecord { source: string; copied_at: string; migration: string; template: string; cloned_at: number }
+interface SeedRecord { source: string; copied_at: string; migration: string; template: string; cloned_at: number }
 export interface Stack {
   run: string; pid: number; ports: Record<string, number>; url: string;
   project?: string;
@@ -23,8 +23,8 @@ export interface UpOptions {
   take?: Take;
   scrub?: (values: string[]) => void;
 }
-export interface Keys { services: string; install: string; migrate: string; seed: string }
-export interface WarmProducts {
+interface Keys { services: string; install: string; migrate: string; seed: string }
+interface WarmProducts {
   declared(folder: string, paths: readonly string[]): Promise<{ name: string; path: string; key: string }[]>;
   holds(worktree: string, name: string, key: string): Promise<boolean>;
   place(worktree: string, name: string, key: string, dst: string): Promise<string | undefined>;

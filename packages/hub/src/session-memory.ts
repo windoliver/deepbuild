@@ -39,7 +39,7 @@ import type { CallContext } from './session-types.js';
 
 import { TYPED_RULE, RULES_HEAD, letters, rulePieces, FOREIGN, type Obj, isObj } from "./hub-shared.js";
 
-export interface SessionMemoryOptions {
+interface SessionMemoryOptions {
   decisions: Pick<DecisionsProvider, 'evidence' | 'judge'>;
   cwdOf: KnowledgeProvider['cwdOf'];
   removal: KnowledgeProvider['removal'];

@@ -47,7 +47,7 @@ import { parents } from './children.js';
 import { TranscriptReader } from './transcript-reader.js';
 import { letters, ghToken, WAKE_GRACE, SHOWN_SOON, said, FOREIGN, placesItself, type Obj, isObj, asRefused, effectEntries, callOf, sendKey, PULL_LOOKUP_MS, OWN_TURN, continueText, holdsTurns, sql } from "./hub-shared.js";
 
-export interface AnswerDeliveryOptions {
+interface AnswerDeliveryOptions {
   settings: CoreOptions & { forge: string };
   services: {
     readonly now: () => number;

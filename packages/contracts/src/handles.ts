@@ -5,7 +5,7 @@ export const HANDLE_SCHEMES: readonly string[] = Object.freeze([
   'task', 'ask', 'claim', 'verdict', 'run', 'req', 'decision', 'plan', 'lease', 'reading', 'notice', 'doc', 'ev', 'session',
 ]);
 
-export interface Handle { scheme: string; id: string; fragment?: string }
+interface Handle { scheme: string; id: string; fragment?: string }
 
 // The id is a record's ULID, or a content hash for a definition; the fragment picks a part of it.
 const HANDLE = /^([^:#]*):([0-9A-Za-z]+)(?:#([A-Za-z0-9][A-Za-z0-9._-]*))?$/;

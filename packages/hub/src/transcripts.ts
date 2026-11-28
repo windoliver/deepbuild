@@ -13,7 +13,7 @@ import type { Session, Turn, Cursor } from './session-types.js';
 
 import { REACHED, HOOKS_MISSING, TURN_GRACE, CURSOR_SAVE, type Obj, isObj } from "./hub-shared.js";
 
-export interface TranscriptsOptions {
+interface TranscriptsOptions {
   settings: CoreOptions;
   services: {
     readonly root: Root;

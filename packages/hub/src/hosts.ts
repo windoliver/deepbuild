@@ -159,14 +159,14 @@ printf 'owner\t%s\nsha\t%s\nexit\t%s\n' "$(stat -c %u -- "$d")" "$(cat "$d/sha" 
 sed 's/^/print\t/' "$d/prints" 2>/dev/null; true`;
 
 /** A fact as read over SSH: its value and when it was read, on this machine's clock. */
-export interface Reading { value: unknown; as_of: number }
+interface Reading { value: unknown; as_of: number }
 /** A change a run as you declares it makes on its host (#1946): what it does, what it touches, and its undo as you. */
 export interface Declared { does: string; changes: string[]; undo: string | null }
-export interface RemoteSpec { host: string; run: string; token: string; argv: string[]; cwd?: string; env: Record<string, string>; adopt?: boolean; changes?: Declared[]; output: { stdout(chunk: Buffer): void; stderr(chunk: Buffer): void } }
-export interface RemoteEnd { code: number | null; signal?: string; failed?: string }
-export interface Ran { code: number | null; stdout: string; stderr: string }
+interface RemoteSpec { host: string; run: string; token: string; argv: string[]; cwd?: string; env: Record<string, string>; adopt?: boolean; changes?: Declared[]; output: { stdout(chunk: Buffer): void; stderr(chunk: Buffer): void } }
+interface RemoteEnd { code: number | null; signal?: string; failed?: string }
+interface Ran { code: number | null; stdout: string; stderr: string }
 /** Your SSH config, the one file that names hosts. */
-export const sshConfig = (): string => join(homedir(), '.ssh', 'config');
+const sshConfig = (): string => join(homedir(), '.ssh', 'config');
 /** ssh's options for every call to a host: your config file, a connection of its own, and a dead link noticed within 15 s. */
 export const sshOptions = (): string[] => ['-F', sshConfig(), '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', '-o', 'ControlPath=none', '-o', 'ServerAliveInterval=5', '-o', 'ServerAliveCountMax=3', '-o', 'ConnectTimeout=30'];
 /** One ssh call on a connection of its own: the script on its stdin, run by `sh -s` with `args`. */

@@ -33,7 +33,7 @@ const OUTPUT_BYTES = 64 * 1024;
 export const recordable = (failures: Failure[]): Failure[] => failures.map((f) => ({ ...f, test: f.test.slice(0, 1000), message: f.message.slice(0, 6000) }));
 
 /** A speed a claim's words state, as written, and the timing check file it cites. */
-export interface StatedSpeed { stated: string; file: string }
+interface StatedSpeed { stated: string; file: string }
 /** The check a stated speed runs as, through the numbers kind: the claim's speed, its timing file and the claim's merge base, its default baseline. */
 export interface SpeedSpec extends CheckSpec { kind: 'numbers'; runner: 'timing'; stated: string; file: string; base: string }
 /** Where a claim's numbers checks read beyond its checkout: the supervisor, the hub's object store and checkouts of other commits. */

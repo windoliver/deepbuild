@@ -15,7 +15,7 @@ export { onPath } from './paths.js';
  * home folder, where the row names one), or, for the install row (#1349), none of these programs on PATH and none
  * where an agent's own installer puts its program.
  */
-export type Found = 'always' | { env: string; folder: string } | { program: string; folder?: string } | { none: string[] };
+type Found = 'always' | { env: string; folder: string } | { program: string; folder?: string } | { none: string[] };
 export interface Row {
   step: 'install' | 'hooks' | 'plugin' | 'package' | 'history';
   /** The agent whose settings the step changes, or whose history it reads. */
@@ -31,7 +31,7 @@ const LIST = JSON.parse(readFileSync(new URL('../../../contracts/setup-steps.jso
 /** A row's key, `<step>:<agent>`, as setup's runners, its stop record and the screen's nodes name it. */
 export const key = (row: Row): string => (row.agent ? `${row.step}:${row.agent}` : row.step);
 /** Each agent's own installer and its plan, by agent (adapters/install.json). */
-export interface Installer { name: string; plan: { paid: boolean; page: string; price?: string; read?: string }; [platform: string]: unknown }
+interface Installer { name: string; plan: { paid: boolean; page: string; price?: string; read?: string }; [platform: string]: unknown }
 export const installers = (): Record<string, Installer> => readFacts<{ agents: Record<string, Installer> }>('install.json').agents;
 /** Where an agent's installer puts its program on this platform, under your home, or undefined when it has none here. */
 export const lands = (agent: string): string | undefined => {

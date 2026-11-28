@@ -17,12 +17,12 @@ export interface ChannelItem {
   thread_key: string; summary: string; link: string; answerable: 'answer' | 'view' | 'cancel' | 'closed';
   options: { id: string; label: string }[]; revision: number; hub: string; refused: string | null;
 }
-export interface ChannelRequest { method: 'GET' | 'POST'; path: string; body?: unknown }
-export interface ChannelReply { status: number; body: unknown }
+interface ChannelRequest { method: 'GET' | 'POST'; path: string; body?: unknown }
+interface ChannelReply { status: number; body: unknown }
 /** The hub's provider call; the kit's provider answers at once, so the preflight's synchronous kit check can drive a fill. */
 export interface ChannelCtx { settings: Record<string, unknown>; fetch(request: ChannelRequest): Promise<ChannelReply> | ChannelReply }
 export type Delivered = { outcome: 'delivered'; ack: string } | { outcome: 'stalled' } | { outcome: 'timed_out' } | { outcome: 'conflict'; conflict: string };
-export interface ChannelAnswer { thread_key: string; answer: string; signature?: unknown; account_link_id?: string }
+interface ChannelAnswer { thread_key: string; answer: string; signature?: unknown; account_link_id?: string }
 export interface Received { answers: ChannelAnswer[]; seen: string[]; conflict: string | null }
 export interface ChannelFill extends SlotFill {
   slot: 'channel@1';

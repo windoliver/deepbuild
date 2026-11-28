@@ -7,9 +7,9 @@ import { visible } from './visible.js';
 const DRAIN_LEASE_MS = 30_000;
 
 /** The process that took the drain, as its connection named it: its PID and, where it can be read and shown, its command line. */
-export interface DrainHolder { pid: number; command?: string }
+interface DrainHolder { pid: number; command?: string }
 /** A drain that holds: its holder (null when the caller named no process), since when, and when it lapses (epoch ms). */
-export interface HeldDrain { holder: DrainHolder | null; since: number; lapses: number }
+interface HeldDrain { holder: DrainHolder | null; since: number; lapses: number }
 
 export class Drain {
   private held: { holder: DrainHolder | null; since: number; renewed: number } | undefined;

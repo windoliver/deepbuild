@@ -6,8 +6,6 @@ import { AskRefused, isObj, type Ask } from './model.js';
 
 /** The trusted path: the question card and `deep inbox answer`. Every other writer is an agent's or the core's. */
 export const TRUSTED: Readonly<Record<string, 'card' | 'inbox'>> = { app: 'card', cli: 'inbox' };
-/** What may answer an ask, which the place that raises it declares (#1581): only the trusted path, or any channel you verified as well. */
-export type MayAnswer = 'trusted_path' | 'verified_channel';
 /**
  * The one check of that declaration: whether a channel you verified may answer the ask, as its account link does
  * (#65), that ask alone. An ask the record holds from before asks declared it takes the trusted path alone.

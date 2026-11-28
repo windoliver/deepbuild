@@ -16,7 +16,7 @@ import type { CallContext } from './session-types.js';
 
 import { letters, type Obj } from "./hub-shared.js";
 
-export interface WorkspaceActionsOptions {
+interface WorkspaceActionsOptions {
  settings: CoreOptions;
  services: {
 readonly tasks: AskTasks;

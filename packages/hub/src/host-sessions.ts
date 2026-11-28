@@ -21,7 +21,7 @@ const sha = (bytes: string | Uint8Array): string => createHash('sha256').update(
  * A host whose sessions record here: its home, its deep-hook, the version and contract that deep-hook reported when
  * the link last came up, and the hub's own then, which `deep doctor` reads beside them.
  */
-export interface AddedHost { home: string; hook: string; version: string | null; contract: string | null; hubVersion: string; hubContract: string }
+interface AddedHost { home: string; hook: string; version: string | null; contract: string | null; hubVersion: string; hubContract: string }
 /** This hub's version, as its package says it. */
 const HUB_VERSION = (JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string }).version;
 /** The hosts added, by name; the event loop reads the same file to open each one's link. */

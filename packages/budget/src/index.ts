@@ -7,7 +7,7 @@
 // Its state is a function of the record: every method first reads what the log gained, then decides on
 // what it read and appends, with no await between that read and the append. Price lookups run before the
 // decision, so a slow lookup never holds the others. Your yes reaches it only as the asks core's answer.
-import { canonicalize, sha256Hex } from '@deepbuild/contracts';
+import { isRecord as isObj, canonicalize, sha256Hex } from '@deepbuild/contracts';
 import type { JsonValue } from '@deepbuild/contracts';
 import type { Asks, PlanStep } from '@deepbuild/asks';
 import { asCore, readSince, ulid } from '@deepbuild/record';
@@ -50,7 +50,7 @@ export class BudgetRefused extends Error {
   }
 }
 
-export interface LedgerOptions {
+interface LedgerOptions {
   record: RecordStore;
   asks: Asks;
   now: () => number;
@@ -109,7 +109,6 @@ const SHA256 = /^[0-9a-f]{64}$/;
 const isAgent = (writer: string): boolean => writer === 'hook' || writer.startsWith('mcp:');
 const isText = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
 type Obj = { [key: string]: JsonValue };
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /**
  * Money is counted in micro-dollars, so sums of cents stay exact. A price or cost coming in rounds up and a

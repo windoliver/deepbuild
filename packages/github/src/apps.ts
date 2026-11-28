@@ -11,7 +11,7 @@ type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 type Permissions = Record<string, 'read' | 'write'>;
 /** An app as your settings name it: its ID, and its private key (PEM) as the hub reads it, from the Keychain. */
-export interface AppKey { app_id: number; key(): Promise<string | undefined> }
+interface AppKey { app_id: number; key(): Promise<string | undefined> }
 /** A token minted for one repo: what it may do, when GitHub stops taking it, and the login GitHub records its pushes as. */
 interface AppToken { token: string; expires: number; permissions: Permissions; login: string | null }
 

@@ -8,7 +8,7 @@ export interface MergedPr {
   /** Each review's time and state, in order. */
   reviews: { at: number; state: string }[];
 }
-export interface LifecycleNumber { reading: string; value: number; unit: string; n: number }
+interface LifecycleNumber { reading: string; value: number; unit: string; n: number }
 const median = (values: number[]): number => [...values].sort((a, b) => a - b)[Math.floor((values.length - 1) / 2)]!;
 /** A number with nothing to count is left out, so it reads missing, never zero. */
 export function lifecycleNumbers(repo: string, prs: readonly MergedPr[]): LifecycleNumber[] {

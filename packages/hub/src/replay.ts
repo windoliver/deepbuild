@@ -17,7 +17,7 @@ export const counted = (events: number): string => events.toLocaleString('en-US'
 export const rebuilding = (at: Replaying): string => `The hub is rebuilding its tables from the log: ${counted(at.replayed)} of ${counted(at.events)} events replayed.`;
 
 /** A replay as the hub's event loop holds it: `at`, how far it is while one runs, and `begun`, settled once one was first heard of. */
-export class Replay {
+class Replay {
   at: Replaying | undefined;
   private begin!: () => void;
   readonly begun = new Promise<void>((resolve) => { this.begin = resolve; });

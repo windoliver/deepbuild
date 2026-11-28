@@ -5,7 +5,7 @@ import { coverage, coveredBy } from './adapter-facts.js';
 import { onPath } from './paths.js';
 
 export const PLUGIN_ID = 'deepbuild';
-export interface ListedPlugin { id?: string; plugin?: string; status?: string; enabled?: boolean; error?: string }
+interface ListedPlugin { id?: string; plugin?: string; status?: string; enabled?: boolean; error?: string }
 
 type Ran = { code: number | null; out: string; err: string };
 function ran(program: string, args: string[], timeout: number): Promise<Ran | null> {

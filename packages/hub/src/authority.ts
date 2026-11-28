@@ -20,7 +20,7 @@ async function asYou(method: string, params: Obj): Promise<Reply> {
   return withPrompt(() => call(socket, token, method, params, peer));
 }
 /** Why `command` doesn't count, or undefined once the OS confirmed you through the hub. */
-export async function confirmed(command: string, detail?: string): Promise<string | undefined> {
+async function confirmed(command: string, detail?: string): Promise<string | undefined> {
   try {
     const reply = await asYou('you.confirm', { command, ...(detail ? { detail } : {}) });
     return 'error' in reply ? reply.error.remediation : undefined;

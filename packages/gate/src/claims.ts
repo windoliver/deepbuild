@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 
 export type ClaimSource = 'stop' | 'deep_claim' | 'gh_pr_create';
-export interface OpenAsk { task_ref: string; touched: boolean }
+interface OpenAsk { task_ref: string; touched: boolean }
 export interface ClaimIntake {
   source: ClaimSource;
   session: string;
@@ -10,7 +10,7 @@ export interface ClaimIntake {
   turn: { work: boolean; answer: boolean; last_message?: string };
   named?: string[];
 }
-export interface MadeClaim { claim: string; task_ref: string; source: ClaimSource; session: string; commit: string }
+interface MadeClaim { claim: string; task_ref: string; source: ClaimSource; session: string; commit: string }
 type ClaimPlant = 'claims-every-open-ask' | 'claims-on-words' | 'claims-on-answers' | 'two-per-ask';
 
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';

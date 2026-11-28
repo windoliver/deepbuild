@@ -58,7 +58,7 @@ export interface Manifest {
 /** An install: also the check kinds it holds, its own until a package that replaces one installs. */
 export interface Entry extends Installed { grant: { record: string[]; text?: boolean; projects?: string[]; hosts?: HostGrant[]; docs?: string[] }; holds: string[]; jobs?: HeldJobs }
 
-export type Ask = (method: string, params: unknown) => Promise<unknown>;
+type Ask = (method: string, params: unknown) => Promise<unknown>;
 
 /** A store a piece declared (#363): the generation its items are held to, their check against its schema, and its quota in bytes (#365). */
 export interface Store { generation: number; check: (value: unknown) => string | undefined; quota: number | null }

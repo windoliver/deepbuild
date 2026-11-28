@@ -2,7 +2,7 @@
 export interface AppKey { app_id: number; key(): Promise<string | undefined> }
 interface ForgeSession { id: string; agent: string; cwd: string }
 export interface ForgeObserver { verdicts(): void; pass(): Promise<void> }
-export interface ForgeOptions {
+interface ForgeOptions {
   api: string;
   reads(): Promise<string | undefined>;
   posts(repo: string): Promise<string | undefined>;

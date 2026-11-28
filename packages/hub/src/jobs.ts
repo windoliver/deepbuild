@@ -25,7 +25,6 @@
 // of: a retry makes no call and is BLOCKED with one unblock ask naming the provider and the key. While a job runs, a
 // second request with its key joins it, starting nothing, and a request that is cancelled leaves it; the job stops
 // only once no request waits on it. A request whose session closed leaves it too, but the job runs on (#1925).
-import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
@@ -42,10 +41,9 @@ import { tableRecord } from './table-record.js';
 type Obj = Record<string, unknown>;
 type Host = Pick<ExtensionHost, 'jobs' | 'jobParams' | 'runJobTool' | 'jobHostReport' | 'runCheck'>;
 type CheckSpec = Parameters<Host['runCheck']>[1];
-const sha256 = (b: Uint8Array): string => createHash('sha256').update(b).digest('hex');
 /** Each input's hash by name, a list input's as a list in its order (#154). */
 const hashes = (bytes: Record<string, Uint8Array | Uint8Array[]>): Record<string, string | string[]> =>
-  Object.fromEntries(Object.entries(bytes).map(([n, b]) => [n, Array.isArray(b) ? b.map(sha256) : sha256(b)]));
+  Object.fromEntries(Object.entries(bytes).map(([n, b]) => [n, Array.isArray(b) ? b.map(sha256Hex) : sha256Hex(b)]));
 const message = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 /** A tool pinned by name@version: no range, tag or bare name. */
 const PINNED = /^[a-z0-9][a-z0-9_-]*@\d+\.\d+\.\d+$/;
@@ -56,7 +54,7 @@ const CHECK_MS = 60_000;
 /** The planted hub job-speech-tools-enum's list of speech's tools in code (#509): the three first-party names, no other. */
 const SPEECH_ENUM = ['kokoro@0.9.4', 'platform-say@1.0.0', 'azure-speech@1.0.0'];
 
-export interface JobDeps {
+interface JobDeps {
   /** The hub's folder: jobs.json keeps the cache, by key, and your standing rules. */
   root: string;
   now(): number;
@@ -282,7 +280,7 @@ export class Jobs {
     if (url) {
       // The planted hub sends the files before any answer of yours.
       if (this.d.plant === 'job-host-sends-early') await host.runJobTool(tool, kind, params, bytes).catch(() => undefined);
-      const gate = await this.gate([...new Set(Object.values(bytes).flat().map(sha256))], where, tool, kind, key);
+      const gate = await this.gate([...new Set(Object.values(bytes).flat().map(sha256Hex))], where, tool, kind, key);
       if ('reply' in gate) return gate.reply;
       sent = gate.sent;
     }

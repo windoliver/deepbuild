@@ -392,7 +392,7 @@ export interface Answer { handle: string; value: unknown; cites: string[]; as_of
 const HANDLE = /^[a-z]+:.+$/;
 
 /** The plug-in's request, held to deep.runner.run's shape; a call that isn't refuses naming what is wrong. */
-export function jobRequest(given: unknown): JobRequest {
+function jobRequest(given: unknown): JobRequest {
   const r = (typeof given === 'object' && given !== null ? given : {}) as Record<string, unknown>;
   const refuse = (why: string): never => { throw Error(`deep.runner.run: ${why}`); };
   if (typeof r.prompt !== 'string' || !r.prompt) refuse('a job has a prompt');
@@ -404,7 +404,7 @@ export function jobRequest(given: unknown): JobRequest {
 }
 
 /** What the agent reads: what DeepBuild asks of every job, each input's content by its handle, then the plug-in's prompt as given. */
-export function jobPrompt(piece: string, inputs: { handle: string; content: unknown }[], prompt: string): string {
+function jobPrompt(piece: string, inputs: { handle: string; content: unknown }[], prompt: string): string {
   return [
     `DeepBuild runs this job for the plug-in ${piece}. Use only the inputs below; read no file and call no tool.`,
     'Answer with one JSON object and nothing else: {"value": <your answer>, "cites": [<the handles below your answer rests on>]}.',

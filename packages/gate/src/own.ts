@@ -21,7 +21,7 @@ export const ownRead = (path: string): boolean => path.split('/').slice(0, -1).s
 
 /** A test runner's config, or pytest's conftest.py: the tool finds and loads it by its own rules, wherever it lies. */
 const LOADED_BY_TOOL = /(^|\/)((vitest|vite|jest)\.config\.[cm]?[jt]s|vitest\.workspace\.[cm]?[jt]s|pytest\.ini|conftest\.py)$/;
-export type ChangesPlant = 'edited-check-approved' | 'own-files-test-folders-only';
+type ChangesPlant = 'edited-check-approved' | 'own-files-test-folders-only';
 type Changes = { changed: readonly string[]; configs: ReadonlyMap<string, string>; scripts: boolean };
 /**
  * Of a claim's changed files, those the test tool loads whatever a run read: a runner's config, or a file one names.

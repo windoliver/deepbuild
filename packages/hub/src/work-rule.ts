@@ -91,14 +91,14 @@ function section(body: string, name: string): string[] | undefined {
 }
 
 /** The links on an issue's `**Design:**` field, as written, up to the line's next bold field. */
-export function designLinks(body: string): string[] | undefined {
+function designLinks(body: string): string[] | undefined {
   const line = /(?:^\s*|\*\*)Design:?(?:\*\*)?:?(.*)$/im.exec(body)?.[1];
   if (line === undefined) return undefined;
   return [...line.split(/\*\*[A-Z][\w ]*:?\*\*/)[0]!.matchAll(/\]\(\s*<?([^\s)>]+)/g)].map((m) => m[1]!);
 }
 
 /** The anchors a markdown file holds: each heading slugged as GitHub slugs it, and each `<a id>` or `<a name>`. */
-export function anchorsOf(text: string): Set<string> {
+function anchorsOf(text: string): Set<string> {
   const found = new Set<string>();
   const headings = new Set<string>();
   let fence: string | undefined;

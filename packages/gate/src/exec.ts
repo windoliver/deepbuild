@@ -70,7 +70,7 @@ export async function slot(table: LeaseTable, holder: string, run: string, lane:
 const MEM: Resource = { host: 'local', kind: 'mem', key: 'mem' };
 /** Why a run waits for memory: DeepBuild's runs hold the pool, or the kernel reads less available than it expects. */
 export type MemoryWait = { on: 'pool'; holders: Lease[]; free: number } | { on: 'outside'; available: number };
-export interface MemoryAsk {
+interface MemoryAsk {
   /** Its expected peak, in MB: the units of `mem` it takes beside its slot. */
   mb: number;
   /** The memory the kernel reads available, in MB: the run starts only while it is at least `mb`. Undefined holds nothing back. */
@@ -131,8 +131,8 @@ function spawnRun(argv: string[], cwd: string): Promise<Spawned> {
 }
 
 export interface ExecCheck { id: string; argv: string[] }
-export interface ExecuteOptions { repo: string; session: string; table: LeaseTable; checks: ExecCheck[]; plant?: 'ignores-limit' | 'own-slot-queue' | 'runs-in-worktree' }
-export interface ExecutedCheck { id: string; lease: string | null; queued_at: number; started_at: number; ended_at: number; wall_ms: number; exit: number | null; output: string; cwd: string }
+interface ExecuteOptions { repo: string; session: string; table: LeaseTable; checks: ExecCheck[]; plant?: 'ignores-limit' | 'own-slot-queue' | 'runs-in-worktree' }
+interface ExecutedCheck { id: string; lease: string | null; queued_at: number; started_at: number; ended_at: number; wall_ms: number; exit: number | null; output: string; cwd: string }
 export interface Executed { snapshot: string; checkout: string; snapshot_ms: number; checkout_ms: number; checkout_ready_at: number; checks: ExecutedCheck[] }
 
 export async function executeClaim(o: ExecuteOptions): Promise<Executed> {
@@ -162,9 +162,9 @@ export async function executeClaim(o: ExecuteOptions): Promise<Executed> {
   return { snapshot, checkout, snapshot_ms: t1 - t0, checkout_ms: ready - t1, checkout_ready_at: ready, checks };
 }
 
-export interface Load { avg1: number; cores: number }
+interface Load { avg1: number; cores: number }
 interface Memory { last: Map<string, { key: string; outcome: 'passed' | 'failed'; exit: number | null }>; kept: boolean }
-export interface VerdictMemory { dropEvidence(): void }
+interface VerdictMemory { dropEvidence(): void }
 const memories = new WeakMap<VerdictMemory, Memory>();
 export function verdictMemory(): VerdictMemory {
   const m: Memory = { last: new Map(), kept: true };
@@ -172,11 +172,11 @@ export function verdictMemory(): VerdictMemory {
   memories.set(handle, m);
   return handle;
 }
-export interface HeavyOptions {
+interface HeavyOptions {
   repo: string; session: string; table: LeaseTable; argv: string[]; inputs: string[]; memory: VerdictMemory;
   timing?: boolean; load?: () => Load; plant?: 'own-slot-queue' | 'ignores-lease-script' | 'no-reuse' | 'no-load-reading';
 }
-export interface HeavyResult { reused: boolean; exit: number | null; outcome: 'passed' | 'failed'; lease: Lease | null; load: Load | null }
+interface HeavyResult { reused: boolean; exit: number | null; outcome: 'passed' | 'failed'; lease: Lease | null; load: Load | null }
 
 /** The digest of the files the declared inputs match, as the worktree holds them now. */
 async function inputsKey(repo: string, inputs: string[], argv: string[]): Promise<string> {
@@ -212,7 +212,7 @@ export async function runHeavy(o: HeavyOptions): Promise<HeavyResult> {
   }
 }
 
-export interface TimedRun { outcome: RunOutcome; under_load: boolean; load: number | null; cores: number; output: string }
+interface TimedRun { outcome: RunOutcome; under_load: boolean; load: number | null; cores: number; output: string }
 export function runTiming(check: { run(): { passed: boolean; output: string } }, machine: { load(): number; cores: number }): { outcome: Result; runs: TimedRun[] } {
   const runs: TimedRun[] = [];
   const counted = (): RunOutcome[] => runs.filter((r) => r.outcome !== 'uncounted').map((r) => r.outcome);

@@ -72,7 +72,7 @@ export type AsksPlant = 'decision-exists-only'
  * that holds every step, and an Undo that withdraws a step that already ran.
  */
 export const HOLD_PLANTS = ['hold-starts-at-click', 'undo-runs-anyway', 'undo-closes-declined', 'restart-runs-held', 'batch-holds-all', 'undo-withdraws-ran'] as const;
-export type HoldPlant = typeof HOLD_PLANTS[number];
+type HoldPlant = typeof HOLD_PLANTS[number];
 
 /** What the question card shows for one ask. */
 export interface Card {
@@ -133,7 +133,7 @@ export type InboxStatus = 'queued' | 'shown' | 'later' | 'folded' | 'held' | 'cl
 
 export type Obj = { [key: string]: JsonValue };
 export type Option = { id: string; label: string; decision: Decision };
-export const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
+export { isObject as isObj } from '@deepbuild/contracts';
 export const bare = (handle: string): string => handle.replace(/^ask:/, '');
 /** A session or project ID as a scope names it: letters and digits only, as the hub's handles hold them. */
 export const letters = (id: string): string => id.replace(/[^0-9A-Za-z]/g, '');

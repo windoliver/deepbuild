@@ -20,7 +20,7 @@ const TOP = new Set(['claims', 'checks', 'outside', 'release', 'switches', 'reso
 const ON_CHECK = new Set(['type', 'run', 'deadline', 'host', 'runs', 'accept', 'min_tests', 'kind', 'doc', 'input', 'memory_mb']);
 
 /** Each key of the spec's text that no reader takes, at its top or on a check entry, with the line it is written at. */
-export function unreadKeys(text: string): { key: string; line: number; check?: string }[] {
+function unreadKeys(text: string): { key: string; line: number; check?: string }[] {
   const lines = new LineCounter();
   const doc = parseDocument(text, { lineCounter: lines });
   const keysOf = (node: unknown): { key: string; line: number; value: unknown }[] => {

@@ -156,7 +156,7 @@ interface Early { claim: string; session: string; agent: string; cwd: string }
 const TRUSTED = new Set(['you', 'owner', 'collaborator']);
 const trusted = (a: Author): boolean => TRUSTED.has(a.role) && a.automated !== true;
 /** What alone settles a requirement no check of a claim can (#1331): the scheduled budget window, on a reference Mac. */
-export const BUDGET_WINDOW = 'budget-window';
+const BUDGET_WINDOW = 'budget-window';
 /** The kinds of spend a check can cost (#325). */
 const PAID = new Set<string>(['live call', 'hosted browser run', 'model job']);
 /** Where each definition's drafted checks are kept, behind the `.deepbuild/` guard. */

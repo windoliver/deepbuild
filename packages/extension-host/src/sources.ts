@@ -418,7 +418,7 @@ const SHOWN_MIN_MS = 10_000;
 /** How long a work source's provider call has to answer (#66). */
 const WORK_MS = 20_000;
 /** A work source call that went out with no answer: whether it landed is unknown (#66). */
-export class NoAnswer extends Error {}
+class NoAnswer extends Error {}
 const whole = (n: unknown): n is number => Number.isSafeInteger(n) && (n as number) > 0;
 const path = (p: unknown): p is string => typeof p === 'string' && p.startsWith('/') && !p.startsWith('//');
 
@@ -609,7 +609,7 @@ export function secretServiceStore(): SecretStore {
 /** The OS secret store this platform has: the Keychain on macOS, the Secret Service on Linux. */
 export const osSecrets = (): SecretStore => (process.platform === 'darwin' ? keychainStore() : process.platform === 'linux' ? secretServiceStore() : noSecrets);
 /** Opens your browser at a sign-in page. */
-export const openBrowser = (url: string): Promise<void> => new Promise((done, fail) => {
+const openBrowser = (url: string): Promise<void> => new Promise((done, fail) => {
   if (process.platform !== 'darwin') return fail(Error('this host opens no browser for a sign-in'));
   execFile('/usr/bin/open', [url], { timeout: 10_000 }, (error) => (error ? fail(error) : done()));
 });

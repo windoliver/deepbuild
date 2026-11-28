@@ -29,7 +29,7 @@ export function heavyReply(meta: HookMeta, ruled: string, rewrites: boolean, pla
 }
 
 /** A warn entry's words in the guard entries' reply to a call no entry blocks, or none. */
-export const warnings = (ruled: string): string[] => {
+const warnings = (ruled: string): string[] => {
   const stdout = String((JSON.parse(ruled) as Obj).stdout ?? '');
   const said = stdout ? (JSON.parse(stdout) as { hookSpecificOutput?: { additionalContext?: unknown } }).hookSpecificOutput?.additionalContext : undefined;
   return typeof said === 'string' ? [said] : [];

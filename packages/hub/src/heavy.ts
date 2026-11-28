@@ -32,7 +32,7 @@ export function heavyDenial(command: string, form: string, entry: string): strin
 
 // ---- Memory pressure.
 
-export type Pressure = 'normal' | 'warn' | 'critical';
+type Pressure = 'normal' | 'warn' | 'critical';
 /**
  * The system's memory-pressure level: macOS's (kern.memorystatus_vm_pressure_level: 1 normal, 2 warn, 4 critical),
  * or Linux's pressure stall information (/proc/pressure/memory: full stalls over 10% of the last 10 s are critical,

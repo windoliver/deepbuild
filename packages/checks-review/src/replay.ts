@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { judgeAnswer } from './review.js';
 import type { ReviewFinding, ReviewerAnswer, SendBackItem } from './types.js';
 
-export interface ReplayedCase { case: string; findings: ReviewFinding[] }
+interface ReplayedCase { case: string; findings: ReviewFinding[] }
 /** Where a checkout keeps the replay's cases: the planted-bug diffs, their clean twins and the recorded rounds. */
 const CASES = 'packages/checks-review/replay';
 interface Case { diff: string; rubric: string[]; answer: ReviewerAnswer; since?: SendBackItem[] }

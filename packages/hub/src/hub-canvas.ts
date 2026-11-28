@@ -28,7 +28,7 @@ type Obj = Record<string, unknown>;
 const bare = (handle: string): string => handle.replace(/^[a-z_]+:/, '');
 /** Whether a document pins a pack, the only way it reaches what a pack fills. */
 const pinsPacks = (document: unknown): boolean => isObj(document) && Array.isArray(document.packs) && document.packs.length > 0;
-export interface HubCanvasOptions {
+interface HubCanvasOptions {
   doneSpec(cwd: string): unknown;
   root: Root; now: () => number; plant: Plant | undefined;
   record: () => RecordStore; store: () => EvidenceStore; libraries: () => Libraries | undefined;
