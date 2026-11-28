@@ -1,6 +1,6 @@
 # 0018: What the canvas code moved for size said in comments
 
-Status: accepted (#3650, #3669). The size ratchet's fix moves one named concept to a file of its own, and a new file starts with no comments (0001). Each note below is what a comment on the moved code said, word for word where it is a decision, with the file and the symbol it now governs. Nothing here is a new decision.
+Status: accepted (#3650, #3669). The size ratchet's fix moves one named concept to a file of its own, and a new file starts with no comments (0001). Each note below is what a comment on the moved code said, lightly reworded with its meaning kept, with the file and the symbol it now governs. Nothing here is a new decision.
 
 ## deep-show
 
@@ -23,5 +23,5 @@ Status: accepted (#3650, #3669). The size ratchet's fix moves one named concept 
 ## deep-gpu-layer and deep-scene3d-render
 
 - **#462's planted `status_in_look`.** `crates/deep-gpu-layer/src/view3d/in_look.rs`, `in_look_status`. It gives the status map of the look a render draws in, where it has one of its own; `None` for the shipped program, which draws the document's.
-- **Our DFG table (#421).** `crates/deep-scene3d-render/src/albedo.rs`, `dfg_table`. For 32 cosines of the view angle across and 32 roughnesses down, it holds the GGX lobe's directional albedo split as F0·A + F90·B, by Hammersley importance sampling in f64, two entries to a vec4. Its samples include both ends, so roughness 1 and a view along the normal are read exactly (#422's white furnace). A sample's weight under GGX importance sampling is V × 4 n·l v·h ÷ n·h.
-- **The sheen table (#428).** `crates/deep-scene3d-render/src/albedo.rs`, `sheen_table`. It holds the sheen lobe's directional albedo: ∫ D V (n·l) dω of Charlie's distribution and Estevez and Kulla's visibility (KHR_materials_sheen) at α = max(roughness, 10⁻³)², on the grid of 64 cos views by 32 sheen roughnesses, packed four to an entry after the DFG table. Its entries are written the first time a scene shades sheen.
+- **Our DFG table (#421).** `crates/deep-scene3d-render/src/albedo.rs`, `dfg_table`. For 32 cosines of the view angle across and 32 roughnesses down, it holds the GGX lobe's directional albedo split as F0·A + F90·B, by Hammersley importance sampling in f64, two entries to a vec4. Its samples include both ends, so roughness 1 and a view along the normal are read exactly (#422's white furnace). A sample's weight under GGX importance sampling is V × 4 n·l v·h ÷ n·h. Its last step, `out.resize(1024, [0.0; 4])`, reserves the sheen table's entries, which are written the first time a scene shades sheen (#428).
+- **The sheen table (#428).** `crates/deep-scene3d-render/src/albedo.rs`, `sheen_table`. It holds the sheen lobe's directional albedo: ∫ D V (n·l) dω of Charlie's distribution and Estevez and Kulla's visibility (KHR_materials_sheen) at α = max(roughness, 10⁻³)², on the grid of 64 cos views by 32 sheen roughnesses, packed four to an entry after the DFG table.
