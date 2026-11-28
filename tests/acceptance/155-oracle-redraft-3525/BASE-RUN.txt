@@ -1,0 +1,48 @@
+Base: b134dd38f (origin/main) plus the blind #3525 suite commit d9b9015ff; no implementation of #3525.
+Machine: macOS (Apple silicon), Node v24.22.0. Built: workspaces, target/debug/deep-hook. NOT built: deep-show (disk;
+not built by this job, per its brief). RUSTUP_TOOLCHAIN set to a toolchain that doesn't exist so that useShow's
+`cargo build --bin deep-show` can't build it; showBin() would fail later, past the fetch.
+Result: 1 test, 1 failed, at `deep install` of test/clicks ("No canvas core is built"), before the fetch this redraft
+changes. The redrafted call was not reached; this run proves only that the file loads, starts the hub, installs
+deepbuild/score and fails where the canvas core is missing. Full scene needs deep-show built.
+
+Start: Fri Nov 27 07:37:50 UTC 2026 | 23:37  up 2 days, 17:27, 2 users, load averages: 96.74 89.95 122.11
+HEAD: d9b9015ff67c53c56ef6558ca1918b4ffde00ea9; node v24.22.0; deep-show: ls: target/debug/deep-show: No such file or directory
+$ RUSTUP_TOOLCHAIN=deep-no-build-155 node node_modules/vitest/vitest.mjs run --root tests/acceptance/155-oracle-redraft-3525 --testTimeout=600000 --no-file-parallelism
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/festive-dijkstra-c49494/tests/acceptance/155-oracle-redraft-3525
+
+ ❯ sample-accurate.test.ts (1 test | 1 failed) 17398ms
+   ❯ AC8 #155.ec088f1d oracle: upstream's sample-accurate scheduling, run on spawned voices on stroke occurrences (1)
+     × AC8 #155.ec088f1d impulses started by nine stroke occurrences inside and across 128-sample quanta land on exactly their sample and nowhere else; a mixer that starts voices per quantum is rejected 16376ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  sample-accurate.test.ts > AC8 #155.ec088f1d oracle: upstream's sample-accurate scheduling, run on spawned voices on stroke occurrences > AC8 #155.ec088f1d impulses started by nine stroke occurrences inside and across 128-sample quanta land on exactly their sample and nowhere else; a mixer that starts voices per quantum is rejected
+AssertionError: deep install of the library test/clicks installs it: exit 3, stdout "Source: /private/tmp/dh155-4OP2LQ/clicks\n  test/clicks@1.0.0, digest 93b9167bd250240cababf7ab000881faf2b5908672eeaf37cd418077cf965bcd\n  Assets fetch only on first use after an authority ask or your standing rule.\n", stderr "No canvas core is built under ~/private/deepbuild-core/.claude/worktrees/festive-dijkstra-c49494/target; run cargo build --bin deep-show first.\n": expected 3 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 3
+
+ ❯ clicksWorld sample-accurate.test.ts:115:90
+    113|   const dir = writeLibrary(join(w.tmp, 'clicks'), w.shelf!, CLICKS);
+    114|   const lib = await install(w, dir);
+    115|   expect(lib.code, `deep install of the library test/clicks installs i…
+       |                                                                                          ^
+    116|   await must(w, 'pack.rule', { pack: CLICKS.id, licenses: [CC0.id] });
+    117|   for (const t of takesOf(CLICKS)) {
+ ❯ sample-accurate.test.ts:132:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  23:37:52
+   Duration  22.43s (tests 79%, transform 19%, import 2%)
+
+exit=1
+End: Fri Nov 27 07:38:15 UTC 2026 | 23:38  up 2 days, 17:27, 2 users, load averages: 99.56 90.85 121.48

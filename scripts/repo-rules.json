@@ -3378,6 +3378,18 @@
           "why": "Issue #2700: the probe prints what it saw as one JSON line, with the canvas core's own serde_json and its preserve_order feature; already in the tree, test-only."
         }
       }
+    },
+    "tests/acceptance/2130/suite/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../../../../crates/deep-canvas",
+          "why": "Issue #2130: the acceptance suite's seven Rust files call the canvas core's public items, built from each checkout's own copy; test-only, outside the workspace."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #2130: the suite's files build documents and manifests with the canvas core's own serde_json and its preserve_order feature; already in the tree, test-only."
+        }
+      }
     }
   },
   "allowedFindings": [

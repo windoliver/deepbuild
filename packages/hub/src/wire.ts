@@ -154,7 +154,6 @@ export interface HookMeta {
   rules?: { notices: string[]; before?: { file: string; scope: string; rules: string[] }[] };
   /** A shell call's command line; only the matches-text plant reads it. */
   command?: string;
-  /** At SessionStart, the session's own inbox address, the path its agent exported to its hooks (#3405); never its token. */
   inbox?: string;
   /** The agent version the session's transcript names; unset until it holds an entry. */
   version?: string;

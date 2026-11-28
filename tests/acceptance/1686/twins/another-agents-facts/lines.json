@@ -1,0 +1,12 @@
+{
+  "packages/adapters/src/facts.ts": [
+    {
+      "find": [
+        "  return JSON.parse(readFileSync(new URL(file, FACTS), 'utf8')) as T;"
+      ],
+      "wrong": [
+        "  return JSON.parse(readFileSync(new URL(file.replace('claude-code', 'codex'), FACTS), 'utf8')) as T;"
+      ]
+    }
+  ]
+}
