@@ -912,6 +912,11 @@ for (const name of ['ac1-section', 'ac3-agent-routes', 'ac5-taste-call']) {
   redrafted[`tests/acceptance/1352/${name}.test.mjs`] = 'tests/acceptance/1352-redraft-3402/';
   byHand.push(`tests/acceptance/1352/${name}.test.mjs`);
 }
+redrafted['tests/acceptance/1352-redraft-3402/ac1-section.test.mjs'] = 'tests/acceptance/1352-redraft-3413/';
+byHand.push('tests/acceptance/1352-redraft-3402/ac1-section.test.mjs');
+redrafted['tests/acceptance/2790/purpose.test.ts'] = 'tests/acceptance/2790-redraft-3413/';
+byHand.push('tests/acceptance/2790/purpose.test.ts');
+
 // #3525 moves the asset fetch from deep_kinds to deep_job and refuses deep_kinds' fetch, so the files below, which
 // brought an asset in through deep_kinds, no longer hold their scene; #2898's table, reads and repeats files state
 // deep_kinds' old hints. Each is kept as written, by hand only, and its blind redraft runs in its place, alone: each

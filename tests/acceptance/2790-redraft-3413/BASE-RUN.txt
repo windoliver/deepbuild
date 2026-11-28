@@ -1,0 +1,115 @@
+Runs of tests/acceptance/2790-redraft-3413/purpose.test.ts, 2026-11-27, macOS, node v24.22.0, vitest 5.0.5, 1-minute load about 51.
+Each run is from an export of the base 9539bc612 (git archive) under $TMPDIR, shown as <tmp>, with the checkout's
+node_modules and built packages/extension-host/dist linked in. Command, from the export's root:
+
+  node node_modules/vitest/vitest.mjs run tests/acceptance/2790-redraft-3413 --reporter=verbose
+
+The two copies differ from the base in line 61 of scripts/guide.mjs alone (diff base copy):
+
+(2) extension:
+61c61
+<   'deep.registerPort': 'A plug-in\'s side of a piece\'s port: `entries` and `rows`, the entries and occurren ...
+---
+>   'deep.registerPort': 'An extension\'s side of a piece\'s port: `entries` and `rows`, the entries and occur ...
+
+(3) phrase removed:
+61c61
+<   'deep.registerPort': 'A plug-in\'s side of a piece\'s port: `entries` and `rows`, the entries and occurren ...
+---
+>   'deep.registerPort': 'For a piece\'s port: `entries` and `rows`, the entries and occurrence rows it takes, ...
+
+===== (1) base 9539bc612's scripts/guide.mjs: expected PASS, 8 of 8
+exit 0
+
+ RUN  v5.0.5 <tmp>/base
+
+ ✓ tests/acceptance/2790-redraft-3413/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 it is a plug-in's side of a piece's port 106ms
+ ✓ tests/acceptance/2790-redraft-3413/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 it lists the entries and the occurrence rows the port takes, by the contract's field names 119ms
+ ✓ tests/acceptance/2790-redraft-3413/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 it lists the sources the port gives for readings in 129ms
+ ✓ tests/acceptance/2790-redraft-3413/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 it says whether its gear makes sound 105ms
+ ✓ tests/acceptance/2790-redraft-3413/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 gear that makes sound makes the plug-in a device gate owner whatever the document says 94ms
+ ✓ tests/acceptance/2790-redraft-3413/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 registering opens nothing 88ms
+ ✓ tests/acceptance/2790-redraft-3413/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 a port opens only after a person clicks Connect 110ms
+ ✓ tests/acceptance/2790-redraft-3413/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 a port sends only while the piece plays live 99ms
+
+ Test Files  1 passed (1)
+      Tests  8 passed (8)
+   Start at  03:22:49
+   Duration  2.05s (tests 50%, transform 45%, import 4%, worker 1%)
+
+
+===== (2) the entry says "An extension's side of a piece's port": expected PASS, 8 of 8
+exit 0
+
+ RUN  v5.0.5 <tmp>/ext
+
+ ✓ tests/acceptance/2790-redraft-3413/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 it is a plug-in's side of a piece's port 110ms
+ ✓ tests/acceptance/2790-redraft-3413/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 it lists the entries and the occurrence rows the port takes, by the contract's field names 124ms
+ ✓ tests/acceptance/2790-redraft-3413/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 it lists the sources the port gives for readings in 144ms
+ ✓ tests/acceptance/2790-redraft-3413/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 it says whether its gear makes sound 125ms
+ ✓ tests/acceptance/2790-redraft-3413/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 gear that makes sound makes the plug-in a device gate owner whatever the document says 115ms
+ ✓ tests/acceptance/2790-redraft-3413/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 registering opens nothing 151ms
+ ✓ tests/acceptance/2790-redraft-3413/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 a port opens only after a person clicks Connect 132ms
+ ✓ tests/acceptance/2790-redraft-3413/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 a port sends only while the piece plays live 112ms
+
+ Test Files  1 passed (1)
+      Tests  8 passed (8)
+   Start at  03:22:52
+   Duration  2.32s (tests 54%, transform 41%, import 4%)
+
+
+===== (3) the phrase removed: expected the first test to FAIL, the other 7 to pass
+exit 1
+
+ RUN  v5.0.5 <tmp>/gone
+
+ × tests/acceptance/2790-redraft-3413/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 it is a plug-in's side of a piece's port 124ms
+   → the entry says deep.registerPort is an extension's or a plug-in's side of a piece's port: expected 'For a piece\'s port: `entries` and `r…' to match /(?:extension|plug-in)'s side of (?:a…/i
+ ✓ tests/acceptance/2790-redraft-3413/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 it lists the entries and the occurrence rows the port takes, by the contract's field names 103ms
+ ✓ tests/acceptance/2790-redraft-3413/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 it lists the sources the port gives for readings in 109ms
+ ✓ tests/acceptance/2790-redraft-3413/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 it says whether its gear makes sound 101ms
+ ✓ tests/acceptance/2790-redraft-3413/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 gear that makes sound makes the plug-in a device gate owner whatever the document says 154ms
+ ✓ tests/acceptance/2790-redraft-3413/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 registering opens nothing 121ms
+ ✓ tests/acceptance/2790-redraft-3413/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 a port opens only after a person clicks Connect 85ms
+ ✓ tests/acceptance/2790-redraft-3413/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 a port sends only while the piece plays live 100ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2790-redraft-3413/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 it is a plug-in's side of a piece's port
+AssertionError: the entry says deep.registerPort is an extension's or a plug-in's side of a piece's port: expected 'For a piece\'s port: `entries` and `r…' to match /(?:extension|plug-in)'s side of (?:a…/i
+
+- Expected:
+/(?:extension|plug-in)'s side of (?:a|the) piece's port/i
+
++ Received:
+"For a piece's port: `entries` and `rows`, the entries and occurrence rows it takes, and `sources`, the sources it gives for readings in, each one the plug-in registers. The piece must list each of them, and the port carries what the piece lists, which may be more. `sound` says whether its gear makes sound, which makes the plug-in a device gate owner whatever the document says. Registering opens nothing: a port opens only after a person clicks Connect on the app's prompt, and sends only while the piece plays live and forward, never on a seek, a replay or an export."
+
+ ❯ tests/acceptance/2790-redraft-3413/purpose.test.ts:10:113
+      8|     const text = said();
+      9|     expect(text, `the entry says what the method is for: ${text}`).not…
+     10|     expect(text, 'the entry says deep.registerPort is an extension\'s …
+       |                                                                                                                 ^
+     11|   }, 120_000);
+     12|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 7 passed (8)
+   Start at  03:22:55
+   Duration  2.27s (transform 48%, tests 47%, import 5%)
+
+
+===== For the record, why the redraft: the original tests/acceptance/2790/purpose.test.ts on copy (2) exits 1
+ × tests/acceptance/2790/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 it is a plug-in's side of a piece's port 125ms
+   → the entry says deep.registerPort is a plug-in's side of a piece's port: expected 'An extension\'s side of a piece\'s po…' to match /plug-in's side of (?:a|the) piece's …/i
+ ✓ tests/acceptance/2790/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 it lists the entries and the occurrence rows the port takes, by the contract's field names 118ms
+ ✓ tests/acceptance/2790/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 it lists the sources the port gives for readings in 165ms
+ ✓ tests/acceptance/2790/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 it says whether its gear makes sound 151ms
+ ✓ tests/acceptance/2790/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 gear that makes sound makes the plug-in a device gate owner whatever the document says 123ms
+ ✓ tests/acceptance/2790/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 registering opens nothing 128ms
+ ✓ tests/acceptance/2790/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 a port opens only after a person clicks Connect 105ms
+ ✓ tests/acceptance/2790/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 a port sends only while the piece plays live 136ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  1 failed | 7 passed (8)
