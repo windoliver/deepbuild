@@ -1,0 +1,12 @@
+{
+  "scripts/throttle.mjs": [
+    {
+      "find": [
+        "  if (process.platform === 'darwin') {"
+      ],
+      "wrong": [
+        "  if (process.platform === 'darwin-never') {"
+      ]
+    }
+  ]
+}
