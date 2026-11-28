@@ -1,0 +1,12 @@
+{
+  "scripts/benchmark.mjs": [
+    {
+      "find": [
+        "  if (pBelow < ALPHA) return { status: 'PASS', pairs, change, seed, pAbove, pBelow };"
+      ],
+      "wrong": [
+        "  if (pBelow < ALPHA) return { status: change < 0 ? 'INCONCLUSIVE' : 'PASS', pairs, change, seed, pAbove, pBelow, uncounted, reason: `${rose}: a fall isn't judged` };"
+      ]
+    }
+  ]
+}

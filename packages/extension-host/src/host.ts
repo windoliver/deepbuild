@@ -3099,6 +3099,11 @@ class Host implements ExtensionHost {
     return { address: `127.0.0.1:${(server.address() as AddressInfo).port}` };
   }
   private async serve(ext: Ext, chosen: Set<string>, req: IncomingMessage, res: ServerResponse): Promise<void> {
+    if (req.headers.origin !== undefined || req.headers['sec-fetch-site'] !== undefined || req.headers.host !== `127.0.0.1:${req.socket.localPort}`) {
+      req.resume();
+      res.writeHead(403).end();
+      return;
+    }
     const path = (req.url ?? '/').split('?')[0]!;
     const route = `${req.method} ${path}`;
     if (!chosen.has(route) || !ext.ask || (await this.revoked(ext))) {
