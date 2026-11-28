@@ -1,6 +1,6 @@
 # #3414: each changed line beside the line it replaced
 
-From the merge base `9539bc612` to the change, in docs/technical-design.md, docs/canvas-primitives.md, docs/parallel-proof.md, docs/extension-guide.md. Each changed line is shown as the words around each change, 140 characters either side, the changed words between ⟦ and ⟧; a line under 400 characters is shown whole: before, then after. A line that is new has no before.
+From the merge base `a75e1c56f` to the change, in docs/technical-design.md, docs/canvas-primitives.md, docs/parallel-proof.md, docs/extension-guide.md. Each changed line is shown as the words around each change, 140 characters either side, the changed words between ⟦ and ⟧; a line under 400 characters is shown whole: before, then after. A line that is new has no before.
 
 ## docs/technical-design.md
 
@@ -96,13 +96,13 @@ New line, an anchor that keeps the old heading's link landing: `<a id="the-contr
 - After: **Where it sits.** The canvas core is part of the trusted ring. The ⟦core⟧ holds the document contract: kinds with versions, stable IDs, and patches recorded with their writer. The canvas core is the only part that…
 
 
-### docs/technical-design.md:2820
+### docs/technical-design.md:2848
 
 - Before: …k's fail-open, spool and fail-closed core, the Claude Code adapter, the Stop hold, the verdict engine, the gate runner, command checks, the ⟦kernel's⟧ ask-tasks with the definition lock, a done gate that reads the issue's acceptance criteria and the bootstrap `.deepbuild/done.yaml`, and th…
 - After: …k's fail-open, spool and fail-closed core, the Claude Code adapter, the Stop hold, the verdict engine, the gate runner, command checks, the ⟦core's⟧ ask-tasks with the definition lock, a done gate that reads the issue's acceptance criteria and the bootstrap `.deepbuild/done.yaml`, and th…
 
 
-### docs/technical-design.md:2862
+### docs/technical-design.md:2890
 
 - Before: …never silently. A change to DeepBuild itself has one of three weights. A change to the four invariants in `AGENTS.md`, to a row below or to ⟦a kernel ⟧contract in a way that breaks it is yours to decide: the edit guard refuses the first two unless they arrive as their own approved proposal,…
 - After: …never silently. A change to DeepBuild itself has one of three weights. A change to the four invariants in `AGENTS.md`, to a row below or to ⟦the ⟧contract in a way that breaks it is yours to decide: the edit guard refuses the first two unless they arrive as their own approved proposal,…
@@ -138,7 +138,7 @@ New line, an anchor that keeps the old heading's link landing: `<a id="what-the-
 ### docs/canvas-primitives.md:695
 
 - Before: `The tech design's kernel row lists five ask kinds and its asks table six; this keeps six, with `definition`.`
-- After: `The tech design's core row lists five ask kinds and its asks table six; this keeps six, with `definition`.`
+- After: `The tech design's Ask, in [The contract](./technical-design.md#prim-kernel), lists the same six, with `definition`.`
 
 ### docs/canvas-primitives.md:1131
 

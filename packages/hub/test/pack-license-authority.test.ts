@@ -1,7 +1,8 @@
 import { join } from 'node:path';
 import { beforeAll, expect, it } from 'vitest';
 import { CC0 } from '../../../tests/acceptance/1820/pack.ts';
-import { asks, kinds, newAsks, stored, until, yes } from '../../../tests/acceptance/1820/helpers.ts';
+import { asks, newAsks, stored, yes } from '../../../tests/acceptance/1820/helpers.ts';
+import { job, until } from '../../../tests/acceptance/1820-redraft-3525/helpers.ts';
 import { addAsset, bytes, installOrBlock, scopedWorld, sha, writePack, type Listed, type Scoped } from '../../../tests/acceptance/1820/scope/world.ts';
 
 let w: Scoped;
@@ -14,7 +15,7 @@ beforeAll(async () => {
 it('#1820 CC-BY license terms cannot be stored as a manifest claim of CC0 with no attribution', async () => {
   const args = { op: 'fetch', pack: 'fixture/attributed@1.0.0', asset: a.path };
   const before = (await asks(w)).length;
-  let got = await kinds(w, args);
+  let got = await job(w, args);
   if (got.value.status === 'held') {
     const raised = await newAsks(w, before, 'authority');
     expect((await yes(w, raised[0]!)).code).toBe(0);

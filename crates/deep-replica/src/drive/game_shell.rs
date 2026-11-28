@@ -73,8 +73,6 @@ impl Canvas {
         let map = stamped
             .as_object()
             .ok_or_else(|| refused("a screen's document is an object".into()))?;
-        // #3605: each driven data value written where the screen's templates read it, as the scheduler writes it
-        // (`{data/ch1} of 3` over the shell's `done`), before the screen is drawn.
         let program = Program::compile(map)
             .map_err(|r| json!({"ok": false, "code": r.code, "what": format!("a screen's document doesn't compile: {}", r.path), "path": r.path}))?;
         let mut state = program.state();
@@ -178,11 +176,9 @@ pub fn run(call: &Value, plant: Option<Plant>, out: &Path) -> Result<Value, Valu
     let document = call.get("document").ok_or_else(
         || json!({"ok": false, "code": "bad_input", "what": "a shell's play takes its document"}),
     )?;
-    // #3605: a level's track replayed as a piece with no shell, which the moves journey's check compares with its run.
     if call.pointer("/shell/journey").and_then(Value::as_str) == Some("replay") {
         return replay(document, call, out);
     }
-    // #3605: a relaunch journey's plays keep the shell's profile record in one store, under this replica's out folder.
     let mut call = call.clone();
     if let Some(store) = call.pointer("/shell/store").and_then(Value::as_str) {
         let name = format!("{:x}", Sha256::digest(store.as_bytes()));
@@ -226,8 +222,6 @@ pub fn run(call: &Value, plant: Option<Plant>, out: &Path) -> Result<Value, Valu
     deep_logic::shell::run::play(document, &stored, &docs, call, &mut canvas, plants_of(name))
 }
 
-/// #3605: level `shell.of`'s document, from the shell's own, played alone over the track the call gives, for
-/// `shell.steps` steps, with each array `shell.values` names at each step: the replica's piece play, with no shell.
 fn replay(document: &Value, call: &Value, out: &Path) -> Result<Value, Value> {
     let spec = &call["shell"];
     let i = spec["of"].as_u64().unwrap_or(0) as usize;
@@ -241,7 +235,6 @@ fn replay(document: &Value, call: &Value, out: &Path) -> Result<Value, Value> {
         .and_then(|l| l.get(i))
         .map(|l| l["doc"].clone())
         .unwrap_or(Value::Null);
-    // A level named by hash is one the call or its evidence gives.
     if let Some(h) = level.as_str().map(str::to_string) {
         let bytes = call
             .pointer(&format!("/documents/{h}"))

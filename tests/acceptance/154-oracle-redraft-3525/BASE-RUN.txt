@@ -1,0 +1,40 @@
+$ NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/154-oracle-redraft-3525 --testTimeout=600000 --no-file-parallelism
+# base b134dd38f (checkout HEAD d9b9015ff = base + #3525's blind suite); target/debug/deep-show built from it; node v24.22.0
+# started 2026-11-27T07:56:06Z, load { 147.63 135.27 126.77 }
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/festive-dijkstra-c49494/tests/acceptance/154-oracle-redraft-3525
+
+ ❯ sample-accurate.test.ts (1 test | 1 failed) 2547333ms
+   ❯ AC2 #154.8b0e5b99 oracle: upstream's sample-accurate scheduling, run on score.render@1's note_on and stem (1)
+     × AC2 #154.8b0e5b99 impulses at offsets inside and across 128-sample quanta land on exactly their sample and nowhere else; a renderer that starts notes per quantum is rejected 26767ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  sample-accurate.test.ts > AC2 #154.8b0e5b99 oracle: upstream's sample-accurate scheduling, run on score.render@1's note_on and stem > AC2 #154.8b0e5b99 impulses at offsets inside and across 128-sample quanta land on exactly their sample and nowhere else; a renderer that starts notes per quantum is rejected
+AssertionError: test/clicks@1.0.0's take click.wav is fetched under your standing rule: {"code":"unlisted_field","retryable":false,"remediation":"Leave out pack: the schema lists only op, kind, tool, params, inputs.","path":"/params/arguments/pack","actual":"pack","evidence":[]}: expected undefined to be 'fetched' // Object.is equality
+
+- Expected:
+"fetched"
+
++ Received:
+undefined
+
+ ❯ fetchLibrary ../154-redraft-3525/helpers.ts:32:121
+     30|   for (const t of takesOf(lib)) {
+     31|     const o = await fetchUntil(w, lib, t);
+     32|     expect(o.value.status, `${ref(lib)}'s take ${t.path} is fetched un…
+       |                                                                                                                         ^
+     33|   }
+     34| }
+ ❯ scoreWorld ../154-redraft-3525/helpers.ts:40:5
+ ❯ sample-accurate.test.ts:87:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  23:56:07
+   Duration  2550.75s (tests 100%)
+
+# exit 1 at 2026-11-27T08:38:38Z, load { 98.49 168.67 216.28 }
