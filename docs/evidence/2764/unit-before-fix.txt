@@ -1,0 +1,31 @@
+
+ RUN  v5.0.5 <repo>/packages/hub
+
+ ❯ test/holds.test.ts (40 tests | 1 failed | 39 skipped) 3693ms
+   ❯ a held push (#1156) (38)
+     × holds a delete after a Codex subagent's prompt: a child's prompt starts no turn of the session's (#2764) 3691ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/holds.test.ts > a held push (#1156) > holds a delete after a Codex subagent's prompt: a child's prompt starts no turn of the session's (#2764)
+AssertionError: the delete waits on an ask though a Codex subagent started in the proceed's turn: expected 'let through' to contain 'ask:'
+
+Expected: "ask:"
+Received: "let through"
+
+ ❯ test/holds.test.ts:197:119
+    195|     await prompt('subagent');
+    196|     const held = await remove();
+    197|     expect(held ?? 'let through', "the delete waits on an ask though a…
+       |                                                                                                                       ^
+    198|     const raised = (await record.raw("SELECT question FROM asks WHERE …
+    199|     expect(raised.map((a) => a.question), 'one ask, naming the proceed…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 39 skipped (40)
+   Start at  23:55:28
+   Duration  6.60s (tests 59%, transform 34%, import 6%, worker 1%)
+

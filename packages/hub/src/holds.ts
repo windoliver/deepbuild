@@ -156,7 +156,8 @@ export class Holds {
    */
   private async proceeding(session: string): Promise<{ id: string; question: string; rule: string } | undefined> {
     const child = this.o.plant === 'proceed-ends-at-child-stop' ? '' : ` AND NOT (kind = 'agent.stop' AND json_extract(data, '$.child') IS NOT NULL)`;
-    const [last] = (await this.o.raw(`SELECT id, kind, data FROM events WHERE session_id = ? AND kind IN ('question.proceeded', 'agent.stop', 'user.ask')${child} ORDER BY log_pos DESC LIMIT 1`, [session])) as { id: string; kind: string; data: string }[];
+    const prompt = this.o.plant === 'proceed-ends-at-child-prompt' ? '' : ` AND NOT (kind = 'user.ask' AND agent = 'codex' AND json_extract(data, '$.from') = 'subagent')`;
+    const [last] = (await this.o.raw(`SELECT id, kind, data FROM events WHERE session_id = ? AND kind IN ('question.proceeded', 'agent.stop', 'user.ask')${child}${prompt} ORDER BY log_pos DESC LIMIT 1`, [session])) as { id: string; kind: string; data: string }[];
     if (last?.kind !== 'question.proceeded') return undefined;
     const d = JSON.parse(last.data) as { question: string; rule: string };
     return { id: last.id, question: d.question, rule: d.rule };

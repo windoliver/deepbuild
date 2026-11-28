@@ -1,0 +1,11 @@
+
+ RUN  v5.0.5 <repo>/tests/acceptance/2764
+
+ ✓ proceed-codex-subagent.test.ts > #2764.d93a7447 a Codex subagent's prompt ends no turn a proceed started: the delete after it is held with one authority ask > #2764.d93a7447 in the turn a proceed started, after a Codex subagent's prompt, `gh release delete v1.2.0 --yes` is held at PreToolUse with one authority ask naming the proceed 11094ms
+ ✓ proceed-codex-subagent.test.ts > #2764.d93a7447 a Codex subagent's prompt ends no turn a proceed started: the delete after it is held with one authority ask > #2764.d93a7447 (wrong program) a hub whose proceed-turn query counts a subagent's prompt (DEEP_HUB_PLANT=proceed-ends-at-subagent-prompt) lets the delete run and fails this test, naming the call 6350ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  23:57:37
+   Duration  17.96s (tests 100%)
+

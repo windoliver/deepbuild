@@ -1,0 +1,127 @@
+Direct run at f521b307e (affected.mjs r1 got no build grant), load 15-80 on 20 cores.
+
+Branch:
+  hub-unit: Tests  28 failed | 651 passed | 13 skipped (692)
+  acc-321: Tests  1 failed | 8 passed (9)
+  acc-1836: Tests  2 passed (2)
+  acc-2764: Tests  2 passed (2)
+  acc-1156: Tests  35 failed (35)
+  acc-39: Tests  9 failed | 26 passed | 5 skipped (40)
+
+Base 58b4a8cb2 (scratch worktree), the branch's failing files only:
+  base-hub: Tests  27 failed | 63 passed | 13 skipped (103)
+  base-321: Tests  1 failed | 1 passed (2)
+  base-39: Tests  3 failed | 4 passed (7)
+
+Correction (final review, 2026-11-25): the base reruns of 321 and 39 are not a valid comparison. They failed for another reason: the disk filled during them.
+  base-321 AC1 failed with "the storage refused the write: database or disk is full" (exit 3 on deep inbox answer). On the branch, AC1 failed differently: the yes was counted, but the resent `git push origin main` was denied by guard push-needs-ask, because a held push starts only after its 10 s hold with Undo. The test sends the call again at once. This scenario has no Codex subagent prompt, so #2764's filter does not apply. Main's run (train17's known-failure split) decides whether 321's AC1 fails on main.
+  base-39 AC2 is BLOCKED on the same disk-full write. Only AC8 there failed on its own assertion.
+Every other branch failure fails at the base too, under the same name, except:
+  packages/hub/test/claim-numbers.test.ts 'keeps a failure on a large sample...': a 60 s timeout; run alone on the branch it passed once and failed once (load), and it doesn't touch holds.
+Not compared (environment, BLOCKED or by shape):
+  tests/acceptance/1156: BLOCKED, no python-dbusmock on this machine.
+  tests/acceptance/39 lanes/replies/setup: no codex on PATH, no deep-canvas-render built; AC25 fails on main here (machine notes).
+  packages/hub/test/children-*.test.mjs: node --test files the direct run fed to vitest; under node --test all 9 pass.
+  packages/hub/test/lifecycle-*.test.mjs: BLOCKED, 'unhandled dependency better-sqlite3'.
+
+Branch failures (file > test):
+ FAIL  lanes.test.ts > AC19 #39.52f53113 With tool_timeout_sec = 8 for DeepBuild's MCP server in a Codex config fixture, the deep_ask relation shows broken, and a deep_ask returns at once with the ask
+ FAIL  lanes.test.ts > AC19 #39.52f53113 With tool_timeout_sec = 8 for DeepBuild's MCP server in a Codex config fixture, the deep_ask relation shows broken, and a deep_ask returns at once with the ask
+ FAIL  lanes.test.ts > AC25 #39.5981bf3b On a controlled clock with Codex's Stop hook timeout at 45 minutes, a stop whose slow check's deadline ends 3 s before the timeout isn't held: Codex gets its r
+ FAIL  proceed.test.ts > AC1 #321.69952336 a proceed never covers a push: held at PreToolUse with an authority ask, whatever sorter answered > AC1 a planted sorter's proceed is recorded with its rule;
+ FAIL  replies.test.ts > AC12 #39.071692b0 Every reply the hub sends for each of Codex's twelve events validates against Codex's published output schema for that event, and Codex's own hook engine, fe
+ FAIL  session.test.ts > AC2 #39.0215da31 A held stop continues with the answer > AC2 #39.0215da31 a Codex stop with an open ask is held; your answer comes back as decision: block carrying it, on a re
+ FAIL  session.test.ts > AC8 #39.9d535982 A session on a Codex version past its facts is recorded with its holds watch-only and one health reading > AC8 #39.9d535982 a rollout naming 99.0.0: its event
+ FAIL  setup.test.ts > AC14 #39.c819bb37 After a DeepBuild update, its entries in hooks.json are byte-identical and Codex's hook list still reports them trusted; changing one entry's timeout in a test
+ FAIL  setup.test.ts > AC24 #39.21dbcb3f Running setup again after the slow lane's expected time changes from 20 to 30 minutes leaves Codex's Stop hook entry byte-identical at 45 minutes, and Codex's 
+ FAIL  setup.test.ts > AC9 #39.410c1db7 The output of codex login status is never printed or logged; only its exit code is read > AC9 #39.410c1db7 doctor and the hub read the exit code: the secret-sha
+ FAIL  test/asleep.test.ts > a hub that slept with an ask waiting for its batch moves its deadline later by the time it slept
+ FAIL  test/background.test.ts > a background job that fails is named in hub.health with its error, and cleared once it runs clean again
+ FAIL  test/children-arguments.test.mjs [ test/children-arguments.test.mjs ]
+ FAIL  test/children-failed-spawn.test.mjs [ test/children-failed-spawn.test.mjs ]
+ FAIL  test/children-native-parity.test.mjs [ test/children-native-parity.test.mjs ]
+ FAIL  test/children-node-modes.test.mjs [ test/children-node-modes.test.mjs ]
+ FAIL  test/children-option-coercion.test.mjs [ test/children-option-coercion.test.mjs ]
+ FAIL  test/children-sync-edge-parity.test.mjs [ test/children-sync-edge-parity.test.mjs ]
+ FAIL  test/children-sync-missing.test.mjs [ test/children-sync-missing.test.mjs ]
+ FAIL  test/children-sync.test.mjs [ test/children-sync.test.mjs ]
+ FAIL  test/children-table.test.mjs [ test/children-table.test.mjs ]
+ FAIL  test/claim-numbers.test.ts > the terms a claim adds, on its definition's sample > keeps a failure on a large sample within what the record holds of a finding, naming the filter and the sample
+ FAIL  test/confirm-enroll.test.ts > sets the key up again only from the app with a paired device, and the old key stops counting then
+ FAIL  test/continues.test.ts > a continue parked for the next prompt > outlives the session starting again: a resumed session gets it with its next prompt
+ FAIL  test/continues.test.ts > a first turn that ends in StopFailure > has the waiter its StopFailure started wake the session with the continue parked before it connected
+ FAIL  test/continues.test.ts > a first turn that ends in StopFailure > keeps the continue it handed a waiter that never woke the session: your next prompt carries it
+ FAIL  test/drive.test.ts > a session that ends takes its replicas and their leases with it
+ FAIL  test/env-resources.test.ts > an agent's up while ps fails is refused, never credited to your own terminal
+ FAIL  test/env-resources.test.ts > a session whose agent is killed, with no SessionEnd, takes the stack it leased keys for down, so another worktree's session gets them
+ FAIL  test/gate-identity.test.ts > #1325 who did it, and a credential across a hub restart > a push by the agents' credential names the session holding it, its run and the person who approved the run
+ FAIL  test/gate-identity.test.ts > #1325 who did it, and a credential across a hub restart > a session's credential stops within 60 s of its end though the hub restarted while it ran
+ FAIL  test/hub-down.test.ts > deep hub status with no hub exits 3 naming the socket, well inside the 2 s it would wait for an answer
+ FAIL  test/lifecycle-events.test.mjs [ test/lifecycle-events.test.mjs ]
+ FAIL  test/lifecycle-races.test.mjs [ test/lifecycle-races.test.mjs ]
+ FAIL  test/memory-overrule.test.ts > deep memory overrule > stays overruled across a re-read of the transcript, and a new prompt rejects it again
+ FAIL  test/memory-overrule.test.ts > deep memory overrule > takes a kept lesson's guard off, and the lesson is yours to decide again
+ FAIL  test/memory.test.ts > rejected directions > what you reject in a prompt while a session runs is saved and reaches rules.json at once
+ FAIL  test/onboarding.test.ts > deep setup > says in one line what it added, with no line for a timing relation that holds
+ FAIL  test/onboarding.test.ts > the hub's login service on Linux > starts through the real user manager from a home whose units it doesn't read
+ FAIL  test/pack-cache.test.ts [ test/pack-cache.test.ts ]
+ FAIL  test/pack-envelope.test.ts [ test/pack-envelope.test.ts ]
+ FAIL  test/pack-export-write.test.ts [ test/pack-export-write.test.ts ]
+ FAIL  test/pack-license-authority.test.ts [ test/pack-license-authority.test.ts ]
+ FAIL  test/pack-missing-open.test.ts > #1958 a document naming a pack version the hub lacks opens, its instance skipped with pack_missing naming the version
+ FAIL  test/pack-offline-many.test.ts [ test/pack-offline-many.test.ts ]
+ FAIL  test/pack-ref-safety.test.ts [ test/pack-ref-safety.test.ts ]
+ FAIL  test/pack-restart.test.ts [ test/pack-restart.test.ts ]
+ FAIL  test/pack-rule-after-decline.test.ts [ test/pack-rule-after-decline.test.ts ]
+ FAIL  test/pack-rule-command.test.ts > deep pack rule lets a pack's asset fetch under the rule's license with no ask
+ FAIL  test/parsers.test.ts > the parser for large lines > starts at the first line over 1 MB, and scrubs it by the values the hub held from its start
+ FAIL  test/products-keep-orphan-2122.test.ts > keep replaces a same-key orphan after index loss and serves an independent copy-on-write product
+ FAIL  test/products-restart-reclaim-2122.test.ts > after a hub restart an active PreToolUse protects its old product while low-disk reclaim removes an idle worktree product
+ FAIL  test/setup-statusline.test.ts > a second setup after deep-hook moved keeps your status line as yours
+ FAIL  test/shutdown-connection.test.ts [ test/shutdown-connection.test.ts ]
+ FAIL  test/size-scope.test.ts > #324 a size taste call holds no send-back > a drafted check that fails while the size taste call is open still sends the stop back
+ FAIL  test/staging.test.ts > does not stage a discard when one file can't be copied and other copies end after it
+ FAIL  test/startup-memory.test.ts > the hub's threads load no HTTP server or inspector at a start, and its event loop no record store
+ FAIL  test/wiki.test.ts > the one-time choices > runs the wiki's reading on the agent the choices name
+
+Base failures (file > test), for the side-by-side:
+ FAIL  proceed.test.ts > AC1 #321.69952336 a proceed never covers a push: held at PreToolUse with an authority ask, whatever sorter answered > AC1 a planted sorter's proceed is recorded with its rule;
+ FAIL  session.test.ts > AC1 #39.2b854223 A Codex session's tool calls and commits are recorded > AC1 #39.2b854223 setup's entries in ~/.codex/hooks.json run deep-hook; a shell call and a real git com
+ FAIL  session.test.ts > AC2 #39.0215da31 A held stop continues with the answer > AC2 #39.0215da31 a Codex stop with an open ask is held; your answer comes back as decision: block carrying it, on a re
+ FAIL  session.test.ts > AC8 #39.9d535982 A session on a Codex version past its facts is recorded with its holds watch-only and one health reading > AC8 #39.9d535982 a rollout naming 99.0.0: its event
+ FAIL  test/asleep.test.ts > a hub that slept with an ask waiting for its batch moves its deadline later by the time it slept
+ FAIL  test/background.test.ts > a background job that fails is named in hub.health with its error, and cleared once it runs clean again
+ FAIL  test/confirm-enroll.test.ts > sets the key up again only from the app with a paired device, and the old key stops counting then
+ FAIL  test/continues.test.ts > a continue parked for the next prompt > outlives the session starting again: a resumed session gets it with its next prompt
+ FAIL  test/continues.test.ts > a first turn that ends in StopFailure > has the waiter its StopFailure started wake the session with the continue parked before it connected
+ FAIL  test/continues.test.ts > a first turn that ends in StopFailure > keeps the continue it handed a waiter that never woke the session: your next prompt carries it
+ FAIL  test/drive.test.ts > a session that ends takes its replicas and their leases with it
+ FAIL  test/env-resources.test.ts > an agent's up while ps fails is refused, never credited to your own terminal
+ FAIL  test/env-resources.test.ts > a session whose agent is killed, with no SessionEnd, takes the stack it leased keys for down, so another worktree's session gets them
+ FAIL  test/gate-identity.test.ts > #1325 who did it, and a credential across a hub restart > a push by the agents' credential names the session holding it, its run and the person who approved the run
+ FAIL  test/gate-identity.test.ts > #1325 who did it, and a credential across a hub restart > a session's credential stops within 60 s of its end though the hub restarted while it ran
+ FAIL  test/hub-down.test.ts > deep hub status with no hub exits 3 naming the socket, well inside the 2 s it would wait for an answer
+ FAIL  test/memory-overrule.test.ts > deep memory overrule > stays overruled across a re-read of the transcript, and a new prompt rejects it again
+ FAIL  test/memory-overrule.test.ts > deep memory overrule > takes a kept lesson's guard off, and the lesson is yours to decide again
+ FAIL  test/memory.test.ts > rejected directions > what you reject in a prompt while a session runs is saved and reaches rules.json at once
+ FAIL  test/onboarding.test.ts > deep setup > says in one line what it added, with no line for a timing relation that holds
+ FAIL  test/onboarding.test.ts > the hub's login service on Linux > starts through the real user manager from a home whose units it doesn't read
+ FAIL  test/pack-cache.test.ts [ test/pack-cache.test.ts ]
+ FAIL  test/pack-envelope.test.ts [ test/pack-envelope.test.ts ]
+ FAIL  test/pack-export-write.test.ts [ test/pack-export-write.test.ts ]
+ FAIL  test/pack-license-authority.test.ts [ test/pack-license-authority.test.ts ]
+ FAIL  test/pack-missing-open.test.ts > #1958 a document naming a pack version the hub lacks opens, its instance skipped with pack_missing naming the version
+ FAIL  test/pack-offline-many.test.ts [ test/pack-offline-many.test.ts ]
+ FAIL  test/pack-ref-safety.test.ts [ test/pack-ref-safety.test.ts ]
+ FAIL  test/pack-restart.test.ts [ test/pack-restart.test.ts ]
+ FAIL  test/pack-rule-after-decline.test.ts [ test/pack-rule-after-decline.test.ts ]
+ FAIL  test/pack-rule-command.test.ts > deep pack rule lets a pack's asset fetch under the rule's license with no ask
+ FAIL  test/parsers.test.ts > the parser for large lines > starts at the first line over 1 MB, and scrubs it by the values the hub held from its start
+ FAIL  test/products-keep-orphan-2122.test.ts > keep replaces a same-key orphan after index loss and serves an independent copy-on-write product
+ FAIL  test/products-restart-reclaim-2122.test.ts > after a hub restart an active PreToolUse protects its old product while low-disk reclaim removes an idle worktree product
+ FAIL  test/setup-statusline.test.ts > a second setup after deep-hook moved keeps your status line as yours
+ FAIL  test/shutdown-connection.test.ts [ test/shutdown-connection.test.ts ]
+ FAIL  test/size-scope.test.ts > #324 a size taste call holds no send-back > a drafted check that fails while the size taste call is open still sends the stop back
+ FAIL  test/staging.test.ts > does not stage a discard when one file can't be copied and other copies end after it
+ FAIL  test/startup-memory.test.ts > the hub's threads load no HTTP server or inspector at a start, and its event loop no record store
+ FAIL  test/wiki.test.ts > the one-time choices > runs the wiki's reading on the agent the choices name
