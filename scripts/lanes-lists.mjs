@@ -917,6 +917,15 @@ byHand.push('tests/acceptance/1352-redraft-3402/ac1-section.test.mjs');
 redrafted['tests/acceptance/2790/purpose.test.ts'] = 'tests/acceptance/2790-redraft-3413/';
 byHand.push('tests/acceptance/2790/purpose.test.ts');
 
+// #2570: the #2565 redraft's rollback scene restarts nothing. Its hub.stop on the token alone is refused by the
+// installed hub (#1865) and the refusal swallowed, so "one notice, never twice" read the same hub. Both files that
+// judge through that scene are kept as written, by hand only; their blind redraft, whose restart is deep hub stop and
+// deep hub start, runs in their place, alone by its own lane.json.
+for (const name of ['crash', 'misjudge']) {
+  redrafted[`tests/acceptance/1334-redraft-2565/${name}.test.mjs`] = 'tests/acceptance/1334-redraft-2570/';
+  byHand.push(`tests/acceptance/1334-redraft-2565/${name}.test.mjs`);
+}
+
 // #3525 moves the asset fetch from deep_kinds to deep_job and refuses deep_kinds' fetch, so the files below, which
 // brought an asset in through deep_kinds, no longer hold their scene; #2898's table, reads and repeats files state
 // deep_kinds' old hints. Each is kept as written, by hand only, and its blind redraft runs in its place, alone: each
