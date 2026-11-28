@@ -1,5 +1,3 @@
-// #2669: the agent is told once where a session's work lives. Two tasks from one session outside any repo that land
-// at once share one workspace and one notice, as two that land one after the other do.
 import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, expect, it } from 'vitest';
