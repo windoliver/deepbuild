@@ -1,8 +1,3 @@
-// A zip read as a stream (#3570): its entries' local headers in order as the bytes pass, one member named by its path
-// inflated as it comes and handed on in chunks, the rest skipped. Each of these refuses the file by name: an encrypted
-// entry; a named member that is itself an archive, or a path through one; a path that leaves the archive's root; a
-// path the archive holds twice; a member whose unpacked bytes pass `max_bytes`, counted on the stream as it inflates and
-// never taken from a header. Nothing is fetched and nothing outside the archive is read.
 import { createHash } from 'node:crypto';
 import { createInflateRaw } from 'node:zlib';
 
@@ -11,10 +6,8 @@ const CENTRAL = 0x02014b50;
 const END = 0x06054b50;
 const DESCRIPTOR = 0x08074b50;
 
-/** A refusal naming what it refuses: `code` the kind of thing, `detail` the thing. */
 export const refusal = (code, why, detail = {}) => Object.assign(Error(why), { refusal: { code, ...detail } });
 
-/** Whether a path leaves an archive's root: absolute, a drive, a `..` segment, or a backslash a reader may split on. */
 export function leaves(path) {
   if (!path || path.startsWith('/') || path.includes('\\') || /^[A-Za-z]:/.test(path)) return true;
   return path.split('/').some((s) => s === '..');
@@ -22,13 +15,7 @@ export function leaves(path) {
 const archived = (bytes) => bytes.length >= 4 && bytes.readUInt32LE(0) === LOCAL;
 const isArchiveName = (path) => /\.(zip|jar|xlsx|docx|ods|7z|gz|tar|tgz|rar)$/i.test(path);
 
-/**
- * Reads a zip from a stream of chunks: `push(chunk)` as they come, then `end()`. The member at `member` is handed to
- * `sink.data(chunk)` as it inflates and `sink.end()` after it; `end()` resolves to `{path, sha256, bytes}`. A refusal
- * rejects push or end with an Error carrying `refusal`.
- */
 export class ZipMember {
-  /** `first` is the planted reader of #3570's qualification: it takes the archive's first member whatever `member` says. */
   constructor(member, maxBytes, sink, first = false) {
     if (leaves(member)) throw refusal('zip_path_leaves_root', `the member ${JSON.stringify(member)} leaves the archive's root, so it isn't read`, { member });
     this.member = member;
@@ -39,7 +26,6 @@ export class ZipMember {
     this.names = new Map();
     this.found = undefined;
     this.done = false;
-    // The entry being passed: undefined between entries.
     this.entry = undefined;
     this.chain = Promise.resolve();
   }
@@ -67,7 +53,6 @@ export class ZipMember {
       if (!(await this.body())) return;
     }
   }
-  /** One local header: its path, flags, method and sizes (zip64 sizes from its extra field). */
   header(h, n) {
     const flags = h.readUInt16LE(6);
     const method = h.readUInt16LE(8);
@@ -94,7 +79,6 @@ export class ZipMember {
     if (later && method === 0) throw refusal('zip_unreadable', `the entry ${JSON.stringify(path)} is stored with its size after its data, so it can't be read as a stream`, { member: path });
     return { path, method, named, later, left: compressed, inflate: undefined, out: 0, hash: named ? createHash('sha256') : undefined, first: true };
   }
-  /** Passes the entry's data on, or by; true once it and its descriptor are passed. */
   async body() {
     const e = this.entry;
     if (!e.later) {
@@ -102,7 +86,6 @@ export class ZipMember {
       const part = this.held.subarray(0, take);
       this.held = this.held.subarray(take);
       e.left -= take;
-      // An entry not named, of known size, is passed by unread.
       if (e.named && e.method === 0) this.out(e, part);
       else if (e.named && (part.length || e.left === 0)) await this.inflate(e, part, e.left === 0);
       if (e.error) throw e.error;
@@ -110,7 +93,6 @@ export class ZipMember {
       this.finish(e);
       return true;
     }
-    // Sizes after the data: the deflate stream says where it ends, and its descriptor follows.
     if (!e.ended) {
       if (!this.held.length) return false;
       const used = await this.inflate(e, this.held, false);
@@ -122,10 +104,6 @@ export class ZipMember {
     this.finish(e);
     return true;
   }
-  /**
-   * Inflates a part of the entry's deflate stream, `last` its known end; resolves to how many of its bytes the stream
-   * used, all of them until it ends, and those up to its end where the stream ends inside the part.
-   */
   inflate(e, part, last) {
     if (!e.inflate) {
       e.inflate = createInflateRaw({ chunkSize: 1 << 20 });
@@ -147,12 +125,10 @@ export class ZipMember {
         if (e.error) reject(e.error);
         else resolve(e.ended ? z.bytesWritten - before : part.length);
       };
-      // A known end waits for the stream's end; a write, for its bytes to be taken and their output handed on.
       if (last) z.end(part);
       else z.write(part, () => setImmediate(() => e.settle?.()));
     });
   }
-  /** An entry's unpacked bytes: counted for the named member against max_bytes, hashed, handed on; others dropped. */
   out(e, bytes) {
     if (!e.named || e.error) return;
     e.out += bytes.length;

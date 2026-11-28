@@ -17,9 +17,7 @@ import type { Cause, Checked, Fault, MutantReport, ProofSpec } from './types.js'
 const ESCAPE = /\bkani::(?:assume|requires|stub|should_panic|unwind)\b/;
 /** Mutants tried per check, at most. */
 const MUTANTS = 12;
-/** Kani prints the counterexample of each failed check as a Rust test. */
 const KANI_FLAGS = ['-Z', 'concrete-playback', '--concrete-playback=print'];
-/** The key's tools: Kani's version and the runner's flags. */
 const toolsOf = (version: string): Record<string, string> => ({ kani: version, 'kani.flags': KANI_FLAGS.join(' ') });
 
 type Cargo = (args: string[]) => Exec;

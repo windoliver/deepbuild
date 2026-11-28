@@ -540,7 +540,6 @@ const paseoConfig = (): string => join(homedir(), '.paseo', 'config.json');
  */
 async function installPaseo(root: string, record: ReturnType<typeof setupRecord>, paseo: string, cli: string, quiet: boolean): Promise<void> {
   const source = pluginSource();
-  // Read before anything is written (#3428): paseo's version against the facts, the plugin as paseo lists it, and the source.
   const untouched = `so setup installed nothing and left ${paseoConfig()} as it is`;
   const read = await paseoVersion(paseo, 60_000);
   if ('unread' in read) throw Error(`${read.unread}, ${untouched}`);
@@ -569,7 +568,6 @@ async function installPaseo(root: string, record: ReturnType<typeof setupRecord>
   } finally {
     noteWritten(record, paseoConfig());
   }
-  // Installed counts only once paseo lists the plugin as loaded: one it refused is said with paseo's own reason.
   const after = await listedPlugin(paseo, 60_000);
   const problem = 'unread' in after ? after.unread : after.plugin ? pluginProblem(after.plugin) : `paseo doesn't list its plugin deepbuild after paseo plugin install`;
   if (problem) throw Error(`${problem}; deep setup --undo puts ${paseoConfig()} back`);

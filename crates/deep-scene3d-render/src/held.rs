@@ -29,8 +29,7 @@ fn texel(f: wgpu::TextureFormat) -> u64 {
 /// What the renderers drawing `scene` hold beside the view's slots and upscale:
 /// - each internal pixel: the linear, ID and depth targets, the geometry pass's stored samples
 ///   of the IDs and depth (its color's are memoryless), and, while a list is culled on the GPU,
-///   the cull's pyramid, a third more for its mips (its occluders draw into the geometry pass's
-///   depth, #3506); and
+///   the cull's pyramid, a third more for its mips; and
 ///   a quarter of the same for a mirror's own view, which draws at half the internal size
 ///   (#2691);
 /// - whatever that size: each view's own (each solid's record, the glyph atlas where a label

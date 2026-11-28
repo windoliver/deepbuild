@@ -757,8 +757,6 @@ impl World {
                         .iter()
                         .filter_map(|x| Some((x, read(x)?)))
                         .collect();
-                    // #3605: a shell setting with no entry at step 0, played alone or under a
-                    // shell that doesn't declare it, reads its default there.
                     if k == 0 && list.is_empty() {
                         if let Some((_, d)) = item
                             .settings
