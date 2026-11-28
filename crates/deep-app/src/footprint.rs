@@ -6,12 +6,14 @@
 use std::sync::Mutex;
 use std::time::Instant;
 
+#[cfg(target_os = "macos")]
 use deep_canvas::gauge::{Gauge, Place};
 use deep_gpu::footprint::{self, Minutes, Readers};
 use gpui_kit::Window;
 use serde_json::{json, Value};
 
 /// GPUI's glyph atlas: its pages, their tiles counted in entries, at the bounds its holder declares.
+#[cfg(target_os = "macos")]
 static GLYPHS: Gauge = Gauge::new(
     "MetalAtlasTextures::monochrome_textures", // copy-exception: a gauge's key, read in the footprint record, never drawn
     Place::Device,
@@ -19,6 +21,7 @@ static GLYPHS: Gauge = Gauge::new(
     256_000_000,
 );
 /// GPUI's sprite atlas, the images the app retains until it drops them: its pages, their tiles in entries.
+#[cfg(target_os = "macos")]
 static SPRITES: Gauge = Gauge::new(
     "MetalAtlasTextures::polychrome_textures", // copy-exception: a gauge's key, read in the footprint record, never drawn
     Place::Device,
@@ -26,6 +29,7 @@ static SPRITES: Gauge = Gauge::new(
     512_000_000,
 );
 /// GPUI's path targets, one window's size each.
+#[cfg(target_os = "macos")]
 static TARGETS: Gauge = Gauge::new(
     "MetalRenderer::path_intermediate_texture", // copy-exception: a gauge's key, read in the footprint record, never drawn
     Place::Device,
@@ -33,6 +37,7 @@ static TARGETS: Gauge = Gauge::new(
     512_000_000,
 );
 /// GPUI's instance buffers, in its pool and in flight.
+#[cfg(target_os = "macos")]
 static INSTANCES: Gauge = Gauge::new(
     "InstanceBufferPool::buffers", // copy-exception: a gauge's key, read in the footprint record, never drawn
     Place::Device,
@@ -40,6 +45,7 @@ static INSTANCES: Gauge = Gauge::new(
     512_000_000,
 );
 /// Each window's drawables, the surfaces it presents through: at most three a window.
+#[cfg(target_os = "macos")]
 static DRAWABLES: Gauge = Gauge::new("CAMetalLayer::drawables", Place::Device, 48, 1_024_000_000);
 
 /// Mirrors GPUI's own counts of what its renderer holds on the device into the app's gauges.

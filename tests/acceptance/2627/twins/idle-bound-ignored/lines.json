@@ -1,0 +1,12 @@
+{
+  "scripts/affected.mjs": [
+    {
+      "find": [
+        "const IDLE_MIN = Number(process.env.DEEP_JOB_IDLE_MIN ?? 360);"
+      ],
+      "wrong": [
+        "const IDLE_MIN = 360;"
+      ]
+    }
+  ]
+}

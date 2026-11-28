@@ -1,0 +1,74 @@
+Base run of tests/acceptance/3413 at c13122f6a (origin/main; merge base = HEAD), Node v24.22.0, macOS, load average 62-66 at start.
+Command: node --test --test-concurrency=1 'tests/acceptance/3413/*.test.mjs'
+Wall time 1,464 s (24.4 min) for the suite; the longest file, ac1-plants.test.mjs, 660 s. Exit 1: 4 pass, 5 fail.
+
+✖ #3413.e9cc44fd AC1: the text check fails the merge base's docs, naming lines that say plug-in, with its count (232725.251167ms)
+ℹ merge base c13122f6ae02c140cfb1a3387153af1a878e746a: node scripts/glossary-lint.mjs exited 0; 0 lines name a prose line that says plug-in (docs/technical-design.md 0 of 106, docs/canvas-primitives.md 0 of 145, docs/extension-guide.md 0 of 14)
+✖ #3413.e9cc44fd AC1: a planted "a plug-in may" in the prose of docs/technical-design.md fails the text check, naming the file and the line, and the word in code passes (296453.799959ms)
+✖ #3413.e9cc44fd AC1: a planted "a plug-in may" in the prose of docs/canvas-primitives.md fails the text check, naming the file and the line, and the word in code passes (240922.107375ms)
+✖ #3413.e9cc44fd AC1: a planted "a plug-in may" in the prose of docs/extension-guide.md fails the text check, naming the file and the line, and the word in code passes (122930.677584ms)
+✔ #3413.493e049c AC2: node scripts/guide.mjs --check passes on the generated guide (149109.547125ms)
+ℹ node scripts/guide.mjs --check exited 0
+  PASS guide: docs/extension-guide.md has one entry per published method (46) and slot (17), each as the contract has it
+✖ #3413.e975ffde AC3: the design links lane passes with the open issues read (167159.024042ms)
+ℹ 1202 open issues read; headings that say plug-in at the merge base, with the open issues linking them: docs/technical-design.md#blocks-for-plug-ins-that-do-real-work (45), docs/technical-design.md#blocks-for-plug-ins-that-host-something-live (13), docs/technical-design.md#the-done-loop-trusted-plug-ins-on-the-contract (6), docs/technical-design.md#threats-from-pieces-plug-ins-media-and-pages (0), docs/canvas-primitives.md#check-input-plug-in-reads (3), docs/extension-guide.md#a-first-plug-in (0)
+ℹ node scripts/design-links.mjs exited 1
+    #3498 https://github.com/windoliver/deepbuild/blob/main/docs/technical-design.md#what-a-person-reads-on-a-plain-surface (no heading or <a id> in docs/technical-design.md is #what-a-person-reads-on-a-plain-surface)
+    #3497 https://github.com/windoliver/deepbuild/blob/main/docs/technical-design.md#what-a-person-reads-on-a-plain-surface (no heading or <a id> in docs/technical-design.md is #what-a-person-reads-on-a-plain-surface)
+    #3496 https://github.com/windoliver/deepbuild/blob/main/docs/technical-design.md#what-a-person-reads-on-a-plain-surface (no heading or <a id> in docs/technical-design.md is #what-a-person-reads-on-a-plain-surface)
+✔ #3413.e975ffde AC3: a planted rename with no <a id> fails the design links lane, naming an issue that links the old anchor (136405.115416ms)
+ℹ 1202 open issues read; headings that say plug-in at the merge base, with the open issues linking them: docs/technical-design.md#blocks-for-plug-ins-that-do-real-work (45), docs/technical-design.md#blocks-for-plug-ins-that-host-something-live (13), docs/technical-design.md#the-done-loop-trusted-plug-ins-on-the-contract (6), docs/technical-design.md#threats-from-pieces-plug-ins-media-and-pages (0), docs/canvas-primitives.md#check-input-plug-in-reads (3), docs/extension-guide.md#a-first-plug-in (0)
+✔ #3413.6523d84f AC4: the doc ceilings check passes against the merge base (117278.316166ms)
+ℹ node scripts/doc-ceilings.mjs exited 0
+  PASS doc-ceilings: 744 headings read, 19 over the limit of 16,384 bytes; the largest is docs/technical-design.md#decided, 64,939 bytes
+✔ #3413.6523d84f AC4: no ceiling in scripts/doc-ceilings.json is above the merge base's (94.344417ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 4
+ℹ fail 5
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1463914.475458
+
+✖ failing tests:
+
+test at tests/acceptance/3413/ac1-merge-base.test.mjs:7:1
+✖ #3413.e9cc44fd AC1: the text check fails the merge base's docs, naming lines that say plug-in, with its count (232725.251167ms)
+  AssertionError [ERR_ASSERTION]: the text check passes the merge base's docs, which say plug-in in 106 prose lines of docs/technical-design.md, 145 prose lines of docs/canvas-primitives.md, 14 prose lines of docs/extension-guide.md
+  node scripts/glossary-lint.mjs exited 0
+    PASS glossary: GLOSSARY.md lists 60 terms in 8 groups, its links land, and AGENTS.md points to it
+
+test at tests/acceptance/3413/ac1-plants.test.mjs:10:3
+✖ #3413.e9cc44fd AC1: a planted "a plug-in may" in the prose of docs/technical-design.md fails the text check, naming the file and the line, and the word in code passes (296453.799959ms)
+  AssertionError [ERR_ASSERTION]: the text check passes docs/technical-design.md with "a plug-in may" planted at line 26
+  node scripts/glossary-lint.mjs exited 0
+    PASS glossary: GLOSSARY.md lists 60 terms in 8 groups, its links land, and AGENTS.md points to it
+
+test at tests/acceptance/3413/ac1-plants.test.mjs:10:3
+✖ #3413.e9cc44fd AC1: a planted "a plug-in may" in the prose of docs/canvas-primitives.md fails the text check, naming the file and the line, and the word in code passes (240922.107375ms)
+  AssertionError [ERR_ASSERTION]: the text check passes docs/canvas-primitives.md with "a plug-in may" planted at line 120
+  node scripts/glossary-lint.mjs exited 0
+    PASS glossary: GLOSSARY.md lists 60 terms in 8 groups, its links land, and AGENTS.md points to it
+
+test at tests/acceptance/3413/ac1-plants.test.mjs:10:3
+✖ #3413.e9cc44fd AC1: a planted "a plug-in may" in the prose of docs/extension-guide.md fails the text check, naming the file and the line, and the word in code passes (122930.677584ms)
+  AssertionError [ERR_ASSERTION]: the text check passes docs/extension-guide.md with "a plug-in may" planted at line 18
+  node scripts/glossary-lint.mjs exited 0
+    PASS glossary: GLOSSARY.md lists 60 terms in 8 groups, its links land, and AGENTS.md points to it
+
+test at tests/acceptance/3413/ac3-links.test.mjs:21:1
+✖ #3413.e975ffde AC3: the design links lane passes with the open issues read (167159.024042ms)
+  AssertionError [ERR_ASSERTION]: node scripts/design-links.mjs exited 1
+    an issue's first read (design-section.mjs --issue): 1,117 issues read; tokens not counted, gpt-tokenizer is not installed (npm ci)
+    FAIL 4 links into docs/*.md land on no heading, 0 names are not in the design, 0 planned names are stale, 0 principles findings, 0 places where the design is behind main
+      #3499 https://github.com/windoliver/deepbuild/blob/main/docs/technical-design.md#what-a-person-reads-on-a-plain-surface (no heading or <a id> in docs/technical-design.md is #what-a-person-reads-on-a-plain-surface)
+      #3498 https://github.com/windoliver/deepbuild/blob/main/docs/technical-design.md#what-a-person-reads-on-a-plain-surface (no heading or <a id> in docs/technical-design.md is #what-a-person-reads-on-a-plain-surface)
+      #3497 https://github.com/windoliver/deepbuild/blob/main/docs/technical-design.md#what-a-person-reads-on-a-plain-surface (no heading or <a id> in docs/technical-design.md is #what-a-person-reads-on-a-plain-surface)
+      #3496 https://github.com/windoliver/deepbuild/blob/main/docs/technical-design.md#what-a-person-reads-on-a-plain-surface (no heading or <a id> in docs/technical-design.md is #what-a-person-reads-on-a-plain-surface)
+  
+  1 !== 0
+  
+real 1463.97
+user 119.94
+sys 240.32

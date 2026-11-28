@@ -1,0 +1,142 @@
+# #3537 acceptance tests: the run on the base
+
+## The base (7997a6637, no work on #3537), in the blind job's own checkout, on a Mac17,10 (Darwin arm64, 18 cores, node v24.22.0)
+
+Each file once, as the lanes run a blind suite: through the machine's throttle, and directly, once, where no test
+grant came within its 10 minutes. The evidence store was built in the checkout first (npm run build -w
+@deepbuild/evidence, under a build grant). The helpers stand in the machine (a Mac15,7 on mains) and pin the load each
+process of a sandbox reads at 2, so no verdict below reads this Mac's own; the loads named are this Mac's, from other
+sessions. Node's stack-trace lines and its dump of each error object are dropped; a checkout would read <checkout>, a
+scene's temporary folder <sandbox> and a home folder ~, and no line below holds one.
+
+Seven tests fail, each at an assertion of the suite's own and for the reason its criterion names; one passes.
+
+- AC1 #3537.ac8dfced fails as the criterion says of the merge base: shrunk reads PASS where its p50 fell by 99.73%
+  and its instructions retired by 99.86%, on work of 3000 records against 3. The message names the task and the three
+  judges' answers there: no miss from compare or judgeInstructions in the row's note, and judgeCount PASS on the
+  task's instructions ceiling.
+- AC2 #3537.f37dbb33 passes, and should: the base reads a fall as PASS, which the criterion keeps, and its record
+  already holds both sides' instructions retired per round. Its wrong program is the planted judge that reads every
+  fall as INCONCLUSIVE (README: Wrong programs, fall-inconclusive).
+- AC3 #3537.a2b0a773 fails at its first assertion: the base takes the lowering on silent, a task that reports no
+  work, and all three rows read PASS.
+- AC4 #3537.fb27f5b5 fails on stray: the base judges its unlike work, whatever task the approval names. Its first
+  assertion, that meant is judged, holds on the base, which judges every fall.
+- AC5 #3537.b8c98e7f fails: the base reads unread-change PASS, a count missing on one side taken as a match.
+- AC6 #3537.2e65de36 fails: the base's record has no noWork, and no falls.
+- AC7 #3537.e8bf6db2 fails twice: the base's benchmark prints no report, and the window reads the planted store PASS
+  on evidence-retain-30d, where its instructions retired fell by 99.75% ("where it reads PASS on the merge base").
+
+After the runs the temporary folder held no sandbox of theirs, and no process of theirs ran (ls and ps).
+
+### judged.test.mjs
+
+$ node scripts/throttle.mjs test --wait 10 -- node --test tests/acceptance/3537/judged.test.mjs
+(exit 3; 600 s; 1-minute load 38.6 at its start and 39.3 at its end)
+INCONCLUSIVE no grant: no test grant came within 10 min
+  Fix: Wait for the other sessions' builds and proofs on this machine, then run again.
+
+$ node --test tests/acceptance/3537/judged.test.mjs
+(exit 1; 201 s; 1-minute load 39.3 at its start and 63.7 at its end)
+✖ AC1 #3537.ac8dfced a fixture task whose run reports work records 3000 on the merge base and records 3 on the change reads INCONCLUSIVE, naming records and both values, where its time and its instructions retired fell by 99% (200661.200833ms)
+✔ AC2 #3537.f37dbb33 the same task with equal work on both sides and instructions retired down by 30% reads PASS, and its window record holds the fall (0.783166ms)
+✖ AC4 #3537.fb27f5b5 with an approved proposal that names the task and both values, the unlike comparison is judged, and an approval naming another task leaves it INCONCLUSIVE (0.678792ms)
+✖ AC5 #3537.b8c98e7f work that cannot be read on one side is missing, never equal, and the task reads INCONCLUSIVE (0.281291ms)
+✖ AC6 #3537.2e65de36 a window record lists each task with no work by name with their count, and each reading that fell by more than half with both values (0.529375ms)
+ℹ tests 5
+ℹ pass 1
+ℹ fail 4
+ℹ skipped 0
+ℹ duration_ms 201203.836792
+
+✖ failing tests:
+
+test at tests/acceptance/3537/judged.test.mjs:39:1
+✖ AC1 #3537.ac8dfced a fixture task whose run reports work records 3000 on the merge base and records 3 on the change reads INCONCLUSIVE, naming records and both values, where its time and its instructions retired fell by 99% (200661.200833ms)
+  AssertionError [ERR_ASSERTION]: shrunk read PASS on 3fefb2fa4e98d4d1b1f4ec27384039f803bcd62c, judged as on the merge base (compare and judgeInstructions left no miss in its note, and judgeCount read PASS on its instructions ceiling of 100000000000): its run reports work {"records":3000} on the merge base and {"records":3} on the change, where its p50 fell by 99.73%, from 7988.1 to 21.9 ms, and its instructions retired by 99.86%
+
+test at tests/acceptance/3537/judged.test.mjs:62:1
+✖ AC4 #3537.fb27f5b5 with an approved proposal that names the task and both values, the unlike comparison is judged, and an approval naming another task leaves it INCONCLUSIVE (0.678792ms)
+  AssertionError [ERR_ASSERTION]: the window took an approval naming steady, "Approves: benchmarks/budgets.json › steady › work.records 5000 → 5", for stray's unlike work, records 5000 on the merge base and 5 on the change, on 3fefb2fa4e98d4d1b1f4ec27384039f803bcd62c: stray read PASS, not INCONCLUSIVE: {"state":"PASS","note":null}
+
+test at tests/acceptance/3537/judged.test.mjs:72:1
+✖ AC5 #3537.b8c98e7f work that cannot be read on one side is missing, never equal, and the task reads INCONCLUSIVE (0.281291ms)
+  AssertionError [ERR_ASSERTION]: unread-change read PASS on 3fefb2fa4e98d4d1b1f4ec27384039f803bcd62c: its run reports {"work":{"records":"many"}} on the change side, a count that can't be read, and {"work":{"records":3000}} on the merge base side, so the count missing on the change side was taken as a match
+
+test at tests/acceptance/3537/judged.test.mjs:97:1
+✖ AC6 #3537.2e65de36 a window record lists each task with no work by name with their count, and each reading that fell by more than half with both values (0.529375ms)
+  AssertionError [ERR_ASSERTION]: the record of 3fefb2fa4e98d4d1b1f4ec27384039f803bcd62c lists no task that reports no work: its noWork is null
+
+### lowering.test.mjs
+
+$ node scripts/throttle.mjs test --wait 10 -- node --test tests/acceptance/3537/lowering.test.mjs
+(exit 3; 600 s; 1-minute load 63.7 at its start and 39.1 at its end)
+INCONCLUSIVE no grant: no test grant came within 10 min
+  Fix: Wait for the other sessions' builds and proofs on this machine, then run again.
+
+$ node --test tests/acceptance/3537/lowering.test.mjs
+(exit 1; 46 s; 1-minute load 39.1 at its start and 36.2 at its end)
+✖ AC3 #3537.a2b0a773 a fixture change that lowers a ceiling on a task that reports no work is refused, naming the task, with work reported and equal on both sides it passes as the first criterion of #2665 has it, and a lowering whose five runs reported less is refused, naming both values (45551.589708ms)
+ℹ tests 1
+ℹ pass 0
+ℹ fail 1
+ℹ skipped 0
+ℹ duration_ms 45821.597291
+
+✖ failing tests:
+
+test at tests/acceptance/3537/lowering.test.mjs:39:1
+✖ AC3 #3537.a2b0a773 a fixture change that lowers a ceiling on a task that reports no work is refused, naming the task, with work reported and equal on both sides it passes as the first criterion of #2665 has it, and a lowering whose five runs reported less is refused, naming both values (45551.589708ms)
+  AssertionError [ERR_ASSERTION]: the window took 08890414dda8973a01ecd2bcc8dfbd2d9244e018, which lowers silent's peakBytes ceiling from 100000000 to 50000000, a task whose run reports no work (its report is {"held":512}): the record isn't refused by a FAIL or BLOCKED row naming silent: PASS: matched PASS; silent PASS; thinned PASS
+
+### evidence.test.mjs
+
+$ node scripts/throttle.mjs test --wait 10 -- node --test tests/acceptance/3537/evidence.test.mjs
+(exit 1; 449 s; 1-minute load 22.6 at its start and 57.9 at its end)
+✖ AC7 #3537.e8bf6db2 evidence-put-5mb reports the bytes it stored and evidence-retain-30d the records its pass removed, each the same on two runs of an unchanged store (78.193125ms)
+✖ AC7 #3537.e8bf6db2 a planted store whose retention pass removes nothing reads INCONCLUSIVE on evidence-retain-30d, naming records and both values, and evidence-put-5mb, whose store is unchanged, is not held for unlike work (448230.098708ms)
+ℹ tests 2
+ℹ pass 0
+ℹ fail 2
+ℹ skipped 0
+ℹ duration_ms 448687.863917
+
+✖ failing tests:
+
+test at tests/acceptance/3537/evidence.test.mjs:42:1
+✖ AC7 #3537.e8bf6db2 evidence-put-5mb reports the bytes it stored and evidence-retain-30d the records its pass removed, each the same on two runs of an unchanged store (78.193125ms)
+  AssertionError [ERR_ASSERTION]: evidence-put-5mb's run prints no report, a last stdout line that is a JSON object, so nothing says what it did: its stdout ends ""
+
+test at tests/acceptance/3537/evidence.test.mjs:73:1
+✖ AC7 #3537.e8bf6db2 a planted store whose retention pass removes nothing reads INCONCLUSIVE on evidence-retain-30d, naming records and both values, and evidence-put-5mb, whose store is unchanged, is not held for unlike work (448230.098708ms)
+  AssertionError [ERR_ASSERTION]: evidence-retain-30d read PASS, judged as on the merge base: 0863e1798254b335cc9f8f9ae5d75c48898851d6 plants a store whose retention pass removes nothing, where the merge base's pass removes 2700 records, and its instructions retired fell by 99.75%
+
+## Before these runs
+
+An earlier draft of judged.test.mjs and of lowering.test.mjs ran once each on the base, under a test grant (64 s and
+37 s). Three things changed after: halved counts 1,000 rounds on the change, not 2,000; matched's lowering commit
+also makes its benchmark count 14,000 rounds; and AC6 reads a fall in instructions from the two sides' medians. In
+that run of lowering.test.mjs the base read matched, whose two sides then ran the same 20,000 rounds, INCONCLUSIVE:
+"instructions retired changed 0.00% over the merge base (median of 20 pairs), and the pairs can't tell it from 2% at
+p under 0.01: p 0.62 that it's above 2%, p 0.38 that it's under, seed 1405" (README: Known limits, Two sides that do
+the same). The runs above are of the files as delivered.
+
+## The throwaway guess, and each fault planted in it (README: Wrong programs)
+
+Not the base, and no proof of the real change: a guess at the change kept outside the checkout, run through a copy of
+these files, then deleted. Result lines only, at 1-minute loads of 20 to 113.
+
+The guess as it was: 8 of 8 pass (judged.test.mjs 88 to 110 s, lowering.test.mjs 37 to 43 s, evidence.test.mjs 5 min 32 s).
+any-task, missing-matches and leaves-one-out planted together: AC1 and AC2 pass; AC4, AC5 and AC6 fail.
+  AC4: the window took an approval naming steady, "Approves: benchmarks/budgets.json › steady › work.records 5000 → 5", for stray's unlike work, records 5000 on the merge base and 5 on the change, on <sha>: stray read PASS, not INCONCLUSIVE: {"state":"PASS","note":null}
+  AC5: unread-change read PASS on <sha>: its run reports {"work":{"records":"many"}} on the change side, a count that can't be read, and {"work":{"records":3000}} on the merge base side, so the count missing on the change side was taken as a match
+  AC6: the record of <sha> leaves out plain-b, a task whose run reports no work: {"count":1,"tasks":["plain-a"]}
+fall-inconclusive, and a record that leaves halved's fall out, planted together: AC1 and AC5 pass; AC2, AC4 and AC6 fail.
+  AC2: steady read INCONCLUSIVE on <sha>, not PASS: its work is equal on both sides, {"records":3000}, and its instructions retired fell by 30.83%, which is a gain: {"state":"INCONCLUSIVE","note":"instructions: instructions retired fell 30.83% under the merge base"}
+  AC4: meant's unlike work, records 7000 on the merge base and 7 on the change, wasn't judged on <sha>, which carries the approval "Approves: benchmarks/budgets.json › meant › work.records 7000 → 7": it read INCONCLUSIVE, where its fall is a gain
+  AC6: the record of <sha> doesn't list each reading that fell by more than half with both values:
+       - it leaves out halved's instructions, which fell by more than half: 506682571 to 509174031 on the merge base and 83090571 to 102137317 on the change
+takes-less: AC3 fails.
+  AC3: the window took <sha>, which lowers thinned's peakBytes ceiling from 100000000 to 50000000 on five runs that reported less, records 40 where the merge base's runs report records 4000: the record isn't refused by a FAIL or BLOCKED row naming thinned, 4000 and 40: INCONCLUSIVE: matched PASS; silent PASS; thinned INCONCLUSIVE: work: this side reported records 40 and the merge base 4000, so their work is unlike; …
+A window that prints nothing and exits 0: the seven tests that read a window fail.
+  BLOCKED (window): the window left no record for the measured commit <sha>
