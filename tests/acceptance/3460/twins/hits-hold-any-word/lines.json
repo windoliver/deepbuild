@@ -1,0 +1,28 @@
+{
+  "packages/hub/src/search.ts": [
+    {
+      "find": [
+        "  return wanted.every((w) => (spaceless(w) ? lower.includes(w) : have.has(w)));"
+      ],
+      "wrong": [
+        "  return wanted.some((w) => (spaceless(w) ? lower.includes(w) : have.has(w)));"
+      ]
+    },
+    {
+      "find": [
+        "  const rows = (await input.raw(`SELECT handle, page, text FROM wiki_text WHERE ${where} ORDER BY rowid`, params)) as { handle: string; page: string; text: string }[];"
+      ],
+      "wrong": [
+        "  const rows = (await input.raw(`SELECT handle, page, text FROM wiki_text ORDER BY rowid`, [where, ...params].slice(0, 0))) as { handle: string; page: string; text: string }[];"
+      ]
+    },
+    {
+      "find": [
+        "  const found = (await past.messages(terms, past.sessions)).filter((m) => holds(m.text, wanted));"
+      ],
+      "wrong": [
+        "  const found = (await Promise.all(terms.map((t) => past.messages([t], past.sessions)))).flat().filter((m) => holds(m.text, wanted));"
+      ]
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 //! Issue #402: `deep-show serve`, the hub's terminal side on the wall clock, with real
-//! processes (technical design: Blocks for plug-ins that host something live; Panels and devices:
+//! processes (technical design: Blocks for extensions that host something live; Panels and devices:
 //! Stream and raw input). Line 1 is the setup, a scenario with no calls (plus `clipboard`, the
 //! test clipboard, and `record`, a record the hub must never write a stream to); each later line
 //! is one call, answered by one line.

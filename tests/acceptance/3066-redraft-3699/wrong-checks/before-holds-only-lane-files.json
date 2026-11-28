@@ -1,0 +1,10 @@
+[
+  {
+    "find": [
+      "  const laneFiles = tracked.filter((path) => laneFolders.some((folder) => path.startsWith(folder)) && (path.endsWith('/lane.json') || TEST_FILE.test(path)));"
+    ],
+    "wrong": [
+      "  const laneFiles = tracked.filter((path) => laneFolders.some((folder) => path.startsWith(folder)) && path.endsWith('/lane.json'));"
+    ]
+  }
+]

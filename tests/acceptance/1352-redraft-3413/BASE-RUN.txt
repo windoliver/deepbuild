@@ -1,0 +1,164 @@
+Runs of tests/acceptance/1352-redraft-3413/ac1-section.test.mjs, made 2026-11-27T10:52Z on macOS, node v24.22.0, at the base
+commit c13122f6a (origin/main). Durations and paths are replaced by <ms>, <checkout> and <copy>.
+Each <copy> is a temp folder holding docs/technical-design.md as described and the folders
+tests/acceptance/1352-redraft-3402/ and tests/acceptance/1352-redraft-3413/ copied unchanged, so CHECKOUT resolves there.
+The checkout itself was never written. The changed design line is one long line (the section's browser bullet); the
+diff below shows its first 60 characters, then the words around the change on each side.
+
+== 1. The base design, as the checkout holds it. Expected: both tests PASS (the section says plug-in).
+$ node --test tests/acceptance/1352-redraft-3413/ac1-section.test.mjs
+✔ #1352.4c4e63a7 criterion 1 (redraft): the design's section anchored cloud-hub answers each of the eight Scope decisions, with at least eight "Not taken" (<ms>)
+✔ #1352.4c4e63a7 criterion 1 (redraft): each of the seven rows #1352 added is in a table with the Decided columns under Decisions, and one of them links to the section or names the hub and the cloud (<ms>)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms <ms>
+exit 0
+
+== 2. Copy: every plug-in(s) in the cloud-hub section replaced by extension(s), case kept. The section holds one,
+so one change, made literally ("a plug-in" -> "a extension"). Expected: both tests PASS.
+plant: extension: 1 change(s) in lines 2534-2560
+$ diff <checkout>/docs/technical-design.md <copy>/docs/technical-design.md
+2555c2555
+< - **The browser.** A hosted hub has no app on a Mac, so yo
+---
+> - **The browser.** A hosted hub has no app on a Mac, so yo
+around the change:
+< ...An agent, a page or a plug-in holds no passkey...
+> ...An agent, a page or a extension holds no passkey...
+$ (cd <copy> && node --test tests/acceptance/1352-redraft-3413/ac1-section.test.mjs)
+✔ #1352.4c4e63a7 criterion 1 (redraft): the design's section anchored cloud-hub answers each of the eight Scope decisions, with at least eight "Not taken" (<ms>)
+✔ #1352.4c4e63a7 criterion 1 (redraft): each of the seven rows #1352 added is in a table with the Decided columns under Decisions, and one of them links to the section or names the hub and the cloud (<ms>)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms <ms>
+exit 0
+
+== 3. Copy: the browser decision's words removed: the section's whole '- **The browser.**' bullet deleted. Expected:
+the section test FAILS naming the browser decision; the Decided test, which doesn't read the section's words, PASSES.
+plant: drop-bullet: 1 change(s) in lines 2534-2559
+$ diff <checkout>/docs/technical-design.md <copy>/docs/technical-design.md
+2555d2554
+< - **The browser.** A hosted hub has no app on a Mac, so yo
+around the change:
+< ...An agent, a page or a plug-in holds no passkey...
+$ (cd <copy> && node --test tests/acceptance/1352-redraft-3413/ac1-section.test.mjs)
+✖ #1352.4c4e63a7 criterion 1 (redraft): the design's section anchored cloud-hub answers each of the eight Scope decisions, with at least eight "Not taken" (<ms>)
+✔ #1352.4c4e63a7 criterion 1 (redraft): each of the seven rows #1352 added is in a table with the Decided columns under Decisions, and one of them links to the section or names the hub and the cloud (<ms>)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 1
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms <ms>
+
+✖ failing tests:
+
+test at tests/acceptance/1352-redraft-3413/ac1-section.test.mjs:5:1
+✖ #1352.4c4e63a7 criterion 1 (redraft): the design's section anchored cloud-hub answers each of the eight Scope decisions, with at least eight "Not taken" (<ms>)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + [
+  +   `the section "A hub of your own in the cloud, for someone with no computer" doesn't answer this decision: the browser (a web client, the person's own hub, the authenticated connection, a passkey; no agent, page or extension (plug-in) answers an ask): missing /\\bweb client\\b/i, /\\bown hub\\b/i, /\\bextensions?\\b|\\bplug-ins?\\b/i`,
+  +   'the section "A hub of your own in the cloud, for someone with no computer" says "Not taken" 7 times; each of the 8 decisions needs what was not taken'
+  + ]
+  - []
+  
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ `the section "A hub of your own in the cloud, for someone with no computer" doesn't answer this decision: the browser (a web client, the person's own hub, the authenticated connection, a passkey; no agent, page or extension (plug-in) answers an ask): missing /\\bweb client\\b/i, /\\bown hub\\b/i, /\\bextensions?\\b|\\bplug-ins?\\b/i`, 'the section "A hub of your own in the cloud, for someone with no computer" says "Not taken" 7 times; each of the 8 decisions needs what was not taken' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+exit 1
+
+== 4. Copy: only the browser decision's extension word removed ("An agent, a page or a plug-in" -> "An agent or a page").
+Expected: the section test FAILS naming the browser decision and only that word.
+plant: drop-word: 1 change(s) in lines 2534-2560
+$ diff <checkout>/docs/technical-design.md <copy>/docs/technical-design.md
+2555c2555
+< - **The browser.** A hosted hub has no app on a Mac, so yo
+---
+> - **The browser.** A hosted hub has no app on a Mac, so yo
+around the change:
+< ...An agent, a page or a plug-in holds no passkey...
+> ...An agent or a page holds no passkey...
+$ (cd <copy> && node --test tests/acceptance/1352-redraft-3413/ac1-section.test.mjs)
+✖ #1352.4c4e63a7 criterion 1 (redraft): the design's section anchored cloud-hub answers each of the eight Scope decisions, with at least eight "Not taken" (<ms>)
+✔ #1352.4c4e63a7 criterion 1 (redraft): each of the seven rows #1352 added is in a table with the Decided columns under Decisions, and one of them links to the section or names the hub and the cloud (<ms>)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 1
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms <ms>
+
+✖ failing tests:
+
+test at tests/acceptance/1352-redraft-3413/ac1-section.test.mjs:5:1
+✖ #1352.4c4e63a7 criterion 1 (redraft): the design's section anchored cloud-hub answers each of the eight Scope decisions, with at least eight "Not taken" (<ms>)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + [
+  +   `the section "A hub of your own in the cloud, for someone with no computer" doesn't answer this decision: the browser (a web client, the person's own hub, the authenticated connection, a passkey; no agent, page or extension (plug-in) answers an ask): missing /\\bextensions?\\b|\\bplug-ins?\\b/i`
+  + ]
+  - []
+  
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ `the section "A hub of your own in the cloud, for someone with no computer" doesn't answer this decision: the browser (a web client, the person's own hub, the authenticated connection, a passkey; no agent, page or extension (plug-in) answers an ask): missing /\\bextensions?\\b|\\bplug-ins?\\b/i` ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+exit 1
+
+== 5. The dispute: the 3402 file on copy 2. Expected: its section test FAILS at /\bplug-ins?\b/i alone.
+$ (cd <copy-2> && node --test tests/acceptance/1352-redraft-3402/ac1-section.test.mjs)
+✖ #1352.4c4e63a7 criterion 1 (redraft): the design's section anchored cloud-hub answers each of the eight Scope decisions, with at least eight "Not taken" (<ms>)
+✔ #1352.4c4e63a7 criterion 1 (redraft): each of the seven rows #1352 added is in a table with the Decided columns under Decisions, and one of them links to the section or names the hub and the cloud (<ms>)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 1
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms <ms>
+
+✖ failing tests:
+
+test at tests/acceptance/1352-redraft-3402/ac1-section.test.mjs:9:1
+✖ #1352.4c4e63a7 criterion 1 (redraft): the design's section anchored cloud-hub answers each of the eight Scope decisions, with at least eight "Not taken" (<ms>)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + [
+  +   `the section "A hub of your own in the cloud, for someone with no computer" doesn't answer this decision: the browser (a web client, the person's own hub, the authenticated connection, a passkey; no agent, page or plug-in answers an ask): missing /\\bplug-ins?\\b/i`
+  + ]
+  - []
+  
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ `the section "A hub of your own in the cloud, for someone with no computer" doesn't answer this decision: the browser (a web client, the person's own hub, the authenticated connection, a passkey; no agent, page or plug-in answers an ask): missing /\\bplug-ins?\\b/i` ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+exit 1

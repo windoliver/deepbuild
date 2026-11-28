@@ -1,0 +1,12 @@
+{
+  "scripts/budget-window.mjs": [
+    {
+      "find": [
+        "    noWork = { count: silent.length, tasks: silent };"
+      ],
+      "wrong": [
+        "    noWork = { count: silent.length - 1, tasks: silent.slice(0, -1) };"
+      ]
+    }
+  ]
+}
