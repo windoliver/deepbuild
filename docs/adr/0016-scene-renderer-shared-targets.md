@@ -4,7 +4,7 @@ Status: accepted (#3715). The decisions below were held in comments that main's 
 
 ## One depth for the occluders and the geometry pass
 
-- **The cull's occluders draw into the geometry pass's multisampled depth.** `crates/deep-scene3d-render/src/cull.rs`, `Pyramid::depth` and `Pyramid::new`; `crates/deep-scene3d-render/src/lib.rs`, where a frame makes the pyramid from `depth_ms`. The pyramid reads that depth before the geometry pass clears it, so the prepass needs no depth target of its own (#3506). `Pyramid::new` takes the geometry pass's depth at `size` and `samples`; under the planted `own` it makes the pyramid over a depth of the occluders' own instead.
+- **The cull's occluders draw into the geometry pass's multisampled depth.** `crates/deep-scene3d-render/src/cull.rs`, `Pyramid::depth` and `Pyramid::new`; `crates/deep-scene3d-render/src/lib.rs`, where a frame makes the pyramid from `depth_ms`. The pyramid reads that depth before the geometry pass clears it (#3506). `Pyramid::new` takes the geometry pass's depth at `size` and `samples`; under the planted `own` it makes the pyramid over a depth of the occluders' own instead.
 - **The estimate counts no depth for the occluders.** `crates/deep-scene3d-render/src/held.rs`, `of`. While a list is culled on the GPU it counts the cull's pyramid alone, since the occluders draw into the geometry pass's depth (#3506).
 
 ## One resolved image

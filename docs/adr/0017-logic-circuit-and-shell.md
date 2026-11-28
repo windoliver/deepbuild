@@ -10,14 +10,17 @@ Status: accepted (#3715). The design states circuit@2 under Logic: library inter
 - **At a crossing an RCD's residual is the step before's.** `crates/deep-logic/src/circuit.rs`, `Judge::step`. In phase or against it, the residual is the sum of each pole's rms by the sign it has now. At a crossing it is the step before's while the poles' currents haven't changed, and the library's own reading for the one step they changed on (#3604).
 - **An RCD's count has reached 1 within the rounding of a sum of rises.** `crates/deep-logic/src/circuit.rs`, `Judge::step`. The count is compared with 1 − 1e-9 (#3604).
 - **A part its curve or count opened that the run never opened fails when the rules are read.** `crates/deep-logic/src/circuit.rs`, `Judge::result`. A fuse, breaker or RCD fails there, naming the step that gives it open (#3604).
+- **circuit.kcl sums into each node, + for a part whose `to` it is and − for one whose `from` it is.** `crates/deep-logic/src/circuit.rs`, `step`. A changeover's way counts by where it is, an RCD's and a transformer's second pole or winding by `i2`, and an RCD's test path from its node volts while it takes power.
+- **A device closed again by its reset starts a fuse cold and a breaker with the heat it has.** `crates/deep-logic/src/circuit.rs`, `step`.
+- **The first-party packs are held in the binary so every piece's links resolve against them, as the release's packs are installed for every document.** `crates/deep-logic/src/first_party.rs`.
 
 ## The shell's settings
 
 - **A shell setting's track key and read entry is `settings.<name>`.** `crates/deep-logic/src/piece/checks.rs`, `setting_read`. No control's ID can be that (#3605).
 - **Each shell setting an item takes has a number control's slot after the item's other read entries.** `crates/deep-logic/src/piece/checks.rs`, `region_map` (#3605).
-- **A control that sets one of the piece's own settings takes what it doesn't give from the setting.** `crates/deep-logic/src/shell.rs`, `Shell::of`. Its options, range and increment come from the setting when the control gives none (#3605).
+- **A control that sets one of the piece's own settings takes what it doesn't give from the setting.** `crates/deep-logic/src/shell.rs`, `Shell::of`. (#3605).
 - **A choice's value is its option's index; a toggle flips; a slider's is its value.** `crates/deep-logic/src/shell/rules.rs`, `State::set`; `crates/deep-logic/src/shell/run.rs`, `Run::value`, where a slider's and a toggle's value is the setting (#3605).
-- **A screen's boxes are taken from the screen as it draws.** `crates/deep-logic/src/shell/run.rs`, `Run::items` and `Run::prompted`. The shell's arrays are baked in, by `<shell ID>.<array>`, as the screen's flips, keyed copy and drivers read them, so its drivers and flips over them evaluate (#3605).
+- **A screen's boxes are taken from the screen as it draws.** `crates/deep-logic/src/shell/run.rs`, `Run::items` and `Run::prompted`. The shell's arrays are baked in, by `<shell ID>.<array>`, as the screen's flips, keyed copy and drivers read them, so its drivers and flips over them evaluate.
 - **The shell's arrays are baked as a logic item's are.** `crates/deep-logic/src/shell/run.rs`, `Run::baked`. Each element is held from step 0, a bool as 0 or 1 (Logic `logic@1`; the column view).
 
 ## The profile record
