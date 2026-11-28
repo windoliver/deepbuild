@@ -36,6 +36,14 @@ export const CODES = {
     meaning: 'A run of a bot that must miss a goal reached it.',
     fix: 'Open the run at the step named: the game must not hand that goal to a player who plays that way.',
   },
+  'playtest.always': {
+    meaning: 'A rule the brief says holds at every step was false at a step of a run.',
+    fix: 'Open the run at the step named, with the values named, and keep the rule true there.',
+  },
+  'playtest.order': {
+    meaning: 'In a run, what an order rule puts second was true at a step before what it puts first had ever been.',
+    fix: 'Open the run at the step named, and let the second happen only once the first has.',
+  },
   'play.missing': {
     meaning: 'The piece publishes no array, or one of the wrong type, for a name the play interface declares.',
     fix: 'Publish the named array as the interface locked in the brief declares it; the interface itself doesn\'t change.',

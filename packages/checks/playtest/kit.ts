@@ -11,9 +11,10 @@ import { readFileSync } from 'node:fs';
 import { fail, Finding } from '@deepbuild/conformance';
 import type { CheckResult, CheckRunnerFill, Fixture, PlantedFill, SlotCase, SlotKitImpl, SlotRule } from '@deepbuild/conformance';
 import type { PlayIface } from './iface.ts';
+import { goalSteps, startOf, type Judged } from './judge.ts';
 import { OWN, PLANTED, runReach, type Cell, type ReachInput, type Runner } from './reach.ts';
 import { runPlaytest } from './run.ts';
-import type { Bot, Play, PlaytestInput } from './types.ts';
+import type { Bot, Play, PlayAnswer, PlaytestInput } from './types.ts';
 
 const SLOT = 'check.kind@1';
 const MAZES = ['maze', 'maze-stuck', 'maze-walled', 'maze-trap', 'maze-busy'] as const;
@@ -57,11 +58,20 @@ const RULES = {
   expect: { id: 'expected-miss', rule: 'A run of a bot that must miss a goal and reaches it fails playtest.expect, naming the run and the step.', code: 'playtest.expect', message: 'passed a run that reached a goal it must miss' },
   missing: { id: 'interface-published', rule: 'A name the play interface declares that the piece publishes no array of the right type for fails play.missing, naming it, before any run.', code: 'play.missing', message: 'passed a piece missing a declared name' },
   range: { id: 'within-range', rule: 'A published value outside its name\'s range fails play.out_of_range, naming the name, the row, the value and the step.', code: 'play.out_of_range', message: 'passed a value outside its range' },
+  always: { id: 'always-holds', rule: 'An always rule false at any step of a run fails playtest.always, naming the run, the step and the values it read there.', code: 'playtest.always', message: 'passed a run that broke an always rule at a step where no goal is judged' },
+  order: { id: 'first-before-then', rule: 'An order rule whose then is true at a step before its first ever was fails playtest.order, naming the run and the step.', code: 'playtest.order', message: 'passed a run whose then came before its first' },
+  unseen: { id: 'then-seen', rule: 'An order rule whose then is true in no run reads INCONCLUSIVE, naming the rule, never PASS.', code: 'playtest.order', message: 'passed an order rule whose then never happened' },
 } as const;
 type Rule = keyof typeof RULES;
 const rules: SlotRule[] = Object.values(RULES).map(({ id, rule }) => ({ id, rule }));
 
-interface Expected { outcome: 'passed' | 'failed'; rule: Rule | null }
+interface Expected { outcome: 'passed' | 'failed' | 'uncounted'; rule: Rule | null }
+const PRESSES: PlayIface = { values: { presses: 'maze.presses', won: 'maze.won' } };
+const goalStepsOnly = (play: PlayAnswer, goals: Judged[]): number[] => [...goalSteps(play, goals).values()].flatMap((step) => (step === undefined ? [] : [step - startOf(play)])).sort((a, b) => a - b);
+const NAMED: Partial<Record<Rule, { name: string; drops?: string; ruleSteps?: typeof goalStepsOnly }>> = {
+  always: { name: 'goal-steps-only', ruleSteps: goalStepsOnly },
+  unseen: { name: 'unseen-then-passes', drops: 'INCONCLUSIVE:' },
+};
 const fixture = (id: string, i: CaseInput, expected: Expected): Fixture => ({ id, input: i as never, expected: expected as never });
 const fixtures = (): Fixture[] => [
   fixture('clean-maze', input('maze', [ROUTE_BOT(), POLICY]), { outcome: 'passed', rule: null }),
@@ -74,6 +84,9 @@ const fixtures = (): Fixture[] => [
   fixture('planted-expect', input('maze', [{ ...ROUTE_BOT(), expect: { won: 'miss' } }]), { outcome: 'failed', rule: 'expect' }),
   fixture('planted-missing', input('maze', [ROUTE_BOT()], { play: { turn: 'maze.turn' } }), { outcome: 'failed', rule: 'missing' }),
   fixture('planted-range', input('maze', [ROUTE_BOT()], { play: { values: { presses: { name: 'maze.presses', range: [0, 3] } } } }), { outcome: 'failed', rule: 'range' }),
+  fixture('planted-always', input('maze', [ROUTE_BOT()], { play: PRESSES, always: [{ name: 'never-two-presses', when: 'presses != 2' }] }), { outcome: 'failed', rule: 'always' }),
+  fixture('planted-order', input('maze', [ROUTE_BOT()], { play: PRESSES, order: [{ name: 'won-after-1000-presses', first: 'presses >= 1000', then: 'won' }] }), { outcome: 'failed', rule: 'order' }),
+  fixture('planted-unseen', input('maze', [ROUTE_BOT()], { play: PRESSES, order: [{ name: 'won-before-1000-presses', first: 'won', then: 'presses >= 1000' }] }), { outcome: 'uncounted', rule: 'unseen' }),
 ];
 
 export interface PlaytestFill extends CheckRunnerFill { kind: 'playtest'; play: (i: CaseInput) => Promise<CheckResult> }
@@ -87,24 +100,26 @@ function* judge(fill: PlaytestFill, c: SlotCase): Generator<() => unknown, void,
     return;
   }
   const rule = RULES[ex.rule!];
-  if (r.outcome === 'passed' || !r.failures.some((f) => f.message.startsWith(rule.code))) throw fail(rule.message, [rule.code], `${c.id} reported ${r.outcome} without ${rule.code}`);
+  const told = ex.outcome === 'uncounted' ? r.outcome === 'uncounted' : r.outcome !== 'passed' && r.failures.some((f) => f.message.startsWith(rule.code));
+  if (!told) throw fail(rule.message, [rule.code], `${c.id} reported ${r.outcome} without ${ex.outcome === 'uncounted' ? 'reading INCONCLUSIVE' : rule.code}`);
 }
 
 /** check.kind@1's kit for kind playtest, its plays through `replica(plant)`. */
 export function playtestKit(replica: (plant: string | null) => Play): SlotKitImpl<PlaytestFill> {
-  const reference = (drop: Rule | null = null): PlaytestFill => ({
+  const reference = (drops?: string, ruleSteps?: typeof goalStepsOnly): PlaytestFill => ({
     slot: SLOT, revision: 1, kind: 'playtest',
     run: () => { throw Error('the kit runs a playtest through play'); },
     play: async (i) => {
-      const r = await runPlaytest(i.play, replica(i.plant));
+      const r = await runPlaytest(i.play, replica(i.plant), undefined, ruleSteps);
       // A planted runner drops one rule's failures, and passes when nothing else is left.
-      const failures = drop ? r.failures.filter((f) => !f.message.startsWith(RULES[drop].code)) : r.failures;
+      const failures = drops ? r.failures.filter((f) => !f.message.startsWith(drops)) : r.failures;
       return { ...r, failures, outcome: failures.length ? r.outcome : 'passed' };
     },
   });
-  const planted = (Object.keys(RULES) as Rule[]).map((rule): PlantedFill<PlaytestFill> => ({
-    name: `ignores-${rule}`, message: RULES[rule].message, codes: [RULES[rule].code], breaks: RULES[rule].id, fill: reference(rule),
-  }));
+  const planted = (Object.keys(RULES) as Rule[]).map((rule): PlantedFill<PlaytestFill> => {
+    const own = NAMED[rule];
+    return { name: own?.name ?? `ignores-${rule}`, message: RULES[rule].message, codes: [RULES[rule].code], breaks: RULES[rule].id, fill: reference(own ? own.drops : RULES[rule].code, own?.ruleSteps) };
+  });
   return { slot: SLOT, fills: 'one', revision: 1, rules, fixtures: fixtures(), planted, clean: () => [reference()], generate: () => [], judge };
 }
 

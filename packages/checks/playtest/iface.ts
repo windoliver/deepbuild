@@ -186,50 +186,88 @@ export function idents(e: Node): string[] {
   return 'id' in e ? [e.id] : 'op' in e ? e.args.flatMap(idents) : [];
 }
 
-/** The expression's value, with each identifier read through `get`; true is 1 and false 0. */
-export function evaluate(e: Node, get: (id: string) => number): number {
-  if ('n' in e) return e.n;
-  if ('id' in e) return get(e.id);
-  const [a, b, c] = e.args.map((x) => () => evaluate(x, get));
-  switch (e.op) {
-    case 'neg': return -a!();
-    case '!': return a!() ? 0 : 1;
-    case '||': return a!() || b!() ? 1 : 0;
-    case '&&': return a!() && b!() ? 1 : 0;
-    case '?': return a!() ? b!() : c!();
-    case '==': return a!() === b!() ? 1 : 0;
-    case '!=': return a!() !== b!() ? 1 : 0;
-    case '<': return a!() < b!() ? 1 : 0;
-    case '<=': return a!() <= b!() ? 1 : 0;
-    case '>': return a!() > b!() ? 1 : 0;
-    case '>=': return a!() >= b!() ? 1 : 0;
-    case '+': return a!() + b!();
-    case '-': return a!() - b!();
-    case '*': return a!() * b!();
-    case '/': return a!() / b!();
-    case '%': return a!() % b!();
-    case '^': return a!() ** b!();
-    default: return FNS[e.op]!(...e.args.map((x) => evaluate(x, get)));
+type Values = Record<string, unknown[]>;
+type At = (k: number) => number;
+
+/** The expression's value at a step, with each identifier read through `read`; true is 1 and false 0. */
+function bound(e: Node, read: (id: string) => At): At {
+  if ('n' in e) {
+    const { n } = e;
+    return () => n;
   }
+  if ('id' in e) return read(e.id);
+  const args = e.args.map((x) => bound(x, read));
+  const [a, b, c] = args as [At, At, At];
+  switch (e.op) {
+    case 'neg': return (k) => -a(k);
+    case '!': return (k) => (a(k) ? 0 : 1);
+    case '||': return (k) => (a(k) || b(k) ? 1 : 0);
+    case '&&': return (k) => (a(k) && b(k) ? 1 : 0);
+    case '?': return (k) => (a(k) ? b(k) : c(k));
+    case '==': return (k) => (a(k) === b(k) ? 1 : 0);
+    case '!=': return (k) => (a(k) !== b(k) ? 1 : 0);
+    case '<': return (k) => (a(k) < b(k) ? 1 : 0);
+    case '<=': return (k) => (a(k) <= b(k) ? 1 : 0);
+    case '>': return (k) => (a(k) > b(k) ? 1 : 0);
+    case '>=': return (k) => (a(k) >= b(k) ? 1 : 0);
+    case '+': return (k) => a(k) + b(k);
+    case '-': return (k) => a(k) - b(k);
+    case '*': return (k) => a(k) * b(k);
+    case '/': return (k) => a(k) / b(k);
+    case '%': return (k) => a(k) % b(k);
+    case '^': return (k) => a(k) ** b(k);
+    default: {
+      const fn = FNS[e.op]!;
+      return (k) => fn(...args.map((x) => x(k)));
+    }
+  }
+}
+
+interface Place { path: string; row: number }
+const placesOf = (play: PlayIface | undefined): Map<string, Place> => new Map((play ? declared(play) : []).map((d) => [d.name, { path: pathOf(d.at), row: d.row ?? 0 }]));
+function numberOf(v: unknown, row: number): number {
+  const x = Array.isArray(v) ? v[row] : v;
+  return typeof x === 'boolean' ? Number(x) : Number(x ?? 0);
+}
+function boundTo(tree: Node, where: (id: string) => Place, values: Values): At {
+  return bound(tree, (id) => {
+    const { path, row } = where(id);
+    const list = values[path] ?? [];
+    return (k) => numberOf(list[k], row);
+  });
 }
 
 /**
  * A goal's test from its `when`: an expression over the interface's names (or logic array paths), true at a step when
  * nonzero. Each name reads its array's first row, a unit's field the self unit's row. Answers the paths it reads.
  */
-export function goalTest(when: string, play: PlayIface | undefined): { reads: string[]; at: (values: Record<string, unknown[]>, k: number) => boolean } {
-  const names = new Map((play ? declared(play) : []).map((d) => [d.name, { path: pathOf(d.at), row: d.row ?? 0 }]));
+export function goalTest(when: string, play: PlayIface | undefined): { reads: string[]; at: (values: Values, k: number) => boolean } {
+  const names = placesOf(play);
   const tree = parse(when);
   const ids = idents(tree);
   for (const id of ids) if (!names.has(id) && !id.includes('.')) throw Error(`the goal ${when} reads ${id}, which the play interface doesn't declare`);
-  const where = (id: string): { path: string; row: number } => names.get(id) ?? { path: id, row: 0 };
+  const where = (id: string): Place => names.get(id) ?? { path: id, row: 0 };
+  let last: { values: Values; at: At } | undefined;
   return {
     reads: [...new Set(ids.map((id) => where(id).path))],
-    at: (values, k) => evaluate(tree, (id) => {
-      const { path, row } = where(id);
-      const v = values[path]?.[k];
-      const x = Array.isArray(v) ? v[row] : v;
-      return typeof x === 'boolean' ? Number(x) : Number(x ?? 0);
-    }) !== 0,
+    at: (values, k) => (last?.values === values ? last : (last = { values, at: boundTo(tree, where, values) })).at(k) !== 0,
+  };
+}
+
+export interface RuleTest { reads: string[]; over: (values: Values) => { at: (k: number) => boolean; named: (k: number) => Record<string, number> } }
+
+export function ruleTest(rule: string, expression: string, play: PlayIface | undefined): RuleTest {
+  const names = placesOf(play);
+  const tree = parse(expression);
+  const ids = [...new Set(idents(tree))];
+  const undeclared = ids.find((id) => !names.has(id));
+  if (undeclared !== undefined) throw Error(`play.missing: the rule ${rule} reads ${undeclared}, which the play interface doesn't declare`);
+  const where = (id: string): Place => names.get(id)!;
+  return {
+    reads: [...new Set(ids.map((id) => where(id).path))],
+    over: (values) => {
+      const at = boundTo(tree, where, values);
+      return { at: (k) => at(k) !== 0, named: (k) => Object.fromEntries(ids.map((id) => [id, numberOf(values[where(id).path]?.[k], where(id).row)])) };
+    },
   };
 }

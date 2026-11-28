@@ -13,8 +13,8 @@
 import { createHash } from 'node:crypto';
 import type { CheckResult, Failure } from '@deepbuild/conformance';
 import { kindOf, lower, refusal } from './bots.ts';
-import { declared, goalTest, legalPaths, linkOffGrid, linksOf, lockRefusal, outOfRange, ranged } from './iface.ts';
-import { firstDiffering, goalSteps, outcomeOf, startOf, type Judged } from './judge.ts';
+import { declared, goalTest, legalPaths, linkOffGrid, linksOf, lockRefusal, outOfRange, ranged, ruleTest } from './iface.ts';
+import { firstDiffering, goalSteps, outcomeOf, rulesRead, startOf, type Broken, type Judged, type Rules } from './judge.ts';
 import { actingSteps, modelReplies, type Ask } from './model.ts';
 import { onReferenceMac, soakFailure, windowsOf } from './soak.ts';
 import type { Bot, Outcome, Play, PlayAnswer, PlaytestInput, Span } from './types.ts';
@@ -52,7 +52,7 @@ export function said(e: unknown): string {
 /** A run as the result lists it (#1048): counted false for a model bot's, whose runs count only through replay. */
 export interface RunShown { test: string; seed: number; track: string; outcome: Outcome; replay: string; frames: string[]; counted: boolean }
 
-export async function runPlaytest(input: PlaytestInput, play: Play, ask?: Ask): Promise<CheckResult & { runs: RunShown[] }> {
+export async function runPlaytest(input: PlaytestInput, play: Play, ask?: Ask, ruleSteps?: (play: PlayAnswer, goals: Judged[]) => number[]): Promise<CheckResult & { runs: RunShown[] }> {
   const runs = input.runs ?? 20;
   const span = input.span ?? 120;
   const iface = input.play;
@@ -68,6 +68,17 @@ export async function runPlaytest(input: PlaytestInput, play: Play, ask?: Ask): 
   } catch (e) {
     return { ...ended([failure('goals', `refused before any run: ${said(e)}`, false)]), runs: [] };
   }
+  let rules: Rules;
+  try {
+    rules = {
+      always: (input.always ?? []).map((r) => ({ name: r.name, when: ruleTest(r.name, r.when, iface) })),
+      order: (input.order ?? []).map((r) => ({ name: r.name, first: ruleTest(r.name, r.first, iface), then: ruleTest(r.name, r.then, iface) })),
+    };
+  } catch (e) {
+    const why = said(e);
+    return { ...ended([failure('rules', why.startsWith('play.missing') ? why : `refused before any run: ${why}`, false)]), runs: [] };
+  }
+  reads.push(...rules.always.flatMap((r) => r.when.reads), ...rules.order.flatMap((r) => [...r.first.reads, ...r.then.reads]));
   for (const [b, bot] of input.bots.entries()) {
     const why = refusal(bot, iface);
     if (why) return { ...ended([failure(`bot ${b}`, `refused before any run: ${why}`, false)]), runs: [] };
@@ -156,8 +167,15 @@ export async function runPlaytest(input: PlaytestInput, play: Play, ask?: Ask): 
 
   const failures: Failure[] = [];
   const evidence: string[] = [];
+  const happened = new Set<string>();
   for (const r of ran) {
     evidence.push(r.first.track, r.replay.track, ...[...r.first.frames, ...r.replay.frames].map((f) => f.sha256));
+    if (r.outcome.kind !== 'invalid') {
+      const read = rulesRead(r.first, rules, ruleSteps?.(r.first, goals));
+      for (const name of read.happened) happened.add(name);
+      const again = read.broken.length ? rulesRead(r.replay, rules, ruleSteps?.(r.replay, goals)).broken : [];
+      for (const b of read.broken) failures.push(failure(r.test, `${b.code}: ${r.test} (seed ${r.seed}): ${broke(b, again.find((x) => x.rule === b.rule && x.code === b.code)?.step)}`));
+    }
     // A model run's stuck, trap or over-budget outcome stands only when its track, played again without the model,
     // fails the same way at the same step; otherwise the run is refused.
     const o = r.outcome;
@@ -195,8 +213,9 @@ export async function runPlaytest(input: PlaytestInput, play: Play, ask?: Ask): 
     }
   }
   for (const [b, bot] of input.bots.entries()) failures.push(...held(b, bot, counted.filter((r) => r.bot === b)));
-  const outcome = !failures.length ? 'passed' : failures.every((f) => !f.assertion) ? 'ran_nothing' : 'failed';
-  return { outcome, testsRun: ran.length, failures, evidence, read: [], mask: null, runs: shown };
+  const unread = (input.order ?? []).filter((o) => !happened.has(o.name)).map((o) => failure(`order ${o.name}`, `INCONCLUSIVE: ${o.name}: ${o.then} was true in no run, so the rule proves nothing`, false));
+  const outcome = failures.length ? (failures.every((f) => !f.assertion) ? 'ran_nothing' : 'failed') : unread.length ? 'uncounted' : 'passed';
+  return { outcome, testsRun: ran.length, failures: [...failures, ...unread], evidence, read: [], mask: null, runs: shown };
 }
 
 /** The soak's failures: its run refused, or playtest.soak at the first window over a limit. */
@@ -233,6 +252,12 @@ function held(b: number, bot: Bot, runs: Ran[]): Failure[] {
     for (const r of runs.filter((x) => x.reached.has(goal))) out.push(failure(r.test, `playtest.expect: ${r.test} (seed ${r.seed}) of ${name} reached ${goal} at step ${r.reached.get(goal)}, which it must miss`));
   }
   return out;
+}
+
+function broke(b: Broken, replayed: number | undefined): string {
+  const named = Object.entries(b.values).map(([name, value]) => `${name} is ${value}`).join(' and ');
+  const what = b.code === 'playtest.always' ? `${b.rule} is false at step ${b.step}, where ${named}` : `${b.rule}'s then is true at step ${b.step}, where ${named}, before its first ever was`;
+  return `${what}; its replay breaks it ${replayed === b.step ? `at step ${replayed} too` : replayed === undefined ? 'at no step' : `first at step ${replayed}`}`;
 }
 
 /** What a run's outcome says, or nothing when it reached its goals or ended. */

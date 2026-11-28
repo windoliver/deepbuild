@@ -4,6 +4,7 @@
 // first step whose fuel passed its class's ceiling; invalid when its bot trapped. The earliest failure decides. And
 // the replay's comparison: the first checkpoint whose full-state hash differs. A goal is a test of a step's values:
 // an array path true when nonzero, or an expression over the play interface's names (iface.ts).
+import type { RuleTest } from './iface.ts';
 import type { Outcome, PlayAnswer } from './types.ts';
 
 /** A goal compiled: its name and whether a play's values reach it at step k. */
@@ -62,6 +63,38 @@ export function outcomeOf(play: PlayAnswer, goals: Judged[], stuck: { measure: s
   const first = failures.sort((a, b) => a.step - b.step)[0];
   if (first) return first;
   return done !== undefined ? { kind: 'reached', step: done } : { kind: 'ended', step: at + play.steps };
+}
+
+export interface Rules { always: { name: string; when: RuleTest }[]; order: { name: string; first: RuleTest; then: RuleTest }[] }
+export interface Broken { code: 'playtest.always' | 'playtest.order'; rule: string; step: number; values: Record<string, number> }
+
+export function rulesRead(play: PlayAnswer, rules: Rules, only?: number[]): { broken: Broken[]; happened: Set<string> } {
+  const start = startOf(play);
+  const steps = only?.length ?? play.steps;
+  const broken: Broken[] = [];
+  const happened = new Set<string>();
+  for (const { name, when } of rules.always) {
+    const held = when.over(play.values);
+    for (let i = 0; i < steps; i++) {
+      const k = only?.[i] ?? i;
+      if (held.at(k)) continue;
+      broken.push({ code: 'playtest.always', rule: name, step: start + k, values: held.named(k) });
+      break;
+    }
+  }
+  for (const { name, first, then } of rules.order) {
+    const [before, after] = [first.over(play.values), then.over(play.values)];
+    let earlier = false;
+    for (let i = 0; i < steps; i++) {
+      const k = only?.[i] ?? i;
+      earlier ||= before.at(k);
+      if (!after.at(k)) continue;
+      happened.add(name);
+      if (!earlier) broken.push({ code: 'playtest.order', rule: name, step: start + k, values: { ...before.named(k), ...after.named(k) } });
+      break;
+    }
+  }
+  return { broken, happened };
 }
 
 /** The first checkpoint step whose full-state hash differs between a run and its replay, or undefined when none does. */

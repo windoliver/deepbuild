@@ -1,0 +1,1 @@
+{ "alone": true, "why": "timing: ac06-budget.test.ts times the check with and without eight rules against 100 ms by the perf lane's rule; the other files build deep-drive, deep-logic and the assembler into this checkout's target/ through #184's, #533's and #555's helpers and start replicas and hubs, as #3265's do", "timed": ["ac06-budget.test.ts"] }

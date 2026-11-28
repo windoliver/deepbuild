@@ -1,0 +1,100 @@
+The suite at the base commit a7ae0e804 (its last merge is #3696), before any implementation, on macOS (Mac17,10, 18
+cores, 1-minute load 17 to 18), with the workspace packages and the debug deep-drive (env-plants), deep-logic and
+#533's assembler built, one file at a time under a test grant of the machine's throttle (2026-11-28T01:12Z to 01:15Z;
+every grant came within its wait):
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    node scripts/throttle.mjs test --wait 10 -- npx vitest run --root tests/acceptance/3264 --testTimeout=600000 \
+    --no-file-parallelism --reporter=verbose <file>
+
+Test Files  6 failed (6)
+     Tests  10 failed (10)      (ac01 22 s, ac02 8 s, ac03 6 s, ac04 8 s, ac05 6 s, ac06 0.5 s)
+
+Every test fails at an assertion it names, after this suite's own plays gave each fixture and twin what its test says.
+No test passes on the base.
+
+The twin that criterion 1 names PASSES on the base, with the rule as without it. Its 20 runs each open the door and
+reach the exit; runs 6, 8, 12 and 13, which start with 2 hit points, read hp -3 from the trap's step to the span's end
+(the base's own result, with this suite's own plays of the same seeds, from a scratch probe that isn't part of the
+suite):
+
+  the base's playtest of the twin under always: hp >= 0: passed, testsRun 20; failures: (none)
+    bot 0 run 6 (seed 569870475501228): reached at step 12, counted true; hp 2 at step 0, -3 at step 59, below 0 from
+      step 10 for 50 steps
+    bot 0 run 8 (seed 2953773848591171): reached at step 16, counted true; hp 2 at step 0, -3 at step 59, below 0 from
+      step 14 for 46 steps
+    bot 0 run 12 (seed 8467733045604029): reached at step 16, counted true; hp 2 at step 0, -3 at step 59, below 0
+      from step 14 for 46 steps
+    bot 0 run 13 (seed 2281326162925749): reached at step 10, counted true; hp 2 at step 0, -3 at step 59, below 0
+      from step 8 for 52 steps
+    the other 16 runs: reached at step 10 to 16, counted true, hp 2 or above at every step
+
+ac01-always.test.ts > the twin whose trap takes 5 from a unit at 2 passes with no rule and fails playtest.always, naming
+the run, the step and hp -3, its replay at the same step; the fixture passes
+  AssertionError: under always: hp >= 0 the twin fails: passed, testsRun 20; failures: (none): expected 'passed' to be
+  'failed'
+  (after the fixture's 20 runs read hp at 0 or above, the twin's runs 6, 8, 12 and 13 read 2 then -3 with their replays
+  at the same steps, and the twin passed with no rule)
+
+ac01-always.test.ts > a replay that never reads below 0 is not reported as failing at the run's step
+  AssertionError: the twin fails playtest.always, each failure naming its replay's step: passed, testsRun 20; failures:
+  (none): expected [ …(5) ] to deeply equal []: "the outcome is passed, not failed", "0 failures of bot 0 run 6 start
+  playtest.always and name never_negative, not 1" and the same for runs 8, 12 and 13
+
+ac02-order.test.ts > the twin fails playtest.order, naming the run and the first step door_open is true with has_key
+still 0; the fixture, whose door uses its key up, passes
+  AssertionError: under order: has_key then door_open the twin fails: passed, testsRun 20; failures: (none): expected
+  'passed' to be 'failed'
+  (after the fixture's 20 runs took the key before the door, and 11 of the twin's opened the door at step 6 with no
+  key, their replays too)
+
+ac03-one-step.test.ts > the twin whose hp reads -1 at step 811 alone, with 4 on either side, fails always: hp >= 0 at
+step 811
+  AssertionError: the twin fails: passed, testsRun 3; failures: (none): expected 'passed' to be 'failed'
+  (after each of its 3 runs read hp 4, -1, 4 at steps 810 to 812 and below 0 at no other step)
+
+ac03-one-step.test.ts > a planted check that reads only the steps where a goal is judged passes the twin, and fails this
+test
+  AssertionError: the kit plants a playtest runner named goal-steps-only: ["ignores-stuck","ignores-goal",
+  "ignores-trap","ignores-budget","ignores-replay","ignores-band","ignores-expect","ignores-missing","ignores-range"]:
+  expected undefined to be defined
+
+ac04-never-happened.test.ts > with bots that never open the door, the order rule reads INCONCLUSIVE, naming it, never
+PASS
+  AssertionError: door_open is true in no run, so the check reads INCONCLUSIVE (uncounted), naming key_before_door, and
+  reports nothing else: passed, testsRun 40; failures: (none): expected [ …(2) ] to deeply equal []
+  (after no run of either bot opened the door, and the slow explorer took the key in 9 runs)
+
+ac04-never-happened.test.ts > a planted check that passes a rule whose then never happened fails this test
+  AssertionError: the kit plants a playtest runner named unseen-then-passes: ["ignores-stuck", … "ignores-range"]:
+  expected undefined to be defined
+
+ac05-hidden-and-undeclared.test.ts > an order rule on the hidden has_key passes the fixture and fails the timer twin, a
+model bot's runs too, and no prompt the model gets holds has_key
+  AssertionError: the rule reads the hidden name: the twin fails playtest.order in each run whose door opens first, the
+  model bot's among them: passed, testsRun 12; failures: (none): expected [ …(10) ] to deeply equal []: "the outcome
+  is passed, not failed", and "0 failures of … start playtest.order and name key_before_door, not 1" for bot 0 runs 0
+  to 5 and bot 1 runs 0, 4 and 5
+
+ac05-hidden-and-undeclared.test.ts > a rule on a name the interface doesn't declare fails play.missing, naming it,
+before any run
+  AssertionError: an always rule on mana is never passed: passed, testsRun 20; failures: (none): expected 'passed' not
+  to be 'passed'
+
+ac06-budget.test.ts > eight rules are read at each of the 14,400 steps of 20 recorded runs, and on a reference Mac at
+rest add under 100 ms to the check in five readings
+  AssertionError: a recording whose last run reads hp -1 at its last step alone fails under the eight rules: passed,
+  testsRun 20; failures: (none): expected 'passed' to be 'failed'
+  (no reading was taken: the test stops before its clock)
+
+One finding, fixed in the test. The first run of ac04's first test failed for another reason than its criterion's: its
+playtest had no goal, so no play read a value, and the host refused the base's pass ("reported passed without bot 0
+run 0 …'s values: its play read none"; outcome failed, testsRun 0). The playtest now has one goal, alive (hp >= 1),
+which every run reaches at its first step, and the test was run again: the result above.
+
+What the base can't reach behind those assertions was probed apart, in a throwaway test file since deleted: the kit's
+own check reached through fill.play passes the one-step twin and the shut door (as the base must); through the
+plug-in's entry the model bot was asked 36 times, no prompt holding has_key and each holding door_open; the planted
+replica changes a replay's hp and no other play; the verdict engine reads an uncounted run as pending, not PASS; and
+the budget's five readings, taken once with one rule the base ignores, were judged INCONCLUSIVE here by judgeLimit
+(the thermal state read fair, not nominal).
