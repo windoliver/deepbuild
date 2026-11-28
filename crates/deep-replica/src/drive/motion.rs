@@ -384,11 +384,14 @@ impl Recording {
         })
     }
 
-    /// Every element's track: its index into the frames and its state there, for each frame it is in.
+    /// Every element's track: its index into the frames and its state there, for each frame it has an area to see in.
     fn tracks(&self) -> BTreeMap<&str, Vec<(usize, &El)>> {
         let mut tracks: BTreeMap<&str, Vec<(usize, &El)>> = BTreeMap::new();
         for (k, (_, elements)) in self.frames.iter().enumerate() {
-            for (id, e) in elements {
+            for (id, e) in elements
+                .iter()
+                .filter(|(_, e)| e.bounds[2] > 0 && e.bounds[3] > 0)
+            {
                 tracks.entry(id.as_str()).or_default().push((k, e));
             }
         }
@@ -801,3 +804,6 @@ pub fn run(drive: &mut Drive, args: &Value) -> Result<Value, Fail> {
         json!({"claim": claim, "findings": findings, "stale": stale, "invalid": invalid, "pacing": PACING, "journeys": journeys}),
     )
 }
+
+#[cfg(test)]
+mod tests;
