@@ -6,6 +6,8 @@ use std::path::Path;
 use deep_canvas_marks::key::sha256_hex;
 use serde_json::{json, Map, Value};
 
+use crate::fetched;
+
 /// Why a table column can't be read: a code and the field's path.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Refused {
@@ -66,8 +68,8 @@ pub fn tables(doc: &mut Map<String, Value>, evidence: Option<&Path>) -> Result<(
                 .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
                 .ok_or_else(|| refused("asset_missing", format!("{path}: {hash}")))?;
             let probed = record["probe"]["table"]["columns"].as_array();
+            let probed = probed.and_then(|c| c.iter().find(|c| c["name"] == field.as_str()));
             let dtype = probed
-                .and_then(|c| c.iter().find(|c| c["name"] == field.as_str()))
                 .and_then(|c| c["dtype"].as_str())
                 .ok_or_else(|| refused("ref_unresolved", format!("{path}/column")))?;
             let cells = record["cells"][&field]
@@ -92,9 +94,11 @@ pub fn tables(doc: &mut Map<String, Value>, evidence: Option<&Path>) -> Result<(
                     "raw": deep_canvas::base64::encode(raw.as_bytes()),
                     "file": deep_canvas::base64::encode(bytes),
                 });
-                if derived.lineage.is_some() {
+                if let Some(lineage) = &derived.lineage {
                     let key = keys.and_then(|k| k.get(i)).and_then(|c| c["raw"].as_str());
                     out["from"] = derived.from(key.unwrap_or(""));
+                    out["wrote"] =
+                        json!(fetched::wrote(&record, lineage, &field, key.unwrap_or("")));
                 }
                 traced.push(out);
             }
@@ -109,6 +113,9 @@ pub fn tables(doc: &mut Map<String, Value>, evidence: Option<&Path>) -> Result<(
                 json!(deep_canvas::base64::encode(&out))
             };
             let mut trace = json!({"table": asset, "column": field, "source": record["source"], "cells": traced});
+            trace["unit"] = probed.map_or(Value::Null, |c| c["unit"].clone());
+            trace["files"] = json!(fetched::files(&record, hash, evidence));
+            trace["show"] = column.get("show").cloned().unwrap_or(Value::Null);
             if derived.lineage.is_some() {
                 trace["weakest"] = json!(derived.weakest);
             }
