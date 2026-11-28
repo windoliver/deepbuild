@@ -2442,7 +2442,7 @@ class Host implements ExtensionHost {
     return (of[key] ??= this.options.plant === 'hands-one-writable-event' ? made() : frozen(made()));
   }
   /**
-   * What a passed run of a check whose input gives a seed lacks (Check input: plug-in reads, #184): each run its input
+   * What a passed run of a check whose input gives a seed lacks (Check input: extension reads, #184): each run its input
    * asks (each bot's run i, at hash(seed, i)) played, its track's hash in the evidence and values read, and testsRun
    * counting them all; each lack names the run and its seed, and (#1047) the step of a run that started elsewhere.
    */
@@ -2997,7 +2997,7 @@ class Host implements ExtensionHost {
       if (!isCheckResult(result)) return nothing('failed', `${ext.entry.id}'s ${kind} returned no check result as check.kind@1 defines one`);
       // A passed run rests on the tests it counted: passed with none counted ran nothing it can vouch for.
       if (result.outcome === 'passed' && result.testsRun === 0) return nothing('ran_nothing', `${ext.entry.id}'s ${kind} reported passed without its results: it counted no test`);
-      // A pass built on canvas reads holds only with their content keys as its evidence (Check input: plug-in reads).
+      // A pass built on canvas reads holds only with their content keys as its evidence (Check input: extension reads).
       const missing = read.filter((k) => !result.evidence.includes(k));
       if (result.outcome === 'passed' && missing.length) return nothing('failed', `${ext.entry.id}'s ${kind} reported passed without the content keys its deep.canvas.read calls returned as evidence (${missing.length} missing, first ${missing[0]})`);
       const unplayed = result.outcome === 'passed' ? this.unplayed(ext, result) : [];
@@ -3099,6 +3099,11 @@ class Host implements ExtensionHost {
     return { address: `127.0.0.1:${(server.address() as AddressInfo).port}` };
   }
   private async serve(ext: Ext, chosen: Set<string>, req: IncomingMessage, res: ServerResponse): Promise<void> {
+    if (req.headers.origin !== undefined || req.headers['sec-fetch-site'] !== undefined || req.headers.host !== `127.0.0.1:${req.socket.localPort}`) {
+      req.resume();
+      res.writeHead(403).end();
+      return;
+    }
     const path = (req.url ?? '/').split('?')[0]!;
     const route = `${req.method} ${path}`;
     if (!chosen.has(route) || !ext.ask || (await this.revoked(ext))) {

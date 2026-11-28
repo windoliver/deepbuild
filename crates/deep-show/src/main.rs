@@ -64,6 +64,7 @@ mod narration;
 mod net;
 mod net_web;
 mod over3d;
+mod overflow;
 mod packs;
 mod physics;
 mod picks;
@@ -142,6 +143,8 @@ use hub::{
     Planted, PressPhase, Process, RecordObject, Requirement, Scenario, Session, Show, Slot,
     Startup, Via,
 };
+use overflow::tame_overflow;
+pub use overflow::OVERFLOW;
 use shared::{Clock, CommitFault, Quota};
 
 fn bad_input() -> Value {
@@ -184,57 +187,6 @@ fn base64(text: &str) -> Option<Vec<u8>> {
         out.extend_from_slice(&three[..3 - pad]);
     }
     Some(out)
-}
-
-/// The marker a JSON number past f64's range is read as, so the document check can refuse it
-/// with `out_of_range` at its path instead of the whole line failing to parse.
-pub const OVERFLOW: &str = "\u{0}overflow:";
-
-/// A line whose numbers past f64's range (`1e999`) are rewritten as [`OVERFLOW`] strings, or
-/// `None` when it has none.
-fn tame_overflow(line: &str) -> Option<String> {
-    let bytes = line.as_bytes();
-    let mut out = String::with_capacity(line.len());
-    let mut i = 0;
-    let mut changed = false;
-    while i < bytes.len() {
-        let c = bytes[i];
-        if c == b'"' {
-            // A string, its escapes included, copied as it is.
-            let start = i;
-            i += 1;
-            while i < bytes.len() && bytes[i] != b'"' {
-                i += if bytes[i] == b'\\' { 2 } else { 1 };
-            }
-            i = (i + 1).min(bytes.len());
-            out.push_str(&line[start..i]);
-            continue;
-        }
-        if c == b'-' || c.is_ascii_digit() {
-            let start = i;
-            i += 1;
-            while i < bytes.len()
-                && matches!(bytes[i], b'0'..=b'9' | b'.' | b'e' | b'E' | b'+' | b'-')
-            {
-                i += 1;
-            }
-            let token = &line[start..i];
-            match token.parse::<f64>() {
-                Ok(n) if n.is_infinite() => {
-                    out.push_str(&format!(
-                        "\"{}{token}\"",
-                        OVERFLOW.replace('\u{0}', "\\u0000")
-                    ));
-                    changed = true;
-                }
-                _ => out.push_str(token),
-            }
-            continue;
-        }
-        out.push(c as char);
-        i += 1;
-    }
-    changed.then_some(out)
 }
 
 /// An optional field as `read` takes it: `Some(None)` when it's absent, `None` when `read` refuses it.
@@ -1294,7 +1246,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || deep_canvas_loop::PLANTED.contains(p)
                 || deep_canvas_media::PLANTED.contains(p)
                 // #1732's wrong programs live in the motion module's arrangement solve.
-                || deep_canvas_motion::arrange::PLANTED.contains(p)
+                || deep_canvas_motion::arrange::PLANTED.contains(p) || deep_canvas_motion::relations::PLANTED.contains(p)
                 || *p == deep_canvas_motion::module::UNDECLARED_KIND_ACCEPTED
                 || deep_canvas_motion::module::PLANTED.contains(p)
                 || deep_canvas_motion::cues::planted(p)

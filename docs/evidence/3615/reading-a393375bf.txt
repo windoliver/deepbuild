@@ -1,0 +1,47 @@
+#3615: tests/acceptance/2032-redraft-ac8/ac8-budget.test.ts, read once at main a393375bf on a reference Mac
+(Mac17,10, Apple M5 Max, 64 GB, macOS 26B8119), on mains with Low Power Mode off.
+
+Not a run at rest. The thermal state was "fair" and the one-minute load 63 to 73 on 18 cores, so the judge reads
+INCONCLUSIVE, never a pass. The owner said on 2026-11-27 to take the reading on the busy machine and not to wait
+for a quiet one. All five readings are within 2 ms; the judge's only objections are the thermal state and the load.
+
+The one run, under scripts/lease's build grant, with no timed grant asked: npm ci, then deep-gpu built with the
+environment the test's README names, then the test.
+
+$ DEEP_LEASE_WAIT=600 scripts/lease sh <npm ci; cargo build --locked --bin deep-gpu; the vitest run below>
+asked    2026-11-27T10:03:10Z
+granted  2026-11-27T10:50:52Z  load averages 206.73 204.62 188.47
+built    2026-11-27T11:10:29Z  load averages 60.88 73.86 107.56  (Finished `dev` profile [unoptimized] in 19m 26s)
+fingerprint before {"model":"Mac17,10","chip":"Apple M5 Max","memoryBytes":68719476736,"power":"ac","lowPowerMode":false,"thermalState":"fair","macosBuild":"26B8119"}
+
+$ PATH=~/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin:$PATH CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    node node_modules/vitest/vitest.mjs run --root tests/acceptance/2032-redraft-ac8 --no-file-parallelism --testTimeout=600000
+
+ RUN  v5.0.5 tests/acceptance/2032-redraft-ac8
+
+AC8 #2032.1a4ae9f6: warm-up run: shadowed 2.926 ms, plain 1.380 ms, the lights and their shadows 1.546 ms a frame (median of 120 frames each)
+AC8 #2032.1a4ae9f6: run 1 of 5: shadowed 2.856 ms, plain 1.374 ms, the lights and their shadows 1.483 ms a frame (median of 120 frames each); the one-minute load 63.50 at its start, 63.50 at its end
+AC8 #2032.1a4ae9f6: run 2 of 5: shadowed 3.159 ms, plain 1.403 ms, the lights and their shadows 1.756 ms a frame (median of 120 frames each); the one-minute load 63.50 at its start, 70.91 at its end
+AC8 #2032.1a4ae9f6: run 3 of 5: shadowed 3.116 ms, plain 1.386 ms, the lights and their shadows 1.730 ms a frame (median of 120 frames each); the one-minute load 70.91 at its start, 73.08 at its end
+AC8 #2032.1a4ae9f6: run 4 of 5: shadowed 3.279 ms, plain 1.390 ms, the lights and their shadows 1.889 ms a frame (median of 120 frames each); the one-minute load 73.08 at its start, 72.51 at its end
+AC8 #2032.1a4ae9f6: run 5 of 5: shadowed 2.991 ms, plain 1.389 ms, the lights and their shadows 1.602 ms a frame (median of 120 frames each); the one-minute load 72.51 at its start, 69.59 at its end
+AC8 #2032.1a4ae9f6 the GPU ms a frame of 16 lights and 4,096 occluder segments: INCONCLUSIVE 1.4828, 1.7556, 1.7304, 1.8887, 1.6016 against 2, the load at each run's start and end 63.50-63.50, 63.50-70.91, 70.91-73.08, 73.08-72.51, 72.51-69.59 (a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): thermal state is "fair", not "nominal"; load 73.07763671875 at a run's start or end is above the 18 cores)
+
+ FAIL  ac8-budget.test.ts > AC8 #2032.1a4ae9f6 the budget of 16 lights and 4,096 occluder segments at 1920 × 1080 > AC8 #2032.1a4ae9f6 16 lights and 4,096 occluder segments at 1920 × 1080 cost under 2 ms of GPU time a frame, on the reference Mac
+AssertionError: INCONCLUSIVE: [the line above]; this is not a pass
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Duration  36.74s (tests 100%)
+
+fingerprint after {"model":"Mac17,10","chip":"Apple M5 Max","memoryBytes":68719476736,"power":"ac","lowPowerMode":false,"thermalState":"fair","macosBuild":"26B8119"}
+exit 1   2026-11-27T11:11:07Z  load averages 69.59 74.71 106.52
+
+Two earlier requests started nothing: `INCONCLUSIVE no grant: no build grant came within 30 min` (asked 00:43:56Z at
+main 35956a44a) and `INCONCLUSIVE no grant: no build grant came within 240 min` (asked 01:21Z at main c60215952,
+made under that tree's build limit of 1 while later requests were made under 4).
+
+After the entry's removal:
+
+$ node scripts/known-failures-check.mjs
+all 179 entries of known-failures.json: each listed failure names an open issue, added within the last 14 days, and each lint file and skipped test is in the tree

@@ -1,0 +1,61 @@
+Acceptance tests for #3528 on the base f0a816405 (origin/main when this suite was written), run on 2026-11-26 with
+Node v24.22.0 in this checkout, with the suite uncommitted, at a load of about 60:
+
+  node --test 'tests/acceptance/3528/*.test.mjs'
+
+Trimmed to each test's result and each failure's message; node's stack frames, its error fields and the repo rules'
+NOTE lines are left out. No local path appears below. 4 of the 5 tests fail, each at its assertion. 1 passes on the
+base: the on-the-change run of the repo rules, which the base passes too (README: On the base).
+
+✖ #3528.10044f94 the repo rules over the merge base's tree fail, naming both .orig files under crates/ and none of the five under vendor/
+✔ #3528.10044f94 on the change the repo rules pass, with the five vendor/**/Cargo.toml.orig still tracked
+✖ #3528.10044f94 a crates/deep-app/src/main.rs.rej planted in the change's index fails the repo rules, naming the file
+✖ #3528.6d9e9cc1 git ls-files on the change holds neither path, and no file in the tree names either
+✖ #3528.36ac6187 the change's diff against the merge base holds the two deletions under crates/ and the check in scripts/repo-rules.mjs, and nothing else
+ℹ tests 5
+ℹ pass 1
+ℹ fail 4
+
+✖ #3528.10044f94 the repo rules over the merge base's tree fail, naming both .orig files under crates/ and none of the five under vendor/
+  AssertionError [ERR_ASSERTION]: the merge base's tree tracks both files, so the repo rules exit 1
+  exit 0; 19 lines, of them:
+  PASS workflows: .github/workflows/ has no entries
+  PASS agent-hooks: no hooks, plugins or hook switch-off in .claude settings, no .codex/ folder
+  PASS secrets: 24381 files scanned, 38 lockfiles and 1423 binary files skipped, 48 allowed
+  PASS deps: 196 package.json files and 86 crates match scripts/repo-rules.json
+  PASS cards: 41 packages and 55 crates have cards with the four headings; 139 deviations, each naming a file that exists
+  PASS security: SECURITY.md names the private report form, .github/ISSUE_TEMPLATE/config.yml links it, ...
+  PASS physics-build: rapier3d 0.36.1 [...], none of simd8, parallel, block-solve
+  PASS display-text: no state in status.ts or states.rs is decided by display text
+  PASS body-fixtures: tests/fixtures/hands@1/open-fist-pinch.mov: hands@1, drawn by open-fist-pinch.mjs
+  0 !== 1
+
+✖ #3528.10044f94 a crates/deep-app/src/main.rs.rej planted in the change's index fails the repo rules, naming the file
+  AssertionError [ERR_ASSERTION]: a tracked .rej outside vendor/ exits the repo rules 1
+  exit 0; 19 lines, of them:
+  (the same PASS lines as above)
+  0 !== 1
+
+✖ #3528.6d9e9cc1 git ls-files on the change holds neither path, and no file in the tree names either
+  AssertionError [ERR_ASSERTION]: git ls-files on the change still holds them
+  + actual - expected
+  + [
+  +   'crates/deep-gpu-layer/src/view3d.rs.orig',
+  +   'crates/deep-scene3d-render/src/lib.rs.orig'
+  + ]
+  - []
+
+✖ #3528.36ac6187 the change's diff against the merge base holds the two deletions under crates/ and the check in scripts/repo-rules.mjs, and nothing else
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  + []
+  - [
+  -   'D crates/deep-gpu-layer/src/view3d.rs.orig',
+  -   'D crates/deep-scene3d-render/src/lib.rs.orig',
+  -   'M scripts/repo-rules.mjs'
+  - ]
+
+Separately, on the same base: `git grep` over the tree (this folder left out) finds no file naming either path or
+either file's own name, so the first criterion's second half already holds; `node scripts/repo-rules.mjs` in this
+checkout, with this folder untracked, exits 0. scripts/text-lint.mjs is the canvas text call-site lint over Rust and
+reads nothing in this folder.

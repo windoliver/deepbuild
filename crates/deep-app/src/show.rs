@@ -59,6 +59,8 @@ pub struct Item {
     pub id: String,
     pub value: Value,
     pub rect: [f32; 4],
+    pub rows: Vec<crate::sourced::Placed>,
+    pub source_lines: Vec<crate::sourced::Placed>,
 }
 
 /// One presented revision: its document, revision, the panel's rect and the layers on it.
@@ -75,7 +77,7 @@ pub struct Presented {
 }
 
 /// Four numbers, as `[x, y, w, h]`.
-fn rect_of(v: &Value) -> Option<[f32; 4]> {
+pub(crate) fn rect_of(v: &Value) -> Option<[f32; 4]> {
     let r: Vec<f32> = v
         .as_array()?
         .iter()
@@ -118,6 +120,8 @@ impl Presented {
                     id: i["id"].as_str()?.to_string(),
                     value: i["value"].clone(),
                     rect: rect_of(&i["box"])?,
+                    rows: crate::sourced::placed(&i["rows"]),
+                    source_lines: crate::sourced::placed(&i["source_lines"]),
                 })
             })
             .collect();
@@ -665,6 +669,7 @@ impl Render for CanvasPanel {
         });
         let (outline, focus, area) = (self.outline.clone(), chrome.focus, self.area.clone());
         let found = self.found;
+        let listed = page.clone();
         div()
             .size_full()
             .on_mouse_down(
@@ -690,12 +695,23 @@ impl Render for CanvasPanel {
             )
             .child(
                 canvas(
-                    move |_, window, _| {
+                    move |area, window, cx| {
                         for label in &names {
                             deep_text_gpui::prepare(label, window.scale_factor());
                         }
+                        let Some((rect, items, _)) = &listed else {
+                            return Vec::new();
+                        };
+                        let panel = bounds(*rect, area);
+                        let k = f32::from(panel.size.width) / rect[2].max(1.);
+                        let nodes = crate::sourced::nodes(items, |r| Bounds {
+                            origin: panel.origin
+                                + point(px((r[0] - rect[0]) * k), px((r[1] - rect[1]) * k)),
+                            size: size(px(r[2] * k), px(r[3] * k)),
+                        });
+                        crate::sourced::prepaint(nodes, window, cx)
                     },
-                    move |at, _, window, cx| {
+                    move |at, mut sourced, window, cx| {
                         area.set(Some(at));
                         let area = at;
                         for (i, (rect, picture, name)) in layers.iter().enumerate() {
@@ -792,6 +808,9 @@ impl Render for CanvasPanel {
                                     ));
                                 }
                             });
+                        }
+                        for node in &mut sourced {
+                            node.paint(window, cx);
                         }
                     },
                 )

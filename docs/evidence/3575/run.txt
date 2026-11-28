@@ -1,0 +1,12 @@
+The blind suite tests/acceptance/3575 on the merge with main, through scripts/throttle.mjs test, on a Mac17,10:
+
+Test Files  8 passed (8)
+Tests  8 passed (8)
+Start at  21:27:06
+Duration  63.26s (tests 100%)
+exit 0 2026-11-28T02:28:10Z load 15.17 16.91 16.09
+
+The files beside this one are what that run wrote to its proof folder: the three fetch records, the list's rows
+beside them, the source lines of both fixtures, the check's failures on the scoped list, the typed row and the planted
+list, the asks as deep inbox printed them, the replica's rows with the copied URL, and the two pictures of criterion 8
+with their hashes, which tests/acceptance/3575/TASTE.json names.

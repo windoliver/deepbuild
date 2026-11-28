@@ -1,0 +1,26 @@
+{
+  "inputs": {
+    "counties.csv": "8b1181cb1ba1e7d6614d576739335e0c675688334464a043cc73c8c7b202e3f8",
+    "metros.csv": "65e3d5d869f7c1f7c69673793c66a4fcc12849465d99b440052dbee932e5551d",
+    "counties-tie.csv": "dfde73a6801d33149ecafdb5e2118661de640030c758c0500965615ff2ccd0b6",
+    "metros-tie.csv": "3b53a2d0aee92f806db6f2f052bd6fc69cc358f3c3c4bbbd37c2d559778cd0e2"
+  },
+  "ranked": {
+    "outputs": {
+      "table": "a9e0a42a71c81cdeb384318a7e396904ead40a0f6b0f645ae499e6edcf8e7b34",
+      "lineage": "b3a45f55475273d6d6bccfeefbc2b213f8f24609faca03db2de96db6145191c8",
+      "receipt": "33e45da4dd3818b5b249d972a9cfe8a5521604ce59fe106e9ab0e6476af45650",
+      "record": "b6b9299912ab3db625547b34ebeab6a74c84c27ac6c804cb3ea220ef182eafa0"
+    },
+    "table": "metro,workers,rank\nA,250,2\nB,307,1\n"
+  },
+  "tie": {
+    "outputs": {
+      "table": "1eb03cd61e752d85ee7c87eecac2b4052ef9fd55428313b7c145a811c2836fd3",
+      "lineage": "c4a4d95280d77b1910c8bbfc77d270f15c41c87f57bc92f23dddcbd5177957f9",
+      "receipt": "fef5bb41e40e822de6ffed3d09e4edaa1e74dbbbf403bc965082759e6420a13e",
+      "record": "3b17993020e7be5feaa0cf93d277de397d7b84a71fd9dabae9a9c4675321d1ab"
+    },
+    "table": "metro,workers,rank\nA,250,2\nB,250,3\nC,400,1\n"
+  }
+}

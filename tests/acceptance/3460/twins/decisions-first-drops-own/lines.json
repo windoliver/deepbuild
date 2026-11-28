@@ -1,0 +1,12 @@
+{
+  "packages/hub/src/search.ts": [
+    {
+      "find": [
+        "  return [...decided, ...hits, ...record, ...numbers, ...history];"
+      ],
+      "wrong": [
+        "  return [...decided, ...hits, ...numbers, ...history];"
+      ]
+    }
+  ]
+}

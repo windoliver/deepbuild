@@ -1,0 +1,30 @@
+{
+  "claims": [
+    { "page": "repos/api", "id": "port", "text": "`api` starts on port 3000" },
+    { "page": "setup", "id": "cache", "text": "The cache is redis 7" },
+    { "page": "repos/web", "id": "previews", "text": "`web` previews run on port 5173" },
+    { "page": "repos/web", "id": "preview-port", "text": "The web preview port is chosen by vite" },
+    { "page": "rules", "id": "tests", "text": "Run the unit tests before every push" },
+    { "page": "setup", "id": "deploys", "text": "Deploys run from the release branch" }
+  ],
+  "queries": [
+    { "form": "words", "query": "api port 3000", "claim": "wiki:repos/api#port" },
+    { "form": "words", "query": "redis cache", "claim": "wiki:setup#cache" },
+    { "form": "words", "query": "web previews port", "claim": "wiki:repos/web#previews" },
+    { "form": "words", "query": "vite preview port web", "claim": "wiki:repos/web#preview-port" },
+    { "form": "words", "query": "unit tests push", "claim": "wiki:rules#tests" },
+    { "form": "words", "query": "release branch", "claim": "wiki:setup#deploys" },
+    { "form": "form", "query": "api ports", "claim": "wiki:repos/api#port" },
+    { "form": "form", "query": "caching redis", "claim": "wiki:setup#cache" },
+    { "form": "form", "query": "web preview port", "claim": "wiki:repos/web#previews" },
+    { "form": "form", "query": "previews", "claim": "wiki:repos/web#preview-port" },
+    { "form": "form", "query": "unit tests pushed", "claim": "wiki:rules#tests" },
+    { "form": "form", "query": "deploy release", "claim": "wiki:setup#deploys" },
+    { "form": "question", "query": "How does api start?", "claim": "wiki:repos/api#port" },
+    { "form": "question", "query": "What is the cache?", "claim": "wiki:setup#cache" },
+    { "form": "question", "query": "What port do web previews run on?", "claim": "wiki:repos/web#previews" },
+    { "form": "question", "query": "Who chooses the web preview port?", "claim": "wiki:repos/web#preview-port" },
+    { "form": "question", "query": "What runs before every push?", "claim": "wiki:rules#tests" },
+    { "form": "question", "query": "Which branch do deploys run from?", "claim": "wiki:setup#deploys" }
+  ]
+}

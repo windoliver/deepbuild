@@ -1,0 +1,13 @@
+{
+  "scripts/known-failures.json": [
+    {
+      "find": [
+        "  \"failures\": {"
+      ],
+      "wrong": [
+        "  \"failures\": {",
+        "    \"tests/acceptance/3066-redraft-3699/planted.test.mjs › a failure the merge base never named\": \"planted by the twin names-another-failure\","
+      ]
+    }
+  ]
+}

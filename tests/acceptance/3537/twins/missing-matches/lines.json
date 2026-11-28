@@ -1,0 +1,12 @@
+{
+  "scripts/benchmark.mjs": [
+    {
+      "find": [
+        "  if (!change || !base) return { status: 'INCONCLUSIVE', reason: `the change's runs report ${workSaid(change)} and the merge base's ${workSaid(base)}: work that can't be read on one side is missing, never equal` };"
+      ],
+      "wrong": [
+        "  if (!change || !base) return { status: 'PASS' };"
+      ]
+    }
+  ]
+}

@@ -8,7 +8,6 @@ import { Numbers } from './numbers.js';
 import { homedir } from 'node:os';
 import { basename, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ADAPTERS } from '@deepbuild/adapters';
 import { HOLD_PLANTS, openAsks, signInSignature, type Asks, type AsksPlant } from '@deepbuild/asks';
 import { openLedger, type Ledger } from '@deepbuild/budget';
 import { canonicalize, contextBoundFor, sha256Hex, type JsonValue } from '@deepbuild/contracts';
@@ -50,7 +49,7 @@ import { Questions } from './questions.js';
 import { Staging } from './staging.js';
 import { CAN_RUN, CANT_RUN, describe, RUN_BY, unrunnable } from './hook-programs.js';
 import { coverage, coveredBy } from './adapter-facts.js';
-import { SLASH_COMMAND, adapterOf, registry, toolClasses, versionOf } from './hookmap.js';
+import { SLASH_COMMAND, adapterOf, mappedHook, registry, toolClasses, versionOf } from './hookmap.js';
 import { continueLine, fit, type Part } from './context-fit.js';
 
 import { briefing, headOf, loadsOf } from './session-facts.js';
@@ -951,7 +950,7 @@ export class Core {
       adopt: async (bytes) => { await this.control.stored(await this.store.connect({ role: 'agent', session: 'unknown' }).put({ bytes, kind: 'file', source: 'unrecorded', redaction: 'unknown', license: { name: 'unknown', allows: [] } }), 'a file of unknown origin'); },
       send: (request, boundary) => this.store.send(request, boundary),
       raise: (source, ask, plan) => this.asks.raise(this.connection('core'), source, ask, plan),
-      fetched: (sha) => this.libraries?.fetchedFile(sha), table: async (sha, record) => { await mkdir(join(this.root.evidence, 'tables'), { recursive: true }); await writeFile(join(this.root.evidence, 'tables', `${sha}.json`), JSON.stringify(record)); }, row: (job, running) => this.state.jobShown(job, running), reserve: (run, usd, step) => this.ledger.reserveCovering(this.connection('core'), run, usd, step), charge: (run, usd) => this.ledger.charge(this.connection('core'), run, usd), approve: (ask, budget) => this.ledger.approveOn(this.connection('core'), ask, budget),
+      fetched: (sha) => this.libraries?.fetchedFile(sha), readTable: (sha) => { try { return JSON.parse(readFileSync(join(this.root.evidence, 'tables', `${sha}.json`), 'utf8')) as Record<string, unknown>; } catch { return undefined; } }, table: async (sha, record) => { await mkdir(join(this.root.evidence, 'tables'), { recursive: true }); await writeFile(join(this.root.evidence, 'tables', `${sha}.json`), JSON.stringify(record)); }, row: (job, running) => this.state.jobShown(job, running), reserve: (run, usd, step) => this.ledger.reserveCovering(this.connection('core'), run, usd, step), charge: (run, usd) => this.ledger.charge(this.connection('core'), run, usd), approve: (ask, budget) => this.ledger.approveOn(this.connection('core'), ask, budget),
     });
     this.libraries = new Libraries({
       root: this.root.dir, now: this.now, host: () => this.extensions,
@@ -1818,16 +1817,6 @@ export class Core {
     const blocks = (Array.isArray(d.matched) ? d.matched.map(String) : []).filter((n) => { const e = entries[n]; return isObj(e) && e.mode === 'block' && !/^effect:(dependency|cloud-resource|unknown-reach-delete|unrestorable-delete|discard-edits|drop-stash)$/.test(String(e.match)); });
     return blocks.length ? { guard: blocks.join(', ').slice(0, 2000), label: callOf(d, effectEntries(this.root.dir)).label.slice(0, 2000) } : undefined;
   }
-  /** A request line the adapters map, for a payload the core rebuilt from what the parser kept of the hook. */
-  private mapped(meta: HookMeta, draft: Draft, payload: Obj, transcript: readonly Obj[]): Obj | undefined {
-    if (meta.agent === 'pi' || meta.agent === 'paseo') return undefined;
-    const name = ADAPTERS[meta.agent] ?? 'claude';
-    const adapter = registry().get(name);
-    const version = ((adapter.facts as Obj).versions as string[]).at(-1)!;
-    const line = { v: 1 as const, agent: name, event: meta.event, seq: draft.seq ?? '0', id: draft.id, pid: meta.pid, ppid: meta.ppid, matched: [], payload: { session_id: meta.session, hook_event_name: meta.event, ...payload } as JsonValue };
-    return adapter.mapHook(line, version, transcript as JsonValue[]).events.find((e) => e.kind === draft.kind)?.data as Obj | undefined;
-  }
-
   /** Fills what the core reads beside a hook, off the parser: what a session loads, a prompt's origin, a stop's records and loop. */
   private async enrich(drafts: Draft[], meta: HookMeta, session: Session | undefined): Promise<void> {
     if (!meta.session) return;
@@ -1856,7 +1845,7 @@ export class Core {
         const entry = !meta.fields?.prompt_id || !session ? undefined : meta.host ? await this.hosts.sessions.promptEntry(meta.host, meta.transcript, meta.fields.prompt_id) : (await turnFrom(session, meta.fields.prompt_id, this.transcriptReader))[0];
         // A Codex subagent's prompt carries the root's session ID with an agent_id: no message of yours, nor the root's turn (#39).
         if (childPrompt(meta)) { data.from = 'subagent'; continue; }
-        const mapped = foreign ? undefined : this.mapped(meta, draft, { ...meta.fields }, entry ? [entry] : []);
+        const mapped = foreign ? undefined : mappedHook(meta, draft, { ...meta.fields }, entry ? [entry] : []);
         let from = String(mapped?.from ?? data.from);
         if (from === 'unknown' && !foreign && this.options.plant === 'unplaced-is-person') from = 'person';
         // The planted wrong programs take an automatic continuation for yours, or read the resume prompt by its look.
@@ -2086,7 +2075,7 @@ export class Core {
   private async stopRecords(draft: Draft, meta: HookMeta, session: Session | undefined): Promise<void> {
     const data = draft.data;
     if (session && meta.fields?.prompt_id && !meta.fields.agent_id) {
-      const read = this.mapped(meta, draft, { ...meta.fields }, await turnFrom(session, meta.fields.prompt_id, this.transcriptReader));
+      const read = mappedHook(meta, draft, { ...meta.fields }, await turnFrom(session, meta.fields.prompt_id, this.transcriptReader));
       if (read && typeof read.cause === 'string') {
         data.cause = read.cause;
         if (read.cause === 'plan_window_spent' && typeof read.plan_resets === 'number') data.plan_resets = read.plan_resets;

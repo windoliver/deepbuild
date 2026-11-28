@@ -1,0 +1,41 @@
+#3615: tests/acceptance/2032-redraft-ac8/ac8-budget.test.ts, read a second time, at main 894a293f2 (the branch's
+merge with it, baee27b40) on the same reference Mac (Mac17,10, Apple M5 Max, 64 GB, macOS 26B8119), under a
+top-level timed grant.
+
+Not a counted verdict either. The load was 7.8 to 8.6 on 18 cores, the thermal state nominal and Low Power Mode
+off, but the Mac had been unplugged and ran on battery, so the judge reads INCONCLUSIVE, never a pass. Three of the
+five readings are over 2 ms. The first reading, on mains under load (reading-a393375bf.txt), had all five within it.
+
+$ CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 scripts/lease cargo build --locked --bin deep-gpu
+asked    2026-11-27T21:39:32Z  load averages 13.32 6.93 4.38
+built    2026-11-27T21:51:22Z  load averages 78.71 32.01 15.63  (Finished `dev` profile [unoptimized] in 5m 51s)
+
+$ PATH=~/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin:$PATH CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    node scripts/throttle.mjs timed --wait 20 -- node node_modules/vitest/vitest.mjs run \
+    --root tests/acceptance/2032-redraft-ac8 --no-file-parallelism --testTimeout=600000
+asked    2026-11-27T21:51:22Z
+granted  2026-11-27T21:59:28Z  load averages 9.81 18.99 16.56
+fingerprint before {"model":"Mac17,10","chip":"Apple M5 Max","memoryBytes":68719476736,"power":"battery","lowPowerMode":false,"thermalState":"nominal","macosBuild":"26B8119"}
+
+ RUN  v5.0.5 tests/acceptance/2032-redraft-ac8
+
+AC8 #2032.1a4ae9f6: warm-up run: shadowed 2.936 ms, plain 1.050 ms, the lights and their shadows 1.886 ms a frame (median of 120 frames each)
+AC8 #2032.1a4ae9f6: run 1 of 5: shadowed 3.538 ms, plain 1.037 ms, the lights and their shadows 2.501 ms a frame (median of 120 frames each); the one-minute load 8.61 at its start, 8.08 at its end
+AC8 #2032.1a4ae9f6: run 2 of 5: shadowed 3.835 ms, plain 1.076 ms, the lights and their shadows 2.759 ms a frame (median of 120 frames each); the one-minute load 8.08 at its start, 7.83 at its end
+AC8 #2032.1a4ae9f6: run 3 of 5: shadowed 3.323 ms, plain 1.101 ms, the lights and their shadows 2.222 ms a frame (median of 120 frames each); the one-minute load 7.83 at its start, 7.83 at its end
+AC8 #2032.1a4ae9f6: run 4 of 5: shadowed 2.924 ms, plain 1.076 ms, the lights and their shadows 1.848 ms a frame (median of 120 frames each); the one-minute load 7.83 at its start, 7.92 at its end
+AC8 #2032.1a4ae9f6: run 5 of 5: shadowed 2.903 ms, plain 1.038 ms, the lights and their shadows 1.865 ms a frame (median of 120 frames each); the one-minute load 7.92 at its start, 7.85 at its end
+AC8 #2032.1a4ae9f6 the GPU ms a frame of 16 lights and 4,096 occluder segments: INCONCLUSIVE 2.5009, 2.7593, 2.2224, 1.8485, 1.8649 against 2, the load at each run's start and end 8.61-8.08, 8.08-7.83, 7.83-7.83, 7.83-7.92, 7.92-7.85 (a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): power (mains) is "battery", not "ac")
+
+ FAIL  ac8-budget.test.ts > AC8 #2032.1a4ae9f6 the budget of 16 lights and 4,096 occluder segments at 1920 × 1080 > AC8 #2032.1a4ae9f6 16 lights and 4,096 occluder segments at 1920 × 1080 cost under 2 ms of GPU time a frame, on the reference Mac
+AssertionError: INCONCLUSIVE: [the line above]; this is not a pass
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Duration  26.02s (tests 100%)
+
+fingerprint after {"model":"Mac17,10","chip":"Apple M5 Max","memoryBytes":68719476736,"power":"battery","lowPowerMode":false,"thermalState":"nominal","macosBuild":"26B8119"}
+exit 1   2026-11-27T21:59:54Z  load averages 7.85 17.61 16.14
+
+On mains these five would still not be a verdict: they are neither all within 2 ms nor all over it by more than the
+margin.
