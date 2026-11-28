@@ -1,7 +1,7 @@
 {
 "commit": "11404f91002549703d3eed81d16f6a988923b7b7",
 "command": "node tests/acceptance/3529/record.mjs",
-"files": {"tests/acceptance/2324/fixtures/base-bake.json":"af37bb39484542447a968037b499f5e5f38e05c28d3a7ae78e6b78b629ebd1ea","tests/acceptance/2324/fixtures/base-golden.json":"19c8ecbe94cfaac3212f711f7ebeefda10215597e8313e4aa351a60370a2422a","tests/acceptance/2662/fixtures/golden.json":"9493cec08e9289595331d5158e8424620d264f152e35842397721d6e15c5c833"},
+"files": {"tests/acceptance/2324/fixtures/base-bake.json":"af37bb39484542447a968037b499f5e5f38e05c28d3a7ae78e6b78b629ebd1ea","tests/acceptance/2324/fixtures/base-golden.json":"19c8ecbe94cfaac3212f711f7ebeefda10215597e8313e4aa351a60370a2422a","tests/acceptance/2662/fixtures/golden.json":"f41d16ff580d1c831a14d4cffa8a5ece29a98ab8aeda38dbc1aa86545b0f9bf2"},
 "kept": {"golden2324":{"hashes":true,"bake_keys":false},"golden2662":{"hashes":true,"bake_keys":true}},
 "reached": {
 "fixtures": {
