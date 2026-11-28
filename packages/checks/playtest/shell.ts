@@ -8,7 +8,6 @@ type Row = {
   step: number; screen: string | null; level: number; level_step: number; paused: boolean; unlocked: boolean[];
   focus: string | null; enabled: string[]; prompts: Record<string, string>; device: string | null; hash: string;
   transition: number; screen_step: number; from?: string; control?: string; quit?: boolean;
-  /** #3605: the levels finished, the piece's own settings, the loaded level's arrays and its own full-state hash. */
   done?: boolean[]; custom?: number[]; values?: Record<string, unknown[]> | null; level_hash?: string | null;
 };
 type Box = [number, number, number, number];
@@ -22,7 +21,6 @@ export interface ShellAnswer {
   refused: { code: string; message: string } | null; stopped: { code?: string; message?: string } | null;
   recording: string | null; levels: number; unpaused?: { level_step: number; hash: string }[]; paused?: { level_step: number; hash: string }[];
   unreached?: { from: string; control?: string; stop: { code?: string; message?: string } }[];
-  /** #3605: each level load's own input track, and each completion's shell step. */
   level_tracks?: { level: number; entries: unknown[]; steps: number }[]; completions?: { level: number; step: number }[];
 }
 export type ShellPlay = (piece: string, run: { seed: number; shell: Record<string, unknown>; track?: unknown[] }) => Promise<{ shell: ShellAnswer } & Record<string, unknown>>;
@@ -30,13 +28,11 @@ export type ShellPlay = (piece: string, run: { seed: number; shell: Record<strin
 export interface ShellInput {
   piece: string; seed: number; journeys?: string[]; devices?: string[]; sizes?: [number, number][];
   level?: { actions?: Record<string, number[]>; span?: number }; pause?: { at?: number; hold?: number; to?: number }; budget?: number;
-  /** #3605: the moves journey's script, and the relaunch journey's first launch's. */
   moves?: unknown[];
 }
 
 export const JOURNEYS = ['title_to_level', 'unlock', 'carry', 'pause', 'credits', 'back', 'focus', 'prompts', 'layout', 'wired'];
 const PLAYS = ['title_to_level', 'unlock', 'pause', 'credits', 'moves'];
-/** #3605: the relaunch journey's four launches over one profile store, in order. */
 export const LAUNCHES = ['first', 'relaunch', 'fresh', 'relaunch'] as const;
 const DEVICES = ['keys', 'pad', 'touch'];
 const SIZES: [number, number][] = [[1512, 982], [2400, 1080]];
@@ -120,7 +116,6 @@ export function judge(a: ShellAnswer, input: ShellInput): Failure[] {
     }
     case 'pause':
     case 'relaunch':
-      // Judged from all its plays together (pauseFailures, relaunchFailures).
       break;
     case 'moves':
       out.push(...doneFailures(a, test));
@@ -242,10 +237,6 @@ export function judge(a: ShellAnswer, input: ShellInput): Failure[] {
 
 const doneOf = (r: Row | undefined, i: number): boolean => r?.done?.[i] === true || (r?.done?.[i] as unknown) === 1;
 
-/**
- * #3605: a level's `done` element turns true only at the shell step its level's own `done` first turned true, the row
- * whose step ran the level's last step and left it, and never turns false.
- */
 export function doneFailures(a: ShellAnswer, test: string): Failure[] {
   const out: Failure[] = [];
   const rows = a.steps;
@@ -267,7 +258,6 @@ export function doneFailures(a: ShellAnswer, test: string): Failure[] {
   return out;
 }
 
-/** #3605: each level load's rows, in load order: the runs of rows with a level loaded. */
 function loadRows(rows: Row[]): Row[][] {
   const out: Row[][] = [];
   let cur: Row[] | null = null;
@@ -280,10 +270,6 @@ function loadRows(rows: Row[]): Row[][] {
   return out;
 }
 
-/**
- * #3605: each level load's own input track replayed as a piece with no shell: at every step its arrays must equal the
- * run's, and at its last step its full-state hash, or the replay fails, naming the first step that differs.
- */
 export async function replayFailures(a: ShellAnswer, input: ShellInput, play: ShellPlay, test: string): Promise<Failure[]> {
   const out: Failure[] = [];
   const loads = loadRows(a.steps);
@@ -317,10 +303,6 @@ export async function replayFailures(a: ShellAnswer, input: ShellInput, play: Sh
   return out;
 }
 
-/**
- * #3605: the relaunch journey's launches over one profile store: a relaunch holds from its first row every mark the
- * last launch before it that wasn't fresh left; start fresh holds none.
- */
 export function relaunchFailures(plays: ShellAnswer[], test: string): Failure[] {
   const out: Failure[] = [];
   let kept: Row | undefined;
@@ -390,8 +372,6 @@ export async function runShell(input: ShellInput, play: ShellPlay): Promise<Chec
         if (input.pause !== undefined) shell['pause'] = input.pause;
         if (input.budget !== undefined) shell['budget'] = input.budget;
         if (journey === 'moves' && input.moves !== undefined) shell['moves'] = input.moves;
-        // The pause journey is two plays: one never paused, then one paused and resumed; the relaunch journey four, over
-        // one profile store no other play shares.
         const store = `relaunch ${input.piece} ${device} ${size.join('x')} ${Date.now()} ${Math.random()}`;
         const runs = journey === 'pause'
           ? [{ ...shell, paused: false }, shell]

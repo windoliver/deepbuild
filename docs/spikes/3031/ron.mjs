@@ -1,14 +1,8 @@
-// A reader for the RON that wgpu-core's API trace writes (`trace.ron`: one action after another, each printed from
-// column 0), enough of the format for that file: structs, tuples, enum variants, options, lists, maps, strings and
-// numbers. `Some(x)` reads as x and `None` as null; a variant with no fields reads as its name; `Name(a: 1)` reads
-// as `{$: 'Name', a: 1}`, `Name(1, 2)` as `{$: 'Name', _: [1, 2]}`; an unnamed `(a: 1)` as `{a: 1}` and `(1, 2)`
-// as `[1, 2]`.
 import { closeSync, openSync, readSync } from 'node:fs';
 
 const IDENT_START = /[A-Za-z_]/;
 const IDENT = /[A-Za-z0-9_]/;
 
-/** One RON value read from `text`. Throws, naming the place, on anything it doesn't know. */
 export function parse(text) {
   let i = 0;
   const fail = (what) => {
@@ -26,7 +20,6 @@ export function parse(text) {
       } else return;
     }
   };
-  // An identifier, or a raw one (`r#dont-care`), which is how a name that isn't Rust's is written.
   const rawIdent = () => text[i] === 'r' && text[i + 1] === '#' && /[A-Za-z0-9_.+-]/.test(text[i + 2] ?? '');
   const ident = () => {
     const raw = rawIdent();
@@ -85,14 +78,12 @@ export function parse(text) {
     if (s.endsWith('NaN')) return NaN;
     return Number(s);
   };
-  // What follows an open parenthesis: fields (`a: 1, b: 2`) or values (`1, 2`), to its close.
   const group = () => {
     skip();
     if (text[i] === ')') {
       i++;
       return { fields: null, values: [] };
     }
-    // A field name is an identifier followed by a colon.
     const at = i;
     let named = false;
     if (IDENT_START.test(text[i])) {
@@ -194,10 +185,6 @@ export function parse(text) {
   return out;
 }
 
-/**
- * The actions of a trace file, one at a time, as text: the file is `[`, then each action printed from column 0 and
- * followed by a comma, then `]` when the device was dropped. Reads the file in pieces, so its size is no limit.
- */
 export function* actions(path) {
   const fd = openSync(path, 'r');
   const buffer = Buffer.allocUnsafe(1 << 24);
@@ -216,7 +203,6 @@ export function* actions(path) {
       rest = n > 0 ? parts.pop() : '';
       for (const l of parts) {
         if (l === '[' || l === ']' || l === '') continue;
-        // An action starts at column 0 with its name; every other line of it is indented or closes it.
         if (/^[A-Za-z]/.test(l)) yield* flush();
         lines.push(l);
       }
