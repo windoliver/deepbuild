@@ -166,7 +166,7 @@ pub enum Guard {
     /// `valid_until`.
     ReuseIgnoresValidUntil,
     /// #231: one export guard waits 8.4 ms on every frame.
-    GuardWaits,
+    ExportGuardWaits,
     /// #231: the content key of an item that reads a spectrum array leaves the band levels out.
     KeyWithoutSpectrumBand,
     /// #231: each frame is read back and hashed with BLAKE3 on the CPU.
@@ -283,7 +283,7 @@ pub(crate) fn planted(name: &str) -> Option<Planted> {
         "receipt_wall_sums_phases" => Planted::Export(G::WallSumsPhases),
         "receipt_books_compiles_under_draw" => Planted::Export(G::BooksCompilesUnderDraw),
         "reuse_ignores_valid_until" => Planted::Export(G::ReuseIgnoresValidUntil),
-        "guard_waits_8_4_ms" => Planted::Export(G::GuardWaits),
+        "guard_waits_8_4_ms" => Planted::Export(G::ExportGuardWaits),
         "content_key_without_spectrum_band" => Planted::Export(G::KeyWithoutSpectrumBand),
         "export_hashes_on_cpu" => Planted::Export(G::HashesOnCpu),
         other => Planted::Export(G::Codec(CODEC_PLANTS.iter().find(|p| **p == other)?)),

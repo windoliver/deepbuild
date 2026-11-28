@@ -1,0 +1,8 @@
+[
+  {
+    "find": [
+      "    if (tests.every((path) => runsByHand(byHand, path))) return { file, why: 'redraft holds only by-hand test files', line: `${move}, redrafted to ${target}, whose test files all run by hand` };"
+    ],
+    "wrong": []
+  }
+]

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Generates the extension guide (docs/extension-guide.md) from the published extension API
-// (packages/contracts/extension-api.json) and its slot declarations (packages/contracts/hub-slots.json), the first-plug-in
+// (packages/contracts/extension-api.json) and its slot declarations (packages/contracts/hub-slots.json), the first-extension
 // tier first (#351), and stamps the envelope digest of its two worked examples. `--check` is the guide's drift test, as
 // skill.mjs's is the skill's: one entry per published method and per slot, none for anything the contract doesn't
 // publish, each as the contract has it now. One `PASS guide` line, or one `FAIL guide: <name>: <reason>` line per
@@ -30,7 +30,7 @@ function panelModule() {
   return [
     '## A panel\'s module',
     '',
-    `A panel imports only \`${catalog.module}\`, DeepBuild's own module, by name: \`import { View, div, v_flex } from "${catalog.module}"\`, as \`panel/main.js\` does. It never names the toolkit under it, so a change of toolkit breaks no plug-in. A panel that imports the toolkit, or a name off the list below, is refused at install and again at load, naming the file and line, and for a name off the list the closest name on it. The list is checked in at \`crates/deep-app/panel-catalog.json\`, with every component the toolkit has that isn't offered and why.`,
+    `A panel imports only \`${catalog.module}\`, DeepBuild's own module, by name: \`import { View, div, v_flex } from "${catalog.module}"\`, as \`panel/main.js\` does. It never names the toolkit under it, so a change of toolkit breaks no extension. A panel that imports the toolkit, or a name off the list below, is refused at install and again at load, naming the file and line, and for a name off the list the closest name on it. The list is checked in at \`crates/deep-app/panel-catalog.json\`, with every component the toolkit has that isn't offered and why.`,
     '',
     ...catalog.core.map((c) => `- \`${c.name}\`: ${c.what}`),
     '- `needs_you`, `sessions`, `quotes`: the data the app serves a panel, as plain values. `sessions` lists each session in the sidebar\'s order as `{id, title, words, entry}`: its row\'s id is `session:<id>`, and it draws its title and its state\'s words, never an id.',
@@ -43,7 +43,7 @@ function panelModule() {
   ].join('\n');
 }
 
-/** The first-plug-in tier, in the order a plug-in reaches for them (design: A first plug-in). */
+/** The first-extension tier, in the order an extension reaches for them (design: A first extension). */
 const TIER = ['deep.on', 'deep.registerView', 'deep.registerSource', 'deep.store', 'deep.schedule', 'deep.registerAction', 'deep.secret',
   'deep.notices.send', 'deep.send', 'deep.asks.create', 'deep.provide', 'deep.use', 'deep.readNow'];
 
@@ -52,13 +52,13 @@ const DOCS = {
   'deep.on': 'Handles an event: session.start, tool.before, tool.after, prompt.submit, agent.stop, pr.opened, merged, released or schedule. A handler adds context for the agent or denies with a reason; outside DeepBuild\'s signed release, both only fill templates the manifest declares, with typed values.',
   'deep.registerCheck': 'A check kind: its runner gets a spec and the checkout and returns the run\'s outcome, the tests it ran, each failure from the tool\'s own report and the evidence. The verdict is the core\'s, never the runner\'s.',
   'deep.registerResolver': 'Answers an ask with an option and the decision that covers it. The core applies the answer only when that decision is active and of the ask\'s kind and scope; otherwise the ask reaches you.',
-  'deep.registerSource': 'A source of readings, each with its unit, source and as-of time: polled from a host with a secret, a quota and a timeout, a stream read from a cursor, or an MCP tool counted as read. A polled source is one path on its host, query included, and its `parse(answer)` gets `{ status, headers, body }` and returns `{ value, unit }`: one finite number and its unit, such as `{ value: 187.25, unit: \'USD\' }`. A list or a record is no reading, unless the source declares `shape: \'series\'`: then `parse` returns `{ values, unit }`, up to 10,000 named numbers a call, which the hub keeps as one batch, each bound as `reading:<source>#<name>`. `while_shown: { every }`, at least 10 s, is a cadence the hub runs only while a view that binds the source is shown; one its quota can\'t serve is refused at install. A source\'s readings over time are its history, which the hub keeps: a chart draws from them, so a plug-in needs no source per point. A library source (`variant: \'library\'`, asset.library@1, #1731) names its one host in the manifest, which the install grants, and gives `search(ctx, {words, kind, size_m, license, limit})` and `fetch(ctx, {id})`: they read the library\'s API through `ctx.fetch`, the hub\'s call to that host, and the hub downloads every file a fetch names, so a library\'s rows and licenses reach `deep_kinds` and the evidence store with no byte through the plug-in.',
+  'deep.registerSource': 'A source of readings, each with its unit, source and as-of time: polled from a host with a secret, a quota and a timeout, a stream read from a cursor, or an MCP tool counted as read. A polled source is one path on its host, query included, and its `parse(answer)` gets `{ status, headers, body }` and returns `{ value, unit }`: one finite number and its unit, such as `{ value: 187.25, unit: \'USD\' }`. A list or a record is no reading, unless the source declares `shape: \'series\'`: then `parse` returns `{ values, unit }`, up to 10,000 named numbers a call, which the hub keeps as one batch, each bound as `reading:<source>#<name>`. `while_shown: { every }`, at least 10 s, is a cadence the hub runs only while a view that binds the source is shown; one its quota can\'t serve is refused at install. A source\'s readings over time are its history, which the hub keeps: a chart draws from them, so an extension needs no source per point. A library source (`variant: \'library\'`, asset.library@1, #1731) names its one host in the manifest, which the install grants, and gives `search(ctx, {words, kind, size_m, license, limit})` and `fetch(ctx, {id})`: they read the library\'s API through `ctx.fetch`, the hub\'s call to that host, and the hub downloads every file a fetch names, so a library\'s rows reach the search of `deep_kinds`, and its licenses the fetch of `deep_job` and the evidence store with no byte through the extension.',
   'deep.registerStateSource': 'State outside a repo that a workspace keeps: read() returns its items, compare(item, expected) the difference from what was expected, and undo(change) a plan to undo a change, or that it cannot.',
   'deep.registerChannel': 'A way to reach you, such as your phone, a chat app or email: deliver({ summary, link, thread_key }) says delivered, stalled or timed out, and receive() gives an answer with its proof, which the hub checks and decides what it counts as.',
   'deep.channel.fetch': 'A channel\'s one call to its own service: a GET or POST to a path on the host the channel was granted, answered through the hub.',
   'deep.work.fetch': 'A work or library source\'s one call to its provider, as its context\'s `fetch`: a GET or POST to a path on the source\'s host, with its secret and under its quota, answered through the hub.',
-  'deep.source.ask': 'A plug-in asks a model source its manifest lists for a reply to a prompt. The hub makes the call, from a recording when replaying, and the plug-in gets the answer\'s status and body, or no answer and why; it never reaches the network itself.',
-  'deep.registerPort': 'A plug-in\'s side of a piece\'s port: `entries` and `rows`, the entries and occurrence rows it takes, and `sources`, the sources it gives for readings in, each one the plug-in registers. The piece must list each of them, and the port carries what the piece lists, which may be more. `sound` says whether its gear makes sound, which makes the plug-in a device gate owner whatever the document says. Registering opens nothing: a port opens only after a person clicks Connect on the app\'s prompt, and sends only while the piece plays live and forward, never on a seek, a replay or an export.',
+  'deep.source.ask': 'An extension asks a model source its manifest lists for a reply to a prompt. The hub makes the call, from a recording when replaying, and the extension gets the answer\'s status and body, or no answer and why; it never reaches the network itself.',
+  'deep.registerPort': 'An extension\'s side of a piece\'s port: `entries` and `rows`, the entries and occurrence rows it takes, and `sources`, the sources it gives for readings in, each one the extension registers. The piece must list each of them, and the port carries what the piece lists, which may be more. `sound` says whether its gear makes sound, which makes the extension a device gate owner whatever the document says. Registering opens nothing: a port opens only after a person clicks Connect on the app\'s prompt, and sends only while the piece plays live and forward, never on a seek, a replay or an export.',
   'deep.registerEnvironment': 'An environment a check runs against: up(spec, lease, checkout) starts it and returns a handle, down(handle) stops it.',
   'deep.lease': 'Leases a resource of a declared lease.kind@1 kind, the core\'s or one a manifest declares, exclusive or shared, held by the package itself: the grant, or the refusal naming the holder.',
   'deep.registerView': 'A JavaScript panel in the app, in the sidebar, the home screen, a tab or the line, under an empty policy plus DeepBuild\'s modules. `view` adds its pages, each opened from ⌘K with one parameter (a page per stock: `{ name: "Stock", param: "symbol", values }`, given to the panel\'s `init` as `props.page`), its ⌘K commands, each running one of its actions, and `binds`, the readings it shows (`reading:<source>` or `reading:<source>#<series>`), which Read now and while-shown cadences go by. A panel never calls the network itself: it reads what its sources read, and a panel that fetches is refused at install.',
@@ -72,13 +72,13 @@ const DOCS = {
   'deep.asks.create': 'Raises an ask: a question only you can answer, with its options, its deadline and its default.',
   'deep.config.get': 'Reads one of the package\'s settings.',
   'deep.notices.send': 'Sends a notice you asked for, citing fresh readings, once per key.',
-  'deep.store': 'The plug-in\'s own data, kept in the record under a kind and a schema that only moves forward.',
-  'deep.store.put': 'Writes one item of the plug-in\'s own store under its key, checked against the store\'s schema and tied to the action call that wrote it.',
-  'deep.store.get': 'Reads the latest item of the plug-in\'s own store under a key, or nothing when there is none.',
-  'deep.store.list': 'Reads the latest item under every key of the plug-in\'s own store.',
+  'deep.store': 'The extension\'s own data, kept in the record under a kind and a schema that only moves forward.',
+  'deep.store.put': 'Writes one item of the extension\'s own store under its key, checked against the store\'s schema and tied to the action call that wrote it.',
+  'deep.store.get': 'Reads the latest item of the extension\'s own store under a key, or nothing when there is none.',
+  'deep.store.list': 'Reads the latest item under every key of the extension\'s own store.',
   'deep.schedule': 'Runs a job on a cadence: never overlapping, with a deadline per run and one catch-up run after sleep.',
   'deep.schedule.read': 'Reads a source the job declared among its readings, for the run under way: a job calls it as its context\'s `read`, and outside a run it is refused. Listing `deep.schedule` in `requires.preview` covers it.',
-  'deep.secret': 'A handle to a secret: the hub adds its value to the request, and the plug-in never sees it.',
+  'deep.secret': 'A handle to a secret: the hub adds its value to the request, and the extension never sees it.',
   'deep.send': 'Anything that leaves your machine for a person: an ask, or a standing rule.',
   'deep.provide': 'An output other pieces may use, by its interface name@major: readings, actions, notice kinds, views or checks.',
   'deep.use': 'An output interface another piece provides, resolved by type to an installed provider, the one `from` names first; typed and pinned to a version.',
@@ -89,10 +89,10 @@ const DOCS = {
   'deep.terminal.list': 'The package\'s own hosted terminals, each with its run and process.',
   'deep.terminal.read': 'Reads a hosted terminal\'s output from an offset, in pages.',
   'deep.terminal.close': 'Closes a hosted terminal: stops its program and host process and removes its log and checkpoint.',
-  'deep.runner.run': 'A model job on your own agent, headless on your plan, with its inputs by handle, a budget in USD and a deadline in ms. Each handle is checked against the plug-in\'s grant before the job starts. The job answers one JSON object, `{ value, cites }`; the plug-in gets a reading, `{ handle, value, cites, as_of, stale_at }`, as old as the oldest reading it cites, citing only handles its grant reaches. A job that fails rejects with its stop cause, never with text.',
+  'deep.runner.run': 'A model job on your own agent, headless on your plan, with its inputs by handle, a budget in USD and a deadline in ms. Each handle is checked against the extension\'s grant before the job starts. The job answers one JSON object, `{ value, cites }`; the extension gets a reading, `{ handle, value, cites, as_of, stale_at }`, as old as the oldest reading it cites, citing only handles its grant reaches. A job that fails rejects with its stop cause, never with text.',
   'deep.canvas.read': 'For a check runner: a canvas revision\'s evaluated values by stable ID at the times it names, with their content keys and a coverage block, read only and only for the documents its grant names. A pass built on a read holds only with those keys as its evidence.',
   'deep.canvas.play': 'For a check runner: a piece played headless in a replica on its virtual clock, a step at a time, from a seed and entries the running check\'s input gives (its seed or hash(it, i) for one of its runs, one of its bots, or a track it gives or a play of this run recorded), as the writer bot, and only for the documents its grant names. It answers the recorded track by hash, the values at the paths asked for at each step, any trap, each step\'s time and fuel and the frames asked for by hash; frames are evidence, never values. A pass built on plays holds only with every run played, its track among its evidence and values read.',
-  'deep.registerAction': 'What panels, your words and agents\' MCP tools can do to the plug-in\'s data. It declares read, change or send, and a change or send returns its report.',
+  'deep.registerAction': 'What panels, your words and agents\' MCP tools can do to the extension\'s data. It declares read, change or send, and a change or send returns its report.',
   'deep.registerJob': 'An offline job kind, one per name: its params schema, its outputs, its key (hash of the tool\'s name@version, the canonical params and each input\'s hash), the output checks an output passes before any item names it, and the fixtures a tool must qualify on.',
   'deep.registerJobTool': 'A tool for a registered kind, pinned by name@version, its files the program the hub runs outside its process. It joins the kind once it writes each qualification fixture\'s expected bytes, and stays the build it qualified as. A tool that calls a provider names its one host as `provider` in its manifest\'s `job_tools` entry; each run gets `call: {provider, key, journal}` on stdin, and the tool appends `{key, provider}` to the journal before its request leaves and `{key, provider, task}` when the provider answers. A key whose journal holds a call and whose outputs aren\'t kept is never run again: it is BLOCKED with one unblock ask.',
 };
@@ -131,7 +131,7 @@ function render(api, table) {
     '',
     'A package is a folder: `deepbuild.json`, its manifest in the one package envelope (an `owner/name` ID, a version, the digest of its files and, when signed, its publisher\'s key and signature), and its code: `index.ts` for TypeScript, or an executable `main` that speaks JSON-RPC 2.0 on stdio in any language. Every package outside DeepBuild\'s signed release runs sandboxed, out of process, whoever wrote it. Each method below is marked with the release it arrives in; a preview method can still change before a shipped piece of its release calls it.',
     '',
-    'The installer refuses a package whose digest isn\'t its files\', whose signature doesn\'t verify, or whose key isn\'t the one trusted for it; one that replaces a piece of the trusted ring (`app-shell`, `canvas-core`, `supervisor`, `installer`) or the done gate; one that conflicts with an installed package (`conflicts`); one that registers a check kind an installed package holds without declaring it `replaces` it; and one that runs on a kernel contract version (`kernel`) the kernel doesn\'t publish.',
+    'The installer refuses a package whose digest isn\'t its files\', whose signature doesn\'t verify, or whose key isn\'t the one trusted for it; one that replaces a piece of the trusted ring (`app-shell`, `canvas-core`, `supervisor`, `installer`) or the done gate; one that conflicts with an installed package (`conflicts`); one that registers a check kind an installed package holds without declaring it `replaces` it; and one that runs on a contract version (`kernel`) the core doesn\'t publish.',
     '',
     '## Two worked examples',
     '',
@@ -140,7 +140,7 @@ function render(api, table) {
     '- [`extension-guide/typescript`](extension-guide/typescript/): `index.ts`, calling `deep.registerCheck` in-process style through the `deep` object the host hands it.',
     '- [`extension-guide/json-rpc`](extension-guide/json-rpc/): `main`, a Python program that answers the host\'s `load` by calling `deep.registerCheck` over JSON-RPC, then answers each `run`.',
     '',
-    'And a plug-in, [`extension-guide/plugin`](extension-guide/plugin/): a weather panel with a source behind a secret, a store, two actions, a schedule that sends a notice, a view with a page per city and a ⌘K command, its panel in `panel/main.js`, and its own tests in `tests/`.',
+    'And an extension, [`extension-guide/plugin`](extension-guide/plugin/): a weather panel with a source behind a secret, a store, two actions, a schedule that sends a notice, a view with a page per city and a ⌘K command, its panel in `panel/main.js`, and its own tests in `tests/`.',
     '',
     '## The manifest',
     '',
@@ -154,9 +154,11 @@ function render(api, table) {
     '',
     panelModule(),
     '',
-    '## A first plug-in',
+    '## A first extension',
     '',
-    `Most plug-ins need few methods. Start with these ${tier.length}, in this order.`,
+    '<a id="a-first-plug-in"></a>',
+    '',
+    `Most extensions need few methods. Start with these ${tier.length}, in this order.`,
     '',
     tier.map((e) => entries.get(e.method)).join('\n\n'),
     '',

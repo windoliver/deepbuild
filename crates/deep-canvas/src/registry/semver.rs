@@ -151,6 +151,23 @@ impl Range {
             }
         })
     }
+
+    pub(super) fn admits_major(&self, major: u64) -> bool {
+        let first = Semver {
+            major,
+            minor: 0,
+            patch: 0,
+        };
+        let starts = self.bounds.iter().filter_map(|bound| match *bound {
+            Bound::Exact(v) | Bound::AtLeast(v) | Bound::Tilde(v, _) | Bound::Caret(v, _) => {
+                Some(v)
+            }
+            Bound::Any | Bound::Below(_) => None,
+        });
+        std::iter::once(first)
+            .chain(starts)
+            .any(|v| v.major == major && self.matches(v))
+    }
 }
 
 impl fmt::Display for Range {
@@ -213,5 +230,41 @@ mod tests {
         assert!(Range::parse("=1.0.0").unwrap().matches(v("1.0.0")));
         assert!(!Range::parse("=1.0.0").unwrap().matches(v("1.0.1")));
         assert!(Range::parse("").is_none() && Range::parse(">x").is_none());
+    }
+
+    #[test]
+    fn a_range_admits_a_major_when_one_of_its_versions_matches() {
+        let ranges = [
+            "*",
+            "^1",
+            "^1.2",
+            "~1",
+            "~1.4",
+            "=1.3.0",
+            "=2.0.0",
+            ">=1.1.0, <2.0.0",
+            ">=1.5.0, <1.5.0",
+            ">=1.2.3, <1.2.4",
+            ">=0.9.0",
+            ">=3.0.0",
+            "<1.0.0",
+            "^0.3.1",
+            "0.0.1",
+        ];
+        for text in ranges {
+            let range = Range::parse(text).unwrap();
+            for major in 0..4 {
+                let matched = (0..10).any(|minor| {
+                    (0..10).any(|patch| {
+                        range.matches(Semver {
+                            major,
+                            minor,
+                            patch,
+                        })
+                    })
+                });
+                assert_eq!(range.admits_major(major), matched, "{text}, major {major}");
+            }
+        }
     }
 }

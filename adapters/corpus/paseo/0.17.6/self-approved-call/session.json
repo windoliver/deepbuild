@@ -1,0 +1,8 @@
+{
+  "schema": "corpus.session@1",
+  "agent": "paseo",
+  "version": "0.17.6",
+  "surface": "daemon",
+  "recorded": "2026-11-27",
+  "scenario": "self-approved-call"
+}

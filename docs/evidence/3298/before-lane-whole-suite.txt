@@ -1,0 +1,44 @@
+BAY claim {"index":2,"role":"base","use":"before","bay":"/home/jing/deepbuild-bays/2/base","base":"254bdc87c7f2fc34676193463ee2e685b67a43df","tree":"0aeed2b62adc0ad59a626a059c9538bea5c4f3d1","bundle":null,"untracked":null,"overlay":{"files":17943,"hash":"f4964d6fa7f52941a7674579ea72da21e5633bd412f8c981aac0fc9466791b5c"},"sealedTree":{"base":"bc5b9c5409c3baa2317ed79682d38df7b2fd5942","tree":"f5b55d2937fa3fa0666b30964a1400f869afa62a","bundle":null,"untracked":null},"seal":"intact","cold":false,"stopped":false,"installed":false,"written":1320,"deleted":39,"crates":["deep-app","deep-canvas","deep-canvas-cells","deep-canvas-drawn","deep-canvas-effects","deep-canvas-export","deep-canvas-graph","deep-canvas-input","deep-canvas-loop","deep-canvas-marks","deep-canvas-media","deep-canvas-motion","deep-canvas-physics","deep-canvas-record","deep-canvas-sandbox","deep-canvas-scene3d","deep-canvas-seams","deep-canvas-sheet","deep-canvas-test-modules","deep-canvas-vector","deep-catalog","deep-codecs","deep-contracts","deep-effects-render","deep-gpu","deep-gpu-layer","deep-groups-render","deep-hook","deep-images","deep-input","deep-logic","deep-lottie","deep-lottie-reader","deep-marks-gpui","deep-marks-raster","deep-marks-render","deep-marks-vello","deep-motion","deep-net","deep-panel-host","deep-physics-rapier","deep-play","deep-player","deep-pptx-reader","deep-relay","deep-replica","deep-sandbox-wasmtime","deep-scene3d-render","deep-show","deep-synth-job","deep-text","deep-text-gpui","deep-text-render","deep-typeset","deep-urdf"]}
+BAY claim {"index":2,"role":"change","use":"before","bay":"/home/jing/deepbuild-bays/2/change","tree":"5a503db78837989820ccb102b6270d92cf9c6be2","bundle":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untracked":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untrackedFiles":[],"overlay":null,"sealedTree":{"tree":"80a964c3562339047902042884e9c2e84daf5ac7","bundle":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untracked":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untrackedFiles":[]},"seal":"intact","cold":false,"stopped":false,"installed":false,"written":1329,"deleted":40,"crates":["deep-app","deep-canvas","deep-canvas-cells","deep-canvas-drawn","deep-canvas-effects","deep-canvas-export","deep-canvas-graph","deep-canvas-input","deep-canvas-loop","deep-canvas-marks","deep-canvas-media","deep-canvas-motion","deep-canvas-physics","deep-canvas-record","deep-canvas-sandbox","deep-canvas-scene3d","deep-canvas-seams","deep-canvas-sheet","deep-canvas-test-modules","deep-canvas-vector","deep-catalog","deep-codecs","deep-contracts","deep-effects-render","deep-gpu","deep-gpu-layer","deep-groups-render","deep-hook","deep-images","deep-input","deep-logic","deep-lottie","deep-lottie-reader","deep-marks-gpui","deep-marks-raster","deep-marks-render","deep-marks-vello","deep-motion","deep-net","deep-panel-host","deep-physics-rapier","deep-play","deep-player","deep-pptx-reader","deep-relay","deep-replica","deep-sandbox-wasmtime","deep-scene3d-render","deep-show","deep-synth-job","deep-text","deep-text-gpui","deep-text-render","deep-typeset","deep-urdf"]}
+before: tests/acceptance/27-redraft-2073/waits.test.ts: by hand, from the byHand list in scripts/lanes.mjs, so not run here and proves nothing
+before: tests/acceptance/27/desktop-redraft/desktop.test.ts: by hand, from the byHand list in scripts/lanes.mjs, so not run here and proves nothing
+before: tests/acceptance/27/desktop.test.ts: by hand, from the byHand list in scripts/lanes.mjs, so not run here and proves nothing
+before: tests/acceptance/27/outcomes-redraft/outcomes.test.ts: by hand, from the byHand list in scripts/lanes.mjs, so not run here and proves nothing
+before: tests/acceptance/27/outcomes.test.ts: by hand, from the byHand list in scripts/lanes.mjs, so not run here and proves nothing
+before: tests/acceptance/27/repeat.test.ts: by hand, from the byHand list in scripts/lanes.mjs, so not run here and proves nothing
+before: tests/acceptance/27/session.live.test.ts: by hand, from the byHand list in scripts/lanes.mjs, so not run here and proves nothing
+before: tests/acceptance/27/waits.test.ts: by hand, from the byHand list in scripts/lanes.mjs, so not run here and proves nothing
+before: tests/acceptance/70/redraft-ac1/e2e.live.test.ts: by hand, from the byHand list in scripts/lanes.mjs, so not run here and proves nothing
+before: tests/acceptance/994/app.test.ts: by hand, from the byHand list in scripts/lanes.mjs, so not run here and proves nothing
+before: tests/acceptance/994/taste.test.ts: by hand, from the byHand list in scripts/lanes.mjs, so not run here and proves nothing
+before: tests/proof/994/runs.test.ts: by hand, from the byHand list in scripts/lanes.mjs, so not run here and proves nothing
+before: the timed set, from the timed list in scripts/lanes.mjs, run only under a timed grant (2): tests/acceptance/27/budgets.test.ts tests/acceptance/55/budgets.test.ts
+BLOCKED before: tests/acceptance/27/desktop-redraft-2/desktop.test.ts: cannot run on the change: the run was stopped after 20 minutes
+BLOCKED before: tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts: cannot run on the change: the run was stopped after 20 minutes
+BLOCKED before: tests/acceptance/27/redraft-3178/repeat.test.ts: cannot run on the change: the run was stopped after 20 minutes
+BLOCKED before: tests/acceptance/27/redraft-3178/waits.test.ts: cannot run on the change: the run was stopped after 20 minutes
+BLOCKED before: tests/acceptance/27/wake.test.ts: cannot run on the change: the run was stopped after 20 minutes
+BLOCKED before: tests/acceptance/3178/suites.test.ts: cannot run on the change: the run was stopped after 20 minutes
+BLOCKED before: tests/acceptance/3428/doctor.test.ts: cannot run on the change: the run was stopped after 20 minutes
+BLOCKED before: tests/acceptance/3428/real.test.ts: cannot run on the change: the run was stopped after 20 minutes
+BLOCKED before: tests/acceptance/3428/setup.test.ts: cannot run on the change: the run was stopped after 20 minutes
+BLOCKED before: tests/acceptance/3428/source.test.ts: cannot run on the change: the run was stopped after 20 minutes
+BLOCKED before: tests/acceptance/3429/gate.test.ts: cannot run on the change: the run was stopped after 20 minutes
+BLOCKED before: tests/acceptance/3429/mode.test.ts: cannot run on the change: the run was stopped after 20 minutes
+BLOCKED before: tests/acceptance/3430/canceled.test.ts: cannot run on the change: the run was stopped after 20 minutes
+BLOCKED before: tests/acceptance/55-redraft-ac13/delivery.test.ts: cannot run on the change: the run was stopped after 20 minutes
+BLOCKED before: tests/acceptance/55-redraft-ac13/wrong-program.test.ts: cannot run on the change: the run was stopped after 20 minutes
+BLOCKED before: tests/acceptance/55/gate.test.ts: cannot run on the change: the run was stopped after 20 minutes
+BLOCKED before: tests/acceptance/55/permissions.test.ts: cannot run on the change: the run was stopped after 20 minutes
+BLOCKED before: tests/acceptance/55/real.test.ts: cannot run on the change: the run was stopped after 20 minutes
+BLOCKED before: tests/acceptance/994/deadline-redraft/deadline.test.ts: cannot run on the change: the run was stopped after 20 minutes
+BLOCKED before: tests/acceptance/994/first-screen-redraft/first-screen.test.ts: cannot run on the change: the run was stopped after 20 minutes
+BLOCKED before: tests/acceptance/994/first-screen-redraft/shown.test.ts: cannot run on the change: the run was stopped after 20 minutes
+BLOCKED before: tests/acceptance/994/hub.test.ts: cannot run on the change: the run was stopped after 20 minutes
+INCONCLUSIVE before: tests/acceptance/27/budgets.test.ts: cannot run on the change: INCONCLUSIVE no grant: no timed grant came within 15 minutes
+INCONCLUSIVE before: tests/acceptance/55/budgets.test.ts: cannot run on the change: INCONCLUSIVE no grant: no timed grant came within 15 minutes
+PASS before: no tagged test to run on the merge base (12 tagged files by hand, not run)
+BAY release {"index":2,"role":"base","bay":"/home/jing/deepbuild-bays/2/base","status":null,"targetBytes":38680096295,"touched":1}
+BAY release {"index":2,"role":"change","bay":"/home/jing/deepbuild-bays/2/change","status":null,"targetBytes":38875589208,"touched":0}
+proof: wall time 5763.6 s
+exit 1

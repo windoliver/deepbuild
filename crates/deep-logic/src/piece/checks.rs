@@ -21,6 +21,7 @@ pub(super) struct Declared {
     carry: Option<Value>,
     carry_in: Option<crate::carry::CarryIn>,
     profile: Option<Value>,
+    settings: Vec<(String, f64)>,
     /// #276: the seats a profile's read entry has a block for: the piece's `players`, else 1.
     seats: u32,
     emits: Vec<Emit>,
@@ -66,6 +67,7 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
             "carry",
             "carry_in",
             "profile",
+            "settings",
             "emits",
             "fires",
             "services",
@@ -361,6 +363,7 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
                 .map(|_| Some(v.clone()))
                 .map_err(|r| logic_refused(id, vec![r]))?,
         },
+        settings: settings_of(params.get("settings")).map_err(|r| logic_refused(id, vec![r]))?,
         seats: 1,
         emits,
         fires,
@@ -628,6 +631,17 @@ pub(super) fn region_map(
             read: Read::Profile,
         });
     }
+    for (name, _) in &d.settings {
+        let at = entries.last().map_or(at, |e| align8(e.offset + e.size));
+        entries.push(Region {
+            region: "reads",
+            name: setting_read(name),
+            offset: at,
+            size: crate::piece::SLOT,
+            ty: "control".into(),
+            read: Read::Control,
+        });
+    }
     let mut at = 0u32;
     for w in &d.writes {
         entries.push(Region {
@@ -779,6 +793,32 @@ fn reading_max(r: &Read) -> u32 {
     }
 }
 
+pub fn setting_read(name: &str) -> String {
+    format!("settings.{name}")
+}
+
+fn settings_of(v: Option<&Value>) -> Result<Vec<(String, f64)>, Value> {
+    let Some(v) = v else { return Ok(Vec::new()) };
+    let o = v.as_object().ok_or_else(|| {
+        refusal(
+            "field",
+            "settings is {name → default number}".into(),
+            json!({"field": "settings"}),
+        )
+    })?;
+    o.iter()
+        .map(|(n, d)| {
+            d.as_f64().map(|d| (n.clone(), d)).ok_or_else(|| {
+                refusal(
+                    "field",
+                    format!("settings.{n}'s default is a number"),
+                    json!({"field": "settings", "setting": n}),
+                )
+            })
+        })
+        .collect()
+}
+
 pub(super) type Controls = BTreeMap<String, (u32, &'static str)>;
 /// A piece's sources by the reading each delivers, `reading:<source>` (#533), and (#182) the
 /// readings its worlds declare that a logic item may read, `world_reads`.
@@ -886,6 +926,9 @@ pub fn check_in(
             )
         };
         let given = asset(&d.program).ok_or_else(|| missing("program", &d.program))?;
+        let circuit2 = crate::interfaces::imported(&given)
+            .iter()
+            .any(|n| n == "circuit@2");
         // The linker first, before the subset check and the rewrite (#190); an item without links
         // is never linked.
         let (mut given, mut libraries, mut functions, mut lib_data, mut link_ns) =
@@ -914,6 +957,17 @@ pub fn check_in(
             given = links::empty_linking(given);
         }
         let linked = !d.links.is_empty() || planted.linker_adds_linking_section;
+        let circuit_major = if circuit2
+            || libraries.iter().any(|l| {
+                l.implements.iter().any(|i| i == "circuit@2")
+                    || l.exports.iter().any(|e| {
+                        ["breaker", "rcd", "changeover", "transformer"].contains(&e.as_str())
+                    })
+            }) {
+            2
+        } else {
+            1
+        };
         let lines = match &d.debug {
             None => None,
             Some(sha) => {
@@ -1071,8 +1125,6 @@ pub fn check_in(
                 Some(std::sync::Arc::new(t))
             }
         };
-        // #1181: the table `circuit` declares, its nodes and parts, is asset 0; each input that
-        // closes a part is found by its slot in the item's read region.
         let circuit = match &d.circuit {
             None => None,
             Some(v) => {
@@ -1083,7 +1135,22 @@ pub fn check_in(
                         .find(|e| e.region == "reads" && e.name == name && e.ty == "control")
                         .map(|e| e.offset)
                 };
-                let c = crate::circuit::build(v, &slot).map_err(|r| logic_refused(id, r))?;
+                let write = |name: &str| {
+                    layout
+                        .entries
+                        .iter()
+                        .find(|e| e.region == "writes" && e.name == name)
+                        .map(|e| {
+                            let size = if e.ty == "f64" { 8 } else { 4 };
+                            (e.offset, writes_at + e.offset, e.ty.clone(), e.size / size)
+                        })
+                };
+                let look = crate::circuit::Lookup {
+                    slot: &slot,
+                    write: &write,
+                };
+                let c = crate::circuit::build(v, circuit_major, &look)
+                    .map_err(|r| logic_refused(id, r))?;
                 assets.push((rewrite::hash(&c.bytes), c.bytes.clone()));
                 Some(std::sync::Arc::new(c))
             }
@@ -1203,7 +1270,13 @@ pub fn check_in(
                     .expect("due names a write")
                     .offset
             }),
-            reads: d.reads.clone(),
+            reads: d
+                .reads
+                .iter()
+                .cloned()
+                .chain(d.settings.iter().map(|(n, _)| setting_read(n)))
+                .collect(),
+            settings: d.settings.clone(),
             writes: d.writes.clone(),
             layout,
             reads_at,

@@ -139,8 +139,11 @@ function prepare(root, k) {
     rmSync(join(dir, 'target/debug/incremental'), { recursive: true, force: true });
     git(dir, ['init', '-q', '--template=', dir]);
     mkdirSync(join(dir, '.git/objects/info'), { recursive: true });
-    writeFileSync(join(dir, '.git/objects/info/alternates'), `${join(resolve(root, git(root, ['rev-parse', '--git-common-dir']).trim()), 'objects')}\n`);
   }
+  const alternates = join(dir, '.git/objects/info/alternates');
+  const objects = join(resolve(root, git(root, ['rev-parse', '--git-common-dir']).trim()), 'objects');
+  const named = existsSync(alternates) ? readFileSync(alternates, 'utf8').split('\n').filter(Boolean) : [];
+  if (!named.includes(objects)) writeFileSync(alternates, `${[...named, objects].join('\n')}\n`);
   // The refs and HEAD are the worktree's, as one packed-refs file, sorted by name as git keeps it.
   const refs = git(root, ['for-each-ref', '--format=%(objectname) %(refname)']).split('\n').filter(Boolean).sort((a, b) => (a.split(' ')[1] < b.split(' ')[1] ? -1 : 1));
   writeFileSync(join(dir, '.git/packed-refs'), `# pack-refs with: peeled fully-peeled sorted \n${refs.join('\n')}\n`);
@@ -197,7 +200,9 @@ export async function claimShards(root, want, say) {
       done(null);
     });
   })));
-  return ready.filter(Boolean);
+  const claimed = ready.filter(Boolean);
+  if (want > 0 && !claimed.length) process.stderr.write(`SHARD none claimed of ${want} asked for: the alone block runs unsharded in the worktree, one group at a time\n`);
+  return claimed;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
