@@ -10,6 +10,7 @@ const STATES = 'States people see';
 const PLAIN = 'contracts/plain-words.json';
 const REPO = 'https://github.com/windoliver/deepbuild/blob/main/';
 
+const WORDED = ['docs/technical-design.md', 'docs/canvas-primitives.md', 'docs/parallel-proof.md'];
 const findings = [];
 const fail = (at, why, fix) => findings.push(`FAIL glossary: ${at}: ${why}\n  Fix: ${fix}`);
 const finish = () => {
@@ -125,7 +126,6 @@ for (const { at, term, text, avoid } of entries) {
   }
 }
 
-const WORDED = ['docs/technical-design.md', 'docs/canvas-primitives.md', 'docs/parallel-proof.md'];
 const OTHER_KERNELS = [
   { file: 'docs/technical-design.md', words: "such as a kernel's output against", why: 'a numeric kernel, code that computes numbers' },
   { file: 'docs/technical-design.md', words: "such as a kernel's output, gets", why: 'a numeric kernel, code that computes numbers' },
