@@ -1,0 +1,1 @@
+{ "alone": true, "why": "shared: the fixed port 127.0.0.1:4318; every test needs it free at its start, then the installed hub's receiver or the test itself binds it, so no other suite may hold it meanwhile" }

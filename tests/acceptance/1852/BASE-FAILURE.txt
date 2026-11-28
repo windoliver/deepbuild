@@ -1,0 +1,85 @@
+Base commit: e87cefc44b8dc017c6a642ef8f5f8b7e141a81b4
+Command: NO_COLOR=1 npx vitest run --root tests/acceptance/1852
+Date: 2026-11-28T04:15:26Z  Node v24.22.0  vitest vitest/5.0.5 darwin-arm64 node-v24.22.0
+Note: run through node node_modules/vitest/vitest.mjs run --root tests/acceptance/1852, the same binary npx resolves, because a local shell hook rewrites npx vitest. Built first: npm ci && npm run build --workspaces, cargo build --locked -p deep-hook.
+Exit code: 1
+
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/issue-1852-otlp-receiver-688aa2/tests/acceptance/1852
+
+ ❯ hub-receiver.test.ts (3 tests | 3 failed) 33695ms
+   ❯ #1852 the hub starts the OTLP receiver, and the doctor says when nothing listens where Claude Code exports (3)
+     × #1852.215083f6 Through the installed hub, with no receiver the test starts, a scripted Claude Code session exporting to 127.0.0.1:4318 adds `tool.span` and `request.cost` events to the record; the merge base adds none and fails this test, naming the port 30177ms
+     × #1852.ee6ff135 With Claude Code set to export to 127.0.0.1:4318 and nothing listening there, the doctor item fails naming the address; the merge base reads healthy and fails this test 672ms
+     × #1852.d94f17eb With 4318 held by another process, the hub starts and the doctor item names the port 2845ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  hub-receiver.test.ts > #1852 the hub starts the OTLP receiver, and the doctor says when nothing listens where Claude Code exports > #1852.215083f6 Through the installed hub, with no receiver the test starts, a scripted Claude Code session exporting to 127.0.0.1:4318 adds `tool.span` and `request.cost` events to the record; the merge base adds none and fails this test, naming the port
+AssertionError: the installed hub's record holds tool.span and request.cost for session f35ccfc8-a6d0-4ca6-a98c-2c0bfda90204, exported by Claude Code to http://127.0.0.1:4318 (port 4318); kinds seen: []; the exports: {"session":"f35ccfc8-a6d0-4ca6-a98c-2c0bfda90204","sent":{"traces":{"url":"http://127.0.0.1:4318/v1/traces","error":"http://127.0.0.1:4318/v1/traces: ECONNREFUSED (gave up after 27861 ms of retries)"},"logs":{"url":"http://127.0.0.1:4318/v1/logs","error":"http://127.0.0.1:4318/v1/logs: ECONNREFUSED (gave up after 27821 ms of retries)"}}}: expected { 'tool.span': false, …(1) } to deeply equal { 'tool.span': true, …(1) }
+
+- Expected
++ Received
+
+  {
+-   "request.cost": true,
+-   "tool.span": true,
++   "request.cost": false,
++   "tool.span": false,
+  }
+
+ ❯ hub-receiver.test.ts:23:7
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  hub-receiver.test.ts > #1852 the hub starts the OTLP receiver, and the doctor says when nothing listens where Claude Code exports > #1852.ee6ff135 With Claude Code set to export to 127.0.0.1:4318 and nothing listening there, the doctor item fails naming the address; the merge base reads healthy and fails this test
+AssertionError: with Claude Code exporting to http://127.0.0.1:4318 and nothing listening on 127.0.0.1:4318, the item fails naming the address; it read {"item":"otlp.telemetry","agent":"claude-code","code":"healthy","level":"ok","evidence":"traces: http/protobuf to http://127.0.0.1:4318/; logs: http/protobuf to http://127.0.0.1:4318/","fix":"Nothing: the receiver reads the telemetry Claude Code sends."}: expected { level: 'ok', namesAddress: true } to deeply equal { level: 'fail', namesAddress: true }
+
+- Expected
++ Received
+
+  {
+-   "level": "fail",
++   "level": "ok",
+    "namesAddress": true,
+  }
+
+ ❯ hub-receiver.test.ts:37:7
+     35|       { level: item!.level, namesAddress: `${item!.evidence} ${item!.f…
+     36|       `with Claude Code exporting to ${ENDPOINT} and nothing listening…
+     37|     ).toEqual({ level: 'fail', namesAddress: true });
+       |       ^
+     38|     expect(alone.ran.code, 'deep doctor exits non-zero with a failing …
+     39|     const hub = await startHub(w);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  hub-receiver.test.ts > #1852 the hub starts the OTLP receiver, and the doctor says when nothing listens where Claude Code exports > #1852.d94f17eb With 4318 held by another process, the hub starts and the doctor item names the port
+AssertionError: with 127.0.0.1:4318 held by another process, the hub runs without its receiver and the item says so, naming port 4318; it read {"item":"otlp.telemetry","agent":"claude-code","code":"healthy","level":"ok","evidence":"traces: http/protobuf to http://127.0.0.1:4318/; logs: http/protobuf to http://127.0.0.1:4318/","fix":"Nothing: the receiver reads the telemetry Claude Code sends."}: expected { flagged: false, namesPort: true } to deeply equal { flagged: true, namesPort: true }
+
+- Expected
++ Received
+
+  {
+-   "flagged": true,
++   "flagged": false,
+    "namesPort": true,
+  }
+
+ ❯ hub-receiver.test.ts:60:7
+     58|       { flagged: ['warn', 'fail'].includes(item!.level), namesPort: ne…
+     59|       `with ${ADDRESS} held by another process, the hub runs without i…
+     60|     ).toEqual({ flagged: true, namesPort: true });
+       |       ^
+     61|     expect(running(hub), `the hub still runs after deep doctor: ${hub.…
+     62|     await stopHub(hub);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  20:15:27
+   Duration  33.97s (tests 100%)
+
