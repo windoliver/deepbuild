@@ -1,0 +1,22 @@
+{
+  "shipnotes": {
+    "repo": "{tmp}/source",
+    "commit": "{commit}",
+    "path": "skills/shipnotes",
+    "digest": "1bc23df7de1b2ea39a96f56164a27026a3452975bf189b7c27d0a2e2f5b30fef",
+    "agents": [
+      "claude-code"
+    ],
+    "files": [
+      {
+        "path": "{home}/.claude/skills/shipnotes/run.sh",
+        "after": "7549850db4ab2cefcd6f483032b34ec1af63a2862ebfd4018c35f411dfdd561e"
+      },
+      {
+        "path": "{home}/.claude/skills/shipnotes/SKILL.md",
+        "after": "f30d44673a558c770af27245ea6a6a416de78b0a2d90643fa4cca6dbe1f562f4"
+      }
+    ],
+    "sync": "01M8G4YY99DWFF8K7XA8MPHBGK"
+  }
+}

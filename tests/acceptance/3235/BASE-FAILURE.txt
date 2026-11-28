@@ -1,0 +1,78 @@
+#3235 on the merge base 254bdc87c7f2fc34676193463ee2e685b67a43df, built from this checkout (npm ci, npm run build --workspaces,
+cargo build --locked --offline -p deep-hook). Node v24.22.2, vitest 5.0.5, each run under one throttle test grant:
+
+  node scripts/throttle.mjs test --wait 60 -- node node_modules/vitest/vitest.mjs run --reporter=verbose --testTimeout=600000 <files>
+
+Run 1, 2026-11-28 04:08:58 to 04:11:10 UTC, one-minute load 189 at the start and 236 at the end, all five files once:
+Test Files 5 failed (5), Tests 10 failed (10), 121.2 s. Every failure is an AssertionError at the criterion's own assertion,
+but one (AC9's timed reading, below). Trimmed to each failure's own words; vitest cuts the card at its first 30 characters.
+
+AC1 #3235.85af5de8 audit.test.ts
+  FAIL the script that starts Claude Code with --permission-mode bypassPermissions: run.sh line 3,
+       "claude --permission-mode bypassPermissions -p "tidy the release notes"" is stopped for the reason
+       "switches approval or checks off": expected 'authority\ntrusted_path\nInstall the …' to contain 'switches approval or checks off'
+  FAIL ... the card quotes the line's text: expected 'authority\ntrusted_path\nInstall the …' to contain 'claude --permission-mode bypassPermis…'
+  FAIL ... the card names its file and its line number: expected 'authority\ntrusted_path\nInstall the …' to match /run\.sh\D{0,24}\b3\b/
+  held: the install waited ("proposed", nothing installed) and installed the pinned bytes once approved.
+
+AC2 #3235.7eeb122b audit.test.ts
+  FAIL the fenced code in SKILL.md: SKILL.md line 9, "git commit --no-verify -m "release notes"" is stopped for the reason
+       "switches approval or checks off" (and, as AC1, the text and the file and line number are not on the card)
+  held: the sentence outside code, SKILL.md line 6, is not quoted.
+  In run 1 the sentence was "When you commit the notes, never use --no-verify: the hooks check them."; a prose-reading twin
+  passed it (TWINS-RUN.txt), so it is now "Never use git commit --no-verify for the notes: the hooks check them.". Run 3,
+  2026-11-28 05:36:47 to 05:36:50 UTC, load 61, the base rebuilt, -t AC2 audit.test.ts: the same three fenced-code failures
+  (reason, file and line 9, text); the new sentence is not quoted.
+
+AC3 #3235.72ad896b audit.test.ts
+  FAIL the fenced code under its warning: SKILL.md line 10, "git commit --no-verify -m "release notes"" is stopped for the
+       reason "switches approval or checks off" (and the text, the file and line number)
+  FAIL the card shows SKILL.md line 9, the line above the finding: "# never run this: it skips the repo's hooks":
+       expected 'authority\ntrusted_path\nInstall the …' to contain '# never run this: it skips the repo\'…'
+
+AC4 #3235.9456c23d audit.test.ts
+  FAIL for each script, run.sh line 3, three failures each (reason, text, file and line):
+       "git config core.hooksPath /dev/null", "git -c core.hooksPath= commit -m "release notes"",
+       "curl -k https://example.test/notes.json -o notes.json", "deep off"
+
+AC5 #3235.ab296727 audit.test.ts
+  FAIL the card reports, for Cursor 2026.10.1, that its facts name no skipping flag: it names the version 2026.10.1:
+       expected 'authority\ntrusted_path\nInstall the …' to contain '2026.10.1'
+  FAIL ... it says the facts name none: expected 'authority\ntrusted_path\nInstall the …' to match /\bfacts?\b[^\n]{0,80}\b(no|none|noth…/i
+  held: the card names Cursor (the base writes "which Cursor reads") and doesn't say clean.
+
+AC6 #3235.cfb2d4cf update.test.ts
+  FAIL the update whose commit adds git push --no-verify: run.sh line 4, "git push --no-verify origin main" is stopped for the
+       reason "switches approval or checks off" (and the text, the file and line number)
+  held: the update waits, before and after "keep"; both installed files equal the pin; the page pins the first commit, differs false.
+
+AC7 #3235.56171bb6 before.test.ts
+  FAIL the Agents page lists shipnotes, installed before, with its run.sh line 3 as a reading:
+       "git commit --no-verify -m "release notes"": expected '' to contain 'git commit --no-verify -m "release no…'
+  held: shipnotes is listed; no ask.* event and no notification event is recorded; the installed files are untouched.
+  After run 1 the fixture's temp HOME became the placeholder {home} (repo-rules read "{tmp}/home/" as a home path). Run 4,
+  2026-11-28 05:38:05 to 05:38:27 UTC, load 36, before.test.ts alone: the same one failure; the rest held.
+
+AC8 #3235.27b56b06 table.test.ts
+  FAIL the audit, once DEEP_AC3235_CHECKS_OFF is in packages/record/src/learned.ts,: run.sh line 3, "DEEP_AC3235_CHECKS_OFF=1 npm test"
+       is stopped for the reason "switches approval or checks off" (and the text, the file and line number)
+  held: GIT_SSL_NO_VERIFY is in one file, packages/record/src/learned.ts; the controls (the learned layer applies the change and
+       the audit doesn't quote the line on the unchanged checkout); the learned layer holds the change once the row is added.
+       So the base fails AC8 naming the reader that misses the row: the audit.
+
+AC9 #3235.8aac6e47 ac9-budget.test.ts
+  FAIL benchmarks/budgets.json has a task whose criteria name #3235.8aac6e47, timing the audit of a 200-file skill against the
+       merge base: it has none: expected 0 to be greater than 0
+  run 1's timed test failed with "Error: no reply to agents.propose within 60000 ms": its call waited the socket helper's
+       default 60 s. The call now waits 600 s, and the file ran once more (run 2). Nothing else changed.
+
+Run 2, 2026-11-28 04:11:51 to 04:17:13 UTC, load 243 at the start and 164 at the end, ac9-budget.test.ts alone: 2 failed (2).
+  FAIL the same budgets.json failure as run 1.
+  FAIL INCONCLUSIVE: AC9 200-file skill audit: INCONCLUSIVE 58240.9, 45931.8, 55449.0, 35604.6, 36022.6 ms against 66013.5 ms
+       (merge base median 44009 ms + 50%), load 206.8-192.2, 192.2-146.4, 146.4-113.5, 113.5-116.2, 116.2-159.2 (a reading, not a
+       budget result: off the reference Macs ...: thermal state is "fair", not "nominal"; load 206.8 at a run's start or end is
+       above the 18 cores); this is not a pass
+
+The pinned merge-base median: a probe before run 1 started the base hub on a temporary HOME and proposed the same 200-file
+skill six times over its socket, at a one-minute load of 173: 29036.0 (warm-up), 34237.6, 39237.8, 44008.9, 48473.1,
+47785.5 ms; the median of the last five, 44,009 ms, is BASE_MEDIAN_MS. It is a reading under load, not a reference-Mac number.

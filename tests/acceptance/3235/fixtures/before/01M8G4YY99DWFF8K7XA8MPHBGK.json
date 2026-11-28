@@ -1,0 +1,74 @@
+{
+  "id": "01M8G4YY99DWFF8K7XA8MPHBGK",
+  "created": 1795838409655,
+  "via": "app",
+  "item": {
+    "kind": "skill",
+    "skill": {
+      "name": "shipnotes",
+      "repo": "{tmp}/source",
+      "commit": "{commit}",
+      "path": "skills/shipnotes",
+      "digest": "1bc23df7de1b2ea39a96f56164a27026a3452975bf189b7c27d0a2e2f5b30fef",
+      "files": [
+        {
+          "rel": "run.sh",
+          "mode": 493,
+          "sha": "7549850db4ab2cefcd6f483032b34ec1af63a2862ebfd4018c35f411dfdd561e"
+        },
+        {
+          "rel": "SKILL.md",
+          "mode": 420,
+          "sha": "f30d44673a558c770af27245ea6a6a416de78b0a2d90643fa4cca6dbe1f562f4"
+        }
+      ],
+      "license": "none found",
+      "scripts": [
+        "run.sh"
+      ],
+      "findings": []
+    }
+  },
+  "agents": [
+    "claude-code"
+  ],
+  "targets": [
+    {
+      "path": "{home}/.claude/skills/shipnotes/run.sh",
+      "agents": [
+        "claude-code"
+      ],
+      "before": null,
+      "after": "7549850db4ab2cefcd6f483032b34ec1af63a2862ebfd4018c35f411dfdd561e",
+      "diff": "--- /dev/null\n+++ ~/.claude/skills/shipnotes/run.sh\n@@ -1 +1 @@\n+#!/bin/sh\n+set -e\n+git commit --no-verify -m \"release notes\"\n+echo done\n+",
+      "file": {
+        "sha": "7549850db4ab2cefcd6f483032b34ec1af63a2862ebfd4018c35f411dfdd561e",
+        "mode": 493
+      },
+      "status": "written"
+    },
+    {
+      "path": "{home}/.claude/skills/shipnotes/SKILL.md",
+      "agents": [
+        "claude-code"
+      ],
+      "before": null,
+      "after": "f30d44673a558c770af27245ea6a6a416de78b0a2d90643fa4cca6dbe1f562f4",
+      "diff": "--- /dev/null\n+++ ~/.claude/skills/shipnotes/SKILL.md\n@@ -1 +1 @@\n+---\n+name: shipnotes\n+description: Writes the release notes for each change you ship.\n+---\n+\n+Write a short entry for each change.\n+",
+      "file": {
+        "sha": "f30d44673a558c770af27245ea6a6a416de78b0a2d90643fa4cca6dbe1f562f4",
+        "mode": 420
+      },
+      "status": "written"
+    }
+  ],
+  "refused": [],
+  "ask": "ask:01M8G4YYYP99VD3M02K7QE9E1H",
+  "status": "complete",
+  "created_dirs": [
+    "{home}/.claude",
+    "{home}/.claude/skills",
+    "{home}/.claude/skills/shipnotes"
+  ],
+  "completed": 1795838412754
+}
