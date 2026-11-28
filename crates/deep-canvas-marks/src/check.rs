@@ -146,6 +146,12 @@ fn agents_word(origin: &Value) -> bool {
 /// file's (`table_cell_changed`, naming its row), and a table an agent wrote or a template's story
 /// number shown where a status or a reading is bound (`number_unsourced`: story numbers).
 pub fn numbers(doc: &Map<String, Value>) -> (Vec<Value>, Vec<Issue>) {
+    let (mut shown, issues) = traced(doc);
+    shown.extend(crate::sources::quoted(doc, &shown));
+    (shown, issues)
+}
+
+pub(crate) fn traced(doc: &Map<String, Value>) -> (Vec<Value>, Vec<Issue>) {
     let items = object_or_empty(doc.get("items"));
     let binds = ["status_bindings", "bound_values"].iter().any(|k| {
         doc.get(*k)
@@ -154,7 +160,8 @@ pub fn numbers(doc: &Map<String, Value>) -> (Vec<Value>, Vec<Issue>) {
     });
     let (mut shown, mut issues) = (Vec::new(), Vec::new());
     for (id, item) in items {
-        let found = crate::data::numbers(id, item, items);
+        let mut found = crate::data::numbers(id, item, items);
+        crate::sources::lines(item, items, &mut found);
         let mut named = Vec::new();
         for n in &found {
             let name = match n["row"].as_str() {
@@ -594,7 +601,10 @@ fn story_issues(items: &Map<String, Value>) -> Vec<Issue> {
 pub fn check(doc: &Map<String, Value>, look: &Look, min: Option<f64>) -> Vec<Issue> {
     let items = object_or_empty(doc.get("items"));
     let mut issues = roles_apart(items, look);
-    issues.extend(numbers(doc).1);
+    let (shown, unsourced) = traced(doc);
+    issues.extend(unsourced);
+    let listed = crate::sources::drawn(doc, &shown, Default::default());
+    issues.extend(crate::sources::issues(doc, &shown, &listed));
     issues.extend(story_issues(items));
     issues.extend(text_cap_issues(items));
     // #2031: a lit group's cap, nesting and light colors, each named.
