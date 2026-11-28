@@ -31,7 +31,9 @@ use crate::rows::{
 pub(crate) use crate::rows::{in_lane, page_title, RowDrawn, Shape};
 use crate::{bound, brand, canvas, cells, chrome, copy, show::CanvasPanel, states, text};
 
+mod cached_panels;
 mod layout;
+use cached_panels::CachedPanels;
 pub use layout::Layout;
 
 pub const SIDEBAR: &str = "deepbuild/sidebar";
@@ -3139,48 +3141,6 @@ pub(crate) fn words_box() -> Option<Entity<crate::words::WordsBox>> {
 }
 
 /// The window's root (#1461): the list and the page, ⌘K over them once views give it entries (#366).
-/// The dock draws each group's displayed panel as a cached view (#1482): a panel draws again only when it's notified or
-/// the window refreshes, so a pointer over the list draws nothing on the page beside it.
-struct CachedPanels;
-
-impl gpui_kit::base::dock::DockAreaRenderer for CachedPanels {
-    fn tab_group_renderer(&self) -> std::rc::Rc<dyn gpui_kit::base::dock::TabGroupRenderer> {
-        std::rc::Rc::new(CachedPanels)
-    }
-}
-
-impl gpui_kit::base::dock::TabGroupRenderer for CachedPanels {
-    fn render_tab_bar(
-        &self,
-        _: &gpui_kit::base::dock::TabGroupContext,
-        _: &mut Window,
-        _: &mut App,
-    ) -> AnyElement {
-        Empty.into_any_element()
-    }
-
-    fn render_active_panel(
-        &self,
-        panel: AnyView,
-        _: &gpui_kit::base::dock::TabGroupContext,
-        _: &mut Window,
-        cx: &mut App,
-    ) -> AnyElement {
-        // The list draws each of its rows as a cached view, and GPUI draws a cached view's own cached views again
-        // whenever it draws that view, so the list itself is not cached: it draws when a row does, and reuses the rest.
-        let list = panel
-            .clone()
-            .downcast::<Shipped>()
-            .is_ok_and(|panel| panel.read(cx).kind == Kind::Sidebar);
-        if list {
-            return div().size_full().child(panel).into_any_element();
-        }
-        panel
-            .cached(StyleRefinement::default().size_full())
-            .into_any_element()
-    }
-}
-
 pub struct Shell {
     pub dock: Entity<DockArea>,
     commands: Option<Entity<crate::commands::Palette>>,

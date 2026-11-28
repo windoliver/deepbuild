@@ -29,8 +29,7 @@
 // (./series.ts), so a bound value resolves at a frame's pinned log position.
 import { createPublicKey, randomUUID, verify as verifySignature } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs';
-import type { IncomingMessage, ServerResponse } from 'node:http';
-import { createServer, type AddressInfo, type Socket } from 'node:net';
+import { createServer, type Socket } from 'node:net';
 import { homedir } from 'node:os';
 import { stripTypeScriptTypes } from 'node:module';
 import { basename, dirname, isAbsolute, join, relative } from 'node:path';
@@ -72,6 +71,7 @@ import { AnswerTooLarge, declareSource, handleOf, nodeFetch, nodeHttp, osSecrets
 import { TERMINAL_PLANTS, TERMINAL_PROTOCOL, Terminals, type OpenSpec, type TerminalPlant, type TerminalTab } from './terminals.js';
 import { levelTracks, shellRefusal, type ShellInput } from './shell-plays.js';
 import type { ProjectTrust } from './trust.js';
+import { turnOff, turnOn, type RouteHost } from './routes.js';
 import type { ActionCall, ActionListing, ActionResult, Conformance, ExtensionHost, HookReply, HookRequest, InstallFrom, Load, Loaded, PackageTests, Refused, RunningEnvironment, RuntimeEnvironment } from './host-api.js';
 export type { ActionCall, ActionListing, ActionResult, ActionTarget, Conformance, ExtensionHost, HookReply, HookRequest, InstallFrom, Load, Loaded, PackageTests, Refused, RunningEnvironment, RuntimeEnvironment } from './host-api.js';
 
@@ -186,8 +186,6 @@ type ChannelKind = typeof CHANNEL_KINDS[number];
  * late at the deadline itself, so its other handlers' replies (a deny among them) still make the trip back.
  */
 const HOOK_GRACE_MS = 250;
-/** The largest request body a route takes. */
-const BODY = 1024 * 1024;
 /** The largest answer an outside call the host makes for a package takes. */
 const ANSWER = 1024 * 1024;
 const PAGE = 1000;
@@ -3077,70 +3075,9 @@ class Host implements ExtensionHost {
     return this.starting;
   }
 
-  async turnOn(id: string, routes: string[]): Promise<{ address: string }> {
-    const ext = this.exts.get(id);
-    if (!ext?.ask) throw Error(`${id} isn't loaded and running`);
-    const untrusted = `${id}'s project is no longer trusted, so it was stopped and not turned on`;
-    if (ext.server) throw Error(`${id} is already turned on`);
-    for (const route of routes) if (!ext.routes.has(route)) throw Error(`${id} registered no route ${route}`);
-    const chosen = new Set(routes);
-    // node:http loads only for a package turned on: about 2.7 MB of heap the hub's core otherwise never holds.
-    const { createServer: createHttpServer } = await import('node:http');
-    // A request has the call deadline to arrive whole; one that fails is that request's alone.
-    const server = createHttpServer({ requestTimeout: CALL_MS, connectionsCheckingInterval: 1000 }, (req, res) => void this.serve(ext, chosen, req, res).catch(() => res.destroy()));
-    await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
-    if (this.closed || this.exts.get(id) !== ext || !ext.ask || ext.server) {
-      await new Promise((resolve) => server.close(resolve));
-      throw Error(ext.server ? `${id} is already turned on` : `${id} stopped while it was turned on`);
-    }
-    ext.server = server;
-    // Revoked while it bound: unloading it closes this listener too.
-    if (await this.revoked(ext)) throw Error(untrusted);
-    return { address: `127.0.0.1:${(server.address() as AddressInfo).port}` };
-  }
-  private async serve(ext: Ext, chosen: Set<string>, req: IncomingMessage, res: ServerResponse): Promise<void> {
-    const path = (req.url ?? '/').split('?')[0]!;
-    const route = `${req.method} ${path}`;
-    if (!chosen.has(route) || !ext.ask || (await this.revoked(ext))) {
-      req.resume();
-      const chosenPath = [...chosen].some((r) => r.slice(r.indexOf(' ') + 1) === path);
-      res.writeHead(chosenPath ? 405 : 404).end();
-      return;
-    }
-    const chunks: Buffer[] = [];
-    let size = 0;
-    for await (const chunk of req) {
-      size += (chunk as Buffer).length;
-      if (size > BODY) {
-        res.writeHead(413, { connection: 'close' }).end();
-        req.destroy();
-        return;
-      }
-      chunks.push(chunk as Buffer);
-    }
-    // Its body took time to arrive: trust is checked again before the package sees it.
-    if (!ext.ask || (await this.revoked(ext))) {
-      res.writeHead(404).end();
-      return;
-    }
-    try {
-      const request = { method: req.method, path, headers: req.headers, body: Buffer.concat(chunks).toString('utf8') };
-      const answer = (await this.ask(ext, CALL_MS, route, 'route', { route, request })) as { status?: unknown; body?: unknown } | null;
-      const status = typeof answer?.status === 'number' && answer.status >= 200 && answer.status < 600 ? answer.status : 502;
-      res.writeHead(status, { 'content-type': 'text/plain; charset=utf-8' }).end(typeof answer?.body === 'string' ? answer.body : '');
-    } catch {
-      res.writeHead(502).end();
-    }
-  }
-  async turnOff(id: string, ext = this.exts.get(id)): Promise<void> {
-    const server = ext?.server;
-    if (!ext || !server) return;
-    delete ext.server;
-    await new Promise<void>((resolve) => {
-      server.close(() => resolve());
-      server.closeAllConnections();
-    });
-  }
+  private readonly routeHost: RouteHost = { exts: this.exts, closed: () => this.closed, revoked: (ext) => this.revoked(ext), ask: (ext, ms, what, method, params) => this.ask(ext, ms, what, method, params) };
+  async turnOn(id: string, routes: string[]): Promise<{ address: string }> { return turnOn(this.routeHost, id, routes); }
+  async turnOff(id: string, ext = this.exts.get(id)): Promise<void> { return turnOff(ext); }
 
   loadResult(id: string): Record<string, unknown> | undefined {
     const r = this.loadResults.get(id);

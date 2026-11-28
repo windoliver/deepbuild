@@ -24,6 +24,9 @@ use sha2::{Digest, Sha256};
 use crate::hub::{HubClient, HubError};
 use crate::states::{closes, handle, Table};
 
+mod hub_watch;
+pub use hub_watch::HubWatch;
+
 /// Once a session holds this many open asks, its further asks fold into one exception.
 pub const FOLD_AFTER: usize = 5;
 
@@ -61,56 +64,6 @@ const SLOWLY: u64 = 30_000;
 /// (#1461), so a short hiccup never flashes.
 pub const SHOW_AFTER: u64 = 400;
 pub const SHOW_FOR: u64 = 400;
-
-/// When to read the hub, and whether it answered the last read.
-#[derive(Debug, Default)]
-pub struct HubWatch {
-    /// Since when reads have failed, and when to try next.
-    down: Option<(u64, u64)>,
-    /// Since when the window has said the hub isn't answering, and since when it's been down.
-    shown: Option<(u64, u64)>,
-}
-
-impl HubWatch {
-    /// Reads at `now` unless the hub is down and its next try isn't due; `read` says whether it answered. Until a
-    /// down hub has been down [`SHOW_AFTER`], it's tried again at every tick.
-    pub fn tick(&mut self, now: u64, read: impl FnOnce() -> bool) {
-        if self.down.is_some_and(|(_, next)| now < next) {
-            return;
-        }
-        let answered = read();
-        // #1461's planted watch says the hub is down at the first read that gets no answer.
-        let first_miss = crate::plain::planted("down-at-first-miss");
-        self.down = (!answered).then(|| {
-            let since = self.down.map_or(now, |(since, _)| since);
-            let wait = match now - since {
-                gone if gone < SHOW_AFTER => 0,
-                gone if gone < SLOW_AFTER => RETRY,
-                _ => SLOWLY,
-            };
-            (since, now + wait)
-        });
-        match self.down {
-            Some((since, _))
-                if (first_miss || now - since >= SHOW_AFTER) && self.shown.is_none() =>
-            {
-                self.shown = Some((now, since));
-            }
-            None if self.shown.is_some_and(|(at, _)| now >= at + SHOW_FOR) => self.shown = None,
-            _ => {}
-        }
-    }
-
-    /// Whether the window says the hub isn't answering.
-    pub fn down(&self) -> bool {
-        self.shown.is_some()
-    }
-
-    /// Since when the hub it says isn't answering has been down.
-    pub fn since(&self) -> Option<u64> {
-        self.shown.map(|(_, since)| since)
-    }
-}
 
 /// The record as of one start ID and one `log_pos`.
 #[derive(Clone, Debug, Default)]
