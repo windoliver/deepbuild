@@ -22,7 +22,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { confirm, readTables, unshown } from './copy-table.mjs';
+import { confirm, readTables, TABLES, unshown } from './copy-table.mjs';
 
 const SOURCE = 'crates/deep-app/src';
 /** Calls whose arguments never reach the screen: logs, failures, assertions, key contexts, text matching. */
@@ -175,10 +175,10 @@ function rustFiles(dir) {
 }
 
 /** The lint's findings over the app's source under `root`. */
-export function lint(root) {
+export function lint(root, tablesRoot = root) {
   const found = [];
   const gated = featureOnly(root);
-  const { source } = readTables(root);
+  const { source } = readTables(tablesRoot);
   const top = join(root, SOURCE);
   for (const file of rustFiles(top)) {
     const rel = relative(root, file);
@@ -268,7 +268,8 @@ export function lint(root) {
 const main = () => {
   const args = process.argv.slice(2);
   const at = args.indexOf('--root');
-  const root = resolve(at >= 0 ? args[at + 1] : join(fileURLToPath(new URL('.', import.meta.url)), '..'));
+  const checkout = join(fileURLToPath(new URL('.', import.meta.url)), '..');
+  const root = resolve(at >= 0 ? args[at + 1] : checkout);
   if (args[0] === 'confirm') {
     const [, language, key, text] = args.filter((_, i) => i !== at && i !== at + 1 || at < 0);
     if (!language || !key) {
@@ -290,10 +291,11 @@ const main = () => {
     console.log('PASS copy release');
     return;
   }
-  const found = lint(root);
+  const tablesRoot = existsSync(join(root, TABLES)) ? root : checkout;
+  const found = lint(root, tablesRoot);
   for (const line of found) console.log(line);
   // A key a shipped language lacks, or holds stale, draws its English: listed here, failed only by the release check.
-  for (const f of unshown(readTables(root))) console.log(`listed copy: ${f.language} ${f.key}: ${f.said}`);
+  for (const f of unshown(readTables(tablesRoot))) console.log(`listed copy: ${f.language} ${f.key}: ${f.said}`);
   if (found.length) process.exit(1);
   console.log('PASS copy');
 };
