@@ -49,6 +49,7 @@ One page per module topic. Each decision names the file and the symbol it govern
 - [0007](0007-kept-pack-checks.md): a pack check's result kept in the store, what a taken row gives a core, and its counts
 - [0008](0008-scene-relations.md): the `scene.relations` check kind
 - [0010](0010-lane-lists-reasons.md): the lane lists in `scripts/lanes-lists.mjs`: why each entry runs alone, slow, timed or by hand
+- [0019](0019-moved-for-size-app-hook-packages.md): what the code moved for size said in comments: deep-app, deep-hook's tests, the extension host's routes and an ask's thread check
 
 ## Open
 

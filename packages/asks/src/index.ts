@@ -47,7 +47,7 @@ export type { AskKind, AsksPlant, BatchCard, BudgetLeft, Card, Change, Decision,
 export { subjectKey } from './decision-keys.js';
 
 export type { CardTarget, Target, TargetOrigin } from './targets.js';
-import type { Asks, AsksOptions, DecisionScope, InboxRow, Judgment, PlanInput, Step, StepCheck, Tally, ThreadMessage } from './api.js';
+import type { Asks, AsksOptions, DecisionScope, InboxRow, Judgment, PlanInput, Step, StepCheck, Tally } from './api.js';
 export type { AskSource, PlanInput, StepCheck, Step, Delivery, Tally, Judgment, DecisionScope, ThreadMessage, AsksOptions, InboxRow, Asks } from './api.js';
 import { askSources, doneYamlAsks, over, readJson } from './settings.js';
 export { askSources, draftAskSettings } from './settings.js';
@@ -57,6 +57,7 @@ import { ANSWER_FIELDS, channelMayAnswer, docOf, isAgent, picturesOf, PROVISIONA
 export { channelMayAnswer, type MayAnswer } from './answers.js';
 import { markStep, sameStep } from './steps.js';
 import { changedSince, type GitSaid } from './changes.js';
+import { readThreads } from './threads.js';
 
 /** Waits for every write to settle, then throws the first refusal: a write still under way never outlives the asks' lock. */
 async function allThrough(writes: readonly unknown[]): Promise<void> {
@@ -1953,33 +1954,7 @@ class AsksCore implements Asks {
    */
   private async readThreads(): Promise<void> {
     const threads = this.options.threads;
-    if (!threads) return;
-    for (const ask of this.open()) {
-      const thread = chatThread(ask.data);
-      if (!thread || ask.pending.moot) continue;
-      const check = String(ask.data.proves);
-      let messages: ThreadMessage[];
-      try {
-        messages = await threads.read(thread.link);
-      } catch (error) {
-        ask.missing = { check, reasons: [`the thread couldn't be read through the connector: ${(error as Error)?.message ?? String(error)}`], link: thread.link };
-        continue;
-      }
-      const you = String(ask.data.owner);
-      // Only your post since the task was raised: an old exchange in the thread never closes a new task.
-      const posted = messages.findIndex((m) => m.from === you && m.at >= ask.created);
-      if (posted < 0) { delete ask.missing; continue; }
-      const replies = messages.slice(posted + 1).filter((m) => m.from !== you);
-      if (replies.some((m) => typeof m.text === 'string' && m.text.includes(thread.expect))) {
-        ask.pending.moot = { because: 'thread_replied', link: thread.link };
-        continue;
-      }
-      const last = replies.at(-1);
-      ask.missing = {
-        check, link: thread.link,
-        reasons: [last ? `the last reply in the thread, ${JSON.stringify(String(last.text).slice(0, 200))}, doesn't contain ${JSON.stringify(thread.expect)}` : 'no reply in the thread since your post'],
-      };
-    }
+    if (threads) await readThreads(threads, this.open());
   }
 
   /** A provisional choice is offered again, pinned to the new commit, once a change touches what it decided. */
