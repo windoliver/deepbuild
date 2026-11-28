@@ -1,10 +1,11 @@
-// The twins lint (#1832): a planted twin kept as whole copied files goes stale as main moves, since the copy doesn't
-// move with it, so twins are kept as their wrong lines, in a lines.json at the top of the twin's folder, applied to the
-// file as the change holds it when the before lane runs (scripts/proof-runs.mjs, twinOverlay). This lists every twin a
-// suite's tests/acceptance/<suite>/twins.json names whose folder still holds any other file, as the lane lists files
-// (git's, less those it ignores): one `FAIL twins: <folder>: ...` line per twin, however many criteria name it, and
-// exit 1; or the one line `PASS twins`. A twins/ folder no twins.json names holds a suite's own fixtures, never a twin.
-// A twins.json the lane can't read is listed too. `--root <dir>` checks another checkout.
+// The twins lint (#1832, #3291): a twin kept as whole copied files goes stale as main moves, so twins are kept as their
+// wrong lines in a lines.json at the top of the twin's folder (scripts/proof-runs.mjs, twinOverlay). This lists every
+// twin a suite's twins.json names whose folder holds any other file, as the lane lists files: one `FAIL twins: <folder>:
+// ...` line per twin and exit 1, or `PASS twins`. A twins/ folder no twins.json names holds fixtures, never a twin; an
+// unreadable twins.json is listed. `--root <dir>` checks another checkout. `--listed`, as the lint lane runs it, passes
+// the twins scripts/whole-file-twins.json names that its copy at the merge base with origin/main names too, so the list
+// only shrinks as scripts/size-ratchet.mjs's ceilings do, and fails each entry whose folder holds no whole file.
+import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,7 +26,44 @@ try {
   blocked(`git cannot list the files of ${root}: ${String(error.message).split('\n')[0]}`);
 }
 
+const LIST = 'scripts/whole-file-twins.json';
+const listed = process.argv.includes('--listed');
+const parseList = (text, from) => {
+  const list = JSON.parse(text);
+  if (!Array.isArray(list) || !list.every((entry) => typeof entry === 'string')) throw Error(`${from} isn't a list of twin folders`);
+  return new Set(list);
+};
+const invalid = (where, error) => {
+  console.log(`INVALID twins: ${where} can't be read: ${String(error.message).split('\n')[0]}\n  Fix: Restore ${LIST}: a JSON list of the twin folders, tests/acceptance/<suite>/twins/<twin>, still kept as whole files.`);
+  process.exit(1);
+};
+let list = new Set();
+let base = null;
+let unbased = '';
+if (listed) {
+  try {
+    list = parseList(readFileSync(join(root, LIST), 'utf8'), LIST);
+  } catch (error) {
+    invalid(LIST, error);
+  }
+  const git = (...args) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 * 1024 * 1024 });
+  let at;
+  try {
+    at = git('merge-base', 'HEAD', 'origin/main').trim();
+  } catch {
+    unbased = '; no merge base with origin/main to compare the list with';
+  }
+  try {
+    if (at && git('ls-tree', '--name-only', at, '--', LIST).trim()) base = parseList(git('show', `${at}:${LIST}`), `${LIST} at the merge base`);
+    else if (at) unbased = `; the merge base holds no ${LIST} to compare with`;
+  } catch (error) {
+    invalid(`${LIST} at the merge base`, error);
+  }
+}
+
 const findings = [];
+const whole = new Map();
+const unread = new Set();
 for (const file of files.filter((path) => /^tests\/acceptance\/[^/]+\/twins\.json$/.test(path)).sort()) {
   const suite = file.slice(0, -'/twins.json'.length);
   let twins;
@@ -33,23 +71,36 @@ for (const file of files.filter((path) => /^tests\/acceptance\/[^/]+\/twins\.jso
     twins = JSON.parse(readFileSync(join(root, file), 'utf8'));
   } catch (error) {
     findings.push(`${file}: is not JSON (${String(error.message).split('\n')[0]})`);
+    unread.add(suite);
     continue;
   }
   // As the lane reads it (scripts/proof-runs.mjs, twinsOf): each criterion tag to a list of twin folder names.
   const shaped = twins && typeof twins === 'object' && !Array.isArray(twins) && Object.values(twins).every((names) => Array.isArray(names) && names.every((name) => typeof name === 'string' && /^[\w.-]+$/.test(name) && name !== '..' && name !== '.'));
   if (!shaped) {
     findings.push(`${file}: must map each criterion tag to a list of twin folder names`);
+    unread.add(suite);
     continue;
   }
   for (const name of [...new Set(Object.values(twins).flat())].sort()) {
     const folder = `${suite}/twins/${name}`;
-    const whole = files.filter((path) => path === folder || path.startsWith(`${folder}/`)).map((path) => path.slice(folder.length + 1) || name).filter((path) => path !== 'lines.json').sort();
-    if (whole.length) findings.push(`${folder}: holds ${whole.length === 1 ? 'a whole file' : `${whole.length} whole files`}, ${whole.join(', ')}`);
+    const held = files.filter((path) => path === folder || path.startsWith(`${folder}/`)).map((path) => path.slice(folder.length + 1) || name).filter((path) => path !== 'lines.json').sort();
+    if (held.length) whole.set(folder, `${folder}: holds ${held.length === 1 ? 'a whole file' : `${held.length} whole files`}, ${held.join(', ')}`);
   }
 }
 
+let left = 0;
+for (const [folder, finding] of whole) {
+  if (!listed) findings.push(finding);
+  else if (!list.has(folder)) findings.push(finding);
+  else if (base && !base.has(folder)) findings.push(`${finding}; ${LIST} at the merge base doesn't name it, and a twin is never added to the list`);
+  else left++;
+}
+const stale = listed ? [...list].filter((folder) => !whole.has(folder) && !unread.has(folder.replace(/\/twins\/.*$/, ''))).sort() : [];
+for (const folder of stale) findings.push(`${folder}: named in ${LIST}, but holds no whole file a twins.json names`);
+
 for (const finding of findings) console.log(`FAIL twins: ${finding}`);
-if (findings.length) console.log("  Fix: Keep each twin as its wrong lines in the twin's lines.json, converted by a blind redraft of its suite (tests/acceptance/1832/README.md, The line form).");
-else console.log('PASS twins');
+if (findings.length > stale.length) console.log("  Fix: Keep each twin as its wrong lines in the twin's lines.json, converted by a blind redraft of its suite (tests/acceptance/1832/README.md, The line form).");
+if (stale.length) console.log(`  Fix: Take each stale entry off ${LIST}: the list only shrinks.`);
+if (!findings.length) console.log(listed ? `PASS twins: ${left} whole-file twin${left === 1 ? '' : 's'} left, each named in ${LIST}${unbased}` : 'PASS twins');
 // exitCode, not exit(): piped stdout drains first, so a slow reader gets every finding.
 process.exitCode = findings.length ? 1 : 0;

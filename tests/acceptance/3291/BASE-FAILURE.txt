@@ -1,0 +1,180 @@
+# #3291 acceptance suite on the base
+# base commit: 254bdc87c7f2fc34676193463ee2e685b67a43df (Merge pull request #3751 from windoliver/claude/issue-3413-worded-before-finish)
+# node: v24.22.0
+# date: 2026-11-28T03:47:45Z
+# load (sysctl -n vm.loadavg) before: { 47.51 60.62 69.14 }
+# command: node --test tests/acceptance/3291/*.test.mjs (from the checkout root, node_modules installed)
+
+✖ #3291.84843b66 the design says in Wrong programs that a twin is kept as its wrong lines in lines.json, with an example of one find and its wrong lines (3.849042ms)
+✖ #3291.fefc1230 taking a twin off the list while its folder still holds a whole file fails the lint lane, naming the twin (827.303291ms)
+✖ #3291.fefc1230 converting a listed twin to lines.json and leaving it on the list fails the lint lane, naming the stale entry (815.078458ms)
+✖ #3291.fefc1230 converting a listed twin to lines.json and taking it off the list passes the lint lane (817.947167ms)
+✖ #3291.dd8c54d0 a scratch suite that adds a whole-file twin fails the lint lane, naming the twin folder and the file it copies (825.288375ms)
+✖ #3291.dd8c54d0 the same scratch suite with its twin kept as lines.json passes the lint lane (694.469666ms)
+✖ #3291.dd8c54d0 a scratch suite that adds a whole-file twin and puts it on the list still fails the lint lane, naming its folder and file (728.465375ms)
+✖ #3291.dd8c54d0 on this checkout the lint lane passes its twins command: every whole-file twin left is on the list (133.38875ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 0
+ℹ fail 8
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2547.13275
+
+✖ failing tests:
+
+test at tests/acceptance/3291/design.test.mjs:40:1
+✖ #3291.84843b66 the design says in Wrong programs that a twin is kept as its wrong lines in lines.json, with an example of one find and its wrong lines (3.849042ms)
+  AssertionError [ERR_ASSERTION]: the Wrong programs entry of "## How we know version 0 works" does not name lines.json
+  - **Wrong programs:** a test proves a criterion only if it fails on a wrong program that compiles and runs. For a fix, the merge base is that program. For new code it's the planted twin the criterion names, or a mutant: the trace lane mutates the lines the change adds, in the files it touches (cargo-mutants on the Rust crates, StrykerJS on the TypeScript), and runs the tagged tests against each mutant. A mutant no test kills, on a line a tagged test executes, is listed with its diff; a criterion whose tests kill no mutant and name no twin is INVALID for that claim, as a check that can't fail is. Mutation runs are local, in the release preflight and on demand, never on push. A planted wrong program lives in test code, or behind a build feature a release build refuses to compile, and is never chosen by an environment variable, so nothing outside a check can bend a shipped program.
+      at TestContext.<anonymous> (file://tests/acceptance/3291/design.test.mjs:42:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: "- **Wrong programs:** a test proves a criterion only if it fails on a wrong program that compiles and runs. For a fix, the merge base is that program. For new code it's the planted twin the criterion names, or a mutant: the trace lane mutates the lines the change adds, in the files it touches (cargo-mutants on the Rust crates, StrykerJS on the TypeScript), and runs the tagged tests against each mutant. A mutant no test kills, on a line a tagged test executes, is listed with its diff; a criterion whose tests kill no mutant and name no twin is INVALID for that claim, as a check that can't fail is. Mutation runs are local, in the release preflight and on demand, never on push. A planted wrong program lives in test code, or behind a build feature a release build refuses to compile, and is never chosen by an environment variable, so nothing outside a check can bend a shipped program.",
+    expected: /lines\.json/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3291/list.test.mjs:8:1
+✖ #3291.fefc1230 taking a twin off the list while its folder still holds a whole file fails the lint lane, naming the twin (827.303291ms)
+  AssertionError [ERR_ASSERTION]: the lint check of scripts/lanes.mjs runs no scripts/twins-lint.mjs command, so the lint lane never judges a twin
+      at twinsCommandsOfTheLintLane (file://tests/acceptance/3291/helpers.mjs:25:10)
+      at runTwinsCommands (file://tests/acceptance/3291/helpers.mjs:30:16)
+      at TestContext.<anonymous> (file://tests/acceptance/3291/list.test.mjs:11:18)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3291/list.test.mjs:16:1
+✖ #3291.fefc1230 converting a listed twin to lines.json and leaving it on the list fails the lint lane, naming the stale entry (815.078458ms)
+  AssertionError [ERR_ASSERTION]: the lint check of scripts/lanes.mjs runs no scripts/twins-lint.mjs command, so the lint lane never judges a twin
+      at twinsCommandsOfTheLintLane (file://tests/acceptance/3291/helpers.mjs:25:10)
+      at runTwinsCommands (file://tests/acceptance/3291/helpers.mjs:30:16)
+      at TestContext.<anonymous> (file://tests/acceptance/3291/list.test.mjs:20:18)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3291/list.test.mjs:25:1
+✖ #3291.fefc1230 converting a listed twin to lines.json and taking it off the list passes the lint lane (817.947167ms)
+  AssertionError [ERR_ASSERTION]: the lint check of scripts/lanes.mjs runs no scripts/twins-lint.mjs command, so the lint lane never judges a twin
+      at twinsCommandsOfTheLintLane (file://tests/acceptance/3291/helpers.mjs:25:10)
+      at runTwinsCommands (file://tests/acceptance/3291/helpers.mjs:30:16)
+      at TestContext.<anonymous> (file://tests/acceptance/3291/list.test.mjs:29:16)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3291/new-twin.test.mjs:7:1
+✖ #3291.dd8c54d0 a scratch suite that adds a whole-file twin fails the lint lane, naming the twin folder and the file it copies (825.288375ms)
+  AssertionError [ERR_ASSERTION]: the lint check of scripts/lanes.mjs runs no scripts/twins-lint.mjs command, so the lint lane never judges a twin
+      at twinsCommandsOfTheLintLane (file://tests/acceptance/3291/helpers.mjs:25:10)
+      at runTwinsCommands (file://tests/acceptance/3291/helpers.mjs:30:16)
+      at TestContext.<anonymous> (file://tests/acceptance/3291/new-twin.test.mjs:10:18)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3291/new-twin.test.mjs:15:1
+✖ #3291.dd8c54d0 the same scratch suite with its twin kept as lines.json passes the lint lane (694.469666ms)
+  AssertionError [ERR_ASSERTION]: the lint check of scripts/lanes.mjs runs no scripts/twins-lint.mjs command, so the lint lane never judges a twin
+      at twinsCommandsOfTheLintLane (file://tests/acceptance/3291/helpers.mjs:25:10)
+      at runTwinsCommands (file://tests/acceptance/3291/helpers.mjs:30:16)
+      at TestContext.<anonymous> (file://tests/acceptance/3291/new-twin.test.mjs:18:16)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3291/new-twin.test.mjs:21:1
+✖ #3291.dd8c54d0 a scratch suite that adds a whole-file twin and puts it on the list still fails the lint lane, naming its folder and file (728.465375ms)
+  AssertionError [ERR_ASSERTION]: the lint check of scripts/lanes.mjs runs no scripts/twins-lint.mjs command, so the lint lane never judges a twin
+      at twinsCommandsOfTheLintLane (file://tests/acceptance/3291/helpers.mjs:25:10)
+      at runTwinsCommands (file://tests/acceptance/3291/helpers.mjs:30:16)
+      at TestContext.<anonymous> (file://tests/acceptance/3291/new-twin.test.mjs:25:21)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3291/new-twin.test.mjs:28:1
+✖ #3291.dd8c54d0 on this checkout the lint lane passes its twins command: every whole-file twin left is on the list (133.38875ms)
+  AssertionError [ERR_ASSERTION]: the lint check of scripts/lanes.mjs runs no scripts/twins-lint.mjs command, so the lint lane never judges a twin
+      at twinsCommandsOfTheLintLane (file://tests/acceptance/3291/helpers.mjs:25:10)
+      at runTwinsCommands (file://tests/acceptance/3291/helpers.mjs:30:16)
+      at TestContext.<anonymous> (file://tests/acceptance/3291/new-twin.test.mjs:30:16)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+# exit: 1
+# load after: { 46.91 60.27 68.97 }
