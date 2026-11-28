@@ -4,7 +4,7 @@
 
 A package is a folder: `deepbuild.json`, its manifest in the one package envelope (an `owner/name` ID, a version, the digest of its files and, when signed, its publisher's key and signature), and its code: `index.ts` for TypeScript, or an executable `main` that speaks JSON-RPC 2.0 on stdio in any language. Every package outside DeepBuild's signed release runs sandboxed, out of process, whoever wrote it. Each method below is marked with the release it arrives in; a preview method can still change before a shipped piece of its release calls it.
 
-The installer refuses a package whose digest isn't its files', whose signature doesn't verify, or whose key isn't the one trusted for it; one that replaces a piece of the trusted ring (`app-shell`, `canvas-core`, `supervisor`, `installer`) or the done gate; one that conflicts with an installed package (`conflicts`); one that registers a check kind an installed package holds without declaring it `replaces` it; and one that runs on a kernel contract version (`kernel`) the kernel doesn't publish.
+The installer refuses a package whose digest isn't its files', whose signature doesn't verify, or whose key isn't the one trusted for it; one that replaces a piece of the trusted ring (`app-shell`, `canvas-core`, `supervisor`, `installer`) or the done gate; one that conflicts with an installed package (`conflicts`); one that registers a check kind an installed package holds without declaring it `replaces` it; and one that runs on a contract version (`kernel`) the core doesn't publish.
 
 ## Two worked examples
 

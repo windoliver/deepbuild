@@ -257,8 +257,6 @@ async function checkCommand(options) {
 
 // The hook every recorded session runs: it keeps the payload byte for byte and answers a permission
 // request with allow, so a scripted session never waits on a dialog, unless the scenario records the dialog itself.
-// It keeps the session's own inbox address, the path Claude Code exports to its hooks (#3405), and never the token
-// beside it. A SendMessage goes only to the address `<dir>/allow-to` names, so a recorded session messages no other.
 function hookCommand(dir) {
   const raw = readFileSync(0, 'utf8');
   const inbox = process.env.CLAUDE_CODE_MESSAGING_SOCKET;
@@ -270,7 +268,6 @@ function hookCommand(dir) {
   else if (payload.hook_event_name === 'PermissionRequest' && !existsSync(join(dir, 'dialog'))) process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'allow' } } }));
   return 0;
 }
-// Each recorded hook call, in the order it came, with the environment the hook kept.
 const recordedCalls = (dir) => lines(join(dir, 'payloads.jsonl')).flatMap(({ at, raw, env }) => { try { return [{ at, payload: JSON.parse(raw), ...(env ? { env } : {}) }]; } catch { return []; } });
 
 const allowed = ['HOME', 'USER', 'LOGNAME', 'SHELL', 'PATH', 'TMPDIR', 'LANG', 'LC_ALL', 'LC_CTYPE', 'CLAUDE_CONFIG_DIR', 'CODEX_HOME'];
@@ -336,7 +333,6 @@ async function session({ argv, cwd, dir, terminal, steps, startAfter, env = {} }
           if (/❯Yes,Itrustthisfolder/.test(dialog)) { child.stdin.write('\r'); trust.done = true; }
           else if (Date.now() - (trust.moved ?? 0) > 800) { child.stdin.write('\x1b[B'); trust.moved = Date.now(); }
         }
-        // The development channels' warning (#3405): accept, never exit.
         const channels = text.slice(text.lastIndexOf('localchanneldevelopmentonly'));
         if (!trust.channels && text.includes('localchanneldevelopmentonly') && /Entertoconfirm/.test(channels) && Date.now() - (trust.channelsSeen ??= Date.now()) > 800) {
           if (/❯(?:\d+\.)?(?!Exit)[A-Za-z]/.test(channels)) { child.stdin.write('\r'); trust.channels = true; }
@@ -369,7 +365,6 @@ async function session({ argv, cwd, dir, terminal, steps, startAfter, env = {} }
         for (const { pid } of step.signal ? targets.slice(0, 1) : targets) try { process.kill(pid, step.signal ?? 'SIGKILL'); } catch {}
         await sleep(2000);
       }
-      // A file the step writes, such as the channel server's trigger, then the turns it starts.
       if (step.write) writeFileSync(step.write[0], step.write[1]);
       if (step.wait) await sleep(step.wait);
     }
@@ -460,18 +455,12 @@ const CLAUDE_SCENARIOS = [
   // A file the session watches changes on disk (#3136): FileChanged's matcher names a file in the session's folder, as
   // #120's ticker is named, and a shell call appends to it.
   { name: 'file-changed', watch: 'ticker.txt', steps: [{ type: 'Use the Bash tool to run: echo tick >> ticker.txt' }, { wait: 5000 }] },
-  // A message between two sessions on one machine (#3405): the sender messages the idle receiver at the inbox address
-  // the receiver's hooks were given, and the receiver's next turn starts from it.
   { name: 'peer-message-terminal', peer: true },
-  // A channel's event (#3405): a server of our own (scripts/corpus-channel.mjs) behind the development flag pushes one
-  // event into the idle session, which starts a turn.
   { name: 'channel-event', mcp: (dir) => ({ 'corpus-channel': { type: 'stdio', command: process.execPath, args: [join(root, 'scripts/corpus-channel.mjs'), dir] } }),
     args: ['--dangerously-load-development-channels', 'server:corpus-channel'],
     steps: (dir) => [{ type: 'Reply with only the word ready.' }, { write: [join(dir, 'fire'), 'Reply with only the word ok-channel.'] }, { stops: 1, ms: 180_000 }, { wait: 3000 }] },
 ];
 
-// Two sessions, each in a folder of its own with the recorder's hook: the receiver idles after its first turn, then
-// the sender messages it once at its address, and the calls of both are kept in the order they came.
 async function peerSessions(dir, bin, hooks) {
   const started = (_, payloads) => payloads.some(({ hook_event_name: hook }) => hook === 'SessionStart');
   const setup = (sub) => {

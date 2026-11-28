@@ -57,6 +57,7 @@ import { briefing, headOf, loadsOf } from './session-facts.js';
 import { toolLoad } from './tool-load.js';
 
 import { GateRunner, type KeptRow } from './gate-runner.js';
+import { loopHoldFor, resolvePeerSender } from './peer-sender.js';
 import { Siblings } from './siblings.js';
 import { groupUnder } from './children.js';
 import { deepHook, repoOf, rootOf, type Root } from './paths.js';
@@ -950,7 +951,7 @@ export class Core {
       adopt: async (bytes) => { await this.control.stored(await this.store.connect({ role: 'agent', session: 'unknown' }).put({ bytes, kind: 'file', source: 'unrecorded', redaction: 'unknown', license: { name: 'unknown', allows: [] } }), 'a file of unknown origin'); },
       send: (request, boundary) => this.store.send(request, boundary),
       raise: (source, ask, plan) => this.asks.raise(this.connection('core'), source, ask, plan),
-      fetched: (sha) => this.libraries?.fetchedFile(sha), table: async (sha, record) => { await mkdir(join(this.root.evidence, 'tables'), { recursive: true }); await writeFile(join(this.root.evidence, 'tables', `${sha}.json`), JSON.stringify(record)); }, row: (job, running) => this.state.jobShown(job, running), reserve: (run, usd, step) => this.ledger.reserveCovering(this.connection('core'), run, usd, step), charge: (run, usd) => this.ledger.charge(this.connection('core'), run, usd), approve: (ask, budget) => this.ledger.approveOn(this.connection('core'), ask, budget),
+      fetched: (sha) => this.libraries?.fetchedFile(sha), readTable: (sha) => { try { return JSON.parse(readFileSync(join(this.root.evidence, 'tables', `${sha}.json`), 'utf8')) as Record<string, unknown>; } catch { return undefined; } }, table: async (sha, record) => { await mkdir(join(this.root.evidence, 'tables'), { recursive: true }); await writeFile(join(this.root.evidence, 'tables', `${sha}.json`), JSON.stringify(record)); }, row: (job, running) => this.state.jobShown(job, running), reserve: (run, usd, step) => this.ledger.reserveCovering(this.connection('core'), run, usd, step), charge: (run, usd) => this.ledger.charge(this.connection('core'), run, usd), approve: (ask, budget) => this.ledger.approveOn(this.connection('core'), ask, budget),
     });
     this.libraries = new Libraries({
       root: this.root.dir, now: this.now, host: () => this.extensions,
@@ -1597,8 +1598,7 @@ export class Core {
           this.state.midTurn.delete(meta.session);
           // The prompt that opens a turn is its origin, and ends the grace window a loop's last stop started (#965).
           live.turnFrom = String(data.from);
-          if (typeof data.server === 'string') live.turnServer = data.server;
-          else delete live.turnServer;
+          if (typeof data.server === 'string') live.turnServer = data.server; else delete live.turnServer;
           this.siblings.turn(meta.session, draft.id, live.turnFrom, this.now(), live.turnServer);
           // An adapter with no route to hold a prompt leaves the loop rule watch-only for its session, which says so once (#352).
           if (HOLDS_NO_PROMPT.has(meta.agent) && this.siblings.looping(meta.session) && !this.loopWatched.has(meta.session)) {
@@ -1856,26 +1856,19 @@ export class Core {
         const entry = !meta.fields?.prompt_id || !session ? undefined : meta.host ? await this.hosts.sessions.promptEntry(meta.host, meta.transcript, meta.fields.prompt_id) : (await turnFrom(session, meta.fields.prompt_id, this.transcriptReader))[0];
         // A Codex subagent's prompt carries the root's session ID with an agent_id: no message of yours, nor the root's turn (#39).
         if (childPrompt(meta)) { data.from = 'subagent'; continue; }
-        let from = foreign ? 'unknown' : String(this.mapped(meta, draft, { ...meta.fields }, entry ? [entry] : [])?.from ?? data.from);
+        const mapped = foreign ? undefined : this.mapped(meta, draft, { ...meta.fields }, entry ? [entry] : []);
+        let from = String(mapped?.from ?? data.from);
         if (from === 'unknown' && !foreign && this.options.plant === 'unplaced-is-person') from = 'person';
         // The planted wrong programs take an automatic continuation for yours, or read the resume prompt by its look.
         if (from === 'continuation' && this.options.plant === 'continuation-as-person') from = 'person';
         if (this.options.plant === 'continuation-by-likeness' && String(data.text).startsWith('The app was quit while you were working')) from = 'continuation';
-        data.from = from;
-        live.from = from;
-        // A channel's event names its server, as the entry gives it (#3405).
-        const server = this.mapped(meta, draft, { ...meta.fields }, entry ? [entry] : [])?.server;
-        if (from === 'channel' && typeof server === 'string' && server) data.server = server;
-        else delete data.server;
-        // Another session's message names its sender: the live session that reported the address the entry's origin
-        // names (#3405), never the message's text. One no live session reported names none.
-        const sender = from === 'session' && !foreign ? await this.senderOf(meta.session, entry) : undefined;
-        if (sender) data.sender = sender;
-        else delete data.sender;
-        // The loop rule names and holds this sender (#352, #3405), as the record names it.
+        data.from = live.from = from;
+        const server = from === 'channel' && typeof mapped?.server === 'string' && mapped.server ? mapped.server : undefined;
+        if (server) data.server = server; else delete data.server;
+        const sender = from === 'session' && !foreign ? await resolvePeerSender((q, p) => this.record.raw(q, p), this.state.sessions, meta.session, entry, this.options.plant) : undefined;
+        if (sender) data.sender = sender; else delete data.sender;
         if (!draft.queued) live.turnSender = sender;
-        // The origin channel and the fields beside it are user.ask@2's (#3405).
-        if (from === 'channel' || data.sender !== undefined || data.server !== undefined) draft.v = 2;
+        if (from === 'channel' || sender !== undefined || server !== undefined) draft.v = 2;
         // The app's own resume prompt (#82): the stop it leads to gets one automatic continue while asks are open.
         if (from === 'continuation' && live.agent === 'claude-code') { live.resumed = true; this.judging.nudgeable.add(meta.session); this.askingSoon(); }
         // A subagent's report or a command's end notice ends its wait: the call the notice names, or else the oldest
@@ -2311,7 +2304,7 @@ export class Core {
             this.unsaved.set(said, this.appendReading(meta.session, meta.agent, reading).catch((error: unknown) => { process.stderr.write(`deep hub: ${meta.session}'s reading was not recorded: ${error instanceof Error ? error.message : String(error)}\n`); }).finally(() => this.unsaved.delete(said)));
           }
         }
-        const held = await this.loopHeld(meta);
+        const held = await loopHoldFor(meta, this.state.live.get(meta.session), this.state.sessions.get(meta.session), this.siblings, this.transcriptReader, (q, p) => this.record.raw(q, p), this.state.sessions, this.options.plant);
         if (held) return { block: held, message: held.split(':')[0]! };
         const status = await this.statusReply(meta, from);
         for (const [ask, handed] of [...this.delivery.handed]) if (handed.session === meta.session) await this.delivery.unwoken(meta.session, ask, prompt);
@@ -2407,43 +2400,6 @@ export class Core {
     r.waiter.give({ session, text });
     r.waiter = undefined;
     return true;
-  }
-  /**
-   * Whether the loop rule holds this prompt (#352): its origin as the hook mapped it, and the session whose message
-   * started it as the prompt's transcript entry names it (Claude Code's origin.from), never the message's text.
-   */
-  private async loopHeld(meta: HookMeta): Promise<string | undefined> {
-    const live = this.state.live.get(meta.session);
-    const session = this.state.sessions.get(meta.session);
-    if (!live?.turnFrom || childPrompt(meta)) return undefined;
-    return this.siblings.held(meta, live.turnFrom, async () => {
-      if (live.turnSender) return live.turnSender;
-      const entry = session && meta.fields?.prompt_id ? (await turnFrom(session, meta.fields.prompt_id, this.transcriptReader))[0] : undefined;
-      return this.senderOf(meta.session, entry);
-    }, live.turnServer);
-  }
-  /**
-   * The session whose message a prompt's transcript entry names (#3405): Claude Code writes the sender's inbox address,
-   * `uds:<path>`, which is the path a live session reported at its SessionStart; the desktop app writes `local_<id>`,
-   * which names a session only when it is one the hub knows and is live. Nothing is read from the message's text.
-   */
-  private async senderOf(receiver: string, entry: Obj | undefined): Promise<string | undefined> {
-    const from = entry && isObj(entry.origin) && typeof entry.origin.from === 'string' ? entry.origin.from : undefined;
-    if (!from) return undefined;
-    const live = (id: string | undefined): string | undefined => (id && id !== receiver && this.state.sessions.get(id)?.ended !== true ? id : undefined);
-    const address = /^uds:(.+)$/.exec(from)?.[1];
-    if (address) {
-      // The newest start that reported the address, of a session with no end since: a session whose turn ended is
-      // still live (the record's finished), one whose SessionEnd came is not.
-      const [row] = (await this.record.raw(`SELECT e.session_id AS id FROM events e WHERE e.kind = 'session.start' AND json_extract(e.data, '$.inbox') = ? AND NOT EXISTS (SELECT 1 FROM events x WHERE x.session_id = e.session_id AND x.kind = 'session.end' AND x.log_pos > e.log_pos) ORDER BY e.log_pos DESC LIMIT 1`, [address])) as { id: string }[];
-      // The planted wrong program names another live session for an address none reported.
-      if (!row && this.options.plant === 'names-other-session-for-unreported-address') return [...this.state.sessions.values()].find((s) => s.id !== receiver && !s.ended)?.id;
-      return live(row?.id);
-    }
-    const local = /^local_(.+)$/.exec(from)?.[1];
-    if (!local) return undefined;
-    const [row] = (await this.record.raw(`SELECT e.session_id AS id FROM events e WHERE e.kind = 'session.start' AND e.session_id = ? AND NOT EXISTS (SELECT 1 FROM events x WHERE x.session_id = e.session_id AND x.kind = 'session.end' AND x.log_pos > e.log_pos) ORDER BY e.log_pos DESC LIMIT 1`, [local])) as { id: string }[];
-    return live(row?.id);
   }
   /**
    * The messages typed mid-turn since the last acknowledgement (#340): the agent is asked to acknowledge each in one

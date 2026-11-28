@@ -1,0 +1,1 @@
+{ "alone": true, "why": "timing: ac6-first-reply reads a fresh core's first reply's time; ac1-second-core and ac4-hub each hold a canvas core through the 21 shipped packs' checks for minutes, and ac4-hub starts a hub that runs deep-show and deep-hook from this checkout's target/" }
