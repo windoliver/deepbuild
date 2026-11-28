@@ -61,6 +61,10 @@ export function deep(home: string, cwd: string, args: readonly string[]): Promis
 /** `between` runs with the hub stopped, before it starts again. */
 export interface Hub { restart: (env?: Record<string, string>, between?: () => void | Promise<void>) => Promise<void>; exited: (within?: number) => Promise<void> }
 
+export function removeHome(home: string): void {
+  rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+}
+
 /** Runs `body` against a hub started on a temp home with `env` added, then stops the hub and removes the home. */
 export async function withHub(body: (root: string, home: string, hub: Hub) => Promise<void>, env: Record<string, string> = {}): Promise<void> {
   const home = realpathSync(mkdtempSync('/tmp/hub-315-'));
@@ -95,7 +99,7 @@ export async function withHub(body: (root: string, home: string, hub: Hub) => Pr
     await body(root, home, { restart: async (extra = {}, between) => { await stop(); await between?.(); await start(extra); }, exited });
   } finally {
     await stop();
-    rmSync(home, { recursive: true, force: true });
+    removeHome(home);
   }
 }
 
