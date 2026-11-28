@@ -9,7 +9,7 @@
   "admitted": {
    "check": [],
    "rewrite": {
-    "sha256": "a95f04a3d51e58e1dcd270e46baf7a5e3449cd33e07f76a9b88d138dfbde92c8"
+    "sha256": "ee2d1cb4c23404a21c363efe1acd7ed058d243e36e42e8102894b2e22b6d7890"
    }
   },
   "memory_grows": {
@@ -25,7 +25,7 @@
     }
    ],
    "rewrite": {
-    "sha256": "631b660294dc3c2fd1c405b7d1b5a5765ebf88b98300926ec7e328e9460c48ea"
+    "sha256": "d277f2f2acabd5a4ac60d855e6fa671ebc7a38ba9e30e24e2809e1b071e85d90"
    }
   },
   "import": {
@@ -40,7 +40,7 @@
     }
    ],
    "rewrite": {
-    "sha256": "625d580d1ded8b792bdcfb6de59b3eb0a6c484a58be933324aa07ec1efcdb5f1"
+    "sha256": "265d6bf4f6088134241a0c92c8fa8864fadc737c3d064ee43024d0fb06fc2c09"
    }
   },
   "vector_in_function_1500": {
