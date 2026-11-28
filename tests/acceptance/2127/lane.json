@@ -1,0 +1,1 @@
+{ "alone": true, "why": "shared: the sandbox log stream, since sandbox.test.ts opens the supervisor and starts bubblewrap runs whose denials it reads off the record, one racing 5000 connects against a loopback listener; and git-grants.test.ts sets process.platform to linux for its whole worker while its runner checks out a commit" }
