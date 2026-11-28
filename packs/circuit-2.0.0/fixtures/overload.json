@@ -1,0 +1,282 @@
+{
+  "name": "overload",
+  "item": {
+    "kind": "logic@1",
+    "params": {
+      "program": "2957353ab40027c310ef2028012efedd3a51f3dde9e0cf9b0c33426a75c53e64",
+      "step_rate": 10,
+      "reads": [
+        "reset"
+      ],
+      "writes": {
+        "v": {
+          "type": "f64",
+          "count": 3
+        },
+        "i_rms": {
+          "type": "f64",
+          "count": 5
+        },
+        "i": {
+          "type": "f64",
+          "count": 5
+        },
+        "p": {
+          "type": "f64",
+          "count": 5
+        },
+        "r": {
+          "type": "f64",
+          "count": 5
+        },
+        "on": {
+          "type": "i32",
+          "count": 5
+        },
+        "energy": {
+          "type": "f64",
+          "count": 5
+        },
+        "kwh": {
+          "type": "f64",
+          "count": 5
+        },
+        "drift": {
+          "type": "f64",
+          "count": 5
+        },
+        "drift_x": {
+          "type": "f64",
+          "count": 5
+        },
+        "heat": {
+          "type": "f64",
+          "count": 5
+        },
+        "residual": {
+          "type": "f64",
+          "count": 5
+        },
+        "i2_rms": {
+          "type": "f64",
+          "count": 5
+        },
+        "i2": {
+          "type": "f64",
+          "count": 5
+        }
+      },
+      "circuit": {
+        "nodes": [
+          "neutral",
+          "live",
+          "board"
+        ],
+        "parts": [
+          {
+            "id": "mains",
+            "kind": "source_ac",
+            "from": "neutral",
+            "to": "live",
+            "v_rms": 230,
+            "f": 50
+          },
+          {
+            "id": "breaker",
+            "kind": "breaker",
+            "from": "live",
+            "to": "board",
+            "rating": 16,
+            "curve": "B",
+            "reset_by": "reset"
+          },
+          {
+            "id": "heater",
+            "kind": "load",
+            "from": "board",
+            "to": "neutral",
+            "p_rated": 2000,
+            "v_rated": 230
+          },
+          {
+            "id": "oven",
+            "kind": "load",
+            "from": "board",
+            "to": "neutral",
+            "p_rated": 3000,
+            "v_rated": 230
+          },
+          {
+            "id": "kettle",
+            "kind": "load",
+            "from": "board",
+            "to": "neutral",
+            "p_rated": 1000,
+            "v_rated": 230
+          }
+        ]
+      },
+      "budget": {
+        "fuel": 10000000
+      }
+    }
+  },
+  "controls": {
+    "reset": {
+      "kind": "slider"
+    }
+  },
+  "track": [
+    {
+      "t": 63927360000,
+      "seq": 1,
+      "control": "reset",
+      "value": 1,
+      "writer": "you",
+      "player": 1
+    }
+  ],
+  "steps": 1222,
+  "expect": {
+    "arrays": {
+      "0": {
+        "i_rms": [
+          26.08695652173913,
+          26.08695652173913,
+          8.695652173913043,
+          13.043478260869565,
+          4.3478260869565215
+        ],
+        "p": [
+          6000,
+          0,
+          2000,
+          3000,
+          1000
+        ],
+        "on": [
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "heat": [
+          0,
+          0.004426839243133152,
+          0,
+          0,
+          0
+        ]
+      },
+      "605": {
+        "on": [
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "heat": [
+          0,
+          1.6901078638516733,
+          0,
+          0,
+          0
+        ]
+      },
+      "606": {
+        "i_rms": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "p": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "on": [
+          1,
+          0,
+          1,
+          1,
+          1
+        ],
+        "heat": [
+          0,
+          1.6872933634804013,
+          0,
+          0,
+          0
+        ]
+      },
+      "905": {
+        "on": [
+          1,
+          0,
+          1,
+          1,
+          1
+        ],
+        "heat": [
+          0,
+          1.025102237647475,
+          0,
+          0,
+          0
+        ]
+      },
+      "906": {
+        "i_rms": [
+          26.08695652173913,
+          26.08695652173913,
+          8.695652173913043,
+          13.043478260869565,
+          4.3478260869565215
+        ],
+        "on": [
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "1219": {
+        "on": [
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "1220": {
+        "i_rms": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "on": [
+          1,
+          0,
+          1,
+          1,
+          1
+        ]
+      }
+    },
+    "tolerance": {
+      "abs": 1e-12,
+      "rel": 1e-9
+    }
+  },
+  "answer": "The three loads take 2,000 + 3,000 + 1,000 = 6,000 W at 230 V: 26.087 A, 1.6304 times the breaker's 16 A, so its heat after n steps of 0.1 s is 1.6304² × (1 − e^(−0.1n/60)) = 2.6583 (1 − e^(−n/600)), which reaches the opening heat 1.69 after 600 × ln(2.6583 ÷ (2.6583 − 1.69)) = 605.93 steps: the breaker opens at step 606 (60.6 s), the first step it starts with that heat. Open, it carries nothing and cools by e^(−1/600) a step: 30 s later, at step 906, its heat is 1.0250, and the reset turns on there. It closes with that heat, so it reaches 1.69 again after 600 × ln((2.6583 − 1.0250) ÷ (2.6583 − 1.69)) = 313.7 steps and opens at step 1,220; a breaker reset cold would hold to step 906 + 606."
+}

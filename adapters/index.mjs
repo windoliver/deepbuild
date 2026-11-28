@@ -101,11 +101,14 @@ function call(facts, payload) {
 // agent's own app writes, or a field of the transcript entries the prompt joins to.
 function origin(rule, payload, transcript) {
   const entries = rule.join ? transcript.filter((one) => get(one, rule.join.transcript) !== undefined && get(one, rule.join.transcript) === payload[rule.join.payload]) : [];
-  const holds = ({ prompt, match }) => (prompt !== undefined ? typeof payload.prompt === 'string' && payload.prompt.startsWith(prompt)
-    : match !== undefined && entries.some((entry) => Object.entries(match).every(([path, value]) => get(entry, path) === value)));
+  const matching = (match) => entries.find((entry) => Object.entries(match).every(([path, value]) => get(entry, path) === value));
+  const holds = ({ prompt, match }) => (prompt !== undefined ? typeof payload.prompt === 'string' && payload.prompt.startsWith(prompt) : match !== undefined && matching(match) !== undefined);
   const index = (rule.rules ?? []).findIndex(holds);
-  return index < 0 ? { from: rule.otherwise, rule: pointer('mapping', 'UserPromptSubmit', 'origin', 'otherwise') }
-    : { from: rule.rules[index].from, rule: pointer('mapping', 'UserPromptSubmit', 'origin', 'rules', index) };
+  if (index < 0) return { from: rule.otherwise, rule: pointer('mapping', 'UserPromptSubmit', 'origin', 'otherwise') };
+  const found = rule.rules[index];
+  const entry = found.match ? matching(found.match) : undefined;
+  const data = Object.fromEntries(Object.entries(found.data ?? {}).map(([field, path]) => [field, get(entry, path)]).filter(([, value]) => typeof value === 'string' && value));
+  return { from: found.from, data, rule: pointer('mapping', 'UserPromptSubmit', 'origin', 'rules', index) };
 }
 
 // A turn no prompt started (a Codex goal's continuation): the user message that opens it in the
@@ -208,7 +211,7 @@ function map(facts, payload, transcript) {
     // A prompt whose payload names a subagent (the common template's `subagent`) is a child's, which its parent wrote:
     // never yours, as the core reads a Codex child's prompt (#39).
     const found = common.subagent ? { from: 'subagent', rule: pointer('mapping', 'common', 'subagent') } : origin(rule.origin, payload, transcript);
-    Object.assign(event, { data: { ...common, from: found.from, ...fill(rule.data, payload) }, rule: found.rule });
+    Object.assign(event, { data: { ...common, from: found.from, ...found.data, ...fill(rule.data, payload) }, rule: found.rule });
   }
   if (rule.call) {
     const found = call(facts, payload);

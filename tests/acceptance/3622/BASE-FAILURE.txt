@@ -1,0 +1,256 @@
+# #3622 acceptance suite at the base 4471593f (no vendor/gpui-fast* trees), run once on 2026-11-27:
+# node --test tests/acceptance/3622/{ac1-pinned,ac2-plants,ac3-objc2-metal,ac4-retired,wrong}.test.mjs
+# 8 criterion tests fail for the missing trees; the 4 wrong-program tests pass.
+
+✖ AC1 #3622.fb741481 vendor/gpui-fast, vendor/gpui-fast-apple and vendor/gpui-fast-macos are pinned at 0.1.19 (5.398583ms)
+✖ AC1 #3622.fb741481 every vendored file that differs from its pristine 0.1.19 release has a row naming its issue, test and removal condition (4082.900916ms)
+✖ AC1 #3622.fb741481 node scripts/vendor-rebase.mjs check passes, against the pristine 0.1.19 crates.io releases (4.766042ms)
+✖ AC2 #3622.f8db2d26 a planted unmarked hunk in a vendored gpui-fast file, a changed file with no row and a 9-line hunk over budget each fail check, naming file and line (2632.302667ms)
+✖ AC3 #3622.f04efb4a no metal-rs import remains in vendor/gpui-fast-apple (4.013ms)
+✖ AC3 #3622.f04efb4a every carried file ported to objc2-metal compiles against gpui-fast-apple 0.1.19 (3106.57725ms)
+✖ AC4 #3622.0face0d7 each row the base carries on gpui-pre is carried onto 0.1.19, or retired for 0.1.19 naming the upstream change (7.724917ms)
+✖ AC4 #3622.0face0d7 a planted removal of a row 0.1.19 does not cover fails check, naming its carried file (3054.841458ms)
+# plant: an unmarked hunk in a vendored gpui-fast file with a row at vendor/gpui-fast/src/_accessibility.rs:6; check exit 1
+# plant: a changed file with no row at vendor/gpui-fast-macos/src/display.rs:6; check exit 1
+# plant: a marked 9-line hunk over budget at vendor/gpui-fast-apple/src/dispatcher.rs:6; check exit 1
+# plant: row #1 at vendor/gpui-pre-apple/upstream/README.md:7 removed, carried in vendor/gpui-fast/src/_accessibility.rs; check exit 1
+# plant: an unmarked hunk in a vendored gpui-fast file with a row at vendor/gpui-fast/src/_accessibility.rs:6; check exit 1
+# plant: a changed file with no row at vendor/gpui-fast-macos/src/display.rs:6; check exit 1
+# plant: a marked 9-line hunk over budget at vendor/gpui-fast-apple/src/dispatcher.rs:6; check exit 1
+# plant: row #1 at vendor/gpui-pre-apple/upstream/README.md:7 removed, carried in vendor/gpui-fast/src/_accessibility.rs; check exit 1
+# plant: an unmarked hunk in a vendored gpui-fast file with a row at vendor/gpui-fast/src/_accessibility.rs:6; check exit 0
+# plant: a changed file with no row at vendor/gpui-fast-macos/src/display.rs:6; check exit 1
+# plant: a marked 9-line hunk over budget at vendor/gpui-fast-apple/src/dispatcher.rs:6; check exit 1
+# plant: row #1 at vendor/gpui-pre-apple/upstream/README.md:7 removed, carried in vendor/gpui-fast/src/_accessibility.rs; check exit 1
+# plant: an unmarked hunk in a vendored gpui-fast file with a row at vendor/gpui-fast/src/_accessibility.rs:6; check exit 1
+# plant: a changed file with no row at vendor/gpui-fast-macos/src/display.rs:6; check exit 1
+# plant: a marked 9-line hunk over budget at vendor/gpui-fast-apple/src/dispatcher.rs:6; check exit 0
+# plant: row #1 at vendor/gpui-pre-apple/upstream/README.md:7 removed, carried in vendor/gpui-fast/src/_accessibility.rs; check exit 1
+# plant: an unmarked hunk in a vendored gpui-fast file with a row at vendor/gpui-fast/src/_accessibility.rs:6; check exit 1
+# plant: a changed file with no row at vendor/gpui-fast-macos/src/display.rs:6; check exit 1
+# plant: a marked 9-line hunk over budget at vendor/gpui-fast-apple/src/dispatcher.rs:6; check exit 1
+# plant: row #1 at vendor/gpui-pre-apple/upstream/README.md:7 removed, carried in vendor/gpui-fast/src/_accessibility.rs; check exit 1
+# plant: an unmarked hunk in a vendored gpui-fast file with a row at vendor/gpui-fast/src/_accessibility.rs:6; check exit 1
+# plant: a changed file with no row at vendor/gpui-fast-macos/src/display.rs:6; check exit 0
+# plant: a marked 9-line hunk over budget at vendor/gpui-fast-apple/src/dispatcher.rs:6; check exit 1
+# plant: row #1 at vendor/gpui-pre-apple/upstream/README.md:7 removed, carried in vendor/gpui-fast/src/_accessibility.rs; check exit 0
+# plant: an unmarked hunk in a vendored gpui-fast file with a row at vendor/gpui-fast/src/_accessibility.rs:6; check exit 0
+# plant: a changed file with no row at vendor/gpui-fast-macos/src/display.rs:6; check exit 0
+# plant: a marked 9-line hunk over budget at vendor/gpui-fast-apple/src/dispatcher.rs:6; check exit 0
+# plant: row #1 at vendor/gpui-pre-apple/upstream/README.md:7 removed, carried in vendor/gpui-fast/src/_accessibility.rs; check exit 0
+✔ wrong: the plant judges pass the reference check and fail each mutant on its fault (102965.78975ms)
+✔ wrong: the AC1 judges fail an unpinned tree, a changed file with no row and a row with no removal condition (690.887542ms)
+✔ wrong: the AC3 judges fail a metal-rs import, a metal dependency, no port, and a compile error in a carried file (538.603208ms)
+✔ wrong: the AC4 judge fails a GPUI row carried nowhere and a retired row naming no upstream change (651.626708ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 4
+ℹ fail 8
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 112249.734208
+
+✖ failing tests:
+
+test at tests/acceptance/3622/ac1-pinned.test.mjs:11:1
+✖ AC1 #3622.fb741481 vendor/gpui-fast, vendor/gpui-fast-apple and vendor/gpui-fast-macos are pinned at 0.1.19 (5.398583ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + [
+  +   "vendor/gpui-fast/Cargo.toml isn't there",
+  +   "vendor/gpui-fast-apple/Cargo.toml isn't there",
+  +   "vendor/gpui-fast-macos/Cargo.toml isn't there"
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/3622/ac1-pinned.test.mjs:12:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ "vendor/gpui-fast/Cargo.toml isn't there", "vendor/gpui-fast-apple/Cargo.toml isn't there", "vendor/gpui-fast-macos/Cargo.toml isn't there" ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3622/ac1-pinned.test.mjs:15:1
+✖ AC1 #3622.fb741481 every vendored file that differs from its pristine 0.1.19 release has a row naming its issue, test and removal condition (4082.900916ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + [
+  +   "vendor/gpui-fast isn't there",
+  +   "vendor/gpui-fast-apple isn't there",
+  +   "vendor/gpui-fast-macos isn't there"
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/3622/ac1-pinned.test.mjs:16:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ "vendor/gpui-fast isn't there", "vendor/gpui-fast-apple isn't there", "vendor/gpui-fast-macos isn't there" ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3622/ac1-pinned.test.mjs:19:1
+✖ AC1 #3622.fb741481 node scripts/vendor-rebase.mjs check passes, against the pristine 0.1.19 crates.io releases (4.766042ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + [
+  +   "vendor/gpui-fast isn't there, so check reads no gpui-fast tree",
+  +   "vendor/gpui-fast-apple isn't there, so check reads no gpui-fast-apple tree",
+  +   "vendor/gpui-fast-macos isn't there, so check reads no gpui-fast-macos tree",
+  +   "INCONCLUSIVE: no node_modules/vitest here (npm ci), so check can't list the suites of the rows' vitest tests"
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/3622/ac1-pinned.test.mjs:34:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ "vendor/gpui-fast isn't there, so check reads no gpui-fast tree", "vendor/gpui-fast-apple isn't there, so check reads no gpui-fast-apple tree", "vendor/gpui-fast-macos isn't there, so check reads no gpui-fast-macos tree", "INCONCLUSIVE: no node_modules/vitest here (npm ci), so check can't list the suites of the rows' vitest tests" ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3622/ac2-plants.test.mjs:8:1
+✖ AC2 #3622.f8db2d26 a planted unmarked hunk in a vendored gpui-fast file, a changed file with no row and a 9-line hunk over budget each fail check, naming file and line (2632.302667ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + [
+  +   'no vendored tree at vendor/gpui-fast, vendor/gpui-fast-apple, vendor/gpui-fast-macos'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/3622/ac2-plants.test.mjs:9:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ 'no vendored tree at vendor/gpui-fast, vendor/gpui-fast-apple, vendor/gpui-fast-macos' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3622/ac3-objc2-metal.test.mjs:9:1
+✖ AC3 #3622.f04efb4a no metal-rs import remains in vendor/gpui-fast-apple (4.013ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + [
+  +   "vendor/gpui-fast-apple isn't there"
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/3622/ac3-objc2-metal.test.mjs:10:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ "vendor/gpui-fast-apple isn't there" ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3622/ac3-objc2-metal.test.mjs:13:1
+✖ AC3 #3622.f04efb4a every carried file ported to objc2-metal compiles against gpui-fast-apple 0.1.19 (3106.57725ms)
+  AssertionError [ERR_ASSERTION]: vendor/gpui-fast-apple carries no file of ours that names objc2_metal: nothing is ported
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/3622/ac3-objc2-metal.test.mjs:16:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3622/ac4-retired.test.mjs:8:1
+✖ AC4 #3622.0face0d7 each row the base carries on gpui-pre is carried onto 0.1.19, or retired for 0.1.19 naming the upstream change (7.724917ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + [
+  +   '#140: carried on gpui-pre, but no row of it lists a vendored gpui-fast file, none is retired for 0.1.19 and no line leaves it to a follow-up (#3623-#3631)',
+  +   '#391: carried on gpui-pre, but no row of it lists a vendored gpui-fast file, none is retired for 0.1.19 and no line leaves it to a follow-up (#3623-#3631)',
+  +   '#390: carried on gpui-pre, but no row of it lists a vendored gpui-fast file, none is retired for 0.1.19 and no line leaves it to a follow-up (#3623-#3631)',
+  +   '#1480: carried on gpui-pre, but no row of it lists a vendored gpui-fast file, none is retired for 0.1.19 and no line leaves it to a follow-up (#3623-#3631)',
+  +   '#1546: carried on gpui-pre, but no row of it lists a vendored gpui-fast file, none is retired for 0.1.19 and no line leaves it to a follow-up (#3623-#3631)',
+  +   '#1482: carried on gpui-pre, but no row of it lists a vendored gpui-fast file, none is retired for 0.1.19 and no line leaves it to a follow-up (#3623-#3631)',
+  +   '#124: carried on gpui-pre, but no row of it lists a vendored gpui-fast file, none is retired for 0.1.19 and no line leaves it to a follow-up (#3623-#3631)',
+  +   '#1427: carried on gpui-pre, but no row of it lists a vendored gpui-fast file, none is retired for 0.1.19 and no line leaves it to a follow-up (#3623-#3631)',
+  +   '#1550: carried on gpui-pre, but no row of it lists a vendored gpui-fast file, none is retired for 0.1.19 and no line leaves it to a follow-up (#3623-#3631)',
+  +   '#377: carried on gpui-pre, but no row of it lists a vendored gpui-fast file, none is retired for 0.1.19 and no line leaves it to a follow-up (#3623-#3631)',
+  +   '#1434: carried on gpui-pre, but no row of it lists a vendored gpui-fast file, none is retired for 0.1.19 and no line leaves it to a follow-up (#3623-#3631)',
+  +   '#2471: carried on gpui-pre, but no row of it lists a vendored gpui-fast file, none is retired for 0.1.19 and no line leaves it to a follow-up (#3623-#3631)',
+  +   '#177: carried on gpui-pre, but no row of it lists a vendored gpui-fast file, none is retired for 0.1.19 and no line leaves it to a follow-up (#3623-#3631)',
+  +   '#1551: carried on gpui-pre, but no row of it lists a vendored gpui-fast file, none is retired for 0.1.19 and no line leaves it to a follow-up (#3623-#3631)',
+  +   '#3232: carried on gpui-pre, but no row of it lists a vendored gpui-fast file, none is retired for 0.1.19 and no line leaves it to a follow-up (#3623-#3631)',
+  +   '#1843: carried on gpui-pre, but no row of it lists a vendored gpui-fast file, none is retired for 0.1.19 and no line leaves it to a follow-up (#3623-#3631)',
+  +   '#542: carried on gpui-pre, but no row of it lists a vendored gpui-fast file, none is retired for 0.1.19 and no line leaves it to a follow-up (#3623-#3631)',
+  +   '#1431: carried on gpui-pre, but no row of it lists a vendored gpui-fast file, none is retired for 0.1.19 and no line leaves it to a follow-up (#3623-#3631)',
+  +   '#1489: carried on gpui-pre, but no row of it lists a vendored gpui-fast file, none is retired for 0.1.19 and no line leaves it to a follow-up (#3623-#3631)',
+  +   '#499: carried on gpui-pre, but no row of it lists a vendored gpui-fast file, none is retired for 0.1.19 and no line leaves it to a follow-up (#3623-#3631)'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/3622/ac4-retired.test.mjs:9:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ '#140: carried on gpui-pre, but no row of it lists a vendored gpui-fast file, none is retired for 0.1.19 and no line leaves it to a follow-up (#3623-#3631)', '#391: carried on gpui-pre, but no row of it lists a vendored gpui-fast file, none is retired for 0.1.19 and no line leaves it to a follow-up (#3623-#3631)', '#390: carried on gpui-pre, but no row of it lists a vendored gpui-fast file, none is retired for 0.1.19 and no line leaves it to a follow-up (#3623-#3631)', '#1480: carried on gpui-pre, but no row of it lists a vendored gpui-fast file, none is retired for 0.1.19 and no line leaves it to a follow-up (#3623-#3631)', '#1546: carried on gpui-pre, but no row of it lists a vendored gpui-fast file, none is retired for 0.1.19 and no line leaves it to a follow-up (#3623-#3631)', '#1482: carried on gpui-pre, but no row of it lists a vendored gpui-fast file, none is retired for 0.1.19 and no line leaves it to a follow-up (#3623-#3631)', '#124: carried on gpui-pre, but no row of it lists a vendored gpui-fast file, none is retired for 0.1.19 and no line leaves it to a follow-up (#3623-#3631)', '#1427: carried on gpui-pre, but no row of it lists a vendored gpui-fast file, none is retired for 0.1.19 and no line leaves it to a follow-up (#3623-#3631)', '#1550: carried on gpui-pre, but no row of it lists a vendored gpui-fast file, none is retired for 0.1.19 and no line leaves it to a follow-up (#3623-#3631)', '#377: carried on gpui-pre, but no row of it lists a vendored gpui-fast file, none is retired for 0.1.19 and no line leaves it to a follow-up (#3623-#3631)', '#1434: carried on gpui-pre, but no row of it lists a vendored gpui-fast file, none is retired for 0.1.19 and no line leaves it to a follow-up (#3623-#3631)', '#2471: carried on gpui-pre, but no row of it lists a vendored gpui-fast file, none is retired for 0.1.19 and no line leaves it to a follow-up (#3623-#3631)', '#177: carried on gpui-pre, but no row of it lists a vendored gpui-fast file, none is retired for 0.1.19 and no line leaves it to a follow-up (#3623-#3631)', '#1551: carried on gpui-pre, but no row of it lists a vendored gpui-fast file, none is retired for 0.1.19 and no line leaves it to a follow-up (#3623-#3631)', '#3232: carried on gpui-pre, but no row of it lists a vendored gpui-fast file, none is retired for 0.1.19 and no line leaves it to a follow-up (#3623-#3631)', '#1843: carried on gpui-pre, but no row of it lists a vendored gpui-fast file, none is retired for 0.1.19 and no line leaves it to a follow-up (#3623-#3631)', '#542: carried on gpui-pre, but no row of it lists a vendored gpui-fast file, none is retired for 0.1.19 and no line leaves it to a follow-up (#3623-#3631)', '#1431: carried on gpui-pre, but no row of it lists a vendored gpui-fast file, none is retired for 0.1.19 and no line leaves it to a follow-up (#3623-#3631)', '#1489: carried on gpui-pre, but no row of it lists a vendored gpui-fast file, none is retired for 0.1.19 and no line leaves it to a follow-up (#3623-#3631)', '#499: carried on gpui-pre, but no row of it lists a vendored gpui-fast file, none is retired for 0.1.19 and no line leaves it to a follow-up (#3623-#3631)' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3622/ac4-retired.test.mjs:12:1
+✖ AC4 #3622.0face0d7 a planted removal of a row 0.1.19 does not cover fails check, naming its carried file (3054.841458ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + [
+  +   'no row of the table is carried onto a vendored gpui-fast file it alone holds for its issue, so there is no row to remove'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/3622/ac4-retired.test.mjs:13:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ 'no row of the table is carried onto a vendored gpui-fast file it alone holds for its issue, so there is no row to remove' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+--- stderr
+
+--- exit 1 in 112.4 s
