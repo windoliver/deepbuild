@@ -1,0 +1,12 @@
+{
+  "packages/hub/src/client.ts": [
+    {
+      "find": [
+        "  if (!setUp) return \"The hub isn't answering; set this home up with deep setup.\";"
+      ],
+      "wrong": [
+        "  if (!setUp) return \"The hub isn't answering; start it with deep hub start.\";"
+      ]
+    }
+  ]
+}

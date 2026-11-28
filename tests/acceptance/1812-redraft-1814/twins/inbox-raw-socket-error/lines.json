@@ -1,0 +1,12 @@
+{
+  "packages/hub/src/inbox.ts": [
+    {
+      "find": [
+        "    if (!read) return notAnswered(error);"
+      ],
+      "wrong": [
+        "    if (!read || process.stderr.write(`${error instanceof Error ? error.message : String(error)}\\n`)) return read ? 3 : notAnswered(error);"
+      ]
+    }
+  ]
+}
