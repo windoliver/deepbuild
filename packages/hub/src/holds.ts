@@ -153,7 +153,7 @@ export class Holds {
     if (await this.askOf(k)) return;
     const source = effect === 'spend' ? 'budget.raise' : `effect.${effect}`;
     const yes = ANSWERS[effect] ?? ['Go ahead', 'Hold it'];
-    await this.raise(meta.session, meta.agent, meta.cwd, source, k, `The agent offers: "${question}" It needs your authority.`, yes, offerPlan(source, `Let the agent do what it offered: ${question}`));
+    await this.raise(meta.session, meta.agent, meta.cwd, source, k, `The agent offers: "${question}" The person decides.`, yes, offerPlan(source, `Let the agent do what it offered: ${question}`));
   }
 
   /**
@@ -358,7 +358,7 @@ export class Holds {
     if (asked) return asked.decision === 'allow' ? undefined : `ask:${asked.id}`;
     const question = turn
       ? `Run \`${call.label}\`? It ${classes.map((c) => DOES[c]).join(' and ')}, in the turn a "proceed" started for "${turn.question}" (rule ${turn.rule}); no proceed covers a call only the person allows.`
-      : `Run \`${call.label}\`? It replies in your name to a reviewer's thread on the pull request, a send that needs your authority.`;
+      : `Run \`${call.label}\`? It replies as the person to a reviewer's thread on the pull request, a send only they allow.`;
     const targets = await this.placed(meta, classes.includes('push') ? pushTargets(call.label) : []);
     return this.raise(meta.session, meta.agent, meta.cwd, source, k, question, ANSWERS[classes[0]!]!, planFor(source, `Run \`${call.label}\`, which ${classes.map((c) => DOES[c]).join(' and ')}`, [call.label], targets));
   }

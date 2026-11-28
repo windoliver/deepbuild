@@ -227,7 +227,7 @@ export class Questions {
       if (this.o.plant === 'keys-ask-from-words') {
         await this.choice(meta, { question: read.question, options: [{ id: 'yes', label: 'Yes' }, { id: 'no', label: 'No' }], recommended: null, requirement: read.question, own: false });
       }
-      sorted.back.push(`DeepBuild: nothing in this turn fills a question to you from what you ended on: "${read.question}". If it needs an answer, raise it through deep_ask with its options and what it is pinned to; otherwise decide it and go on.`);
+      sorted.back.push(`DeepBuild: nothing in this turn fills the question for the person you ended on: "${read.question}". If it needs an answer, raise it through deep_ask with its options and what it is pinned to; otherwise decide it and go on.`);
     }
     return sorted;
   }
@@ -280,7 +280,7 @@ export class Questions {
         const handle = await this.choice(meta, { question: text, options, recommended, requirement: named, own: false });
         const { option } = await this.o.holds.applied(handle);
         const decided = option && labels[options.findIndex((o) => o.id === option)];
-        if (decided) { answers[text] = decided; said.push(`DeepBuild: your saved decision answers this: ${decided}.`); continue; }
+        if (decided) { answers[text] = decided; said.push(`DeepBuild: a saved decision answers this: ${decided}.`); continue; }
         const label = recommended && labels[options.findIndex((o) => o.id === recommended)];
         said.push(label ? `DeepBuild answered this card: go on with ${label}, marked as undoable; ${handle} waits for the person, and a different answer undoes it.` : `DeepBuild: ${handle} waits for the person's answer.`);
         continue;
