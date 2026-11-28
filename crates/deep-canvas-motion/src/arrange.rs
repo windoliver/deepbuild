@@ -929,7 +929,7 @@ pub fn is_arrangement(item: &Value) -> bool {
     item.get("kind").and_then(Value::as_str) == Some(KIND)
 }
 
-fn ids(v: Option<&Value>) -> Vec<String> {
+pub(crate) fn ids(v: Option<&Value>) -> Vec<String> {
     v.and_then(Value::as_array)
         .into_iter()
         .flatten()
@@ -953,7 +953,7 @@ pub fn is_solid(item: &Value) -> bool {
 
 /// A solid: an item with a three-number `params.size`, its bounds centred on its position. A
 /// light's `size` is what it lights (a probe's box), never a body, written or at its default.
-fn dims_of(item: &Value) -> Option<V3> {
+pub(crate) fn dims_of(item: &Value) -> Option<V3> {
     let kind = item.get("kind").and_then(Value::as_str).unwrap_or_default();
     if kind.starts_with("light.") {
         return None;
@@ -965,7 +965,7 @@ fn dims_of(item: &Value) -> Option<V3> {
     Some([a[0].as_f64()?, a[1].as_f64()?, a[2].as_f64()?])
 }
 
-fn body(id: &str, size: V3, at: &At) -> Body {
+pub(crate) fn body(id: &str, size: V3, at: &At) -> Body {
     Body {
         id: id.to_string(),
         center: [0.0; 3],
@@ -993,8 +993,12 @@ fn solids(doc: &Value, at_of: &dyn Fn(&str, &Value) -> At) -> Vec<Body> {
 
 /// A collection as one hollow body: the box around its members' bounds.
 fn collection(id: &str, members: &[String], bodies: &[Body]) -> Option<Body> {
+    around(id, bodies.iter().filter(|b| members.contains(&b.id)))
+}
+
+pub(crate) fn around<'a>(id: &str, bodies: impl Iterator<Item = &'a Body>) -> Option<Body> {
     let (mut lo, mut hi) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
-    for b in bodies.iter().filter(|b| members.contains(&b.id)) {
+    for b in bodies {
         let y = [b.bottom(), b.top()];
         for p in b.rect().corners() {
             for (k, v) in [(0, p[0]), (2, p[1])] {
