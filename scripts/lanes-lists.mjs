@@ -1675,6 +1675,11 @@ for (const name of ['bound', 'granted']) {
   byHand.push(`tests/acceptance/3588/${name}.test.mjs`);
 }
 
+for (const name of ['turn', 'window', 'compiles']) {
+  redrafted[`tests/acceptance/3549/${name}.test.mjs`] = 'tests/acceptance/3549-redraft-3660/';
+  byHand.push(`tests/acceptance/3549/${name}.test.mjs`);
+}
+
 for (const entry of laneFolders.filter((folder) => !unread.includes(folder))) {
   let text = '';
   try { text = readFileSync(join(root, entry, 'lane.json'), 'utf8'); } catch {}
