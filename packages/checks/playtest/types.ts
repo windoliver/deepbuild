@@ -22,6 +22,8 @@ export type Lowered = { policy: Policy } | { logic: LogicBot } | FirstParty | Mo
 export type Bot = Lowered & { by?: 'agent'; share?: Record<string, [number, number]>; expect?: Record<string, 'miss'> };
 
 export interface Goal { name: string; when: string; each?: boolean }
+export interface Always { name: string; when: string }
+export interface Order { name: string; first: string; then: string }
 /** Seconds, or a count of the piece's steps. */
 export type Span = number | { steps: number };
 
@@ -34,6 +36,8 @@ export interface PlaytestInput {
   span?: Span;
   stuck?: { measure: string; by?: number; within?: Span };
   goals?: Goal[];
+  always?: Always[];
+  order?: Order[];
   frames?: { every?: number };
   piece_seed?: 'own' | 'run';
   /** #1047: a save of the piece, by its asset ID: each run starts at its step, once logic.layout has checked it against the piece. */
