@@ -1,0 +1,4 @@
+The blind suite tests/acceptance/3569 on the merge with main (run through scripts/throttle.mjs test), 2026-11-27T22:02:18Z to 2026-11-27T22:05:02Z:
+
+Test Files  10 passed (10)
+Tests  10 passed | 1 skipped (11)

@@ -1,0 +1,12 @@
+{
+  "crates/deep-gpu-layer/src/session3.rs": [
+    {
+      "find": [
+        "        single_sample: matches!("
+      ],
+      "wrong": [
+        "        single_sample: true || matches!("
+      ]
+    }
+  ]
+}

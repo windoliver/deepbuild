@@ -1,0 +1,66 @@
+# The #2130 acceptance suite as a cargo package of its own, so its seven Rust files build and run with nothing
+# outside tests/acceptance/2130/: each [[test]] target below is one committed file of this folder, by path, and
+# reaches the canvas core through its public items and the core's own serde_json (README.md, The surface). Test
+# tooling only, outside the workspace (the empty [workspace] table), with no lockfile of its own. lib.mjs lays a copy
+# of this folder at target/acceptance-2130/suite, with each path below rewritten to reach the canvas core and the
+# seven files from there and the checkout's root Cargo.lock as its starting lockfile, and runs, from the checkout
+# root, once a target:
+#   cargo test --no-fail-fast --manifest-path target/acceptance-2130/suite/Cargo.toml --target-dir target/acceptance-2130 --test <target>
+# So each checkout (the change, the merge base's copy) builds its own canvas core at the workspace's pins, and cargo
+# writes nothing under tests/.
+[package]
+name = "acceptance-2130-suite"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+
+# Cargo takes no package without a lib or bin target; this one is empty.
+[lib]
+path = "src/lib.rs"
+test = false
+doctest = false
+
+[[test]]
+name = "acceptance_2130_budget_recheck"
+path = "../budget_recheck.rs"
+
+[[test]]
+name = "acceptance_2130_entry_digest"
+path = "../entry_digest.rs"
+
+[[test]]
+name = "acceptance_2130_migrates_from"
+path = "../migrates_from.rs"
+
+[[test]]
+name = "acceptance_2130_duplicate_check_kind"
+path = "../duplicate_check_kind.rs"
+
+[[test]]
+name = "acceptance_2130_recipe_channels"
+path = "../recipe_channels.rs"
+
+[[test]]
+name = "acceptance_2130_check_reads"
+path = "../check_reads.rs"
+
+[[test]]
+name = "acceptance_2130_module_of_check"
+path = "../module_of_check.rs"
+
+[dependencies]
+deep-canvas = { path = "../../../../crates/deep-canvas" }
+# The canvas core's own serde_json, with its feature: a document's members keep their order.
+serde_json = { version = "1", features = ["preserve_order"] }
+
+# No debug info and no incremental state: the folder under target/ stays small, and nothing here is debugged.
+[profile.dev]
+debug = 0
+incremental = false
+
+[workspace]

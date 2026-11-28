@@ -1,0 +1,1 @@
+{ "alone": true, "why": "binary: its files build and run deep-logic and deep-show from this checkout's target/ when no DEEP_BIN_DIR is given, and ac1-core holds a canvas core that checks every shipped pack" }
