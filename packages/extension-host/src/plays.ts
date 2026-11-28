@@ -1,4 +1,4 @@
-// The plays a running check's `deep.canvas.play` may make (Check input: plug-in reads, #184): what its input gives,
+// The plays a running check's `deep.canvas.play` may make (Check input: extension reads, #184): what its input gives,
 // the plays it made, (#832) what a catalog.dominance check's pairs take and what a pass of it must have played, and
 // (#1047) where each play started, so a pass whose run started anywhere but where its input gives is refused.
 import { createHash } from 'node:crypto';
@@ -6,7 +6,7 @@ import type { CheckResult } from '@deepbuild/conformance';
 import { isPlain } from './host-shared.js';
 
 /**
- * What a check's input gives `deep.canvas.play` (Check input: plug-in reads, #184): the piece, the seed, the runs (20
+ * What a check's input gives `deep.canvas.play` (Check input: extension reads, #184): the piece, the seed, the runs (20
  * by default), the bots and the recorded tracks it may play; a playtest's input holds more, which the host ignores.
  */
 export interface PlayInput { piece?: unknown; seed?: unknown; runs?: unknown; bots?: unknown; tracks?: unknown; play?: unknown; from?: unknown; off?: { catalog: unknown; table: unknown; rows: number } }

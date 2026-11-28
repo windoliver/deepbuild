@@ -914,6 +914,13 @@ for (const name of ['ac1-section', 'ac3-agent-routes', 'ac5-taste-call']) {
   redrafted[`tests/acceptance/1352/${name}.test.mjs`] = 'tests/acceptance/1352-redraft-3402/';
   byHand.push(`tests/acceptance/1352/${name}.test.mjs`);
 }
+redrafted['tests/acceptance/1352-redraft-3402/ac1-section.test.mjs'] = 'tests/acceptance/1352-redraft-3413/';
+byHand.push('tests/acceptance/1352-redraft-3402/ac1-section.test.mjs');
+redrafted['tests/acceptance/2790/purpose.test.ts'] = 'tests/acceptance/2790-redraft-3413/';
+byHand.push('tests/acceptance/2790/purpose.test.ts');
+
+byHand.push('tests/acceptance/2813-redraft-ac2/branch.test.mjs');
+
 // #3525 moves the asset fetch from deep_kinds to deep_job and refuses deep_kinds' fetch, so the files below, which
 // brought an asset in through deep_kinds, no longer hold their scene; #2898's table, reads and repeats files state
 // deep_kinds' old hints. Each is kept as written, by hand only, and its blind redraft runs in its place, alone: each
@@ -938,6 +945,12 @@ for (const [folder, originals] of Object.entries(redrafts3525)) {
 }
 // The redrafted budget files time the six-stem render, as #154's and #154-redraft's do.
 timed.push('tests/acceptance/154-redraft-3525/budgets.test.ts', 'tests/acceptance/154-redraft-3525b/budgets.test.ts');
+
+Object.assign(redrafted, { 'tests/acceptance/2665/lowering.test.mjs': 'tests/acceptance/2665-redraft-3537/' });
+byHand.push('tests/acceptance/2665/lowering.test.mjs');
+
+Object.assign(redrafted, { 'tests/acceptance/1503/inline.test.ts': 'tests/acceptance/1503-redraft-defaults/', 'tests/acceptance/1676/spellings.test.ts': 'tests/acceptance/1676-redraft-defaults/', 'tests/acceptance/1662/ac1-tree.test.ts': 'tests/acceptance/1662-redraft-config/' });
+byHand.push('tests/acceptance/1503/inline.test.ts', 'tests/acceptance/1676/spellings.test.ts', 'tests/acceptance/1662/ac1-tree.test.ts');
 
 for (const entry of laneFolders.filter((folder) => !unread.includes(folder))) {
   let text = '';

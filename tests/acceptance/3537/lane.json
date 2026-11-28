@@ -1,0 +1,1 @@
+{ "alone": true, "why": "timing: judged.test.mjs reads a 99% fall in a task's p50 from a window's alternated rounds, and evidence.test.mjs's window times 21 rounds of the base's retention benchmark at 13 to 19 s a round, so a sibling suite's builds beside them stretch both", "slow": ["evidence.test.mjs"] }
