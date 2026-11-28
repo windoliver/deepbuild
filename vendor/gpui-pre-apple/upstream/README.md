@@ -25,6 +25,7 @@ Zed closed our pull request unmerged on October 28, 2026: https://github.com/zed
 | Headless scale: `HeadlessAppContext::simulate_scale_factor_change`, so a render reads at scale 1 | #390 | `vendor/gpui-pre/src/app/headless_app_context.rs`, `vendor/gpui-pre/src/app/headless_app_context/scale_factor.rs` | `tests/acceptance/390/atlas.test.ts › AC3 two labels in two colors from one shaped run share one atlas page and draw through the patch's tinted mask sprite › AC3 the two labels have one coverage mask tinted per instance: equal red channels, different green` | — | gpui-pre's `HeadlessAppContext` lets a test change the scale factor |
 | Hits at a point: `Hitbox::element` and `Window::hits_at`, the hit test a replica asks before a pointer action, so it names what covers the target | #124 | `vendor/gpui-pre/src/window.rs`, `vendor/gpui-pre/src/window/hits.rs` | `tests/acceptance/124/ac6-scrim.test.ts › ${AC.scrim} a click on Save under a transparent scrim is refused naming it, delivered once it is gone, and the probe names it without dismissing it › ${AC.scrim} the probe on Save names the scrim without dismissing it, and answers the same hit test as the click` | — | gpui-pre exposes a window's own hit test at a point, with the element that inserted each hitbox |
 | What each identified element painted: `Window::note_painted` in a div's paint, and `note_paints` and `take_painted`, so a replica's motion recording has every element's bounds and opacity at each step | #1427 | `vendor/gpui-pre/src/window.rs`, `vendor/gpui-pre/src/window/painted.rs`, `vendor/gpui-pre/src/elements/div.rs` | `tests/acceptance/1427/scope-recording.test.ts › #1427 scope: a journey records every element's bounds, opacity and text at each 1/120 s step, keyed by stable identity › Fade in: fade-row's opacity rises a tick at a time, never more than 10% between frames` | — | gpui-pre exposes each painted element's bounds and opacity by its global id |
+| Line breaks by the Unicode rules: `wrap_line`, `truncate_wrapped_line` and a shaped line's wrap break only where UAX #14 at Unicode 17.0.0 allows, through the ICU segmenter `deep-text` uses, instead of by an allow-list of word characters; a shaped line wraps in text order, and one whose glyphs run out of text order (right-to-left text, a reordered vowel sign) has each row laid out on its own | #1550 | `vendor/gpui-pre/Cargo.toml`, `vendor/gpui-pre/src/text_system/line_wrapper.rs`, `vendor/gpui-pre/src/text_system/line_wrapper/breaks.rs`, `vendor/gpui-pre/src/text_system/line_layout.rs` | `tests/acceptance/1550/redraft/wrap.test.ts › #1550.8fc59257 (C3) every boundary chrome picks over LineBreakTest.txt at narrow widths is a break the file allows` | — | gpui-pre's own line breaking passes this row's test: it takes every break UAX #14 at 17.0 allows, inside a grapheme too, and lays a right-to-left line's rows out in text order |
 | gpui-pre's manifest: the library alone, its own workspace, and upstream's one deprecation allowed | #390 | `vendor/gpui-pre/Cargo.toml` | `tests/acceptance/390/atlas.test.ts › AC3 two labels in two colors from one shaped run share one atlas page and draw through the patch's tinted mask sprite › AC3 the two labels have one coverage mask tinted per instance: equal red channels, different green` | 1 over: cargo refuses a `[[example]]` or `[[test]]` whose file isn't there, so upstream's entries go with the files we don't vendor | none: vendoring needs our own manifest while any row above stands |
 | The BGRA surface: `paint_surface` takes a premultiplied BGRA buffer, with the planted twins `DividesAlpha` and `AfterScene` | #377 | `vendor/gpui-pre-apple/build.rs`, `vendor/gpui-pre-apple/src/metal_renderer.rs`, `vendor/gpui-pre-apple/src/metal_renderer/bgra_surface.rs`, `vendor/gpui-pre-apple/src/shaders_carried.metal` | `tests/acceptance/377/handoff.test.ts › #377.756c6dce the surface handoff passes parity/gpu/surface-handoff.scene against the copy path on this machine › #377.756c6dce captured from the window, the glow beyond the 3D object over the 2D page and the 50% pane match the f64 premultiplied over of the slot onto the page within one code value, on both paths` | — | none: zed closed zed-industries/zed#66114 unmerged on October 28, 2026 |
 | The surface reports: which surfaces a frame's command buffer samples, and its completion | #377 | `vendor/gpui-pre-apple/src/metal_renderer.rs`, `vendor/gpui-pre-apple/src/metal_renderer/bgra_surface.rs`, `vendor/gpui-pre-apple/src/metal_renderer/gpu_surfaces.rs` | `tests/acceptance/377/handoff.test.ts › #377.756c6dce the surface handoff passes parity/gpu/surface-handoff.scene against the copy path on this machine › #377.756c6dce the conformance run: macOS passes every part of the fixture on this machine, keeps the zero-copy path, and health shows no handoff reading` | — | none: zed closed zed-industries/zed#66114 unmerged on October 28, 2026 |
@@ -55,14 +56,6 @@ Zed closed our pull request unmerged on October 28, 2026: https://github.com/zed
 
 `node scripts/vendor-rebase.mjs diff` prints what we carry. `node scripts/vendor-rebase.mjs merge <crate> <version>` three-way merges a new release onto our tree, leaves conflict markers and lists each as `CONFLICT <path>:<line>`. A clean merge proves the source only: it then runs the tests of the rows that tree carries, and moves the pin only when they all pass. Otherwise it puts the tree back, keeps the pin and names each test that failed.
 
-## Retired rows
-
-A row leaves the table above when the pinned release meets its removal condition. Each names the upstream change that met it; its test stays and runs without our change.
-
-| Behavior | Issue | Test | Upstream change |
-|---|---|---|---|
-| Line breaks by the Unicode rules: `wrap_line`, `truncate_wrapped_line` and a shaped line's wrap break only where UAX #14 allows, through the ICU segmenter, instead of by an allow-list of word characters | #1550 | `tests/acceptance/1550/redraft/wrap.test.ts › #1550.8fc59257 (C3) every boundary chrome picks over LineBreakTest.txt at narrow widths is a break the file allows` | zed-industries/zed#64624 ("gpui: Use UAX #14 line breaking for text wrapping", merged October 29, 2026): gpui-pre breaks lines by ICU's segmenter from 0.3.11 |
-
 ## Rebase trial
 
 Tried: gpui-pre 0.3.9 -> 0.3.14, gpui-pre-apple 0.3.9 -> 0.3.14, gpui-pre-macos 0.3.9 -> 0.3.14, gpui-kit 0.8.0 -> 0.11.0 (November 27, 2026, the newest of each)
@@ -86,6 +79,7 @@ Outcome: pin moved
 | #1482 | fail: counts.test.ts AC13 names 8 views outside the list, as the merge base's own build does; its hover, wheel and access tests pass |
 | #1489 | pass |
 | #1546 | pass |
+| #1550 | pass |
 | #1551 | fail: deep-show live answers not_presented for its still board, as the merge base's own build does; #3502's still-window test passes |
 | #1843 | pass |
 | #2471 | not run: its test skips on macOS; it needs the Linux lane |
@@ -93,7 +87,7 @@ Outcome: pin moved
 
 A suite's result here is the result of its carried rows' tests, the ones the table above names, each run on this tree on a loaded Mac17,10. `pass` means every one of them passed. The workspace builds (`cargo build --workspace --locked`) and `node scripts/vendor-rebase.mjs check` passes. Three suites fail as they do on the merge base, one misses its frame rate under load, and three could not be read here, so this trial is open: the pin is moved on the branch, and the move is not proven.
 
-The retired #1550 row's test does not pass on 0.3.14's own line breaking (`tests/acceptance/1550/redraft/wrap.test.ts`: right-to-left rows out of text order, and 14,259 boundaries LineBreakTest.txt does not allow), so its removal is not proven either.
+No row was removed: 0.3.14's own line breaking does not pass #1550's test (right-to-left rows out of text order, and 14,259 boundaries LineBreakTest.txt does not allow), so that row is carried again.
 
 ## What was offered upstream (#711)
 

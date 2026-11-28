@@ -2,6 +2,7 @@ use crate::{FontId, Pixels, SharedString, TextRun, TextSystem, px};
 use collections::HashMap;
 use std::{borrow::Cow, iter, sync::Arc};
 use unicode_segmentation::UnicodeSegmentation;
+pub(crate) mod breaks; // DeepBuild patch (windoliver/deepbuild#1550)
 
 /// Determines whether to truncate text from the start or end.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -106,7 +107,7 @@ impl LineWrapper {
                 }
             }
         }
-        let mut break_indices = Self::break_indices(text).peekable();
+        let mut breaks = breaks::Breaks::of(text); // DeepBuild patch (windoliver/deepbuild#1550)
         let mut grapheme_indices = text
             .grapheme_indices(true)
             .map(|(index, _)| index)
@@ -132,10 +133,9 @@ impl LineWrapper {
                     grapheme_index = ix;
                     width_before_grapheme = width;
                 }
-                if break_indices.next_if_eq(&ix).is_some()
-                    && is_grapheme_boundary
-                    && first_non_whitespace_ix.is_some()
-                {
+                // DeepBuild patch (windoliver/deepbuild#1550): UAX #14 picks the breaks, inside a grapheme too
+                // (a space and the mark after it, LB10).
+                if breaks.allows_from(ix, &mut first_non_whitespace_ix) {
                     last_candidate_ix = ix;
                     last_candidate_width = width;
                 }
@@ -442,11 +442,9 @@ impl LineWrapper {
         let mut indent: Option<u32> = None;
         let mut truncate_ix = 0usize;
 
-        let mut break_indices = Self::break_indices(&text).peekable();
+        let mut breaks = breaks::Breaks::of(&text); // DeepBuild patch (windoliver/deepbuild#1550)
         for (ix, c) in text.char_indices() {
-            // Consume boundaries on newlines too, so skipping an empty line does not
-            // leave the iterator stuck before subsequent text.
-            let is_break = break_indices.next_if_eq(&ix).is_some();
+            // DeepBuild patch (windoliver/deepbuild#1550): UAX #14 picks the breaks below, asked in byte order, newlines included.
             if c == '\n' {
                 if line >= max_lines - 1 && !text[ix + 1..].trim().is_empty() {
                     // Newline on the last allowed line with real content
@@ -478,7 +476,8 @@ impl LineWrapper {
 
             let char_width = self.width_for_char(c);
 
-            if is_break && first_non_whitespace_ix.is_some() {
+            // DeepBuild patch (windoliver/deepbuild#1550): UAX #14 picks the breaks.
+            if breaks.allows_from(ix, &mut first_non_whitespace_ix) {
                 last_candidate_ix = ix;
                 last_candidate_width = width;
             }
@@ -536,7 +535,7 @@ impl LineWrapper {
         }
 
         // Text fits within max_lines without truncation.
-        drop(break_indices);
+        drop(breaks); // DeepBuild patch (windoliver/deepbuild#1550)
         (text, Cow::Borrowed(runs))
     }
 

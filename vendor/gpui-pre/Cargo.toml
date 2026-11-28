@@ -184,7 +184,8 @@ package = "gpui-pre-http-client"
 
 [dependencies.icu_segmenter]
 version = "2.3.0"
-features = ["compiled_data"]
+# DeepBuild patch (windoliver/deepbuild#1550): chrome's wrapper breaks lines by UAX #14 at 17.0, as deep-text does.
+features = ["compiled_data", "unstable"]
 default-features = false
 
 [dependencies.image]
