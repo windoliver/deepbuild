@@ -934,6 +934,7 @@ export const BUILD_MS = 45 * 60_000;
 /** `work`, or `BLOCKED` when it fails or isn't done within `ms`: nothing was judged, so it is never a FAIL or a PASS. */
 export async function within<T>(work: Promise<T>, ms: number, what: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
+  // deadline: only turns a build that never finishes into BLOCKED, naming it; nothing waits on it to pass
   const late = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(Error(`BLOCKED: ${what} didn't finish within ${Math.round(ms / 60_000)} min`)), ms); });
   try {
     return await Promise.race([work, late]);
