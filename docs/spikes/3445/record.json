@@ -1,0 +1,449 @@
+{
+ "main": "aafef31316f7da8f741647a5934a717d9019ffff",
+ "firstReply": {
+  "command": "node scripts/throttle.mjs timed --wait 60 -- node docs/spikes/3445/measure.mjs core --core <stock>/deep-show --build <stock>/build.json --root <staged packs> --out docs/spikes/3445/out/first-reply.json",
+  "out": "out/first-reply.json",
+  "sha256": "734ef534e59e1b3c2f8ba9f07dd9a27166209e1ed42200433ed5a9c3684dd067",
+  "lease": "timed:a50904de23b0851c",
+  "load": {
+   "start": [
+    27.80078125,
+    22.12841796875,
+    22.078125
+   ],
+   "end": [
+    20.95458984375,
+    21.02685546875,
+    21.6806640625
+   ]
+  },
+  "result": [
+   {
+    "pid": 81698,
+    "reply": 1,
+    "ms": 3879.158447265625
+   },
+   {
+    "pid": 83169,
+    "reply": 1,
+    "ms": 3854.23046875
+   },
+   {
+    "pid": 84638,
+    "reply": 1,
+    "ms": 3900.81640625
+   },
+   {
+    "pid": 86137,
+    "reply": 1,
+    "ms": 3834.067626953125
+   },
+   {
+    "pid": 87588,
+    "reply": 1,
+    "ms": 3847.561767578125
+   }
+  ]
+ },
+ "compile": {
+  "command": "node scripts/throttle.mjs timed --wait 60 -- node docs/spikes/3445/measure.mjs core --core <timing>/deep-show --build <timing>/build.json --root <staged packs> --out docs/spikes/3445/out/compile.json",
+  "out": "out/compile.json",
+  "sha256": "f98da1e72e9f746a99310289e2b985d4411c84a6913ff2896a04e222480e0002",
+  "lease": "timed:a50904de23b0851c",
+  "load": {
+   "start": [
+    20.95458984375,
+    21.02685546875,
+    21.6806640625
+   ],
+   "end": [
+    22.16455078125,
+    21.423828125,
+    21.80419921875
+   ]
+  },
+  "pid": 96797,
+  "compiles": 109,
+  "ms": 1568.016043,
+  "packs": {
+   "deepbuild/art@1.0.0": [],
+   "deepbuild/blender@1.0.0": [],
+   "deepbuild/chrome-fx@1.0.0": [],
+   "deepbuild/circuit@1.0.0": [
+    {
+     "program": "85957103aae6a86e642dc4f027dec14a5d087cbeaee449637eb9ab4a0af15561",
+     "compiles": 3,
+     "ms": 58.013542
+    },
+    {
+     "program": "77c6cbe0aabe3630b0dbfafe04b42629d8634d3ae6eb53eb1ff2dfdcd6108401",
+     "compiles": 2,
+     "ms": 36.141001
+    },
+    {
+     "program": "3b3f4006df6fe793d0b5436698d260b1fe50d8319ab21cd04ae27136f10f5b4d",
+     "compiles": 2,
+     "ms": 36.290541
+    },
+    {
+     "program": "5f23dc00389e0a7c371c9ca7123b33d42ddacfe82bc8c0e13cc907e34fee684d",
+     "compiles": 2,
+     "ms": 35.108792
+    },
+    {
+     "program": "1b682633c4965cb0bfdd711cba0ccac29671e0c9df82f2d8de3f8a38fe3483af",
+     "compiles": 3,
+     "ms": 55.483918
+    },
+    {
+     "program": "8f0879811b458238393eb3a6db4fae4288f374ed6577e6a52e70ccf64181d503",
+     "compiles": 1,
+     "ms": 18.250791
+    },
+    {
+     "program": "95480581c8bda7218c6bbb59337fc3669c9711b98c55433be7f23ef443ab1fc8",
+     "compiles": 2,
+     "ms": 37.824542
+    },
+    {
+     "program": "31783c49de2cc0c33e04bf7c28bcd05c9b594303ca7eaf84ac1675e998296bc7",
+     "compiles": 2,
+     "ms": 38.566125
+    },
+    {
+     "program": "f371f25ba2394a9bf2d5f25836c99bb7e6137fd6037ba6dd0f7bc46aecc01810",
+     "compiles": 2,
+     "ms": 40.384458
+    },
+    {
+     "program": "e752daed45ec51d80b179bd50a6e4248a12b8724ca5bd2362b73196d91c95542",
+     "compiles": 2,
+     "ms": 37.801583
+    },
+    {
+     "program": "a714594691925c7ff7179eab6ae1cf1c6c13def19121a81e43f1e2e46d5bcac8",
+     "compiles": 2,
+     "ms": 36.921167
+    },
+    {
+     "program": "18b16ee708b526883883c29d5d8eb55c1e7830fddd470b57af5b9d663e33f8b7",
+     "compiles": 2,
+     "ms": 37.192334
+    }
+   ],
+   "deepbuild/composites@1.0.0": [],
+   "deepbuild/explain@1.0.0": [],
+   "deepbuild/familiar@1.0.0": [],
+   "deepbuild/familiar@1.1.0": [],
+   "deepbuild/foley@1.0.0": [],
+   "deepbuild/fx@1.0.0": [],
+   "deepbuild/godot@1.0.0": [],
+   "deepbuild/godot@1.1.0": [],
+   "deepbuild/interfaces@1.0.0": [
+    {
+     "program": "260c9d5993ef28b8605b18bc78db29f17ff6c11e5f7c833698cf927eadf0e28a",
+     "compiles": 2,
+     "ms": 2.419166
+    },
+    {
+     "program": "db724e63f479a9a2f419f16ddae3fd8304c61877b2843b866361c70e62c4b7e1",
+     "compiles": 2,
+     "ms": 2.577083
+    },
+    {
+     "program": "1ce4365e26036bbdd5ed4702e8a9e4b1409fb8da0aaecc2e5fb129c8e45f9fa6",
+     "compiles": 2,
+     "ms": 2.85975
+    }
+   ],
+   "deepbuild/lanes@1.0.0": [
+    {
+     "program": "e3564538326059dc1b06d2b1923f38601d110166ec4213cd1c56afe8794540fb",
+     "compiles": 2,
+     "ms": 32.228457
+    },
+    {
+     "program": "f9e8cf292f1685dab8fca143bdec1861d94228984fabeefdd05476a993acfa1e",
+     "compiles": 2,
+     "ms": 33.332667
+    },
+    {
+     "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
+     "compiles": 4,
+     "ms": 65.399167
+    },
+    {
+     "program": "2dd2b94e040cc950aa388a6c3923a70ccb601ba06ec6b5eafa816af021be0609",
+     "compiles": 2,
+     "ms": 31.999124
+    },
+    {
+     "program": "3943cd29bc9d0b9c09143af39b74d4fbb04a47aa76fe3a58eb0f08111105ea0b",
+     "compiles": 2,
+     "ms": 32.335876
+    }
+   ],
+   "deepbuild/math@1.0.0": [],
+   "deepbuild/modslib@1.0.0": [
+    {
+     "program": "b0491e694ed43b4a2bc3e1417893c42fdda6239fcf3f6d09e096d0b2bf2ee996",
+     "compiles": 2,
+     "ms": 21.464917
+    },
+    {
+     "program": "3914875878016a2f6cf4aa7110d77e18213db9712d323081f6c77c15e6bb2493",
+     "compiles": 2,
+     "ms": 21.454833
+    },
+    {
+     "program": "b2ea3fb5c27b96824fad1c6ab6452a24698fc918659038465ce413372514ae07",
+     "compiles": 2,
+     "ms": 19.319416
+    },
+    {
+     "program": "e50c8a5f133cb4ab093bbf915438b0acf39c0c890bf13ed5953774d5c6fd7ba2",
+     "compiles": 2,
+     "ms": 19.602125
+    },
+    {
+     "program": "896f8c8d83b502320b09935f7c5f7f2a8a05d214fcae871d17a6385ae7d39eeb",
+     "compiles": 2,
+     "ms": 19.907833
+    }
+   ],
+   "deepbuild/process@1.0.0": [
+    {
+     "program": "ef049b2c23eb3c71a14e8b30fab0579caff8f60e74c7706295f1cb1ace5e72fb",
+     "compiles": 2,
+     "ms": 41.548125
+    },
+    {
+     "program": "a1c46d3ff9cec7dc6a7b582ee075863fff0b5da5df80d4070b02ce090a429d02",
+     "compiles": 2,
+     "ms": 44.264292
+    },
+    {
+     "program": "9febdc8f3f07c06b40f71328eb319e713d1a3c6f2aff31dbbe584b29dea77d81",
+     "compiles": 2,
+     "ms": 41.061834
+    },
+    {
+     "program": "d858d5c52212b4dcb5d65b120e0db2a33acd5d684c498f782b60db565d136861",
+     "compiles": 2,
+     "ms": 41.228584
+    },
+    {
+     "program": "92dc30c7da6dcae217a56514efc9febb6a712bb123ccb8a261a3abb0f40c03dd",
+     "compiles": 2,
+     "ms": 40.445249
+    },
+    {
+     "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
+     "compiles": 4,
+     "ms": 81.407293
+    },
+    {
+     "program": "05e422159ec2768b8feeab908aee2bf96ff12b1fbb954e6fd37c08f36c6972c0",
+     "compiles": 2,
+     "ms": 40.614624
+    },
+    {
+     "program": "d0e0d07579c214a08abb00185dbdc222d30b2931e04441a6dbb9aa479728fcff",
+     "compiles": 2,
+     "ms": 42.283292
+    }
+   ],
+   "deepbuild/sense@1.0.0": [
+    {
+     "program": "f1244d523ed647963c5c93c2f5b11fcd111446295408d0af83b38b7e0c3ebda3",
+     "compiles": 2,
+     "ms": 15.317458
+    },
+    {
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "compiles": 10,
+     "ms": 73.850792
+    }
+   ],
+   "deepbuild/separation@1.0.0": [
+    {
+     "program": "d69b261178ed6fe4c083e32c67e63e2f6dc6eb241358e4250ce79bc4fa4e6962",
+     "compiles": 2,
+     "ms": 19.247375
+    },
+    {
+     "program": "082143b303740e02b2adc08ee1eb182c84d16d71dae16fe4ef3ed3b3652bf86b",
+     "compiles": 2,
+     "ms": 25.683459
+    },
+    {
+     "program": "8170ed9e174bdec7fdea96900ac7b0cc10deb59aff50735acef6e7291116ed1a",
+     "compiles": 2,
+     "ms": 25.86825
+    },
+    {
+     "program": "caef2ceb7d15e8998549c6385dbb93ace70f3b6511ce1901613787d90906c749",
+     "compiles": 2,
+     "ms": 27.0885
+    },
+    {
+     "program": "a3c6e180b9636cac1a5d9b0a00a2f53d607ec55f630c7a89529321f62e830d48",
+     "compiles": 2,
+     "ms": 25.309917
+    },
+    {
+     "program": "9d4d605fdfb541d8895d8ab0d3427631b90a1e660be85c8c24f0fd74a4595657",
+     "compiles": 3,
+     "ms": 37.84979
+    },
+    {
+     "program": "7300ee90bb9380f5927e206cf7d975f9a0e4a0ff5cbd2fd1b444b73d311d24bc",
+     "compiles": 1,
+     "ms": 8.928542
+    },
+    {
+     "program": "3c82376c8ac5b680b58182a2f6bb97b3f878728bba2b55354204d7b4a3eebf27",
+     "compiles": 2,
+     "ms": 26.072708
+    },
+    {
+     "program": "31cbd4e0d221dfc46bfde98a0927f68bff3eed1b17cdab97186b0bcebca0f3a1",
+     "compiles": 2,
+     "ms": 25.952709
+    },
+    {
+     "program": "66ad77c23fd07bbc65f0b6ad86a4eb3a67a418f000c230fabb0c135824b3e4b3",
+     "compiles": 2,
+     "ms": 26.866042
+    },
+    {
+     "program": "7439d30e7ad70f1bab28311ff5421ada50a7a47b0d019963143ae5e78243e578",
+     "compiles": 2,
+     "ms": 27.701292
+    },
+    {
+     "program": "9b584ab0caa6b3cc121cfe807677ae61159a41e70419de78ace61125729673e4",
+     "compiles": 2,
+     "ms": 27.352125
+    },
+    {
+     "program": "d6f3605160e3cb773e7e22c9998fc3de88b079dd386751b9be17ddb23562a668",
+     "compiles": 2,
+     "ms": 29.194583
+    }
+   ],
+   "deepbuild/unreal@1.0.0": [],
+   "deepbuild/verbs@1.0.0": []
+  }
+ },
+ "epochs": {
+  "patch": {
+   "path": "patches/epochs-out.patch",
+   "sha256": "6b3a06988a39646d5d1599eec4126081228975288f05913ff77909248ae28640"
+  },
+  "in": {
+   "command": "node scripts/throttle.mjs timed --wait 60 -- node docs/spikes/3445/measure.mjs bench --tree <a copy of main> --out docs/spikes/3445/out/epochs-in-again.json: node benchmarks/logic.mjs in a copy of main",
+   "out": "out/epochs-in-again.json",
+   "sha256": "8b113956ff14f0ff72336664a9d4f82517ea545486e35bd0f4dc8b6b1e67973d",
+   "lease": "timed:a50904de23b0851c",
+   "load": {
+    "start": [
+     23.76025390625,
+     21.841796875,
+     21.91552734375
+    ],
+    "end": [
+     22.177734375,
+     21.54541015625,
+     21.810546875
+    ]
+   }
+  },
+  "out": {
+   "command": "node scripts/throttle.mjs timed --wait 60 -- node docs/spikes/3445/measure.mjs bench --tree <a copy of main with patches/epochs-out.patch applied> --out docs/spikes/3445/out/epochs-out-again.json: node benchmarks/logic.mjs in a copy of main with patches/epochs-out.patch applied",
+   "out": "out/epochs-out-again.json",
+   "sha256": "760ecc60e54d8f12cd7c813231bbc94fbd435d0a40207d72a2390bb4257343d8",
+   "lease": "timed:a50904de23b0851c",
+   "load": {
+    "start": [
+     23.76025390625,
+     21.841796875,
+     21.91552734375
+    ],
+    "end": [
+     23.76025390625,
+     21.841796875,
+     21.91552734375
+    ]
+   }
+  },
+  "goldens": {
+   "tests/acceptance/2324/fixtures/base-golden.json": {
+    "command": "node docs/spikes/3445/measure.mjs golden --logic <epochs-out>/deep-logic --build <epochs-out>/build.json --fixture tests/acceptance/2324/fixtures/base-golden.json --out docs/spikes/3445/out/golden-2324.json",
+    "out": "out/golden-2324.json",
+    "sha256": "231f5dde5c0cd7a05861e9bc5d40c8e14256712225257125fae89b815f43b577"
+   },
+   "tests/acceptance/2662/fixtures/golden.json": {
+    "command": "DEEP_2662_PRINT=1 cargo test --release --locked -p deep-logic --test acceptance_2662_goldens -- --nocapture, in the copy of main with patches/epochs-out.patch applied: the line `FIXTURE golden.json <golden>` it prints, without its first two words",
+    "out": "out/golden-2662.json",
+    "sha256": "430021c376c3466fa760d2b5e78757a899b7e22dcb363beded55fd574a818eb0"
+   }
+  }
+ },
+ "tracker": {
+  "logic": {
+   "command": "node scripts/throttle.mjs timed --wait 60 -- node docs/spikes/3445/measure.mjs tracker --bin <stock>/spike3445_tracker --build <stock>/build.json --out docs/spikes/3445/out/tracker",
+   "out": "out/tracker/writes-logic.json",
+   "sha256": "829afc7d13a5e60420919d96e5bd776f5885bb1d916043d3a1d7006c57358e1f",
+   "lease": "timed:a50904de23b0851c",
+   "load": {
+    "start": [
+     23.5654296875,
+     21.77197265625,
+     21.8916015625
+    ],
+    "end": [
+     23.76025390625,
+     21.841796875,
+     21.91552734375
+    ]
+   }
+  }
+ },
+ "answers": {
+  "compiling": {
+   "ms": 1568.016043,
+   "over": true,
+   "task": {
+    "issue": 3529,
+    "title": "A logic item's program is compiled once a process: a fresh canvas core makes 109 compiles for 48 programs before its first reply",
+    "criteria": [
+     "A fresh canvas core with the shipped packs answers its first call having counted as many compiles as it compiled different programs. The merge base counts 109 for 48 and fails, naming a program compiled twice",
+     "Every fixture of #531 and every kept logic golden reaches the step hashes it reached on the merge base. A hash that moves fails, naming the golden and the step",
+     "Two items of the same bytes in one piece keep their own memory, globals, fuel and trap: a write in one never shows in the other. A planted runner that shares one instance fails, naming the item",
+     "Budget, on the reference Mac in the local preflight, compared with the merge base: the canvas core's first reply with the shipped packs takes at least 500 ms less (drafted), and its memory after that reply reads within its margin"
+    ]
+   }
+  },
+  "checks": {
+   "in": 0.2517381394844957,
+   "out": 0.2503143776198135,
+   "over": false
+  },
+  "writes": {
+   "ns_per_fuel": 0.6224432988205854,
+   "record": 0.25,
+   "over": true,
+   "task": {
+    "issue": 3530,
+    "title": "The page tracker marks a store's page without a call: a step that mostly writes costs 2.5 times the record's ns per fuel unit",
+    "criteria": [
+     "For 1,000 seeded programs of stores, fills and copies, the pages the bitmap holds after a step equal the pages whose bytes changed, in wasmtime and in headless Chrome. A planted rewrite that skips the mark of a store whose page was marked last fails, naming the page",
+     "Every fixture of #531 reaches the full-state hash it reached on the merge base, and a program is charged the fuel it was charged there. A hash or a fuel count that moves fails, naming the fixture and the step",
+     "#3445's twin that mostly writes, as a logic item's program, costs at most twice the record's ns per fuel unit in the app (drafted). The merge base costs 2.5 times and fails",
+     "Budget, on the reference Mac in the local preflight, compared with the merge base: the metering benchmark's ns per fuel unit reads within its margin, in the app and in headless Chrome"
+    ]
+   }
+  }
+ }
+}

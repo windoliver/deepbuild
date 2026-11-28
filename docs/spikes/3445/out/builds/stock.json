@@ -1,0 +1,16 @@
+{
+ "label": "stock",
+ "base": "aafef31316f7da8f741647a5934a717d9019ffff",
+ "patches": [],
+ "example": {"file": "tracker.rs", "sha256": "7ff3716bcf73d2864e920b38319a0d39148169c5454ef9d0c3b8513b91a96276"},
+ "ledger": {"file": "kit-ledger.json", "sha256": "2c1e5e9eb9a57dcae6478575f1116ab5749ff2925c1eb18679ca897ff8fee553"},
+ "command": "cargo build --release --locked -j 10 -p deep-show --bin deep-show -p deep-logic --bin deep-logic --example spike3445_tracker",
+ "finished": "Finished `release` profile [optimized] target(s)",
+ "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+ "date": "2026-11-25T08:44:11Z",
+ "sha256": {
+  "deep-show": "e5e8105dd0634c43c06d07269e808f4be21be8ac6f96297abbcd89379c1585e1",
+  "deep-logic": "a6b490c6121aae0d6ad459401716416843a021fa105ee9c8b168654fcd4dc6f6",
+  "spike3445_tracker": "b98a02c0b76c3ce281ff05f2a3e63e4fa5621da4638033a91589d81fd7875404"
+ }
+}

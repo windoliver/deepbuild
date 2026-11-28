@@ -1,0 +1,237 @@
+{
+ "packs": [
+  {
+   "folder": "art-1.0.0",
+   "id": "deepbuild/art",
+   "version": "1.0.0",
+   "ref": "deepbuild/art@1.0.0",
+   "digest": "4cad4b7533c8bfe5a4df9377e770d5850f91a0898e9c2a9dfc354f8c096ec4cf"
+  },
+  {
+   "folder": "blender-1.0.0",
+   "id": "deepbuild/blender",
+   "version": "1.0.0",
+   "ref": "deepbuild/blender@1.0.0",
+   "digest": "b00c843136686c487fa539dcbf908e83907885dca1332ad817a2f1f8ab332b8b"
+  },
+  {
+   "folder": "chrome-fx-1.0.0",
+   "id": "deepbuild/chrome-fx",
+   "version": "1.0.0",
+   "ref": "deepbuild/chrome-fx@1.0.0",
+   "digest": "fd104c5792cd1e84cfb3d927966304cf1b7c6dc23afa5287ef562d41aa0d15a5"
+  },
+  {
+   "folder": "circuit-1.0.0",
+   "id": "deepbuild/circuit",
+   "version": "1.0.0",
+   "ref": "deepbuild/circuit@1.0.0",
+   "digest": "92dae37bb977c2d896a600aa9a91eb365a8791837d35998285d6c9812f83bd59"
+  },
+  {
+   "folder": "composites-1.0.0",
+   "id": "deepbuild/composites",
+   "version": "1.0.0",
+   "ref": "deepbuild/composites@1.0.0",
+   "digest": "0180ad3718ac6acf6537f762f72752f77353fac800e602d4a40dd06252784e28"
+  },
+  {
+   "folder": "explain-1.0.0",
+   "id": "deepbuild/explain",
+   "version": "1.0.0",
+   "ref": "deepbuild/explain@1.0.0",
+   "digest": "528d77e4ec0cbbece5bac23aa201416f8476f13a8c66be327734730a439b3504"
+  },
+  {
+   "folder": "familiar-1.0.0",
+   "id": "deepbuild/familiar",
+   "version": "1.0.0",
+   "ref": "deepbuild/familiar@1.0.0",
+   "digest": "1710572e7f00f4231c10380ce00e99638c7b0c4ab74b8b5417c326231c0a81db"
+  },
+  {
+   "folder": "familiar-1.1.0",
+   "id": "deepbuild/familiar",
+   "version": "1.1.0",
+   "ref": "deepbuild/familiar@1.1.0",
+   "digest": "62a2b35a11e22ab489fe5700e29d956cd1e8a5e0b1f340817fb000f9069dd865"
+  },
+  {
+   "folder": "foley-1.0.0",
+   "id": "deepbuild/foley",
+   "version": "1.0.0",
+   "ref": "deepbuild/foley@1.0.0",
+   "digest": "0d051d5c6658f2d15be2d2fe400436dd5e45105db81d3322c633dddad51ab8bd"
+  },
+  {
+   "folder": "fx-1.0.0",
+   "id": "deepbuild/fx",
+   "version": "1.0.0",
+   "ref": "deepbuild/fx@1.0.0",
+   "digest": "633dadd58f172b39e9feaa8aa33a90d0d16ac17b47b7834ed743b9e119fcd310"
+  },
+  {
+   "folder": "godot-1.0.0",
+   "id": "deepbuild/godot",
+   "version": "1.0.0",
+   "ref": "deepbuild/godot@1.0.0",
+   "digest": "8e0daa31eb3fe9bd04512e04360fdc9627996d4b02d58a33662629ef0630ded9"
+  },
+  {
+   "folder": "godot-1.1.0",
+   "id": "deepbuild/godot",
+   "version": "1.1.0",
+   "ref": "deepbuild/godot@1.1.0",
+   "digest": "2740e662ed206631062297c0fd6c1046b1cfd998d24858c3765199a65880af19"
+  },
+  {
+   "folder": "interfaces-1.0.0",
+   "id": "deepbuild/interfaces",
+   "version": "1.0.0",
+   "ref": "deepbuild/interfaces@1.0.0",
+   "digest": "075ec0e924d6a5c7b0b7d8069c1633f31849b09bbad54c720d5c8ae86efadc32"
+  },
+  {
+   "folder": "lanes-1.0.0",
+   "id": "deepbuild/lanes",
+   "version": "1.0.0",
+   "ref": "deepbuild/lanes@1.0.0",
+   "digest": "b1254594d703f3afafe6d75a247ada9794ad197f5aa2995ffdab76011c7c505a"
+  },
+  {
+   "folder": "math-1.0.0",
+   "id": "deepbuild/math",
+   "version": "1.0.0",
+   "ref": "deepbuild/math@1.0.0",
+   "digest": "1aa1fd730190e0cd9ea9988323901b4f7b6a240833c47654196ccda6ecbfdee7"
+  },
+  {
+   "folder": "modslib-1.0.0",
+   "id": "deepbuild/modslib",
+   "version": "1.0.0",
+   "ref": "deepbuild/modslib@1.0.0",
+   "digest": "5ddc424cbe2e2a6ed6942e4c329959d7aec7392d5e62e07d702a4ac7bcfffef4"
+  },
+  {
+   "folder": "process-1.0.0",
+   "id": "deepbuild/process",
+   "version": "1.0.0",
+   "ref": "deepbuild/process@1.0.0",
+   "digest": "00b833f66ab3af50e02ee25172977f7042e34f7afa6df968a9d6dd936ade5d6b"
+  },
+  {
+   "folder": "sense-1.0.0",
+   "id": "deepbuild/sense",
+   "version": "1.0.0",
+   "ref": "deepbuild/sense@1.0.0",
+   "digest": "dea1c72e38d4dd31fcf72e1ad5085022bbf68abe9e567d508a109059ab3b1967"
+  },
+  {
+   "folder": "separation-1.0.0",
+   "id": "deepbuild/separation",
+   "version": "1.0.0",
+   "ref": "deepbuild/separation@1.0.0",
+   "digest": "3b18ab2b692c86a1ad0f08edb0fbe93c932fc8bbbc404332ad9ae2e3ec41a49a"
+  },
+  {
+   "folder": "unreal-1.0.0",
+   "id": "deepbuild/unreal",
+   "version": "1.0.0",
+   "ref": "deepbuild/unreal@1.0.0",
+   "digest": "da6180d4af91b6659dbfa430ad9e9e7066c47f84507bf69bff95f611c1f6ae71"
+  },
+  {
+   "folder": "verbs-1.0.0",
+   "id": "deepbuild/verbs",
+   "version": "1.0.0",
+   "ref": "deepbuild/verbs@1.0.0",
+   "digest": "af8c30efe4a17ac771f1836a6b5b922de99484507b5511bef59691f82ec83f39"
+  }
+ ],
+ "world": [
+  {
+   "id": "deepbuild/composites",
+   "dir": "packs/0180ad3718ac6acf6537f762f72752f77353fac800e602d4a40dd06252784e28"
+  },
+  {
+   "id": "deepbuild/modslib",
+   "dir": "packs/5ddc424cbe2e2a6ed6942e4c329959d7aec7392d5e62e07d702a4ac7bcfffef4"
+  },
+  {
+   "id": "deepbuild/chrome-fx",
+   "dir": "packs/fd104c5792cd1e84cfb3d927966304cf1b7c6dc23afa5287ef562d41aa0d15a5"
+  },
+  {
+   "id": "deepbuild/godot",
+   "dir": "packs/8e0daa31eb3fe9bd04512e04360fdc9627996d4b02d58a33662629ef0630ded9"
+  },
+  {
+   "id": "deepbuild/art",
+   "dir": "packs/4cad4b7533c8bfe5a4df9377e770d5850f91a0898e9c2a9dfc354f8c096ec4cf"
+  },
+  {
+   "id": "deepbuild/fx",
+   "dir": "packs/633dadd58f172b39e9feaa8aa33a90d0d16ac17b47b7834ed743b9e119fcd310"
+  },
+  {
+   "id": "deepbuild/lanes",
+   "dir": "packs/b1254594d703f3afafe6d75a247ada9794ad197f5aa2995ffdab76011c7c505a"
+  },
+  {
+   "id": "deepbuild/process",
+   "dir": "packs/00b833f66ab3af50e02ee25172977f7042e34f7afa6df968a9d6dd936ade5d6b"
+  },
+  {
+   "id": "deepbuild/godot",
+   "dir": "packs/2740e662ed206631062297c0fd6c1046b1cfd998d24858c3765199a65880af19"
+  },
+  {
+   "id": "deepbuild/circuit",
+   "dir": "packs/92dae37bb977c2d896a600aa9a91eb365a8791837d35998285d6c9812f83bd59"
+  },
+  {
+   "id": "deepbuild/familiar",
+   "dir": "packs/62a2b35a11e22ab489fe5700e29d956cd1e8a5e0b1f340817fb000f9069dd865"
+  },
+  {
+   "id": "deepbuild/familiar",
+   "dir": "packs/1710572e7f00f4231c10380ce00e99638c7b0c4ab74b8b5417c326231c0a81db"
+  },
+  {
+   "id": "deepbuild/separation",
+   "dir": "packs/3b18ab2b692c86a1ad0f08edb0fbe93c932fc8bbbc404332ad9ae2e3ec41a49a"
+  },
+  {
+   "id": "deepbuild/verbs",
+   "dir": "packs/af8c30efe4a17ac771f1836a6b5b922de99484507b5511bef59691f82ec83f39"
+  },
+  {
+   "id": "deepbuild/blender",
+   "dir": "packs/b00c843136686c487fa539dcbf908e83907885dca1332ad817a2f1f8ab332b8b"
+  },
+  {
+   "id": "deepbuild/explain",
+   "dir": "packs/528d77e4ec0cbbece5bac23aa201416f8476f13a8c66be327734730a439b3504"
+  },
+  {
+   "id": "deepbuild/foley",
+   "dir": "packs/0d051d5c6658f2d15be2d2fe400436dd5e45105db81d3322c633dddad51ab8bd"
+  },
+  {
+   "id": "deepbuild/unreal",
+   "dir": "packs/da6180d4af91b6659dbfa430ad9e9e7066c47f84507bf69bff95f611c1f6ae71"
+  },
+  {
+   "id": "deepbuild/interfaces",
+   "dir": "packs/075ec0e924d6a5c7b0b7d8069c1633f31849b09bbad54c720d5c8ae86efadc32"
+  },
+  {
+   "id": "deepbuild/sense",
+   "dir": "packs/dea1c72e38d4dd31fcf72e1ad5085022bbf68abe9e567d508a109059ab3b1967"
+  },
+  {
+   "id": "deepbuild/math",
+   "dir": "packs/1aa1fd730190e0cd9ea9988323901b4f7b6a240833c47654196ccda6ecbfdee7"
+  }
+ ]
+}

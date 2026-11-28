@@ -1,0 +1,4 @@
+running 2 tests
+test ac6_planted_replay_changes_step_37_fails_the_merge_bases_golden_naming_step_37 ... ok
+test ac6_a_golden_recorded_on_the_merge_base_matches_step_for_step ... ok
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s

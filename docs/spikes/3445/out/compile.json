@@ -1,0 +1,4606 @@
+{
+ "kind": "core",
+ "date": "2026-11-25T19:28:12.722Z",
+ "fingerprint": {
+  "model": "Mac17,10",
+  "chip": "Apple M5 Max",
+  "memoryBytes": 68719476736,
+  "power": "ac",
+  "lowPowerMode": false,
+  "thermalState": "nominal",
+  "macosBuild": "26B8119"
+ },
+ "cores": 18,
+ "lease": "timed:a50904de23b0851c",
+ "load": {
+  "start": [
+   20.95458984375,
+   21.02685546875,
+   21.6806640625
+  ],
+  "end": [
+   22.16455078125,
+   21.423828125,
+   21.80419921875
+  ]
+ },
+ "binary": {
+  "name": "deep-show",
+  "sha256": "abb4c7f38ccf8304fe8552a974638743a7299f3aed1e60e46d8897c2ca98584b",
+  "bytes": 254504128
+ },
+ "made": {
+  "label": "timing",
+  "base": "aafef31316f7da8f741647a5934a717d9019ffff",
+  "patches": [
+   {
+    "file": "patches/timing.patch",
+    "sha256": "b1d99215a6138246260ac6a957ea12437b0fbbeddf1468537648f25696417511"
+   }
+  ],
+  "example": {
+   "file": "tracker.rs",
+   "sha256": "166e58ade3cac859312a359c633ab21f562e4e4a6d4b68bbc06bd8e5b6adfa7c"
+  },
+  "ledger": {
+   "file": "kit-ledger.json",
+   "sha256": "2c1e5e9eb9a57dcae6478575f1116ab5749ff2925c1eb18679ca897ff8fee553"
+  },
+  "command": "cargo build --release --locked -j 10 -p deep-show --bin deep-show -p deep-logic --bin deep-logic --example spike3445_tracker",
+  "finished": "Finished `release` profile [optimized] target(s)",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "date": "2026-11-25T06:12:22Z",
+  "sha256": {
+   "deep-show": "abb4c7f38ccf8304fe8552a974638743a7299f3aed1e60e46d8897c2ca98584b",
+   "deep-logic": "8273842ac5f2dc55945d3f4046e01ed2943ad0364724e98d77d4b96d2353c57d",
+   "spike3445_tracker": "773edbc6e1672eecdb403d7ea77a644a95e9215da07058b51d18be4658fe4560"
+  }
+ },
+ "packs": [
+  "deepbuild/art@1.0.0",
+  "deepbuild/blender@1.0.0",
+  "deepbuild/chrome-fx@1.0.0",
+  "deepbuild/circuit@1.0.0",
+  "deepbuild/composites@1.0.0",
+  "deepbuild/explain@1.0.0",
+  "deepbuild/familiar@1.0.0",
+  "deepbuild/familiar@1.1.0",
+  "deepbuild/foley@1.0.0",
+  "deepbuild/fx@1.0.0",
+  "deepbuild/godot@1.0.0",
+  "deepbuild/godot@1.1.0",
+  "deepbuild/interfaces@1.0.0",
+  "deepbuild/lanes@1.0.0",
+  "deepbuild/math@1.0.0",
+  "deepbuild/modslib@1.0.0",
+  "deepbuild/process@1.0.0",
+  "deepbuild/sense@1.0.0",
+  "deepbuild/separation@1.0.0",
+  "deepbuild/unreal@1.0.0",
+  "deepbuild/verbs@1.0.0"
+ ],
+ "world": [
+  "deepbuild/composites",
+  "deepbuild/modslib",
+  "deepbuild/chrome-fx",
+  "deepbuild/godot",
+  "deepbuild/art",
+  "deepbuild/fx",
+  "deepbuild/lanes",
+  "deepbuild/process",
+  "deepbuild/godot",
+  "deepbuild/circuit",
+  "deepbuild/familiar",
+  "deepbuild/familiar",
+  "deepbuild/separation",
+  "deepbuild/verbs",
+  "deepbuild/blender",
+  "deepbuild/explain",
+  "deepbuild/foley",
+  "deepbuild/unreal",
+  "deepbuild/interfaces",
+  "deepbuild/sense",
+  "deepbuild/math"
+ ],
+ "calls": [
+  "deep_kinds",
+  "deep_kinds",
+  "costs",
+  "packs"
+ ],
+ "replies": [
+  {
+   "pid": 89266,
+   "reply": 1,
+   "call": "deep_kinds",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634893009.709,
+   "repliedMs": 1795634897032.0227,
+   "primes": true,
+   "compiles": 109,
+   "compileNs": 1575828372,
+   "programs": [
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "b0491e694ed43b4a2bc3e1417893c42fdda6239fcf3f6d09e096d0b2bf2ee996",
+     "ns": 12974791
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "b0491e694ed43b4a2bc3e1417893c42fdda6239fcf3f6d09e096d0b2bf2ee996",
+     "ns": 10382250
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "3914875878016a2f6cf4aa7110d77e18213db9712d323081f6c77c15e6bb2493",
+     "ns": 9922458
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "3914875878016a2f6cf4aa7110d77e18213db9712d323081f6c77c15e6bb2493",
+     "ns": 11292459
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "b2ea3fb5c27b96824fad1c6ab6452a24698fc918659038465ce413372514ae07",
+     "ns": 10847500
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "b2ea3fb5c27b96824fad1c6ab6452a24698fc918659038465ce413372514ae07",
+     "ns": 10232667
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "e50c8a5f133cb4ab093bbf915438b0acf39c0c890bf13ed5953774d5c6fd7ba2",
+     "ns": 9979500
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "e50c8a5f133cb4ab093bbf915438b0acf39c0c890bf13ed5953774d5c6fd7ba2",
+     "ns": 9934166
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "896f8c8d83b502320b09935f7c5f7f2a8a05d214fcae871d17a6385ae7d39eeb",
+     "ns": 9861750
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "896f8c8d83b502320b09935f7c5f7f2a8a05d214fcae871d17a6385ae7d39eeb",
+     "ns": 9714333
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "e3564538326059dc1b06d2b1923f38601d110166ec4213cd1c56afe8794540fb",
+     "ns": 15976833
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "e3564538326059dc1b06d2b1923f38601d110166ec4213cd1c56afe8794540fb",
+     "ns": 16499416
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "f9e8cf292f1685dab8fca143bdec1861d94228984fabeefdd05476a993acfa1e",
+     "ns": 16274959
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "f9e8cf292f1685dab8fca143bdec1861d94228984fabeefdd05476a993acfa1e",
+     "ns": 16162167
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
+     "ns": 16448041
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
+     "ns": 15956333
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "2dd2b94e040cc950aa388a6c3923a70ccb601ba06ec6b5eafa816af021be0609",
+     "ns": 16224667
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "2dd2b94e040cc950aa388a6c3923a70ccb601ba06ec6b5eafa816af021be0609",
+     "ns": 15778250
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "3943cd29bc9d0b9c09143af39b74d4fbb04a47aa76fe3a58eb0f08111105ea0b",
+     "ns": 16855375
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "3943cd29bc9d0b9c09143af39b74d4fbb04a47aa76fe3a58eb0f08111105ea0b",
+     "ns": 17199042
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
+     "ns": 15829042
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
+     "ns": 16280708
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "ef049b2c23eb3c71a14e8b30fab0579caff8f60e74c7706295f1cb1ace5e72fb",
+     "ns": 20577750
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "ef049b2c23eb3c71a14e8b30fab0579caff8f60e74c7706295f1cb1ace5e72fb",
+     "ns": 20930583
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "a1c46d3ff9cec7dc6a7b582ee075863fff0b5da5df80d4070b02ce090a429d02",
+     "ns": 21319250
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "a1c46d3ff9cec7dc6a7b582ee075863fff0b5da5df80d4070b02ce090a429d02",
+     "ns": 20475375
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "9febdc8f3f07c06b40f71328eb319e713d1a3c6f2aff31dbbe584b29dea77d81",
+     "ns": 20025333
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "9febdc8f3f07c06b40f71328eb319e713d1a3c6f2aff31dbbe584b29dea77d81",
+     "ns": 20690125
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d858d5c52212b4dcb5d65b120e0db2a33acd5d684c498f782b60db565d136861",
+     "ns": 19978791
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d858d5c52212b4dcb5d65b120e0db2a33acd5d684c498f782b60db565d136861",
+     "ns": 21217000
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "92dc30c7da6dcae217a56514efc9febb6a712bb123ccb8a261a3abb0f40c03dd",
+     "ns": 20004208
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "92dc30c7da6dcae217a56514efc9febb6a712bb123ccb8a261a3abb0f40c03dd",
+     "ns": 20041875
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
+     "ns": 20269709
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
+     "ns": 20064792
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "05e422159ec2768b8feeab908aee2bf96ff12b1fbb954e6fd37c08f36c6972c0",
+     "ns": 21963000
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "05e422159ec2768b8feeab908aee2bf96ff12b1fbb954e6fd37c08f36c6972c0",
+     "ns": 20457208
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d0e0d07579c214a08abb00185dbdc222d30b2931e04441a6dbb9aa479728fcff",
+     "ns": 23222000
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d0e0d07579c214a08abb00185dbdc222d30b2931e04441a6dbb9aa479728fcff",
+     "ns": 20739792
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
+     "ns": 22042541
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
+     "ns": 21550208
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "85957103aae6a86e642dc4f027dec14a5d087cbeaee449637eb9ab4a0af15561",
+     "ns": 18472666
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "85957103aae6a86e642dc4f027dec14a5d087cbeaee449637eb9ab4a0af15561",
+     "ns": 18653125
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "77c6cbe0aabe3630b0dbfafe04b42629d8634d3ae6eb53eb1ff2dfdcd6108401",
+     "ns": 22411166
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "77c6cbe0aabe3630b0dbfafe04b42629d8634d3ae6eb53eb1ff2dfdcd6108401",
+     "ns": 20244833
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "3b3f4006df6fe793d0b5436698d260b1fe50d8319ab21cd04ae27136f10f5b4d",
+     "ns": 19924208
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "3b3f4006df6fe793d0b5436698d260b1fe50d8319ab21cd04ae27136f10f5b4d",
+     "ns": 18554709
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "5f23dc00389e0a7c371c9ca7123b33d42ddacfe82bc8c0e13cc907e34fee684d",
+     "ns": 19801000
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "5f23dc00389e0a7c371c9ca7123b33d42ddacfe82bc8c0e13cc907e34fee684d",
+     "ns": 18556250
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "1b682633c4965cb0bfdd711cba0ccac29671e0c9df82f2d8de3f8a38fe3483af",
+     "ns": 19845500
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "1b682633c4965cb0bfdd711cba0ccac29671e0c9df82f2d8de3f8a38fe3483af",
+     "ns": 18322125
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "85957103aae6a86e642dc4f027dec14a5d087cbeaee449637eb9ab4a0af15561",
+     "ns": 18979958
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "8f0879811b458238393eb3a6db4fae4288f374ed6577e6a52e70ccf64181d503",
+     "ns": 18853959
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "1b682633c4965cb0bfdd711cba0ccac29671e0c9df82f2d8de3f8a38fe3483af",
+     "ns": 18393167
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "95480581c8bda7218c6bbb59337fc3669c9711b98c55433be7f23ef443ab1fc8",
+     "ns": 17883375
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "95480581c8bda7218c6bbb59337fc3669c9711b98c55433be7f23ef443ab1fc8",
+     "ns": 17668417
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "31783c49de2cc0c33e04bf7c28bcd05c9b594303ca7eaf84ac1675e998296bc7",
+     "ns": 17341167
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "31783c49de2cc0c33e04bf7c28bcd05c9b594303ca7eaf84ac1675e998296bc7",
+     "ns": 17898375
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "f371f25ba2394a9bf2d5f25836c99bb7e6137fd6037ba6dd0f7bc46aecc01810",
+     "ns": 18608916
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "f371f25ba2394a9bf2d5f25836c99bb7e6137fd6037ba6dd0f7bc46aecc01810",
+     "ns": 18194125
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "e752daed45ec51d80b179bd50a6e4248a12b8724ca5bd2362b73196d91c95542",
+     "ns": 18745667
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "e752daed45ec51d80b179bd50a6e4248a12b8724ca5bd2362b73196d91c95542",
+     "ns": 18125459
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "a714594691925c7ff7179eab6ae1cf1c6c13def19121a81e43f1e2e46d5bcac8",
+     "ns": 18107167
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "a714594691925c7ff7179eab6ae1cf1c6c13def19121a81e43f1e2e46d5bcac8",
+     "ns": 17545125
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "18b16ee708b526883883c29d5d8eb55c1e7830fddd470b57af5b9d663e33f8b7",
+     "ns": 18578709
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "18b16ee708b526883883c29d5d8eb55c1e7830fddd470b57af5b9d663e33f8b7",
+     "ns": 19171791
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "d69b261178ed6fe4c083e32c67e63e2f6dc6eb241358e4250ce79bc4fa4e6962",
+     "ns": 9183375
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "d69b261178ed6fe4c083e32c67e63e2f6dc6eb241358e4250ce79bc4fa4e6962",
+     "ns": 9544667
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "082143b303740e02b2adc08ee1eb182c84d16d71dae16fe4ef3ed3b3652bf86b",
+     "ns": 12326833
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "082143b303740e02b2adc08ee1eb182c84d16d71dae16fe4ef3ed3b3652bf86b",
+     "ns": 12888083
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "8170ed9e174bdec7fdea96900ac7b0cc10deb59aff50735acef6e7291116ed1a",
+     "ns": 12462625
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "8170ed9e174bdec7fdea96900ac7b0cc10deb59aff50735acef6e7291116ed1a",
+     "ns": 15749250
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "caef2ceb7d15e8998549c6385dbb93ace70f3b6511ce1901613787d90906c749",
+     "ns": 13793750
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "caef2ceb7d15e8998549c6385dbb93ace70f3b6511ce1901613787d90906c749",
+     "ns": 12958625
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "a3c6e180b9636cac1a5d9b0a00a2f53d607ec55f630c7a89529321f62e830d48",
+     "ns": 12983875
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "a3c6e180b9636cac1a5d9b0a00a2f53d607ec55f630c7a89529321f62e830d48",
+     "ns": 12522291
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "9d4d605fdfb541d8895d8ab0d3427631b90a1e660be85c8c24f0fd74a4595657",
+     "ns": 12458334
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "9d4d605fdfb541d8895d8ab0d3427631b90a1e660be85c8c24f0fd74a4595657",
+     "ns": 12291375
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "7300ee90bb9380f5927e206cf7d975f9a0e4a0ff5cbd2fd1b444b73d311d24bc",
+     "ns": 8962500
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "9d4d605fdfb541d8895d8ab0d3427631b90a1e660be85c8c24f0fd74a4595657",
+     "ns": 13110334
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "3c82376c8ac5b680b58182a2f6bb97b3f878728bba2b55354204d7b4a3eebf27",
+     "ns": 13345250
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "3c82376c8ac5b680b58182a2f6bb97b3f878728bba2b55354204d7b4a3eebf27",
+     "ns": 13130292
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "31cbd4e0d221dfc46bfde98a0927f68bff3eed1b17cdab97186b0bcebca0f3a1",
+     "ns": 13175792
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "31cbd4e0d221dfc46bfde98a0927f68bff3eed1b17cdab97186b0bcebca0f3a1",
+     "ns": 13103459
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "66ad77c23fd07bbc65f0b6ad86a4eb3a67a418f000c230fabb0c135824b3e4b3",
+     "ns": 13424459
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "66ad77c23fd07bbc65f0b6ad86a4eb3a67a418f000c230fabb0c135824b3e4b3",
+     "ns": 13536625
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "7439d30e7ad70f1bab28311ff5421ada50a7a47b0d019963143ae5e78243e578",
+     "ns": 14831083
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "7439d30e7ad70f1bab28311ff5421ada50a7a47b0d019963143ae5e78243e578",
+     "ns": 13343167
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "9b584ab0caa6b3cc121cfe807677ae61159a41e70419de78ace61125729673e4",
+     "ns": 13810792
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "9b584ab0caa6b3cc121cfe807677ae61159a41e70419de78ace61125729673e4",
+     "ns": 13275083
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "d6f3605160e3cb773e7e22c9998fc3de88b079dd386751b9be17ddb23562a668",
+     "ns": 13027041
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "d6f3605160e3cb773e7e22c9998fc3de88b079dd386751b9be17ddb23562a668",
+     "ns": 12932791
+    },
+    {
+     "pack": "deepbuild/interfaces@1.0.0",
+     "program": "260c9d5993ef28b8605b18bc78db29f17ff6c11e5f7c833698cf927eadf0e28a",
+     "ns": 1172459
+    },
+    {
+     "pack": "deepbuild/interfaces@1.0.0",
+     "program": "260c9d5993ef28b8605b18bc78db29f17ff6c11e5f7c833698cf927eadf0e28a",
+     "ns": 1063542
+    },
+    {
+     "pack": "deepbuild/interfaces@1.0.0",
+     "program": "db724e63f479a9a2f419f16ddae3fd8304c61877b2843b866361c70e62c4b7e1",
+     "ns": 1284208
+    },
+    {
+     "pack": "deepbuild/interfaces@1.0.0",
+     "program": "db724e63f479a9a2f419f16ddae3fd8304c61877b2843b866361c70e62c4b7e1",
+     "ns": 1344916
+    },
+    {
+     "pack": "deepbuild/interfaces@1.0.0",
+     "program": "1ce4365e26036bbdd5ed4702e8a9e4b1409fb8da0aaecc2e5fb129c8e45f9fa6",
+     "ns": 1392125
+    },
+    {
+     "pack": "deepbuild/interfaces@1.0.0",
+     "program": "1ce4365e26036bbdd5ed4702e8a9e4b1409fb8da0aaecc2e5fb129c8e45f9fa6",
+     "ns": 1398209
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "f1244d523ed647963c5c93c2f5b11fcd111446295408d0af83b38b7e0c3ebda3",
+     "ns": 7922708
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "f1244d523ed647963c5c93c2f5b11fcd111446295408d0af83b38b7e0c3ebda3",
+     "ns": 7377250
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7819375
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7241625
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 8386333
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7484833
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7250541
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7908916
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7389750
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7186125
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7749000
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7207500
+    }
+   ]
+  },
+  {
+   "pid": 89266,
+   "reply": 2,
+   "call": "deep_kinds",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634897032.0537,
+   "repliedMs": 1795634897054.3538,
+   "primes": true
+  },
+  {
+   "pid": 89266,
+   "reply": 3,
+   "call": "costs",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634897054.379,
+   "repliedMs": 1795634898389.651,
+   "primes": true
+  },
+  {
+   "pid": 89266,
+   "reply": 4,
+   "call": "packs",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634898389.6687,
+   "repliedMs": 1795634898389.8262,
+   "primes": true
+  },
+  {
+   "pid": 90770,
+   "reply": 1,
+   "call": "deep_kinds",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634898402.0852,
+   "repliedMs": 1795634902385.1943,
+   "compiles": 109,
+   "compileNs": 1584987962,
+   "programs": [
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "b0491e694ed43b4a2bc3e1417893c42fdda6239fcf3f6d09e096d0b2bf2ee996",
+     "ns": 10580375
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "b0491e694ed43b4a2bc3e1417893c42fdda6239fcf3f6d09e096d0b2bf2ee996",
+     "ns": 10551459
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "3914875878016a2f6cf4aa7110d77e18213db9712d323081f6c77c15e6bb2493",
+     "ns": 10609167
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "3914875878016a2f6cf4aa7110d77e18213db9712d323081f6c77c15e6bb2493",
+     "ns": 10400792
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "b2ea3fb5c27b96824fad1c6ab6452a24698fc918659038465ce413372514ae07",
+     "ns": 9829375
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "b2ea3fb5c27b96824fad1c6ab6452a24698fc918659038465ce413372514ae07",
+     "ns": 9733959
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "e50c8a5f133cb4ab093bbf915438b0acf39c0c890bf13ed5953774d5c6fd7ba2",
+     "ns": 10405875
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "e50c8a5f133cb4ab093bbf915438b0acf39c0c890bf13ed5953774d5c6fd7ba2",
+     "ns": 11227959
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "896f8c8d83b502320b09935f7c5f7f2a8a05d214fcae871d17a6385ae7d39eeb",
+     "ns": 13234375
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "896f8c8d83b502320b09935f7c5f7f2a8a05d214fcae871d17a6385ae7d39eeb",
+     "ns": 10102708
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "e3564538326059dc1b06d2b1923f38601d110166ec4213cd1c56afe8794540fb",
+     "ns": 15871416
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "e3564538326059dc1b06d2b1923f38601d110166ec4213cd1c56afe8794540fb",
+     "ns": 16535917
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "f9e8cf292f1685dab8fca143bdec1861d94228984fabeefdd05476a993acfa1e",
+     "ns": 17357917
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "f9e8cf292f1685dab8fca143bdec1861d94228984fabeefdd05476a993acfa1e",
+     "ns": 15647000
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
+     "ns": 16214500
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
+     "ns": 16182625
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "2dd2b94e040cc950aa388a6c3923a70ccb601ba06ec6b5eafa816af021be0609",
+     "ns": 16347125
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "2dd2b94e040cc950aa388a6c3923a70ccb601ba06ec6b5eafa816af021be0609",
+     "ns": 16520458
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "3943cd29bc9d0b9c09143af39b74d4fbb04a47aa76fe3a58eb0f08111105ea0b",
+     "ns": 15762125
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "3943cd29bc9d0b9c09143af39b74d4fbb04a47aa76fe3a58eb0f08111105ea0b",
+     "ns": 15852209
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
+     "ns": 16373834
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
+     "ns": 17398709
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "ef049b2c23eb3c71a14e8b30fab0579caff8f60e74c7706295f1cb1ace5e72fb",
+     "ns": 20242084
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "ef049b2c23eb3c71a14e8b30fab0579caff8f60e74c7706295f1cb1ace5e72fb",
+     "ns": 20793708
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "a1c46d3ff9cec7dc6a7b582ee075863fff0b5da5df80d4070b02ce090a429d02",
+     "ns": 20029000
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "a1c46d3ff9cec7dc6a7b582ee075863fff0b5da5df80d4070b02ce090a429d02",
+     "ns": 25509666
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "9febdc8f3f07c06b40f71328eb319e713d1a3c6f2aff31dbbe584b29dea77d81",
+     "ns": 21349875
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "9febdc8f3f07c06b40f71328eb319e713d1a3c6f2aff31dbbe584b29dea77d81",
+     "ns": 19877708
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d858d5c52212b4dcb5d65b120e0db2a33acd5d684c498f782b60db565d136861",
+     "ns": 20471041
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d858d5c52212b4dcb5d65b120e0db2a33acd5d684c498f782b60db565d136861",
+     "ns": 19809208
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "92dc30c7da6dcae217a56514efc9febb6a712bb123ccb8a261a3abb0f40c03dd",
+     "ns": 20580583
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "92dc30c7da6dcae217a56514efc9febb6a712bb123ccb8a261a3abb0f40c03dd",
+     "ns": 20885166
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
+     "ns": 20017083
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
+     "ns": 19932875
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "05e422159ec2768b8feeab908aee2bf96ff12b1fbb954e6fd37c08f36c6972c0",
+     "ns": 20246084
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "05e422159ec2768b8feeab908aee2bf96ff12b1fbb954e6fd37c08f36c6972c0",
+     "ns": 22399792
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d0e0d07579c214a08abb00185dbdc222d30b2931e04441a6dbb9aa479728fcff",
+     "ns": 20584417
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d0e0d07579c214a08abb00185dbdc222d30b2931e04441a6dbb9aa479728fcff",
+     "ns": 20104333
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
+     "ns": 21182917
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
+     "ns": 19967792
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "85957103aae6a86e642dc4f027dec14a5d087cbeaee449637eb9ab4a0af15561",
+     "ns": 18099209
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "85957103aae6a86e642dc4f027dec14a5d087cbeaee449637eb9ab4a0af15561",
+     "ns": 18654417
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "77c6cbe0aabe3630b0dbfafe04b42629d8634d3ae6eb53eb1ff2dfdcd6108401",
+     "ns": 18147625
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "77c6cbe0aabe3630b0dbfafe04b42629d8634d3ae6eb53eb1ff2dfdcd6108401",
+     "ns": 18597750
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "3b3f4006df6fe793d0b5436698d260b1fe50d8319ab21cd04ae27136f10f5b4d",
+     "ns": 18211250
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "3b3f4006df6fe793d0b5436698d260b1fe50d8319ab21cd04ae27136f10f5b4d",
+     "ns": 17969416
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "5f23dc00389e0a7c371c9ca7123b33d42ddacfe82bc8c0e13cc907e34fee684d",
+     "ns": 26201833
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "5f23dc00389e0a7c371c9ca7123b33d42ddacfe82bc8c0e13cc907e34fee684d",
+     "ns": 23875333
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "1b682633c4965cb0bfdd711cba0ccac29671e0c9df82f2d8de3f8a38fe3483af",
+     "ns": 22386458
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "1b682633c4965cb0bfdd711cba0ccac29671e0c9df82f2d8de3f8a38fe3483af",
+     "ns": 18481250
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "85957103aae6a86e642dc4f027dec14a5d087cbeaee449637eb9ab4a0af15561",
+     "ns": 19103583
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "8f0879811b458238393eb3a6db4fae4288f374ed6577e6a52e70ccf64181d503",
+     "ns": 19755542
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "1b682633c4965cb0bfdd711cba0ccac29671e0c9df82f2d8de3f8a38fe3483af",
+     "ns": 18815792
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "95480581c8bda7218c6bbb59337fc3669c9711b98c55433be7f23ef443ab1fc8",
+     "ns": 18467875
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "95480581c8bda7218c6bbb59337fc3669c9711b98c55433be7f23ef443ab1fc8",
+     "ns": 19480417
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "31783c49de2cc0c33e04bf7c28bcd05c9b594303ca7eaf84ac1675e998296bc7",
+     "ns": 18200166
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "31783c49de2cc0c33e04bf7c28bcd05c9b594303ca7eaf84ac1675e998296bc7",
+     "ns": 17845167
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "f371f25ba2394a9bf2d5f25836c99bb7e6137fd6037ba6dd0f7bc46aecc01810",
+     "ns": 17917791
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "f371f25ba2394a9bf2d5f25836c99bb7e6137fd6037ba6dd0f7bc46aecc01810",
+     "ns": 18572458
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "e752daed45ec51d80b179bd50a6e4248a12b8724ca5bd2362b73196d91c95542",
+     "ns": 18893459
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "e752daed45ec51d80b179bd50a6e4248a12b8724ca5bd2362b73196d91c95542",
+     "ns": 17958125
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "a714594691925c7ff7179eab6ae1cf1c6c13def19121a81e43f1e2e46d5bcac8",
+     "ns": 18313916
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "a714594691925c7ff7179eab6ae1cf1c6c13def19121a81e43f1e2e46d5bcac8",
+     "ns": 18827167
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "18b16ee708b526883883c29d5d8eb55c1e7830fddd470b57af5b9d663e33f8b7",
+     "ns": 18849708
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "18b16ee708b526883883c29d5d8eb55c1e7830fddd470b57af5b9d663e33f8b7",
+     "ns": 17897958
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "d69b261178ed6fe4c083e32c67e63e2f6dc6eb241358e4250ce79bc4fa4e6962",
+     "ns": 9861041
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "d69b261178ed6fe4c083e32c67e63e2f6dc6eb241358e4250ce79bc4fa4e6962",
+     "ns": 9052875
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "082143b303740e02b2adc08ee1eb182c84d16d71dae16fe4ef3ed3b3652bf86b",
+     "ns": 12931292
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "082143b303740e02b2adc08ee1eb182c84d16d71dae16fe4ef3ed3b3652bf86b",
+     "ns": 12898750
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "8170ed9e174bdec7fdea96900ac7b0cc10deb59aff50735acef6e7291116ed1a",
+     "ns": 12700709
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "8170ed9e174bdec7fdea96900ac7b0cc10deb59aff50735acef6e7291116ed1a",
+     "ns": 12558458
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "caef2ceb7d15e8998549c6385dbb93ace70f3b6511ce1901613787d90906c749",
+     "ns": 12472125
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "caef2ceb7d15e8998549c6385dbb93ace70f3b6511ce1901613787d90906c749",
+     "ns": 12700833
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "a3c6e180b9636cac1a5d9b0a00a2f53d607ec55f630c7a89529321f62e830d48",
+     "ns": 13248250
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "a3c6e180b9636cac1a5d9b0a00a2f53d607ec55f630c7a89529321f62e830d48",
+     "ns": 12988042
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "9d4d605fdfb541d8895d8ab0d3427631b90a1e660be85c8c24f0fd74a4595657",
+     "ns": 13451209
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "9d4d605fdfb541d8895d8ab0d3427631b90a1e660be85c8c24f0fd74a4595657",
+     "ns": 12380083
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "7300ee90bb9380f5927e206cf7d975f9a0e4a0ff5cbd2fd1b444b73d311d24bc",
+     "ns": 9301667
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "9d4d605fdfb541d8895d8ab0d3427631b90a1e660be85c8c24f0fd74a4595657",
+     "ns": 12571583
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "3c82376c8ac5b680b58182a2f6bb97b3f878728bba2b55354204d7b4a3eebf27",
+     "ns": 13085167
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "3c82376c8ac5b680b58182a2f6bb97b3f878728bba2b55354204d7b4a3eebf27",
+     "ns": 14469500
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "31cbd4e0d221dfc46bfde98a0927f68bff3eed1b17cdab97186b0bcebca0f3a1",
+     "ns": 14009792
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "31cbd4e0d221dfc46bfde98a0927f68bff3eed1b17cdab97186b0bcebca0f3a1",
+     "ns": 13694083
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "66ad77c23fd07bbc65f0b6ad86a4eb3a67a418f000c230fabb0c135824b3e4b3",
+     "ns": 13321250
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "66ad77c23fd07bbc65f0b6ad86a4eb3a67a418f000c230fabb0c135824b3e4b3",
+     "ns": 13906375
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "7439d30e7ad70f1bab28311ff5421ada50a7a47b0d019963143ae5e78243e578",
+     "ns": 13123125
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "7439d30e7ad70f1bab28311ff5421ada50a7a47b0d019963143ae5e78243e578",
+     "ns": 14008666
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "9b584ab0caa6b3cc121cfe807677ae61159a41e70419de78ace61125729673e4",
+     "ns": 13052666
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "9b584ab0caa6b3cc121cfe807677ae61159a41e70419de78ace61125729673e4",
+     "ns": 12839167
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "d6f3605160e3cb773e7e22c9998fc3de88b079dd386751b9be17ddb23562a668",
+     "ns": 13034041
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "d6f3605160e3cb773e7e22c9998fc3de88b079dd386751b9be17ddb23562a668",
+     "ns": 12890750
+    },
+    {
+     "pack": "deepbuild/interfaces@1.0.0",
+     "program": "260c9d5993ef28b8605b18bc78db29f17ff6c11e5f7c833698cf927eadf0e28a",
+     "ns": 1160250
+    },
+    {
+     "pack": "deepbuild/interfaces@1.0.0",
+     "program": "260c9d5993ef28b8605b18bc78db29f17ff6c11e5f7c833698cf927eadf0e28a",
+     "ns": 1490750
+    },
+    {
+     "pack": "deepbuild/interfaces@1.0.0",
+     "program": "db724e63f479a9a2f419f16ddae3fd8304c61877b2843b866361c70e62c4b7e1",
+     "ns": 1200250
+    },
+    {
+     "pack": "deepbuild/interfaces@1.0.0",
+     "program": "db724e63f479a9a2f419f16ddae3fd8304c61877b2843b866361c70e62c4b7e1",
+     "ns": 1396667
+    },
+    {
+     "pack": "deepbuild/interfaces@1.0.0",
+     "program": "1ce4365e26036bbdd5ed4702e8a9e4b1409fb8da0aaecc2e5fb129c8e45f9fa6",
+     "ns": 1433834
+    },
+    {
+     "pack": "deepbuild/interfaces@1.0.0",
+     "program": "1ce4365e26036bbdd5ed4702e8a9e4b1409fb8da0aaecc2e5fb129c8e45f9fa6",
+     "ns": 1525375
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "f1244d523ed647963c5c93c2f5b11fcd111446295408d0af83b38b7e0c3ebda3",
+     "ns": 7603292
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "f1244d523ed647963c5c93c2f5b11fcd111446295408d0af83b38b7e0c3ebda3",
+     "ns": 7966042
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7530625
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7425292
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7250209
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7573042
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7141542
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7410375
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7402917
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7544375
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7541625
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7593125
+    }
+   ]
+  },
+  {
+   "pid": 90770,
+   "reply": 2,
+   "call": "deep_kinds",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634902385.2114,
+   "repliedMs": 1795634902406.8145
+  },
+  {
+   "pid": 90770,
+   "reply": 3,
+   "call": "costs",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634902406.8374,
+   "repliedMs": 1795634903741.926
+  },
+  {
+   "pid": 90770,
+   "reply": 4,
+   "call": "packs",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634903741.9355,
+   "repliedMs": 1795634903742.0632
+  },
+  {
+   "pid": 92285,
+   "reply": 1,
+   "call": "deep_kinds",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634903754.5112,
+   "repliedMs": 1795634907731.347,
+   "compiles": 109,
+   "compileNs": 1564413462,
+   "programs": [
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "b0491e694ed43b4a2bc3e1417893c42fdda6239fcf3f6d09e096d0b2bf2ee996",
+     "ns": 10811875
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "b0491e694ed43b4a2bc3e1417893c42fdda6239fcf3f6d09e096d0b2bf2ee996",
+     "ns": 10243083
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "3914875878016a2f6cf4aa7110d77e18213db9712d323081f6c77c15e6bb2493",
+     "ns": 10506333
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "3914875878016a2f6cf4aa7110d77e18213db9712d323081f6c77c15e6bb2493",
+     "ns": 9978125
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "b2ea3fb5c27b96824fad1c6ab6452a24698fc918659038465ce413372514ae07",
+     "ns": 9873375
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "b2ea3fb5c27b96824fad1c6ab6452a24698fc918659038465ce413372514ae07",
+     "ns": 10005916
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "e50c8a5f133cb4ab093bbf915438b0acf39c0c890bf13ed5953774d5c6fd7ba2",
+     "ns": 10435792
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "e50c8a5f133cb4ab093bbf915438b0acf39c0c890bf13ed5953774d5c6fd7ba2",
+     "ns": 9460041
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "896f8c8d83b502320b09935f7c5f7f2a8a05d214fcae871d17a6385ae7d39eeb",
+     "ns": 10237000
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "896f8c8d83b502320b09935f7c5f7f2a8a05d214fcae871d17a6385ae7d39eeb",
+     "ns": 10197084
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "e3564538326059dc1b06d2b1923f38601d110166ec4213cd1c56afe8794540fb",
+     "ns": 17000375
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "e3564538326059dc1b06d2b1923f38601d110166ec4213cd1c56afe8794540fb",
+     "ns": 16378792
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "f9e8cf292f1685dab8fca143bdec1861d94228984fabeefdd05476a993acfa1e",
+     "ns": 15762584
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "f9e8cf292f1685dab8fca143bdec1861d94228984fabeefdd05476a993acfa1e",
+     "ns": 15638417
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
+     "ns": 15980625
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
+     "ns": 16032375
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "2dd2b94e040cc950aa388a6c3923a70ccb601ba06ec6b5eafa816af021be0609",
+     "ns": 16442708
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "2dd2b94e040cc950aa388a6c3923a70ccb601ba06ec6b5eafa816af021be0609",
+     "ns": 15598958
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "3943cd29bc9d0b9c09143af39b74d4fbb04a47aa76fe3a58eb0f08111105ea0b",
+     "ns": 16286500
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "3943cd29bc9d0b9c09143af39b74d4fbb04a47aa76fe3a58eb0f08111105ea0b",
+     "ns": 15943500
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
+     "ns": 15901166
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
+     "ns": 15335917
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "ef049b2c23eb3c71a14e8b30fab0579caff8f60e74c7706295f1cb1ace5e72fb",
+     "ns": 21511333
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "ef049b2c23eb3c71a14e8b30fab0579caff8f60e74c7706295f1cb1ace5e72fb",
+     "ns": 19949083
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "a1c46d3ff9cec7dc6a7b582ee075863fff0b5da5df80d4070b02ce090a429d02",
+     "ns": 19518000
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "a1c46d3ff9cec7dc6a7b582ee075863fff0b5da5df80d4070b02ce090a429d02",
+     "ns": 20418625
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "9febdc8f3f07c06b40f71328eb319e713d1a3c6f2aff31dbbe584b29dea77d81",
+     "ns": 21422583
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "9febdc8f3f07c06b40f71328eb319e713d1a3c6f2aff31dbbe584b29dea77d81",
+     "ns": 19680875
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d858d5c52212b4dcb5d65b120e0db2a33acd5d684c498f782b60db565d136861",
+     "ns": 19743667
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d858d5c52212b4dcb5d65b120e0db2a33acd5d684c498f782b60db565d136861",
+     "ns": 20412584
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "92dc30c7da6dcae217a56514efc9febb6a712bb123ccb8a261a3abb0f40c03dd",
+     "ns": 19646375
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "92dc30c7da6dcae217a56514efc9febb6a712bb123ccb8a261a3abb0f40c03dd",
+     "ns": 19880917
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
+     "ns": 20498667
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
+     "ns": 19838375
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "05e422159ec2768b8feeab908aee2bf96ff12b1fbb954e6fd37c08f36c6972c0",
+     "ns": 20656750
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "05e422159ec2768b8feeab908aee2bf96ff12b1fbb954e6fd37c08f36c6972c0",
+     "ns": 20134500
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d0e0d07579c214a08abb00185dbdc222d30b2931e04441a6dbb9aa479728fcff",
+     "ns": 20558917
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d0e0d07579c214a08abb00185dbdc222d30b2931e04441a6dbb9aa479728fcff",
+     "ns": 21207125
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
+     "ns": 20423417
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
+     "ns": 22357417
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "85957103aae6a86e642dc4f027dec14a5d087cbeaee449637eb9ab4a0af15561",
+     "ns": 19871500
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "85957103aae6a86e642dc4f027dec14a5d087cbeaee449637eb9ab4a0af15561",
+     "ns": 18653833
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "77c6cbe0aabe3630b0dbfafe04b42629d8634d3ae6eb53eb1ff2dfdcd6108401",
+     "ns": 18192459
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "77c6cbe0aabe3630b0dbfafe04b42629d8634d3ae6eb53eb1ff2dfdcd6108401",
+     "ns": 18279625
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "3b3f4006df6fe793d0b5436698d260b1fe50d8319ab21cd04ae27136f10f5b4d",
+     "ns": 18511875
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "3b3f4006df6fe793d0b5436698d260b1fe50d8319ab21cd04ae27136f10f5b4d",
+     "ns": 18473458
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "5f23dc00389e0a7c371c9ca7123b33d42ddacfe82bc8c0e13cc907e34fee684d",
+     "ns": 17921542
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "5f23dc00389e0a7c371c9ca7123b33d42ddacfe82bc8c0e13cc907e34fee684d",
+     "ns": 18295917
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "1b682633c4965cb0bfdd711cba0ccac29671e0c9df82f2d8de3f8a38fe3483af",
+     "ns": 17938208
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "1b682633c4965cb0bfdd711cba0ccac29671e0c9df82f2d8de3f8a38fe3483af",
+     "ns": 19161667
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "85957103aae6a86e642dc4f027dec14a5d087cbeaee449637eb9ab4a0af15561",
+     "ns": 18693333
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "8f0879811b458238393eb3a6db4fae4288f374ed6577e6a52e70ccf64181d503",
+     "ns": 18025458
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "1b682633c4965cb0bfdd711cba0ccac29671e0c9df82f2d8de3f8a38fe3483af",
+     "ns": 19197125
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "95480581c8bda7218c6bbb59337fc3669c9711b98c55433be7f23ef443ab1fc8",
+     "ns": 18205292
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "95480581c8bda7218c6bbb59337fc3669c9711b98c55433be7f23ef443ab1fc8",
+     "ns": 18411917
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "31783c49de2cc0c33e04bf7c28bcd05c9b594303ca7eaf84ac1675e998296bc7",
+     "ns": 18892000
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "31783c49de2cc0c33e04bf7c28bcd05c9b594303ca7eaf84ac1675e998296bc7",
+     "ns": 18794791
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "f371f25ba2394a9bf2d5f25836c99bb7e6137fd6037ba6dd0f7bc46aecc01810",
+     "ns": 18298167
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "f371f25ba2394a9bf2d5f25836c99bb7e6137fd6037ba6dd0f7bc46aecc01810",
+     "ns": 18718584
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "e752daed45ec51d80b179bd50a6e4248a12b8724ca5bd2362b73196d91c95542",
+     "ns": 17724959
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "e752daed45ec51d80b179bd50a6e4248a12b8724ca5bd2362b73196d91c95542",
+     "ns": 18451625
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "a714594691925c7ff7179eab6ae1cf1c6c13def19121a81e43f1e2e46d5bcac8",
+     "ns": 19324792
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "a714594691925c7ff7179eab6ae1cf1c6c13def19121a81e43f1e2e46d5bcac8",
+     "ns": 17833417
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "18b16ee708b526883883c29d5d8eb55c1e7830fddd470b57af5b9d663e33f8b7",
+     "ns": 20368042
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "18b16ee708b526883883c29d5d8eb55c1e7830fddd470b57af5b9d663e33f8b7",
+     "ns": 25403666
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "d69b261178ed6fe4c083e32c67e63e2f6dc6eb241358e4250ce79bc4fa4e6962",
+     "ns": 12297500
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "d69b261178ed6fe4c083e32c67e63e2f6dc6eb241358e4250ce79bc4fa4e6962",
+     "ns": 9111083
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "082143b303740e02b2adc08ee1eb182c84d16d71dae16fe4ef3ed3b3652bf86b",
+     "ns": 12918667
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "082143b303740e02b2adc08ee1eb182c84d16d71dae16fe4ef3ed3b3652bf86b",
+     "ns": 12865500
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "8170ed9e174bdec7fdea96900ac7b0cc10deb59aff50735acef6e7291116ed1a",
+     "ns": 12687458
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "8170ed9e174bdec7fdea96900ac7b0cc10deb59aff50735acef6e7291116ed1a",
+     "ns": 12769667
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "caef2ceb7d15e8998549c6385dbb93ace70f3b6511ce1901613787d90906c749",
+     "ns": 12210334
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "caef2ceb7d15e8998549c6385dbb93ace70f3b6511ce1901613787d90906c749",
+     "ns": 12604958
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "a3c6e180b9636cac1a5d9b0a00a2f53d607ec55f630c7a89529321f62e830d48",
+     "ns": 12580625
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "a3c6e180b9636cac1a5d9b0a00a2f53d607ec55f630c7a89529321f62e830d48",
+     "ns": 12577541
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "9d4d605fdfb541d8895d8ab0d3427631b90a1e660be85c8c24f0fd74a4595657",
+     "ns": 13008166
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "9d4d605fdfb541d8895d8ab0d3427631b90a1e660be85c8c24f0fd74a4595657",
+     "ns": 12476791
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "7300ee90bb9380f5927e206cf7d975f9a0e4a0ff5cbd2fd1b444b73d311d24bc",
+     "ns": 8771000
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "9d4d605fdfb541d8895d8ab0d3427631b90a1e660be85c8c24f0fd74a4595657",
+     "ns": 13042000
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "3c82376c8ac5b680b58182a2f6bb97b3f878728bba2b55354204d7b4a3eebf27",
+     "ns": 15279917
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "3c82376c8ac5b680b58182a2f6bb97b3f878728bba2b55354204d7b4a3eebf27",
+     "ns": 14230667
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "31cbd4e0d221dfc46bfde98a0927f68bff3eed1b17cdab97186b0bcebca0f3a1",
+     "ns": 13983250
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "31cbd4e0d221dfc46bfde98a0927f68bff3eed1b17cdab97186b0bcebca0f3a1",
+     "ns": 13327625
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "66ad77c23fd07bbc65f0b6ad86a4eb3a67a418f000c230fabb0c135824b3e4b3",
+     "ns": 12716584
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "66ad77c23fd07bbc65f0b6ad86a4eb3a67a418f000c230fabb0c135824b3e4b3",
+     "ns": 13598917
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "7439d30e7ad70f1bab28311ff5421ada50a7a47b0d019963143ae5e78243e578",
+     "ns": 13296083
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "7439d30e7ad70f1bab28311ff5421ada50a7a47b0d019963143ae5e78243e578",
+     "ns": 13153916
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "9b584ab0caa6b3cc121cfe807677ae61159a41e70419de78ace61125729673e4",
+     "ns": 12913459
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "9b584ab0caa6b3cc121cfe807677ae61159a41e70419de78ace61125729673e4",
+     "ns": 13414791
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "d6f3605160e3cb773e7e22c9998fc3de88b079dd386751b9be17ddb23562a668",
+     "ns": 12781625
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "d6f3605160e3cb773e7e22c9998fc3de88b079dd386751b9be17ddb23562a668",
+     "ns": 14006083
+    },
+    {
+     "pack": "deepbuild/interfaces@1.0.0",
+     "program": "260c9d5993ef28b8605b18bc78db29f17ff6c11e5f7c833698cf927eadf0e28a",
+     "ns": 1129625
+    },
+    {
+     "pack": "deepbuild/interfaces@1.0.0",
+     "program": "260c9d5993ef28b8605b18bc78db29f17ff6c11e5f7c833698cf927eadf0e28a",
+     "ns": 1362584
+    },
+    {
+     "pack": "deepbuild/interfaces@1.0.0",
+     "program": "db724e63f479a9a2f419f16ddae3fd8304c61877b2843b866361c70e62c4b7e1",
+     "ns": 1503125
+    },
+    {
+     "pack": "deepbuild/interfaces@1.0.0",
+     "program": "db724e63f479a9a2f419f16ddae3fd8304c61877b2843b866361c70e62c4b7e1",
+     "ns": 1776167
+    },
+    {
+     "pack": "deepbuild/interfaces@1.0.0",
+     "program": "1ce4365e26036bbdd5ed4702e8a9e4b1409fb8da0aaecc2e5fb129c8e45f9fa6",
+     "ns": 1492125
+    },
+    {
+     "pack": "deepbuild/interfaces@1.0.0",
+     "program": "1ce4365e26036bbdd5ed4702e8a9e4b1409fb8da0aaecc2e5fb129c8e45f9fa6",
+     "ns": 1490667
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "f1244d523ed647963c5c93c2f5b11fcd111446295408d0af83b38b7e0c3ebda3",
+     "ns": 7735000
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "f1244d523ed647963c5c93c2f5b11fcd111446295408d0af83b38b7e0c3ebda3",
+     "ns": 7205458
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7332625
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7411709
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7584000
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7688750
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7897917
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7393291
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7294916
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7424084
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7431667
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7082542
+    }
+   ]
+  },
+  {
+   "pid": 92285,
+   "reply": 2,
+   "call": "deep_kinds",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634907731.3613,
+   "repliedMs": 1795634907752.294
+  },
+  {
+   "pid": 92285,
+   "reply": 3,
+   "call": "costs",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634907752.3044,
+   "repliedMs": 1795634909087.6729
+  },
+  {
+   "pid": 92285,
+   "reply": 4,
+   "call": "packs",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634909087.6816,
+   "repliedMs": 1795634909087.7761
+  },
+  {
+   "pid": 93794,
+   "reply": 1,
+   "call": "deep_kinds",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634909098.8508,
+   "repliedMs": 1795634913072.6545,
+   "compiles": 109,
+   "compileNs": 1563046121,
+   "programs": [
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "b0491e694ed43b4a2bc3e1417893c42fdda6239fcf3f6d09e096d0b2bf2ee996",
+     "ns": 10526500
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "b0491e694ed43b4a2bc3e1417893c42fdda6239fcf3f6d09e096d0b2bf2ee996",
+     "ns": 10731083
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "3914875878016a2f6cf4aa7110d77e18213db9712d323081f6c77c15e6bb2493",
+     "ns": 11034917
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "3914875878016a2f6cf4aa7110d77e18213db9712d323081f6c77c15e6bb2493",
+     "ns": 10423625
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "b2ea3fb5c27b96824fad1c6ab6452a24698fc918659038465ce413372514ae07",
+     "ns": 9972500
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "b2ea3fb5c27b96824fad1c6ab6452a24698fc918659038465ce413372514ae07",
+     "ns": 9775166
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "e50c8a5f133cb4ab093bbf915438b0acf39c0c890bf13ed5953774d5c6fd7ba2",
+     "ns": 9863208
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "e50c8a5f133cb4ab093bbf915438b0acf39c0c890bf13ed5953774d5c6fd7ba2",
+     "ns": 9896042
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "896f8c8d83b502320b09935f7c5f7f2a8a05d214fcae871d17a6385ae7d39eeb",
+     "ns": 10130250
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "896f8c8d83b502320b09935f7c5f7f2a8a05d214fcae871d17a6385ae7d39eeb",
+     "ns": 9818250
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "e3564538326059dc1b06d2b1923f38601d110166ec4213cd1c56afe8794540fb",
+     "ns": 15780583
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "e3564538326059dc1b06d2b1923f38601d110166ec4213cd1c56afe8794540fb",
+     "ns": 16785250
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "f9e8cf292f1685dab8fca143bdec1861d94228984fabeefdd05476a993acfa1e",
+     "ns": 17518500
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "f9e8cf292f1685dab8fca143bdec1861d94228984fabeefdd05476a993acfa1e",
+     "ns": 16081625
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
+     "ns": 17008458
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
+     "ns": 15850000
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "2dd2b94e040cc950aa388a6c3923a70ccb601ba06ec6b5eafa816af021be0609",
+     "ns": 16104875
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "2dd2b94e040cc950aa388a6c3923a70ccb601ba06ec6b5eafa816af021be0609",
+     "ns": 16322625
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "3943cd29bc9d0b9c09143af39b74d4fbb04a47aa76fe3a58eb0f08111105ea0b",
+     "ns": 16935666
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "3943cd29bc9d0b9c09143af39b74d4fbb04a47aa76fe3a58eb0f08111105ea0b",
+     "ns": 16465417
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
+     "ns": 16036458
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
+     "ns": 16857125
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "ef049b2c23eb3c71a14e8b30fab0579caff8f60e74c7706295f1cb1ace5e72fb",
+     "ns": 20565666
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "ef049b2c23eb3c71a14e8b30fab0579caff8f60e74c7706295f1cb1ace5e72fb",
+     "ns": 19699959
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "a1c46d3ff9cec7dc6a7b582ee075863fff0b5da5df80d4070b02ce090a429d02",
+     "ns": 20294666
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "a1c46d3ff9cec7dc6a7b582ee075863fff0b5da5df80d4070b02ce090a429d02",
+     "ns": 21279625
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "9febdc8f3f07c06b40f71328eb319e713d1a3c6f2aff31dbbe584b29dea77d81",
+     "ns": 20726292
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "9febdc8f3f07c06b40f71328eb319e713d1a3c6f2aff31dbbe584b29dea77d81",
+     "ns": 20000333
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d858d5c52212b4dcb5d65b120e0db2a33acd5d684c498f782b60db565d136861",
+     "ns": 19661709
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d858d5c52212b4dcb5d65b120e0db2a33acd5d684c498f782b60db565d136861",
+     "ns": 20211666
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "92dc30c7da6dcae217a56514efc9febb6a712bb123ccb8a261a3abb0f40c03dd",
+     "ns": 20204459
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "92dc30c7da6dcae217a56514efc9febb6a712bb123ccb8a261a3abb0f40c03dd",
+     "ns": 21134125
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
+     "ns": 21458042
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
+     "ns": 19983792
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "05e422159ec2768b8feeab908aee2bf96ff12b1fbb954e6fd37c08f36c6972c0",
+     "ns": 20207834
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "05e422159ec2768b8feeab908aee2bf96ff12b1fbb954e6fd37c08f36c6972c0",
+     "ns": 19645791
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d0e0d07579c214a08abb00185dbdc222d30b2931e04441a6dbb9aa479728fcff",
+     "ns": 19795541
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d0e0d07579c214a08abb00185dbdc222d30b2931e04441a6dbb9aa479728fcff",
+     "ns": 20209167
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
+     "ns": 19790291
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
+     "ns": 20326625
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "85957103aae6a86e642dc4f027dec14a5d087cbeaee449637eb9ab4a0af15561",
+     "ns": 18483875
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "85957103aae6a86e642dc4f027dec14a5d087cbeaee449637eb9ab4a0af15561",
+     "ns": 17899667
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "77c6cbe0aabe3630b0dbfafe04b42629d8634d3ae6eb53eb1ff2dfdcd6108401",
+     "ns": 18110875
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "77c6cbe0aabe3630b0dbfafe04b42629d8634d3ae6eb53eb1ff2dfdcd6108401",
+     "ns": 18155875
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "3b3f4006df6fe793d0b5436698d260b1fe50d8319ab21cd04ae27136f10f5b4d",
+     "ns": 17991041
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "3b3f4006df6fe793d0b5436698d260b1fe50d8319ab21cd04ae27136f10f5b4d",
+     "ns": 17920084
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "5f23dc00389e0a7c371c9ca7123b33d42ddacfe82bc8c0e13cc907e34fee684d",
+     "ns": 18599875
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "5f23dc00389e0a7c371c9ca7123b33d42ddacfe82bc8c0e13cc907e34fee684d",
+     "ns": 17695750
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "1b682633c4965cb0bfdd711cba0ccac29671e0c9df82f2d8de3f8a38fe3483af",
+     "ns": 24035083
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "1b682633c4965cb0bfdd711cba0ccac29671e0c9df82f2d8de3f8a38fe3483af",
+     "ns": 21158500
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "85957103aae6a86e642dc4f027dec14a5d087cbeaee449637eb9ab4a0af15561",
+     "ns": 18454667
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "8f0879811b458238393eb3a6db4fae4288f374ed6577e6a52e70ccf64181d503",
+     "ns": 18307333
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "1b682633c4965cb0bfdd711cba0ccac29671e0c9df82f2d8de3f8a38fe3483af",
+     "ns": 18678333
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "95480581c8bda7218c6bbb59337fc3669c9711b98c55433be7f23ef443ab1fc8",
+     "ns": 18060917
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "95480581c8bda7218c6bbb59337fc3669c9711b98c55433be7f23ef443ab1fc8",
+     "ns": 18554833
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "31783c49de2cc0c33e04bf7c28bcd05c9b594303ca7eaf84ac1675e998296bc7",
+     "ns": 18016125
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "31783c49de2cc0c33e04bf7c28bcd05c9b594303ca7eaf84ac1675e998296bc7",
+     "ns": 17283834
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "f371f25ba2394a9bf2d5f25836c99bb7e6137fd6037ba6dd0f7bc46aecc01810",
+     "ns": 17478167
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "f371f25ba2394a9bf2d5f25836c99bb7e6137fd6037ba6dd0f7bc46aecc01810",
+     "ns": 17721292
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "e752daed45ec51d80b179bd50a6e4248a12b8724ca5bd2362b73196d91c95542",
+     "ns": 17710167
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "e752daed45ec51d80b179bd50a6e4248a12b8724ca5bd2362b73196d91c95542",
+     "ns": 17379958
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "a714594691925c7ff7179eab6ae1cf1c6c13def19121a81e43f1e2e46d5bcac8",
+     "ns": 20151750
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "a714594691925c7ff7179eab6ae1cf1c6c13def19121a81e43f1e2e46d5bcac8",
+     "ns": 17628375
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "18b16ee708b526883883c29d5d8eb55c1e7830fddd470b57af5b9d663e33f8b7",
+     "ns": 17791500
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "18b16ee708b526883883c29d5d8eb55c1e7830fddd470b57af5b9d663e33f8b7",
+     "ns": 17715333
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "d69b261178ed6fe4c083e32c67e63e2f6dc6eb241358e4250ce79bc4fa4e6962",
+     "ns": 9583625
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "d69b261178ed6fe4c083e32c67e63e2f6dc6eb241358e4250ce79bc4fa4e6962",
+     "ns": 9139416
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "082143b303740e02b2adc08ee1eb182c84d16d71dae16fe4ef3ed3b3652bf86b",
+     "ns": 13162167
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "082143b303740e02b2adc08ee1eb182c84d16d71dae16fe4ef3ed3b3652bf86b",
+     "ns": 12643375
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "8170ed9e174bdec7fdea96900ac7b0cc10deb59aff50735acef6e7291116ed1a",
+     "ns": 12614750
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "8170ed9e174bdec7fdea96900ac7b0cc10deb59aff50735acef6e7291116ed1a",
+     "ns": 12218750
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "caef2ceb7d15e8998549c6385dbb93ace70f3b6511ce1901613787d90906c749",
+     "ns": 12844875
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "caef2ceb7d15e8998549c6385dbb93ace70f3b6511ce1901613787d90906c749",
+     "ns": 13227208
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "a3c6e180b9636cac1a5d9b0a00a2f53d607ec55f630c7a89529321f62e830d48",
+     "ns": 12522375
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "a3c6e180b9636cac1a5d9b0a00a2f53d607ec55f630c7a89529321f62e830d48",
+     "ns": 12459666
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "9d4d605fdfb541d8895d8ab0d3427631b90a1e660be85c8c24f0fd74a4595657",
+     "ns": 12572458
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "9d4d605fdfb541d8895d8ab0d3427631b90a1e660be85c8c24f0fd74a4595657",
+     "ns": 12841417
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "7300ee90bb9380f5927e206cf7d975f9a0e4a0ff5cbd2fd1b444b73d311d24bc",
+     "ns": 8652417
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "9d4d605fdfb541d8895d8ab0d3427631b90a1e660be85c8c24f0fd74a4595657",
+     "ns": 12847333
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "3c82376c8ac5b680b58182a2f6bb97b3f878728bba2b55354204d7b4a3eebf27",
+     "ns": 12789458
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "3c82376c8ac5b680b58182a2f6bb97b3f878728bba2b55354204d7b4a3eebf27",
+     "ns": 13579208
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "31cbd4e0d221dfc46bfde98a0927f68bff3eed1b17cdab97186b0bcebca0f3a1",
+     "ns": 13126833
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "31cbd4e0d221dfc46bfde98a0927f68bff3eed1b17cdab97186b0bcebca0f3a1",
+     "ns": 13023292
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "66ad77c23fd07bbc65f0b6ad86a4eb3a67a418f000c230fabb0c135824b3e4b3",
+     "ns": 13950375
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "66ad77c23fd07bbc65f0b6ad86a4eb3a67a418f000c230fabb0c135824b3e4b3",
+     "ns": 13440833
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "7439d30e7ad70f1bab28311ff5421ada50a7a47b0d019963143ae5e78243e578",
+     "ns": 13296958
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "7439d30e7ad70f1bab28311ff5421ada50a7a47b0d019963143ae5e78243e578",
+     "ns": 13398500
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "9b584ab0caa6b3cc121cfe807677ae61159a41e70419de78ace61125729673e4",
+     "ns": 13592458
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "9b584ab0caa6b3cc121cfe807677ae61159a41e70419de78ace61125729673e4",
+     "ns": 14714000
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "d6f3605160e3cb773e7e22c9998fc3de88b079dd386751b9be17ddb23562a668",
+     "ns": 13221209
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "d6f3605160e3cb773e7e22c9998fc3de88b079dd386751b9be17ddb23562a668",
+     "ns": 13449083
+    },
+    {
+     "pack": "deepbuild/interfaces@1.0.0",
+     "program": "260c9d5993ef28b8605b18bc78db29f17ff6c11e5f7c833698cf927eadf0e28a",
+     "ns": 1235084
+    },
+    {
+     "pack": "deepbuild/interfaces@1.0.0",
+     "program": "260c9d5993ef28b8605b18bc78db29f17ff6c11e5f7c833698cf927eadf0e28a",
+     "ns": 920417
+    },
+    {
+     "pack": "deepbuild/interfaces@1.0.0",
+     "program": "db724e63f479a9a2f419f16ddae3fd8304c61877b2843b866361c70e62c4b7e1",
+     "ns": 1290625
+    },
+    {
+     "pack": "deepbuild/interfaces@1.0.0",
+     "program": "db724e63f479a9a2f419f16ddae3fd8304c61877b2843b866361c70e62c4b7e1",
+     "ns": 1021875
+    },
+    {
+     "pack": "deepbuild/interfaces@1.0.0",
+     "program": "1ce4365e26036bbdd5ed4702e8a9e4b1409fb8da0aaecc2e5fb129c8e45f9fa6",
+     "ns": 1223584
+    },
+    {
+     "pack": "deepbuild/interfaces@1.0.0",
+     "program": "1ce4365e26036bbdd5ed4702e8a9e4b1409fb8da0aaecc2e5fb129c8e45f9fa6",
+     "ns": 1258416
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "f1244d523ed647963c5c93c2f5b11fcd111446295408d0af83b38b7e0c3ebda3",
+     "ns": 7305292
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "f1244d523ed647963c5c93c2f5b11fcd111446295408d0af83b38b7e0c3ebda3",
+     "ns": 7905875
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7480250
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 8258292
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7473958
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7334167
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7329875
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7468917
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 9957708
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 9778916
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 10476958
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 10316958
+    }
+   ]
+  },
+  {
+   "pid": 93794,
+   "reply": 2,
+   "call": "deep_kinds",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634913072.715,
+   "repliedMs": 1795634913093.4207
+  },
+  {
+   "pid": 93794,
+   "reply": 3,
+   "call": "costs",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634913093.4739,
+   "repliedMs": 1795634914481.4946
+  },
+  {
+   "pid": 93794,
+   "reply": 4,
+   "call": "packs",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634914481.5015,
+   "repliedMs": 1795634914481.6448
+  },
+  {
+   "pid": 95305,
+   "reply": 1,
+   "call": "deep_kinds",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634914492.8713,
+   "repliedMs": 1795634918495.497,
+   "compiles": 109,
+   "compileNs": 1583234913,
+   "programs": [
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "b0491e694ed43b4a2bc3e1417893c42fdda6239fcf3f6d09e096d0b2bf2ee996",
+     "ns": 11533166
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "b0491e694ed43b4a2bc3e1417893c42fdda6239fcf3f6d09e096d0b2bf2ee996",
+     "ns": 10604750
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "3914875878016a2f6cf4aa7110d77e18213db9712d323081f6c77c15e6bb2493",
+     "ns": 10821459
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "3914875878016a2f6cf4aa7110d77e18213db9712d323081f6c77c15e6bb2493",
+     "ns": 10267125
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "b2ea3fb5c27b96824fad1c6ab6452a24698fc918659038465ce413372514ae07",
+     "ns": 9921708
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "b2ea3fb5c27b96824fad1c6ab6452a24698fc918659038465ce413372514ae07",
+     "ns": 9947250
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "e50c8a5f133cb4ab093bbf915438b0acf39c0c890bf13ed5953774d5c6fd7ba2",
+     "ns": 10409125
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "e50c8a5f133cb4ab093bbf915438b0acf39c0c890bf13ed5953774d5c6fd7ba2",
+     "ns": 9981916
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "896f8c8d83b502320b09935f7c5f7f2a8a05d214fcae871d17a6385ae7d39eeb",
+     "ns": 10015167
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "896f8c8d83b502320b09935f7c5f7f2a8a05d214fcae871d17a6385ae7d39eeb",
+     "ns": 10346750
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "e3564538326059dc1b06d2b1923f38601d110166ec4213cd1c56afe8794540fb",
+     "ns": 17099333
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "e3564538326059dc1b06d2b1923f38601d110166ec4213cd1c56afe8794540fb",
+     "ns": 17198417
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "f9e8cf292f1685dab8fca143bdec1861d94228984fabeefdd05476a993acfa1e",
+     "ns": 16096916
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "f9e8cf292f1685dab8fca143bdec1861d94228984fabeefdd05476a993acfa1e",
+     "ns": 15969625
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
+     "ns": 17508125
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
+     "ns": 16885542
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "2dd2b94e040cc950aa388a6c3923a70ccb601ba06ec6b5eafa816af021be0609",
+     "ns": 16743042
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "2dd2b94e040cc950aa388a6c3923a70ccb601ba06ec6b5eafa816af021be0609",
+     "ns": 16293000
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "3943cd29bc9d0b9c09143af39b74d4fbb04a47aa76fe3a58eb0f08111105ea0b",
+     "ns": 16407541
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "3943cd29bc9d0b9c09143af39b74d4fbb04a47aa76fe3a58eb0f08111105ea0b",
+     "ns": 16595875
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
+     "ns": 16914250
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
+     "ns": 15505166
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "ef049b2c23eb3c71a14e8b30fab0579caff8f60e74c7706295f1cb1ace5e72fb",
+     "ns": 19974958
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "ef049b2c23eb3c71a14e8b30fab0579caff8f60e74c7706295f1cb1ace5e72fb",
+     "ns": 20887375
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "a1c46d3ff9cec7dc6a7b582ee075863fff0b5da5df80d4070b02ce090a429d02",
+     "ns": 20186042
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "a1c46d3ff9cec7dc6a7b582ee075863fff0b5da5df80d4070b02ce090a429d02",
+     "ns": 20838042
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "9febdc8f3f07c06b40f71328eb319e713d1a3c6f2aff31dbbe584b29dea77d81",
+     "ns": 22033542
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "9febdc8f3f07c06b40f71328eb319e713d1a3c6f2aff31dbbe584b29dea77d81",
+     "ns": 21490833
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d858d5c52212b4dcb5d65b120e0db2a33acd5d684c498f782b60db565d136861",
+     "ns": 19602625
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d858d5c52212b4dcb5d65b120e0db2a33acd5d684c498f782b60db565d136861",
+     "ns": 20843166
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "92dc30c7da6dcae217a56514efc9febb6a712bb123ccb8a261a3abb0f40c03dd",
+     "ns": 20151292
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "92dc30c7da6dcae217a56514efc9febb6a712bb123ccb8a261a3abb0f40c03dd",
+     "ns": 20469167
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
+     "ns": 24077583
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
+     "ns": 20904209
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "05e422159ec2768b8feeab908aee2bf96ff12b1fbb954e6fd37c08f36c6972c0",
+     "ns": 20554291
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "05e422159ec2768b8feeab908aee2bf96ff12b1fbb954e6fd37c08f36c6972c0",
+     "ns": 19222625
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d0e0d07579c214a08abb00185dbdc222d30b2931e04441a6dbb9aa479728fcff",
+     "ns": 23285084
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d0e0d07579c214a08abb00185dbdc222d30b2931e04441a6dbb9aa479728fcff",
+     "ns": 21089834
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
+     "ns": 20304875
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
+     "ns": 21399417
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "85957103aae6a86e642dc4f027dec14a5d087cbeaee449637eb9ab4a0af15561",
+     "ns": 19617750
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "85957103aae6a86e642dc4f027dec14a5d087cbeaee449637eb9ab4a0af15561",
+     "ns": 18847500
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "77c6cbe0aabe3630b0dbfafe04b42629d8634d3ae6eb53eb1ff2dfdcd6108401",
+     "ns": 18150500
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "77c6cbe0aabe3630b0dbfafe04b42629d8634d3ae6eb53eb1ff2dfdcd6108401",
+     "ns": 18637583
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "3b3f4006df6fe793d0b5436698d260b1fe50d8319ab21cd04ae27136f10f5b4d",
+     "ns": 18632292
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "3b3f4006df6fe793d0b5436698d260b1fe50d8319ab21cd04ae27136f10f5b4d",
+     "ns": 18516541
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "5f23dc00389e0a7c371c9ca7123b33d42ddacfe82bc8c0e13cc907e34fee684d",
+     "ns": 19181125
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "5f23dc00389e0a7c371c9ca7123b33d42ddacfe82bc8c0e13cc907e34fee684d",
+     "ns": 18550292
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "1b682633c4965cb0bfdd711cba0ccac29671e0c9df82f2d8de3f8a38fe3483af",
+     "ns": 19642583
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "1b682633c4965cb0bfdd711cba0ccac29671e0c9df82f2d8de3f8a38fe3483af",
+     "ns": 19048166
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "85957103aae6a86e642dc4f027dec14a5d087cbeaee449637eb9ab4a0af15561",
+     "ns": 18923000
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "8f0879811b458238393eb3a6db4fae4288f374ed6577e6a52e70ccf64181d503",
+     "ns": 18834083
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "1b682633c4965cb0bfdd711cba0ccac29671e0c9df82f2d8de3f8a38fe3483af",
+     "ns": 18948875
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "95480581c8bda7218c6bbb59337fc3669c9711b98c55433be7f23ef443ab1fc8",
+     "ns": 18687208
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "95480581c8bda7218c6bbb59337fc3669c9711b98c55433be7f23ef443ab1fc8",
+     "ns": 18666875
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "31783c49de2cc0c33e04bf7c28bcd05c9b594303ca7eaf84ac1675e998296bc7",
+     "ns": 19072416
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "31783c49de2cc0c33e04bf7c28bcd05c9b594303ca7eaf84ac1675e998296bc7",
+     "ns": 18916708
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "f371f25ba2394a9bf2d5f25836c99bb7e6137fd6037ba6dd0f7bc46aecc01810",
+     "ns": 18772084
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "f371f25ba2394a9bf2d5f25836c99bb7e6137fd6037ba6dd0f7bc46aecc01810",
+     "ns": 18480917
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "e752daed45ec51d80b179bd50a6e4248a12b8724ca5bd2362b73196d91c95542",
+     "ns": 18583709
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "e752daed45ec51d80b179bd50a6e4248a12b8724ca5bd2362b73196d91c95542",
+     "ns": 18047500
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "a714594691925c7ff7179eab6ae1cf1c6c13def19121a81e43f1e2e46d5bcac8",
+     "ns": 18334083
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "a714594691925c7ff7179eab6ae1cf1c6c13def19121a81e43f1e2e46d5bcac8",
+     "ns": 17875333
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "18b16ee708b526883883c29d5d8eb55c1e7830fddd470b57af5b9d663e33f8b7",
+     "ns": 18525834
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "18b16ee708b526883883c29d5d8eb55c1e7830fddd470b57af5b9d663e33f8b7",
+     "ns": 17482000
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "d69b261178ed6fe4c083e32c67e63e2f6dc6eb241358e4250ce79bc4fa4e6962",
+     "ns": 8872333
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "d69b261178ed6fe4c083e32c67e63e2f6dc6eb241358e4250ce79bc4fa4e6962",
+     "ns": 9671292
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "082143b303740e02b2adc08ee1eb182c84d16d71dae16fe4ef3ed3b3652bf86b",
+     "ns": 13637417
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "082143b303740e02b2adc08ee1eb182c84d16d71dae16fe4ef3ed3b3652bf86b",
+     "ns": 13279667
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "8170ed9e174bdec7fdea96900ac7b0cc10deb59aff50735acef6e7291116ed1a",
+     "ns": 12975250
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "8170ed9e174bdec7fdea96900ac7b0cc10deb59aff50735acef6e7291116ed1a",
+     "ns": 12414250
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "caef2ceb7d15e8998549c6385dbb93ace70f3b6511ce1901613787d90906c749",
+     "ns": 13714083
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "caef2ceb7d15e8998549c6385dbb93ace70f3b6511ce1901613787d90906c749",
+     "ns": 12454791
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "a3c6e180b9636cac1a5d9b0a00a2f53d607ec55f630c7a89529321f62e830d48",
+     "ns": 12757792
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "a3c6e180b9636cac1a5d9b0a00a2f53d607ec55f630c7a89529321f62e830d48",
+     "ns": 12477125
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "9d4d605fdfb541d8895d8ab0d3427631b90a1e660be85c8c24f0fd74a4595657",
+     "ns": 12258542
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "9d4d605fdfb541d8895d8ab0d3427631b90a1e660be85c8c24f0fd74a4595657",
+     "ns": 12264000
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "7300ee90bb9380f5927e206cf7d975f9a0e4a0ff5cbd2fd1b444b73d311d24bc",
+     "ns": 8600333
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "9d4d605fdfb541d8895d8ab0d3427631b90a1e660be85c8c24f0fd74a4595657",
+     "ns": 12489541
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "3c82376c8ac5b680b58182a2f6bb97b3f878728bba2b55354204d7b4a3eebf27",
+     "ns": 13235417
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "3c82376c8ac5b680b58182a2f6bb97b3f878728bba2b55354204d7b4a3eebf27",
+     "ns": 13579375
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "31cbd4e0d221dfc46bfde98a0927f68bff3eed1b17cdab97186b0bcebca0f3a1",
+     "ns": 13694084
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "31cbd4e0d221dfc46bfde98a0927f68bff3eed1b17cdab97186b0bcebca0f3a1",
+     "ns": 13442250
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "66ad77c23fd07bbc65f0b6ad86a4eb3a67a418f000c230fabb0c135824b3e4b3",
+     "ns": 12752458
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "66ad77c23fd07bbc65f0b6ad86a4eb3a67a418f000c230fabb0c135824b3e4b3",
+     "ns": 13174041
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "7439d30e7ad70f1bab28311ff5421ada50a7a47b0d019963143ae5e78243e578",
+     "ns": 13010167
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "7439d30e7ad70f1bab28311ff5421ada50a7a47b0d019963143ae5e78243e578",
+     "ns": 12896416
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "9b584ab0caa6b3cc121cfe807677ae61159a41e70419de78ace61125729673e4",
+     "ns": 13555500
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "9b584ab0caa6b3cc121cfe807677ae61159a41e70419de78ace61125729673e4",
+     "ns": 13110708
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "d6f3605160e3cb773e7e22c9998fc3de88b079dd386751b9be17ddb23562a668",
+     "ns": 13618167
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "d6f3605160e3cb773e7e22c9998fc3de88b079dd386751b9be17ddb23562a668",
+     "ns": 14750583
+    },
+    {
+     "pack": "deepbuild/interfaces@1.0.0",
+     "program": "260c9d5993ef28b8605b18bc78db29f17ff6c11e5f7c833698cf927eadf0e28a",
+     "ns": 1285959
+    },
+    {
+     "pack": "deepbuild/interfaces@1.0.0",
+     "program": "260c9d5993ef28b8605b18bc78db29f17ff6c11e5f7c833698cf927eadf0e28a",
+     "ns": 1180333
+    },
+    {
+     "pack": "deepbuild/interfaces@1.0.0",
+     "program": "db724e63f479a9a2f419f16ddae3fd8304c61877b2843b866361c70e62c4b7e1",
+     "ns": 1324875
+    },
+    {
+     "pack": "deepbuild/interfaces@1.0.0",
+     "program": "db724e63f479a9a2f419f16ddae3fd8304c61877b2843b866361c70e62c4b7e1",
+     "ns": 1051792
+    },
+    {
+     "pack": "deepbuild/interfaces@1.0.0",
+     "program": "1ce4365e26036bbdd5ed4702e8a9e4b1409fb8da0aaecc2e5fb129c8e45f9fa6",
+     "ns": 1438333
+    },
+    {
+     "pack": "deepbuild/interfaces@1.0.0",
+     "program": "1ce4365e26036bbdd5ed4702e8a9e4b1409fb8da0aaecc2e5fb129c8e45f9fa6",
+     "ns": 1409833
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "f1244d523ed647963c5c93c2f5b11fcd111446295408d0af83b38b7e0c3ebda3",
+     "ns": 8568958
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "f1244d523ed647963c5c93c2f5b11fcd111446295408d0af83b38b7e0c3ebda3",
+     "ns": 8848791
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 8295583
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7834459
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7745750
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7587667
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 8245666
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 8086417
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 8261958
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 8076292
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 9972625
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7978875
+    }
+   ]
+  },
+  {
+   "pid": 95305,
+   "reply": 2,
+   "call": "deep_kinds",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634918495.5237,
+   "repliedMs": 1795634918516.6682
+  },
+  {
+   "pid": 95305,
+   "reply": 3,
+   "call": "costs",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634918516.7798,
+   "repliedMs": 1795634919854.92
+  },
+  {
+   "pid": 95305,
+   "reply": 4,
+   "call": "packs",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634919854.9282,
+   "repliedMs": 1795634919855.0447
+  },
+  {
+   "pid": 96797,
+   "reply": 1,
+   "call": "deep_kinds",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634919866.9539,
+   "repliedMs": 1795634923874.3086,
+   "compiles": 109,
+   "compileNs": 1568016043,
+   "programs": [
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "b0491e694ed43b4a2bc3e1417893c42fdda6239fcf3f6d09e096d0b2bf2ee996",
+     "ns": 10862542
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "b0491e694ed43b4a2bc3e1417893c42fdda6239fcf3f6d09e096d0b2bf2ee996",
+     "ns": 10602375
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "3914875878016a2f6cf4aa7110d77e18213db9712d323081f6c77c15e6bb2493",
+     "ns": 10412958
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "3914875878016a2f6cf4aa7110d77e18213db9712d323081f6c77c15e6bb2493",
+     "ns": 11041875
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "b2ea3fb5c27b96824fad1c6ab6452a24698fc918659038465ce413372514ae07",
+     "ns": 9538708
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "b2ea3fb5c27b96824fad1c6ab6452a24698fc918659038465ce413372514ae07",
+     "ns": 9780708
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "e50c8a5f133cb4ab093bbf915438b0acf39c0c890bf13ed5953774d5c6fd7ba2",
+     "ns": 9768833
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "e50c8a5f133cb4ab093bbf915438b0acf39c0c890bf13ed5953774d5c6fd7ba2",
+     "ns": 9833292
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "896f8c8d83b502320b09935f7c5f7f2a8a05d214fcae871d17a6385ae7d39eeb",
+     "ns": 9922541
+    },
+    {
+     "pack": "deepbuild/modslib@1.0.0",
+     "program": "896f8c8d83b502320b09935f7c5f7f2a8a05d214fcae871d17a6385ae7d39eeb",
+     "ns": 9985292
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "e3564538326059dc1b06d2b1923f38601d110166ec4213cd1c56afe8794540fb",
+     "ns": 16452916
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "e3564538326059dc1b06d2b1923f38601d110166ec4213cd1c56afe8794540fb",
+     "ns": 15775541
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "f9e8cf292f1685dab8fca143bdec1861d94228984fabeefdd05476a993acfa1e",
+     "ns": 16447709
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "f9e8cf292f1685dab8fca143bdec1861d94228984fabeefdd05476a993acfa1e",
+     "ns": 16884958
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
+     "ns": 16524959
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
+     "ns": 16538541
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "2dd2b94e040cc950aa388a6c3923a70ccb601ba06ec6b5eafa816af021be0609",
+     "ns": 15857041
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "2dd2b94e040cc950aa388a6c3923a70ccb601ba06ec6b5eafa816af021be0609",
+     "ns": 16142083
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "3943cd29bc9d0b9c09143af39b74d4fbb04a47aa76fe3a58eb0f08111105ea0b",
+     "ns": 15957084
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "3943cd29bc9d0b9c09143af39b74d4fbb04a47aa76fe3a58eb0f08111105ea0b",
+     "ns": 16378792
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
+     "ns": 16441792
+    },
+    {
+     "pack": "deepbuild/lanes@1.0.0",
+     "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
+     "ns": 15893875
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "ef049b2c23eb3c71a14e8b30fab0579caff8f60e74c7706295f1cb1ace5e72fb",
+     "ns": 20549000
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "ef049b2c23eb3c71a14e8b30fab0579caff8f60e74c7706295f1cb1ace5e72fb",
+     "ns": 20999125
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "a1c46d3ff9cec7dc6a7b582ee075863fff0b5da5df80d4070b02ce090a429d02",
+     "ns": 22633833
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "a1c46d3ff9cec7dc6a7b582ee075863fff0b5da5df80d4070b02ce090a429d02",
+     "ns": 21630459
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "9febdc8f3f07c06b40f71328eb319e713d1a3c6f2aff31dbbe584b29dea77d81",
+     "ns": 20679625
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "9febdc8f3f07c06b40f71328eb319e713d1a3c6f2aff31dbbe584b29dea77d81",
+     "ns": 20382209
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d858d5c52212b4dcb5d65b120e0db2a33acd5d684c498f782b60db565d136861",
+     "ns": 20986250
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d858d5c52212b4dcb5d65b120e0db2a33acd5d684c498f782b60db565d136861",
+     "ns": 20242334
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "92dc30c7da6dcae217a56514efc9febb6a712bb123ccb8a261a3abb0f40c03dd",
+     "ns": 20140833
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "92dc30c7da6dcae217a56514efc9febb6a712bb123ccb8a261a3abb0f40c03dd",
+     "ns": 20304416
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
+     "ns": 20021375
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
+     "ns": 21172959
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "05e422159ec2768b8feeab908aee2bf96ff12b1fbb954e6fd37c08f36c6972c0",
+     "ns": 20372958
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "05e422159ec2768b8feeab908aee2bf96ff12b1fbb954e6fd37c08f36c6972c0",
+     "ns": 20241666
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d0e0d07579c214a08abb00185dbdc222d30b2931e04441a6dbb9aa479728fcff",
+     "ns": 22027583
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d0e0d07579c214a08abb00185dbdc222d30b2931e04441a6dbb9aa479728fcff",
+     "ns": 20255709
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
+     "ns": 19736917
+    },
+    {
+     "pack": "deepbuild/process@1.0.0",
+     "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
+     "ns": 20476042
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "85957103aae6a86e642dc4f027dec14a5d087cbeaee449637eb9ab4a0af15561",
+     "ns": 18855125
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "85957103aae6a86e642dc4f027dec14a5d087cbeaee449637eb9ab4a0af15561",
+     "ns": 18863583
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "77c6cbe0aabe3630b0dbfafe04b42629d8634d3ae6eb53eb1ff2dfdcd6108401",
+     "ns": 17625459
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "77c6cbe0aabe3630b0dbfafe04b42629d8634d3ae6eb53eb1ff2dfdcd6108401",
+     "ns": 18515542
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "3b3f4006df6fe793d0b5436698d260b1fe50d8319ab21cd04ae27136f10f5b4d",
+     "ns": 18243041
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "3b3f4006df6fe793d0b5436698d260b1fe50d8319ab21cd04ae27136f10f5b4d",
+     "ns": 18047500
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "5f23dc00389e0a7c371c9ca7123b33d42ddacfe82bc8c0e13cc907e34fee684d",
+     "ns": 17548750
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "5f23dc00389e0a7c371c9ca7123b33d42ddacfe82bc8c0e13cc907e34fee684d",
+     "ns": 17560042
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "1b682633c4965cb0bfdd711cba0ccac29671e0c9df82f2d8de3f8a38fe3483af",
+     "ns": 18394084
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "1b682633c4965cb0bfdd711cba0ccac29671e0c9df82f2d8de3f8a38fe3483af",
+     "ns": 18877667
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "85957103aae6a86e642dc4f027dec14a5d087cbeaee449637eb9ab4a0af15561",
+     "ns": 20294834
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "8f0879811b458238393eb3a6db4fae4288f374ed6577e6a52e70ccf64181d503",
+     "ns": 18250791
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "1b682633c4965cb0bfdd711cba0ccac29671e0c9df82f2d8de3f8a38fe3483af",
+     "ns": 18212167
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "95480581c8bda7218c6bbb59337fc3669c9711b98c55433be7f23ef443ab1fc8",
+     "ns": 19230834
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "95480581c8bda7218c6bbb59337fc3669c9711b98c55433be7f23ef443ab1fc8",
+     "ns": 18593708
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "31783c49de2cc0c33e04bf7c28bcd05c9b594303ca7eaf84ac1675e998296bc7",
+     "ns": 19878083
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "31783c49de2cc0c33e04bf7c28bcd05c9b594303ca7eaf84ac1675e998296bc7",
+     "ns": 18688042
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "f371f25ba2394a9bf2d5f25836c99bb7e6137fd6037ba6dd0f7bc46aecc01810",
+     "ns": 20404416
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "f371f25ba2394a9bf2d5f25836c99bb7e6137fd6037ba6dd0f7bc46aecc01810",
+     "ns": 19980042
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "e752daed45ec51d80b179bd50a6e4248a12b8724ca5bd2362b73196d91c95542",
+     "ns": 19728125
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "e752daed45ec51d80b179bd50a6e4248a12b8724ca5bd2362b73196d91c95542",
+     "ns": 18073458
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "a714594691925c7ff7179eab6ae1cf1c6c13def19121a81e43f1e2e46d5bcac8",
+     "ns": 18682250
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "a714594691925c7ff7179eab6ae1cf1c6c13def19121a81e43f1e2e46d5bcac8",
+     "ns": 18238917
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "18b16ee708b526883883c29d5d8eb55c1e7830fddd470b57af5b9d663e33f8b7",
+     "ns": 18864917
+    },
+    {
+     "pack": "deepbuild/circuit@1.0.0",
+     "program": "18b16ee708b526883883c29d5d8eb55c1e7830fddd470b57af5b9d663e33f8b7",
+     "ns": 18327417
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "d69b261178ed6fe4c083e32c67e63e2f6dc6eb241358e4250ce79bc4fa4e6962",
+     "ns": 9649125
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "d69b261178ed6fe4c083e32c67e63e2f6dc6eb241358e4250ce79bc4fa4e6962",
+     "ns": 9598250
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "082143b303740e02b2adc08ee1eb182c84d16d71dae16fe4ef3ed3b3652bf86b",
+     "ns": 12628542
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "082143b303740e02b2adc08ee1eb182c84d16d71dae16fe4ef3ed3b3652bf86b",
+     "ns": 13054917
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "8170ed9e174bdec7fdea96900ac7b0cc10deb59aff50735acef6e7291116ed1a",
+     "ns": 13415000
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "8170ed9e174bdec7fdea96900ac7b0cc10deb59aff50735acef6e7291116ed1a",
+     "ns": 12453250
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "caef2ceb7d15e8998549c6385dbb93ace70f3b6511ce1901613787d90906c749",
+     "ns": 13041667
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "caef2ceb7d15e8998549c6385dbb93ace70f3b6511ce1901613787d90906c749",
+     "ns": 14046833
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "a3c6e180b9636cac1a5d9b0a00a2f53d607ec55f630c7a89529321f62e830d48",
+     "ns": 12377500
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "a3c6e180b9636cac1a5d9b0a00a2f53d607ec55f630c7a89529321f62e830d48",
+     "ns": 12932417
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "9d4d605fdfb541d8895d8ab0d3427631b90a1e660be85c8c24f0fd74a4595657",
+     "ns": 12681291
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "9d4d605fdfb541d8895d8ab0d3427631b90a1e660be85c8c24f0fd74a4595657",
+     "ns": 12640083
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "7300ee90bb9380f5927e206cf7d975f9a0e4a0ff5cbd2fd1b444b73d311d24bc",
+     "ns": 8928542
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "9d4d605fdfb541d8895d8ab0d3427631b90a1e660be85c8c24f0fd74a4595657",
+     "ns": 12528416
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "3c82376c8ac5b680b58182a2f6bb97b3f878728bba2b55354204d7b4a3eebf27",
+     "ns": 12886250
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "3c82376c8ac5b680b58182a2f6bb97b3f878728bba2b55354204d7b4a3eebf27",
+     "ns": 13186458
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "31cbd4e0d221dfc46bfde98a0927f68bff3eed1b17cdab97186b0bcebca0f3a1",
+     "ns": 12511167
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "31cbd4e0d221dfc46bfde98a0927f68bff3eed1b17cdab97186b0bcebca0f3a1",
+     "ns": 13441542
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "66ad77c23fd07bbc65f0b6ad86a4eb3a67a418f000c230fabb0c135824b3e4b3",
+     "ns": 13532042
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "66ad77c23fd07bbc65f0b6ad86a4eb3a67a418f000c230fabb0c135824b3e4b3",
+     "ns": 13334000
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "7439d30e7ad70f1bab28311ff5421ada50a7a47b0d019963143ae5e78243e578",
+     "ns": 14453292
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "7439d30e7ad70f1bab28311ff5421ada50a7a47b0d019963143ae5e78243e578",
+     "ns": 13248000
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "9b584ab0caa6b3cc121cfe807677ae61159a41e70419de78ace61125729673e4",
+     "ns": 13695833
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "9b584ab0caa6b3cc121cfe807677ae61159a41e70419de78ace61125729673e4",
+     "ns": 13656292
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "d6f3605160e3cb773e7e22c9998fc3de88b079dd386751b9be17ddb23562a668",
+     "ns": 12791208
+    },
+    {
+     "pack": "deepbuild/separation@1.0.0",
+     "program": "d6f3605160e3cb773e7e22c9998fc3de88b079dd386751b9be17ddb23562a668",
+     "ns": 16403375
+    },
+    {
+     "pack": "deepbuild/interfaces@1.0.0",
+     "program": "260c9d5993ef28b8605b18bc78db29f17ff6c11e5f7c833698cf927eadf0e28a",
+     "ns": 1234000
+    },
+    {
+     "pack": "deepbuild/interfaces@1.0.0",
+     "program": "260c9d5993ef28b8605b18bc78db29f17ff6c11e5f7c833698cf927eadf0e28a",
+     "ns": 1185166
+    },
+    {
+     "pack": "deepbuild/interfaces@1.0.0",
+     "program": "db724e63f479a9a2f419f16ddae3fd8304c61877b2843b866361c70e62c4b7e1",
+     "ns": 1376583
+    },
+    {
+     "pack": "deepbuild/interfaces@1.0.0",
+     "program": "db724e63f479a9a2f419f16ddae3fd8304c61877b2843b866361c70e62c4b7e1",
+     "ns": 1200500
+    },
+    {
+     "pack": "deepbuild/interfaces@1.0.0",
+     "program": "1ce4365e26036bbdd5ed4702e8a9e4b1409fb8da0aaecc2e5fb129c8e45f9fa6",
+     "ns": 1313750
+    },
+    {
+     "pack": "deepbuild/interfaces@1.0.0",
+     "program": "1ce4365e26036bbdd5ed4702e8a9e4b1409fb8da0aaecc2e5fb129c8e45f9fa6",
+     "ns": 1546000
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "f1244d523ed647963c5c93c2f5b11fcd111446295408d0af83b38b7e0c3ebda3",
+     "ns": 7537708
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "f1244d523ed647963c5c93c2f5b11fcd111446295408d0af83b38b7e0c3ebda3",
+     "ns": 7779750
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7389708
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7093542
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7536458
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 6992625
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 6997041
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7572209
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7545125
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7424917
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7689250
+    },
+    {
+     "pack": "deepbuild/sense@1.0.0",
+     "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
+     "ns": 7609917
+    }
+   ]
+  },
+  {
+   "pid": 96797,
+   "reply": 2,
+   "call": "deep_kinds",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634923874.322,
+   "repliedMs": 1795634923893.1113
+  },
+  {
+   "pid": 96797,
+   "reply": 3,
+   "call": "costs",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634923893.1223,
+   "repliedMs": 1795634925220.0256
+  },
+  {
+   "pid": 96797,
+   "reply": 4,
+   "call": "packs",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634925220.0327,
+   "repliedMs": 1795634925220.1301
+  }
+ ],
+ "processes": [
+  {
+   "pid": 89266,
+   "primes": true,
+   "load": [
+    [
+     20.95458984375,
+     21.02685546875,
+     21.6806640625
+    ],
+    [
+     21.9189453125,
+     21.2255859375,
+     21.74658203125
+    ]
+   ],
+   "startedMs": 1795634893009.709,
+   "worldRepliedMs": 1795634893096.355,
+   "exitedMs": 1795634898400.4282,
+   "replyBytes": [
+    55703,
+    55703,
+    2658,
+    2581
+   ],
+   "packs": [
+    {
+     "pack": "deepbuild/composites",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/modslib",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/chrome-fx",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/godot",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/art",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/fx",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/lanes",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/process",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/godot",
+     "version": "1.1.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/circuit",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/familiar",
+     "version": "1.1.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/familiar",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/separation",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/verbs",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/blender",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/explain",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/foley",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/unreal",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/interfaces",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/sense",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/math",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    }
+   ],
+   "stderr": []
+  },
+  {
+   "pid": 90770,
+   "primes": false,
+   "load": [
+    [
+     21.9189453125,
+     21.2255859375,
+     21.74658203125
+    ],
+    [
+     22.56591796875,
+     21.37109375,
+     21.794921875
+    ]
+   ],
+   "startedMs": 1795634898402.0852,
+   "worldRepliedMs": 1795634898462.8445,
+   "exitedMs": 1795634903753.3462,
+   "replyBytes": [
+    55703,
+    55703,
+    2410,
+    2581
+   ],
+   "packs": [
+    {
+     "pack": "deepbuild/composites",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/modslib",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/chrome-fx",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/godot",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/art",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/fx",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/lanes",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/process",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/godot",
+     "version": "1.1.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/circuit",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/familiar",
+     "version": "1.1.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/familiar",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/separation",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/verbs",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/blender",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/explain",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/foley",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/unreal",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/interfaces",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/sense",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/math",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    }
+   ],
+   "stderr": []
+  },
+  {
+   "pid": 92285,
+   "primes": false,
+   "load": [
+    [
+     22.56591796875,
+     21.37109375,
+     21.794921875
+    ],
+    [
+     22.9208984375,
+     21.46435546875,
+     21.8251953125
+    ]
+   ],
+   "startedMs": 1795634903754.5112,
+   "worldRepliedMs": 1795634903815.1057,
+   "exitedMs": 1795634909097.7366,
+   "replyBytes": [
+    55703,
+    55703,
+    2681,
+    2581
+   ],
+   "packs": [
+    {
+     "pack": "deepbuild/composites",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/modslib",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/chrome-fx",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/godot",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/art",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/fx",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/lanes",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/process",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/godot",
+     "version": "1.1.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/circuit",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/familiar",
+     "version": "1.1.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/familiar",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/separation",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/verbs",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/blender",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/explain",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/foley",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/unreal",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/interfaces",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/sense",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/math",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    }
+   ],
+   "stderr": []
+  },
+  {
+   "pid": 93794,
+   "primes": false,
+   "load": [
+    [
+     22.9208984375,
+     21.46435546875,
+     21.8251953125
+    ],
+    [
+     23.4072265625,
+     21.58935546875,
+     21.8671875
+    ]
+   ],
+   "startedMs": 1795634909098.8508,
+   "worldRepliedMs": 1795634909159.5037,
+   "exitedMs": 1795634914491.6873,
+   "replyBytes": [
+    55703,
+    55703,
+    2659,
+    2581
+   ],
+   "packs": [
+    {
+     "pack": "deepbuild/composites",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/modslib",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/chrome-fx",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/godot",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/art",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/fx",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/lanes",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/process",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/godot",
+     "version": "1.1.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/circuit",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/familiar",
+     "version": "1.1.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/familiar",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/separation",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/verbs",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/blender",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/explain",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/foley",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/unreal",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/interfaces",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/sense",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/math",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    }
+   ],
+   "stderr": []
+  },
+  {
+   "pid": 95305,
+   "primes": false,
+   "load": [
+    [
+     23.4072265625,
+     21.58935546875,
+     21.8671875
+    ],
+    [
+     23.53466796875,
+     21.6455078125,
+     21.88525390625
+    ]
+   ],
+   "startedMs": 1795634914492.8713,
+   "worldRepliedMs": 1795634914553.1167,
+   "exitedMs": 1795634919865.4658,
+   "replyBytes": [
+    55703,
+    55703,
+    2661,
+    2581
+   ],
+   "packs": [
+    {
+     "pack": "deepbuild/composites",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/modslib",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/chrome-fx",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/godot",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/art",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/fx",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/lanes",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/process",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/godot",
+     "version": "1.1.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/circuit",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/familiar",
+     "version": "1.1.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/familiar",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/separation",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/verbs",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/blender",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/explain",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/foley",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/unreal",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/interfaces",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/sense",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/math",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    }
+   ],
+   "stderr": []
+  },
+  {
+   "pid": 96797,
+   "primes": false,
+   "load": [
+    [
+     23.53466796875,
+     21.6455078125,
+     21.88525390625
+    ],
+    [
+     22.16455078125,
+     21.423828125,
+     21.80419921875
+    ]
+   ],
+   "startedMs": 1795634919866.9539,
+   "worldRepliedMs": 1795634919928.7678,
+   "exitedMs": 1795634925230.525,
+   "replyBytes": [
+    55703,
+    55703,
+    2532,
+    2581
+   ],
+   "packs": [
+    {
+     "pack": "deepbuild/composites",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/modslib",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/chrome-fx",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/godot",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/art",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/fx",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/lanes",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/process",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/godot",
+     "version": "1.1.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/circuit",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/familiar",
+     "version": "1.1.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/familiar",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/separation",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/verbs",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/blender",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/explain",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/foley",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/unreal",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/interfaces",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/sense",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/math",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    }
+   ],
+   "stderr": []
+  }
+ ],
+ "marks": {
+  "file": "compile.marks.jsonl",
+  "sha256": "4c0d30e237ae28e5343cefe767bbed9b2383b00bb9536e6cfa4bd917d49e13a2",
+  "lines": 996
+ }
+}

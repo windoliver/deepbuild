@@ -1,0 +1,132 @@
+{
+ "kind": "tracker",
+ "date": "2026-11-25T19:29:54.712Z",
+ "fingerprint": {
+  "model": "Mac17,10",
+  "chip": "Apple M5 Max",
+  "memoryBytes": 68719476736,
+  "power": "ac",
+  "lowPowerMode": false,
+  "thermalState": "nominal",
+  "macosBuild": "26B8119"
+ },
+ "cores": 18,
+ "lease": "timed:a50904de23b0851c",
+ "load": {
+  "start": [
+   23.5654296875,
+   21.77197265625,
+   21.8916015625
+  ],
+  "end": [
+   23.76025390625,
+   21.841796875,
+   21.91552734375
+  ]
+ },
+ "command": "spike3445_tracker (docs/spikes/3445/tracker.rs)",
+ "binary": {
+  "name": "spike3445_tracker",
+  "sha256": "b98a02c0b76c3ce281ff05f2a3e63e4fa5621da4638033a91589d81fd7875404",
+  "bytes": 14236656
+ },
+ "build": {
+  "profile": "release",
+  "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+ },
+ "made": {
+  "label": "stock",
+  "base": "aafef31316f7da8f741647a5934a717d9019ffff",
+  "patches": [],
+  "example": {
+   "file": "tracker.rs",
+   "sha256": "7ff3716bcf73d2864e920b38319a0d39148169c5454ef9d0c3b8513b91a96276"
+  },
+  "ledger": {
+   "file": "kit-ledger.json",
+   "sha256": "2c1e5e9eb9a57dcae6478575f1116ab5749ff2925c1eb18679ca897ff8fee553"
+  },
+  "command": "cargo build --release --locked -j 10 -p deep-show --bin deep-show -p deep-logic --bin deep-logic --example spike3445_tracker",
+  "finished": "Finished `release` profile [optimized] target(s)",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "date": "2026-11-25T08:44:11Z",
+  "sha256": {
+   "deep-show": "e5e8105dd0634c43c06d07269e808f4be21be8ac6f96297abbcd89379c1585e1",
+   "deep-logic": "a6b490c6121aae0d6ad459401716416843a021fa105ee9c8b168654fcd4dc6f6",
+   "spike3445_tracker": "b98a02c0b76c3ce281ff05f2a3e63e4fa5621da4638033a91589d81fd7875404"
+  }
+ },
+ "engines": {
+  "app": "wasmtime 49.0.5"
+ },
+ "program": "writes-marked-inline",
+ "rewrite": "plain",
+ "sha256": {
+  "bench": "99f672629267b64bfe866a367620b528410ca9192c89f67293f522b71567621e",
+  "twin": "c71341174f239755eb3c5ff9d687d4725b18e03755498cf7880ee3b4b1730d2f"
+ },
+ "rewritten": {
+  "bench": "721a2d67a7d939911b540c9b34a33a0c7fa7a76ca22a2bad822259493a138651",
+  "twin": "0cdd57a9e6d1a22708aac2c632dfdbad8cef27a7018013d271d6ed40014d9c2a",
+  "bench_bytes": 9201
+ },
+ "writes": {
+  "stores": 64,
+  "iterations": 23600,
+  "instructions": 203,
+  "marked": {
+   "iterations": 5900,
+   "instructions": 843
+  }
+ },
+ "fuel": {
+  "bench": 5351307,
+  "twin": 914
+ },
+ "steps": 10,
+ "unkept": 0.019507912783229196,
+ "raw": [
+  {
+   "bench_ns": 104791,
+   "twin_ns": 416,
+   "ns_per_fuel": 0.019507912783229196
+  },
+  {
+   "bench_ns": 104958,
+   "twin_ns": 375,
+   "ns_per_fuel": 0.019546788432176852
+  },
+  {
+   "bench_ns": 104916,
+   "twin_ns": 375,
+   "ns_per_fuel": 0.01953893854152396
+  },
+  {
+   "bench_ns": 104791,
+   "twin_ns": 375,
+   "ns_per_fuel": 0.019515575771723685
+  },
+  {
+   "bench_ns": 105000,
+   "twin_ns": 375,
+   "ns_per_fuel": 0.019554638322829745
+  },
+  {
+   "bench_ns": 104750,
+   "twin_ns": 416,
+   "ns_per_fuel": 0.019500249794734706
+  }
+ ],
+ "runs": {
+  "app": [
+   0.019546788432176852,
+   0.01953893854152396,
+   0.019515575771723685,
+   0.019554638322829745,
+   0.019500249794734706
+  ]
+ },
+ "ns_per_fuel": {
+  "app": 0.02
+ }
+}

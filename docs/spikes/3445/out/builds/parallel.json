@@ -1,0 +1,16 @@
+{
+ "label": "parallel",
+ "base": "aafef31316f7da8f741647a5934a717d9019ffff",
+ "patches": [{"file":"patches/parallel-compilation.manifests.patch","sha256":"cee42873cd7706a905293e0775c37b03d32f8832ba74cbf78b40ab54233fa54c"}],
+ "example": {"file": "tracker.rs", "sha256": "166e58ade3cac859312a359c633ab21f562e4e4a6d4b68bbc06bd8e5b6adfa7c"},
+ "ledger": {"file": "kit-ledger.json", "sha256": "2c1e5e9eb9a57dcae6478575f1116ab5749ff2925c1eb18679ca897ff8fee553"},
+ "command": "cargo build --release --offline -j 10 -p deep-show --bin deep-show -p deep-logic --bin deep-logic --example spike3445_tracker",
+ "finished": "Finished `release` profile [optimized] target(s)",
+ "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+ "date": "2026-11-25T06:14:43Z",
+ "sha256": {
+  "deep-show": "7771f1a16e5f28bf79bed21e244eccacc904a715715f8efed723f0f79d6bef3c",
+  "deep-logic": "7122239002be086dc5fc44a121ba9d274e0bbf8cc9a8a6b45d856e09236fc0c1",
+  "spike3445_tracker": "fc69e8d8b8c1579c471c4f6b8d41934f3426e01f6606892d13d054ff8183ab2e"
+ }
+}

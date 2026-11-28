@@ -1,0 +1,1302 @@
+{
+ "kind": "core",
+ "date": "2026-11-25T19:27:40.702Z",
+ "fingerprint": {
+  "model": "Mac17,10",
+  "chip": "Apple M5 Max",
+  "memoryBytes": 68719476736,
+  "power": "ac",
+  "lowPowerMode": false,
+  "thermalState": "nominal",
+  "macosBuild": "26B8119"
+ },
+ "cores": 18,
+ "lease": "timed:a50904de23b0851c",
+ "load": {
+  "start": [
+   27.80078125,
+   22.12841796875,
+   22.078125
+  ],
+  "end": [
+   20.95458984375,
+   21.02685546875,
+   21.6806640625
+  ]
+ },
+ "binary": {
+  "name": "deep-show",
+  "sha256": "e5e8105dd0634c43c06d07269e808f4be21be8ac6f96297abbcd89379c1585e1",
+  "bytes": 255011840
+ },
+ "made": {
+  "label": "stock",
+  "base": "aafef31316f7da8f741647a5934a717d9019ffff",
+  "patches": [],
+  "example": {
+   "file": "tracker.rs",
+   "sha256": "7ff3716bcf73d2864e920b38319a0d39148169c5454ef9d0c3b8513b91a96276"
+  },
+  "ledger": {
+   "file": "kit-ledger.json",
+   "sha256": "2c1e5e9eb9a57dcae6478575f1116ab5749ff2925c1eb18679ca897ff8fee553"
+  },
+  "command": "cargo build --release --locked -j 10 -p deep-show --bin deep-show -p deep-logic --bin deep-logic --example spike3445_tracker",
+  "finished": "Finished `release` profile [optimized] target(s)",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "date": "2026-11-25T08:44:11Z",
+  "sha256": {
+   "deep-show": "e5e8105dd0634c43c06d07269e808f4be21be8ac6f96297abbcd89379c1585e1",
+   "deep-logic": "a6b490c6121aae0d6ad459401716416843a021fa105ee9c8b168654fcd4dc6f6",
+   "spike3445_tracker": "b98a02c0b76c3ce281ff05f2a3e63e4fa5621da4638033a91589d81fd7875404"
+  }
+ },
+ "packs": [
+  "deepbuild/art@1.0.0",
+  "deepbuild/blender@1.0.0",
+  "deepbuild/chrome-fx@1.0.0",
+  "deepbuild/circuit@1.0.0",
+  "deepbuild/composites@1.0.0",
+  "deepbuild/explain@1.0.0",
+  "deepbuild/familiar@1.0.0",
+  "deepbuild/familiar@1.1.0",
+  "deepbuild/foley@1.0.0",
+  "deepbuild/fx@1.0.0",
+  "deepbuild/godot@1.0.0",
+  "deepbuild/godot@1.1.0",
+  "deepbuild/interfaces@1.0.0",
+  "deepbuild/lanes@1.0.0",
+  "deepbuild/math@1.0.0",
+  "deepbuild/modslib@1.0.0",
+  "deepbuild/process@1.0.0",
+  "deepbuild/sense@1.0.0",
+  "deepbuild/separation@1.0.0",
+  "deepbuild/unreal@1.0.0",
+  "deepbuild/verbs@1.0.0"
+ ],
+ "world": [
+  "deepbuild/composites",
+  "deepbuild/modslib",
+  "deepbuild/chrome-fx",
+  "deepbuild/godot",
+  "deepbuild/art",
+  "deepbuild/fx",
+  "deepbuild/lanes",
+  "deepbuild/process",
+  "deepbuild/godot",
+  "deepbuild/circuit",
+  "deepbuild/familiar",
+  "deepbuild/familiar",
+  "deepbuild/separation",
+  "deepbuild/verbs",
+  "deepbuild/blender",
+  "deepbuild/explain",
+  "deepbuild/foley",
+  "deepbuild/unreal",
+  "deepbuild/interfaces",
+  "deepbuild/sense",
+  "deepbuild/math"
+ ],
+ "calls": [
+  "deep_kinds",
+  "deep_kinds",
+  "costs",
+  "packs"
+ ],
+ "replies": [
+  {
+   "pid": 80138,
+   "reply": 1,
+   "call": "deep_kinds",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634861005.5857,
+   "repliedMs": 1795634865021.6013,
+   "primes": true
+  },
+  {
+   "pid": 80138,
+   "reply": 2,
+   "call": "deep_kinds",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634865021.6138,
+   "repliedMs": 1795634865041.6091,
+   "primes": true
+  },
+  {
+   "pid": 80138,
+   "reply": 3,
+   "call": "costs",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634865041.63,
+   "repliedMs": 1795634866409.7886,
+   "primes": true
+  },
+  {
+   "pid": 80138,
+   "reply": 4,
+   "call": "packs",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634866409.8123,
+   "repliedMs": 1795634866410.0317,
+   "primes": true
+  },
+  {
+   "pid": 81698,
+   "reply": 1,
+   "call": "deep_kinds",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634866422.4062,
+   "repliedMs": 1795634870301.5647
+  },
+  {
+   "pid": 81698,
+   "reply": 2,
+   "call": "deep_kinds",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634870301.578,
+   "repliedMs": 1795634870323.1125
+  },
+  {
+   "pid": 81698,
+   "reply": 3,
+   "call": "costs",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634870323.1335,
+   "repliedMs": 1795634871682.7874
+  },
+  {
+   "pid": 81698,
+   "reply": 4,
+   "call": "packs",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634871682.8308,
+   "repliedMs": 1795634871682.9646
+  },
+  {
+   "pid": 83169,
+   "reply": 1,
+   "call": "deep_kinds",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634871694.907,
+   "repliedMs": 1795634875549.1375
+  },
+  {
+   "pid": 83169,
+   "reply": 2,
+   "call": "deep_kinds",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634875549.1536,
+   "repliedMs": 1795634875569.1953
+  },
+  {
+   "pid": 83169,
+   "reply": 3,
+   "call": "costs",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634875569.2053,
+   "repliedMs": 1795634876927.9185
+  },
+  {
+   "pid": 83169,
+   "reply": 4,
+   "call": "packs",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634876927.9277,
+   "repliedMs": 1795634876928.0154
+  },
+  {
+   "pid": 84638,
+   "reply": 1,
+   "call": "deep_kinds",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634876939.2598,
+   "repliedMs": 1795634880840.0762
+  },
+  {
+   "pid": 84638,
+   "reply": 2,
+   "call": "deep_kinds",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634880840.2095,
+   "repliedMs": 1795634880860.0771
+  },
+  {
+   "pid": 84638,
+   "reply": 3,
+   "call": "costs",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634880860.0864,
+   "repliedMs": 1795634882209.6091
+  },
+  {
+   "pid": 84638,
+   "reply": 4,
+   "call": "packs",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634882209.6177,
+   "repliedMs": 1795634882209.7078
+  },
+  {
+   "pid": 86137,
+   "reply": 1,
+   "call": "deep_kinds",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634882221.7388,
+   "repliedMs": 1795634886055.8064
+  },
+  {
+   "pid": 86137,
+   "reply": 2,
+   "call": "deep_kinds",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634886055.928,
+   "repliedMs": 1795634886075.5332
+  },
+  {
+   "pid": 86137,
+   "reply": 3,
+   "call": "costs",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634886075.5427,
+   "repliedMs": 1795634887428.6807
+  },
+  {
+   "pid": 86137,
+   "reply": 4,
+   "call": "packs",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634887428.6897,
+   "repliedMs": 1795634887428.7798
+  },
+  {
+   "pid": 87588,
+   "reply": 1,
+   "call": "deep_kinds",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634887440.7725,
+   "repliedMs": 1795634891288.3342
+  },
+  {
+   "pid": 87588,
+   "reply": 2,
+   "call": "deep_kinds",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634891288.346,
+   "repliedMs": 1795634891309.321
+  },
+  {
+   "pid": 87588,
+   "reply": 3,
+   "call": "costs",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634891309.3313,
+   "repliedMs": 1795634892659.095
+  },
+  {
+   "pid": 87588,
+   "reply": 4,
+   "call": "packs",
+   "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+   },
+   "startedMs": 1795634892659.1042,
+   "repliedMs": 1795634892659.2178
+  }
+ ],
+ "processes": [
+  {
+   "pid": 80138,
+   "primes": true,
+   "load": [
+    [
+     27.80078125,
+     22.12841796875,
+     22.078125
+    ],
+    [
+     26.775390625,
+     22.009765625,
+     22.03662109375
+    ]
+   ],
+   "startedMs": 1795634861005.5857,
+   "worldRepliedMs": 1795634861102.1821,
+   "exitedMs": 1795634866421.281,
+   "replyBytes": [
+    55703,
+    55703,
+    2451,
+    2581
+   ],
+   "packs": [
+    {
+     "pack": "deepbuild/composites",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/modslib",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/chrome-fx",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/godot",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/art",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/fx",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/lanes",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/process",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/godot",
+     "version": "1.1.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/circuit",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/familiar",
+     "version": "1.1.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/familiar",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/separation",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/verbs",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/blender",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/explain",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/foley",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/unreal",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/interfaces",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/sense",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/math",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    }
+   ],
+   "stderr": []
+  },
+  {
+   "pid": 81698,
+   "primes": false,
+   "load": [
+    [
+     26.775390625,
+     22.009765625,
+     22.03662109375
+    ],
+    [
+     25.271484375,
+     21.77685546875,
+     21.9541015625
+    ]
+   ],
+   "startedMs": 1795634866422.4062,
+   "worldRepliedMs": 1795634866487.3647,
+   "exitedMs": 1795634871694.0847,
+   "replyBytes": [
+    55703,
+    55703,
+    2497,
+    2581
+   ],
+   "packs": [
+    {
+     "pack": "deepbuild/composites",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/modslib",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/chrome-fx",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/godot",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/art",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/fx",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/lanes",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/process",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/godot",
+     "version": "1.1.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/circuit",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/familiar",
+     "version": "1.1.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/familiar",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/separation",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/verbs",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/blender",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/explain",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/foley",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/unreal",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/interfaces",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/sense",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/math",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    }
+   ],
+   "stderr": []
+  },
+  {
+   "pid": 83169,
+   "primes": false,
+   "load": [
+    [
+     25.271484375,
+     21.77685546875,
+     21.9541015625
+    ],
+    [
+     24.12841796875,
+     21.59765625,
+     21.8896484375
+    ]
+   ],
+   "startedMs": 1795634871694.907,
+   "worldRepliedMs": 1795634871755.6758,
+   "exitedMs": 1795634876938.4548,
+   "replyBytes": [
+    55703,
+    55703,
+    2679,
+    2581
+   ],
+   "packs": [
+    {
+     "pack": "deepbuild/composites",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/modslib",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/chrome-fx",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/godot",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/art",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/fx",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/lanes",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/process",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/godot",
+     "version": "1.1.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/circuit",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/familiar",
+     "version": "1.1.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/familiar",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/separation",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/verbs",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/blender",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/explain",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/foley",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/unreal",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/interfaces",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/sense",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/math",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    }
+   ],
+   "stderr": []
+  },
+  {
+   "pid": 84638,
+   "primes": false,
+   "load": [
+    [
+     24.12841796875,
+     21.59765625,
+     21.8896484375
+    ],
+    [
+     23.23681640625,
+     21.45458984375,
+     21.83740234375
+    ]
+   ],
+   "startedMs": 1795634876939.2598,
+   "worldRepliedMs": 1795634877000.965,
+   "exitedMs": 1795634882220.7563,
+   "replyBytes": [
+    55703,
+    55703,
+    2537,
+    2581
+   ],
+   "packs": [
+    {
+     "pack": "deepbuild/composites",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/modslib",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/chrome-fx",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/godot",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/art",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/fx",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/lanes",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/process",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/godot",
+     "version": "1.1.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/circuit",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/familiar",
+     "version": "1.1.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/familiar",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/separation",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/verbs",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/blender",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/explain",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/foley",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/unreal",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/interfaces",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/sense",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/math",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    }
+   ],
+   "stderr": []
+  },
+  {
+   "pid": 86137,
+   "primes": false,
+   "load": [
+    [
+     23.23681640625,
+     21.45458984375,
+     21.83740234375
+    ],
+    [
+     22.2568359375,
+     21.28076171875,
+     21.7734375
+    ]
+   ],
+   "startedMs": 1795634882221.7388,
+   "worldRepliedMs": 1795634882283.6768,
+   "exitedMs": 1795634887439.6597,
+   "replyBytes": [
+    55703,
+    55703,
+    2602,
+    2581
+   ],
+   "packs": [
+    {
+     "pack": "deepbuild/composites",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/modslib",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/chrome-fx",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/godot",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/art",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/fx",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/lanes",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/process",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/godot",
+     "version": "1.1.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/circuit",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/familiar",
+     "version": "1.1.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/familiar",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/separation",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/verbs",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/blender",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/explain",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/foley",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/unreal",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/interfaces",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/sense",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/math",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    }
+   ],
+   "stderr": []
+  },
+  {
+   "pid": 87588,
+   "primes": false,
+   "load": [
+    [
+     22.2568359375,
+     21.28076171875,
+     21.7734375
+    ],
+    [
+     20.95458984375,
+     21.02685546875,
+     21.6806640625
+    ]
+   ],
+   "startedMs": 1795634887440.7725,
+   "worldRepliedMs": 1795634887502.482,
+   "exitedMs": 1795634892670.413,
+   "replyBytes": [
+    55703,
+    55703,
+    2554,
+    2581
+   ],
+   "packs": [
+    {
+     "pack": "deepbuild/composites",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/modslib",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/chrome-fx",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/godot",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/art",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/fx",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/lanes",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/process",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/godot",
+     "version": "1.1.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/circuit",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/familiar",
+     "version": "1.1.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/familiar",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/separation",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/verbs",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/blender",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/explain",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/foley",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/unreal",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/interfaces",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/sense",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    },
+    {
+     "pack": "deepbuild/math",
+     "version": "1.0.0",
+     "state": "installed",
+     "checks": 1
+    }
+   ],
+   "stderr": []
+  }
+ ]
+}

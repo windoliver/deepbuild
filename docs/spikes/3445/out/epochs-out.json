@@ -1,0 +1,52 @@
+{
+  "fingerprint": {
+    "model": "Mac17,10",
+    "chip": "Apple M5 Max",
+    "memoryBytes": 68719476736,
+    "power": "ac",
+    "lowPowerMode": false,
+    "thermalState": "nominal",
+    "macosBuild": "26B8119"
+  },
+  "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+  },
+  "engines": {
+    "app": "wasmtime 49.0.5",
+    "web": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/158.0.0.0 Safari/537.36"
+  },
+  "fuel": {
+    "bench": 4800007,
+    "twin": 47
+  },
+  "steps": 20,
+  "runs": {
+    "app": [
+      0.271564763039692,
+      0.25020166834723623,
+      0.2501495845798715,
+      0.24997604146701222,
+      0.24906478387319894
+    ],
+    "web": [
+      0.36562804690136097,
+      0.3354194618259382,
+      0.33021108508946534,
+      0.33854448787558294,
+      0.32708605905437266
+    ]
+  },
+  "fixed": {
+    "at": {
+      "1": 1667,
+      "100": 171000,
+      "1000": 2574542
+    },
+    "per_item_ns": 2574.542
+  },
+  "ns_per_fuel": {
+    "app": 0.25,
+    "web": 0.335
+  }
+}

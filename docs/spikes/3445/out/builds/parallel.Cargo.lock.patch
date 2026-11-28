@@ -1,0 +1,12 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 698e40c29..ed0925f83 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -12707,6 +12707,7 @@ dependencies = [
+  "once_cell",
+  "postcard",
+  "pulley-interpreter",
++ "rayon",
+  "rustix 1.1.6",
+  "serde",
+  "serde_derive",
