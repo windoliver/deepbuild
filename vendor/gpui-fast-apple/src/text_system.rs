@@ -905,7 +905,7 @@ mod tests {
         let fonts = AppleTextSystem::new();
         fonts
             .add_fonts(vec![
-                include_bytes!("../../../assets/fonts/lilex/Lilex-Regular.ttf")
+                include_bytes!("../../gpui-fast/upstream/assets/fonts/lilex/Lilex-Regular.ttf") /* DeepBuild patch (windoliver/deepbuild#3625): upstream's file, kept in vendor/gpui-fast/upstream since the release doesn't ship it */
                     .as_slice()
                     .into(),
             ])

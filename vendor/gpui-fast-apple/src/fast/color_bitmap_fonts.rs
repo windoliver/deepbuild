@@ -48,7 +48,7 @@ mod tests {
 
     /// One glyph, a 32 by 32 opaque red square at U+E000, stored only as an
     /// `sbix` PNG strike, built by `assets/fonts/sbix-test/make_sbix_test_font.py`.
-    const SBIX_TEST: &[u8] = include_bytes!("../../../../assets/fonts/sbix-test/SbixTest.ttf");
+    const SBIX_TEST: &[u8] = include_bytes!("../../../gpui-fast/upstream/assets/fonts/sbix-test/SbixTest.ttf"); // DeepBuild patch (windoliver/deepbuild#3625): upstream's file, kept in vendor/gpui-fast/upstream since the release doesn't ship it
 
     /// A font with an `sbix` table that isn't Apple Color Emoji has its glyphs
     /// shaped as emoji and rasterized in color, as Apple Color Emoji's are.

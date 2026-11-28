@@ -551,8 +551,8 @@ mod tests {
     use usvg::fontdb::{Database, Family, Query};
 
     const IBM_PLEX_REGULAR: &[u8] =
-        include_bytes!("../../../assets/fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf");
-    const LILEX_REGULAR: &[u8] = include_bytes!("../../../assets/fonts/lilex/Lilex-Regular.ttf");
+        include_bytes!("../upstream/assets/fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf"); // DeepBuild patch (windoliver/deepbuild#3625): upstream's file, kept in vendor/gpui-fast/upstream since the release doesn't ship it
+    const LILEX_REGULAR: &[u8] = include_bytes!("../upstream/assets/fonts/lilex/Lilex-Regular.ttf"); // DeepBuild patch (windoliver/deepbuild#3625): upstream's file, kept in vendor/gpui-fast/upstream since the release doesn't ship it
 
     #[test]
     fn renders_parsed_svg_at_requested_size() -> Result<()> {
