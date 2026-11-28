@@ -21,9 +21,7 @@ const CHALLENGE = 'DeepProofChallenge';
 const SOLUTION = 'DeepProofSolution';
 /** Mutants tried per check, at most. */
 const MUTANTS = 12;
-/** comparator's flag on macOS, where bubblewrap doesn't exist; on Linux comparator runs in its own sandbox. */
 const LEAN_FLAGS = process.platform === 'darwin' ? ['--inadvisably-no-sandbox'] : [];
-/** The key's tools: Lean's version and comparator's flags. */
 const toolsOf = (version: string): Record<string, string> => ({ lean4: version, 'lean4.comparator': LEAN_FLAGS.join(' ') });
 
 type Lake = (args: string[], into?: string) => Exec;
