@@ -48,7 +48,7 @@ export function roomForTest(held, readings, now = Date.now(), run = false, ceili
 }
 
 /**
- * Every process, by pid: its parent and its start time, which tells a holder from a later process given its number.
+ * Every process, by pid: its parent, whether it exited unreaped, and its start, which tells a holder from a later process.
  * ps prints the start in its own zone and language, so every reader asks for the same ones. ps reads every process,
  * so a listing serves two seconds unless a fresh one is asked for.
  */
@@ -79,8 +79,8 @@ const gone = (pid) => {
     return error.code === 'ESRCH';
   }
 };
-// A process ps listed is alive while its start is the one recorded; one it missed started since, and is alive while
-// its number is.
+// A process ps listed is alive while its start is the one recorded and it hasn't exited, reaped or not; one it missed
+// started since, and is alive while its number is.
 const alive = (procs, { pid, start }) => (procs.has(pid) ? procs.get(pid).start === start && !procs.get(pid).exited : !gone(pid));
 // Gone only by a fresh listing: in an older one, a number since taken by a new process reads as another's.
 const ended = (entry) => !alive(processes(), entry) && !alive(processes({ fresh: true }), entry);
