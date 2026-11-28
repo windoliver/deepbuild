@@ -141,7 +141,7 @@ fn check_by(
 ) -> CheckResult {
     let mut lowered = copy_of(doc);
     let mut head = lower(doc, lowered.get_mut("items"), sealed, kinds, packs);
-    settle(&mut lowered, &head, packs);
+    settle(&mut lowered, &mut head, packs);
     finish(&lowered, &mut head, sealed, kinds, coefficients, sizes);
     let Head {
         mut issues,
@@ -404,24 +404,12 @@ fn lower<'a>(
 }
 
 /// What lowering writes beyond the items: `lowered` is the document with its lowered items.
-fn settle(lowered: &mut Value, head: &Head<'_>, packs: &Packs) {
-    let expansions = &head.expansions;
+fn settle(lowered: &mut Value, head: &mut Head<'_>, packs: &Packs) {
     // A rename carries every path that names the param it renames (#1960).
     super::pack_kinds::migrate::carry_paths(lowered, &head.resolved, packs.planted);
     // A recipe's channels join the document's, targeting the items it derived (#420).
-    let recipe_channels: Map<String, Value> =
-        expansions.iter().flat_map(|e| e.channels.clone()).collect();
-    if !recipe_channels.is_empty() {
-        if let Some(doc) = lowered.as_object_mut() {
-            let channels = doc
-                .entry("channels")
-                .or_insert_with(|| Value::Object(Map::new()));
-            if let Some(map) = channels.as_object_mut() {
-                map.extend(recipe_channels);
-            }
-        }
-    }
-    super::expands::merge(lowered, expansions);
+    super::expands::join_channels(lowered, &head.expansions, &mut head.issues);
+    super::expands::merge(lowered, &head.expansions);
 }
 
 /// The last part of a check, added to `head`: the module checks, the budget estimate and the
@@ -983,7 +971,7 @@ fn recheck_by(
                     .any(|(id, item)| o.op.applies.is_none_or(|a| a(doc, id, item)))
             })
         });
-    if !maps_empty || sealed.has_costs() || costly || packed {
+    if !maps_empty || sealed.has_costs() || costly || packed || member(doc, "budget").is_some() {
         return None;
     }
     let items = member(doc, "items")?.as_object()?;
@@ -1086,7 +1074,7 @@ fn recheck_by(
         // Lowering writes members besides the items: it writes them on a copy.
         let mut copy = lent.doc.clone();
         copy["items"] = lowered;
-        settle(&mut copy, &head, packs);
+        settle(&mut copy, &mut head, packs);
         finish(&copy, &mut head, sealed, kinds, None, &Sizes::new());
     } else {
         lent.swap(lowered);

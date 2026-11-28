@@ -1,6 +1,6 @@
 ---
 name: deepbuild-canvas
-description: Teaches writing DeepBuild canvas documents (figures, films, boards and pieces) as JSON, and the craft rules their checks hold them to. Use it to draw in DeepBuild. Generated from DeepBuild 0.0.0's kinds' schemas, module set e8c751e24ceaf3abfe6a3ebc551152d19cfff7c1babb0d71e7995b053f6d7771; never edit by hand.
+description: Teaches writing DeepBuild canvas documents (figures, films, boards and pieces) as JSON, and the craft rules their checks hold them to. Use it to draw in DeepBuild. Generated from DeepBuild 0.0.0's kinds' schemas, module set b53078dc804388045e83a244e69c9d8da2afe5fe64dbea695d5236a00a77f377; never edit by hand.
 version: 0.0.0
 ---
 
@@ -119,7 +119,7 @@ A film's brief names the checks it wants; each runs only when named and never pa
 }
 ```
 
-## Kinds (module set e8c751e24ceaf3abfe6a3ebc551152d19cfff7c1babb0d71e7995b053f6d7771)
+## Kinds (module set b53078dc804388045e83a244e69c9d8da2afe5fe64dbea695d5236a00a77f377)
 
 Each entry as name@major, with its origin when not first party and its stability when not stable; then its fields as name: type, unit, [min, max] and = default, each left out when it has none. Entries with no fields share one line.
 

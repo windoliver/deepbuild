@@ -1,7 +1,3 @@
-// The channel server the corpus recorder gives a Claude Code session to record a channel's event (#3405): an MCP
-// server that declares Claude Code's channel capability and pushes one event into the session once the recorder writes
-// `<dir>/fire`. Loaded behind Claude Code's development flag (`--dangerously-load-development-channels server:<name>`).
-// Stdio, newline-delimited JSON-RPC, no dependencies.
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
@@ -17,7 +13,6 @@ createInterface({ input: process.stdin }).on('line', (line) => {
   else if (message.id !== undefined && message.method) send({ id: message.id, error: { code: -32601, message: `no method ${message.method}` } });
 });
 
-// One event, when the recorder asks for it: the words the file holds.
 const timer = setInterval(() => {
   const fire = join(dir, 'fire');
   if (!existsSync(fire)) return;

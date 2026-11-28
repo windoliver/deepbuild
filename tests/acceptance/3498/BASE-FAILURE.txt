@@ -1,0 +1,92 @@
+#3498's acceptance suite, run at the base 4307d749c1ec2193be79ab4f9c82176e8ea7af63 (a detached worktree: origin/main at
+03b71e900 merged with the design text #3472 decided; no implementation; only tests/acceptance/3498/ untracked).
+
+Machine: macOS 27.2; Node v24.22.0; vitest 5.0.5; tsc 5.9.3. Load averages 37.63 35.35 38.18 when the runs ended (other
+sessions' builds and test runs). The suite measures no time and no test reached a timeout.
+Built first, once, through the machine's throttle (2026-11-27T22:58Z to 23:02Z, exit 0):
+  node scripts/throttle.mjs build --wait 20 -- npm run build --workspaces --if-present
+No cargo build was started. node node_modules/typescript/bin/tsc --noEmit -p tests/acceptance/3498 exits 0.
+
+Each file was run once as delivered, one at a time. print.test.ts and shown.test.ts ran through the throttle
+(node scripts/throttle.mjs test --wait 20 -- <command>); check.test.ts ran bare: it reads files, runs git archive and would
+run a script of scripts/.
+
+1. check.test.ts (2026-11-27T23:09Z, 2.66 s)
+   NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/3498 --no-file-parallelism --testTimeout=600000 check.test.ts
+   Test Files 1 failed (1); Tests 5 failed (5); exit 1.
+
+   AC1 #3498.66862eb2: run on the merge base's files, the check fails, naming each of the seven sentences ...
+   AC1 #3498.66862eb2: on this checkout the check passes, and the lint lane runs it
+   AC2 #3498.a9609187: a planted template holding "PR" fails the check, naming the template and "change to look at"
+   AC2 #3498.a9609187: a planted why written inline in a rule fails the check, naming the file and line
+   AC4 #3498.0760395f: a planted template with no entry in the app's table fails the check, naming the template, ...
+     each: Error: BLOCKED: scripts/row-sentence-lint.mjs is not there: the lint lane's check of the hub's row sentences
+           (README, Pinned 1)
+
+   BLOCKED is the base's honest reading: the check these five need is not there. Before each stops, the first has
+   extracted the merge base's files and the other three have copied this checkout's tree. The next thing each would
+   reach at the base is also missing: packages/hub/row-sentences.json, and the check's command in the lint lane.
+
+2. print.test.ts (2026-11-27T23:07Z, 0.67 s)
+   NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/3498 --no-file-parallelism --testTimeout=600000 print.test.ts
+   Test Files 1 failed (1); Tests 1 failed | 2 passed (3); exit 1.
+
+   FAILS at its assertion, for the reason the criterion names:
+   AC3 #3498.86739e65: on a fixture record with a PASS, a sent back, a says done, a stale and an unpushed session, no row
+   deep prints with no arguments holds a listed word
+     AssertionError: each of the five rows, as deep prints it with its title, its agent and its age taken out, holds no
+     listed word:
+     row session:7c4d5e60-3498-4222-8333-444455550001 (Cart totals), which reads PASS, prints "PASS · its claim passed its checks", which holds the listed word "claim" (its plain word: "says done")
+     row session:7c4d5e60-3498-4222-8333-444455550002 (Checkout page), which reads sent back, prints "sent back · its checks sent its claim back, round 1 of 3", which holds the listed word "claim" (its plain word: "says done")
+     row session:7c4d5e60-3498-4222-8333-444455550003 (Release notes), which reads says done, prints "says done · it says done, and its checks have given no verdict yet", which holds the listed word "verdict" (its plain word: "result")
+     row session:7c4d5e60-3498-4222-8333-444455550004 (Search box), which reads stale, prints "stale · its verdict is on a commit that has moved since", which holds the listed word "verdict" (its plain word: "result")
+     row session:7c4d5e60-3498-4222-8333-444455550004 (Search box), which reads stale, prints "stale · its verdict is on a commit that has moved since", which holds the listed word "commit" (its plain word: "saved change")
+     row session:7c4d5e60-3498-4222-8333-444455550005 (Invoice schema), which reads finished, prints "finished · unpushed: 2 commits on no remote branch. Push the branch, or say why it stays here. · its turn stopped", which holds the listed word "commit" (its plain word: "saved change")
+     row session:7c4d5e60-3498-4222-8333-444455550005 (Invoice schema), which reads finished, prints "finished · unpushed: 2 commits on no remote branch. Push the branch, or say why it stays here. · its turn stopped", which holds the listed word "branch" (its plain word: "draft")
+     : expected 7 to be +0
+
+   PASSES at the base, as it should:
+   AC3 #3498.86739e65: on the same record each row that isn't PASS says whom it waits for
+     The criterion says "still": the base's four rows each have a waits_on (agent, its checks, agent, you) and name
+     somebody in their own sentence ("its checks", "it", "its", "its"). This test holds the rewording to that; its wrong
+     program is the planted sentence of the next test.
+   AC3 #3498.86739e65: a planted sentence that names nobody fails, naming the row
+     The plant is test code, a row of the hub's own with its why replaced by "nothing has moved since", so it stands at
+     the base: the hub's rows pass the judge, the planted row fails it, and the one failure holds session:7c4d5e60-3498-4222-8333-444455550004
+     and "Search box". It would stop BLOCKED if the plant changed nothing in the print.
+
+3. shown.test.ts (2026-11-27T23:07Z, 0.43 s), with DA3498_SHOWN set to a folder outside the checkout
+   NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/3498 --no-file-parallelism --testTimeout=600000 shown.test.ts
+   Test Files 1 failed (1); Tests 1 failed (1); exit 1.
+
+   FAILS at its assertion:
+   AC5 #3498.826f8cd5: the run writes the seven sentences as deep prints them, before and after, each one reworded, and
+   reads INCONCLUSIVE unless a recorded taste call on exactly these two files says they read right
+     AssertionError: each of the seven sentences is reworded, so there is an after to show:
+     the BLOCKED row (Order history) still prints the merge base's "waits for you: its verdict names no evidence"
+     the flagged row (Login form) still prints the merge base's "its turn ended failed, with no claim"
+     the sent back row (Checkout page) still prints the merge base's "its checks sent its claim back, round 1 of 3"
+     the stale row (Search box) still prints the merge base's "its verdict is on a commit that has moved since"
+     the says done row (Release notes) still prints the merge base's "it says done, and its checks have given no verdict yet"
+     the PASS row (Cart totals) still prints the merge base's "its claim passed its checks"
+     the unpushed row (Invoice schema) still prints the merge base's "2 commits on no remote branch"
+     the unpushed row (Invoice schema) still prints the merge base's "Push the branch, or say why it stays here."
+     : expected 8 to be +0
+
+   Before it failed, the run wrote before.txt and after.txt, and at the base the two are the same bytes, SHA-256
+   6c067facc26314dcc5cd323244f1a834cbe21c09ef0500cfb164dbacc7a9ae2c: shown/before.txt is what the base prints. The test
+   never reached TASTE.json, which holds no call, so with the sentences reworded it reads INCONCLUSIVE, never a pass,
+   until a person records one.
+
+Every one of the seven sessions read its state and its flag at the base (PASS, sent back, says done, stale, the flag
+unpushed, flagged, BLOCKED), so no failure above is a fixture that missed its state, and none is a test-side error.
+
+Checked beside the runs, with plain node and no build, on files this job keeps outside the checkout: each judge against
+a right input and each wrong one (19 checks: the rule that finds a listed word against the unit examples of
+crates/deep-app/src/plain.rs; the merge base judge against a run that names all seven, one that exits 0, one that misses
+a sentence, one that names a line with one of its two words, one that only quotes the sentences and one of PASS lines;
+the row judges against the base's rows, reworded rows, rows led by a state's sentence, a title holding a listed word, a
+row with no line, a row with no waits_on and the planted sentence; the taste reading in each of its five outcomes), and
+the suite's mechanics against a throwaway stand-in for the check: the seven sentences found at lines 138, 165, 169, 174,
+176, 188 and 267 of the merge base's packages/hub/src/status.ts, the tree copies, each plant, and the lint lane read.
+The stand-in is not kept and proves nothing about an implementation.
