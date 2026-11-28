@@ -1,5 +1,5 @@
 // The per-machine throttle table (docs/parallel-proof.md, section 6): a host-local lock table under the user's
-// ~/.deepbuild/throttle/, whatever HOME says, that grants build, bay pair, test and timed by class, so a neighbour's build never runs
+// ~/.deepbuild/throttle/, whatever HOME says, that grants build, bay pair, test, timed and watch by class, so a neighbour's build never runs
 // while a budget is timed. `throttle.mjs <class> [--wait <min> | --stall <min>] -- <command>` acquires, runs, releases and exits
 // with the child's status, or ends a command held past its `--hold` bound while another request waits; acquire and release serve the scripts that hold a grant themselves. `throttle.mjs window`
 // asks for a budget window (section 12a): once one is due, a timed grant that waits for every slot to empty, around budget-window.mjs.
@@ -19,6 +19,10 @@ import { fileURLToPath } from 'node:url';
 // the admitted builds and runs run at once (#3221, #3549).
 const LIMITS = process.platform === 'darwin' ? { build: 4, 'bay-pair': 1, test: 2, timed: 1 } : { build: 6, 'bay-pair': 3, test: 6, timed: 1 };
 const CLASSES = Object.keys(LIMITS);
+// The main watch's tick's own slot (#1333), apart from the classes the machine's work shares and its samples count: the
+// builds and tests asked under it pass through, so they never wait in line behind the machine's, and a second tick
+// waits for the first.
+const SLOTS = { ...LIMITS, watch: 1 };
 const POLL_MS = 200;
 // A CLI grant's default bound, in minutes: the longest full run seen on the Spark was about 9 hours.
 const HOLD = 720;
@@ -342,6 +346,7 @@ function grantable(table, procs, request, seen) {
   if (request.class !== 'timed') {
     if (!request.nested && draining) return false;
     if (request.class === 'bay-pair') return held < LIMITS['bay-pair'];
+    if (request.class === 'watch') return held < SLOTS.watch;
     // A build under no grant is admitted as a run is, without the load (#3549). Only the request first in line under
     // its ceiling comes this far, so a line of builds, each looking five times a second, doesn't read the machine.
     if (request.class === 'build') return roomForTest(slots, readings(), Date.now(), true, LIMITS.build);
@@ -369,7 +374,7 @@ let blocked = [];
  * limit, as a run of one job (#3549, #3694): its grant names that turn as `turn`, and release gives both back.
  */
 export function acquire(cls, { wait = 30, stall, window = false, run, turns = true } = {}) {
-  if (!LIMITS[cls]) throw Error(`no throttle class ${cls}; the classes are ${CLASSES.join(', ')}`);
+  if (!SLOTS[cls]) throw Error(`no throttle class ${cls}; the classes are ${Object.keys(SLOTS).join(', ')}`);
   const pid = process.pid;
   // A readings variable the table can't take is refused before anything is asked.
   readings();
@@ -397,7 +402,7 @@ export function acquire(cls, { wait = 30, stall, window = false, run, turns = tr
       table.requests.push(entry);
       return entry;
     }
-    const entry = { id, class: cls, pid, start, nested: held.length > 0, window, limit: LIMITS[cls], seq: seq(), ...cls === 'test' && run !== undefined && { run: true, disk: run } };
+    const entry = { id, class: cls, pid, start, nested: held.length > 0, window, limit: SLOTS[cls], seq: seq(), ...cls === 'test' && run !== undefined && { run: true, disk: run } };
     table.requests.push(entry);
     return entry;
   });
@@ -456,7 +461,7 @@ export function acquire(cls, { wait = 30, stall, window = false, run, turns = tr
         return entry;
       }
       const taken = new Set(table.grants.filter((other) => other.class === cls).map((other) => other.index));
-      const index = Array.from({ length: LIMITS[cls] }, (_, k) => k + 1).find((k) => !taken.has(k));
+      const index = Array.from({ length: SLOTS[cls] }, (_, k) => k + 1).find((k) => !taken.has(k));
       // A build or test in the table was asked under no grant: an admission, a plain one a run of one job (#3549, #3694).
       const one = cls === 'build' || (cls === 'test' && !pending.run);
       const entry = { id: request.id, class: cls, pid, start: request.start, nested: request.nested, window, index, at: now, ...(pending.run || one) && { run: true, used: 0 }, ...one && { one } };
@@ -1029,8 +1034,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] !== 'l
   const stall = given.get('--stall'), hold = given.get('--hold') ?? HOLD;
   let wait = given.get('--wait') ?? 30;
   const flags = window ? ['--wait'] : ['--wait', '--stall', '--hold', '--turns'];
-  if (!LIMITS[cls] || !command.length || options.length !== 2 * given.size || (given.has('--wait') && given.has('--stall')) || ![...given].every(([flag, value]) => flags.includes(flag) && value >= 0)) {
-    console.log(`BLOCKED throttle: usage: throttle.mjs <${CLASSES.join('|')}> [--wait <min> | --stall <min>] [--hold <min>] [--turns 0] -- <command>, throttle.mjs window [--wait <min>], or throttle.mjs load [--report]`);
+  if (!SLOTS[cls] || !command.length || options.length !== 2 * given.size || (given.has('--wait') && given.has('--stall')) || ![...given].every(([flag, value]) => flags.includes(flag) && value >= 0)) {
+    console.log(`BLOCKED throttle: usage: throttle.mjs <${Object.keys(SLOTS).join('|')}> [--wait <min> | --stall <min>] [--hold <min>] [--turns 0] -- <command>, throttle.mjs window [--wait <min>], or throttle.mjs load [--report]`);
     process.exit(2);
   }
   // A run's admission names the free disk its shards need (#3221); its command doesn't inherit the mark.

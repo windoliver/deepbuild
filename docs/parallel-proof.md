@@ -112,7 +112,7 @@ An `affected.mjs` run builds its `DEEP_BIN_DIR` binaries before it asks for its 
 
 ## 6. Scheduling: a per-machine throttle table
 
-Budgets refuse to count at a load above the core count, so two sessions proving at once turn each other's budgets INCONCLUSIVE. `scripts/throttle.mjs` (T5) is a host-local, flock-based lock table under `~/.deepbuild/throttle/` with four classes. The folder is the user's home from the password database, never `HOME`, so a run with a `HOME` of its own still shares the machine's table (#2744):
+Budgets refuse to count at a load above the core count, so two sessions proving at once turn each other's budgets INCONCLUSIVE. `scripts/throttle.mjs` (T5) is a host-local, flock-based lock table under `~/.deepbuild/throttle/` with five classes. The folder is the user's home from the password database, never `HOME`, so a run with a `HOME` of its own still shares the machine's table (#2744):
 
 | Class | Mac | Spark | Holds |
 |---|---|---|---|
@@ -120,6 +120,7 @@ Budgets refuse to count at a load above the core count, so two sessions proving 
 | bay pair | 1 | 3 | A counting semaphore whose grant index k names `~/deepbuild-bays/<k>/`; `bays.mjs` is its only caller |
 | test | 2 | 6 | The vitest parallel block and `node --test`, and an `affected.mjs` run's admission, whose jobs then take turns on the machine's pool (below). The number is a ceiling: past the first grant, the machine's memory decides (below), and a plain request then takes a turn on the pool (#3694) |
 | timed | 1 | 1 | Exclusive of every class; waits for load below the core count |
+| watch | 1 | 1 | The main watch's tick (section 12b, #1333): a slot of its own, apart from build's and test's, so the builds and tests asked under it pass through at once and never wait in line behind the machine's. A second tick waits for the first. timed still drains it. It shares no slot with the machine's work, so `load`'s samples count the four classes above, not this one |
 
 `throttle.mjs <class> [--wait <min> | --stall <min>] [--hold <min>] [--turns 0] -- <command>` acquires, runs, releases and exits with the child's status, or 128 plus the signal when the child is killed. An importable `acquire(class)` and `release(grant)` serve `proof-runs.mjs`, `preflight.mjs` and `perf.mjs`. `lanes.mjs` wraps each of its commands by this classification, and `affected.mjs` routes its own commands the same way: the workspace build, clippy and `cargo test -p` as build, the vitest block and `node --test` as test.
 
@@ -376,10 +377,10 @@ Agents run day and night, so no idle period exists for budgets, and a per-PR bud
 Nothing else runs after a merge, so `scripts/main-watch.mjs` does, on the run's host, in a checkout of main that no session works in:
 
 ```
-0 * * * * zsh -lc 'cd ~/doneright && node scripts/main-watch.mjs tick' >> ~/.deepbuild/main-watch.log 2>&1
+0 * * * * zsh -lc 'cd ~/doneright && node scripts/throttle.mjs watch --wait 50 -- node scripts/main-watch.mjs tick' >> ~/.deepbuild/main-watch.log 2>&1
 ```
 
-- **When.** A tick runs the unit and lint lanes of main's head, from that head's own `lanes.mjs`, once 5 landings reached main or 6 hours passed since its last run, and at every tick while landings are paused. A landing is a commit on main's first-parent line. Its lanes go through `runLanes`, so the throttle and `deep lease` hold them like any other. It calls no model and starts no hosted workflow.
+- **When.** A tick runs the unit and lint lanes of main's head, from that head's own `lanes.mjs`, once 5 landings reached main or 6 hours passed since its last run, and at every tick while landings are paused. A landing is a commit on main's first-parent line. Its lanes go through `runLanes` under the tick's `watch` grant (section 6, owner decision 2026-11-27), so their builds and tests pass through on it and `deep lease` holds them like any other. It calls no model and starts no hosted workflow.
 - **A new failure** is one `known-failures.json` doesn't list. It runs again alone, up to three times. One that passes on a repeat reads INCONCLUSIVE and is filed once, with its runs, and nothing pauses. One that holds pauses landings and is bisected, running only that test, over the landings since the last clean run, which names the landing and its issue.
 - **Recovery.** A pull request reverts that landing. It is merged once the failing test passes on it and nothing that passed on main fails there, and then the issue reopens naming the failure and landings open again. A revert that conflicts or doesn't clear main starts an attempt on the issue, a headless `claude` or `codex` run. Only once that attempt has ended with main still red is a person asked, once, by an issue titled `Ask: …`.
 - **The gate.** `node scripts/main-watch.mjs status` prints `landings open` (exit 0) or `landings paused: …` (exit 1) from the job's state under `~/.deepbuild/main-watch/`, without fetching. The landing queue (#1331), and anyone landing by hand, reads it first.
