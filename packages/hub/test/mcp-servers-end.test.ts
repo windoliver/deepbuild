@@ -33,6 +33,5 @@ it('keeps a list as it stood when the last page came, whatever follows it in the
   writeFileSync(join(dir, '.claude.json'), JSON.stringify({ mcpServers: { late: { command: process.execPath, args: [join(dir, 'server.mjs')] } } }));
   process.env.HOME = dir;
   const listed = await toolLists(dir);
-  await new Promise((done) => setTimeout(done, 200));
   expect(listed.map((l) => [l.server, l.tools.map((t) => t.name)])).toEqual([['late', ['asked']]]);
 });
