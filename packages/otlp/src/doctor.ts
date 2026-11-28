@@ -94,10 +94,11 @@ export async function doctor(env: NodeJS.ProcessEnv): Promise<DoctorItem[]> {
   const answer = await probe(`${receiver}/v1/logs`);
   if (answer === null) {
     return item('hub_unreachable', 'fail', `${read.join('; ')}; nothing answers at ${HOST}:${port}, so no tool span or request cost reaches the record`,
-      `Start the hub with deep hub start: it runs the receiver at ${receiver}.`);
+      `Start the hub with deep hub start, not in safe mode: it runs the receiver at ${receiver}.`);
   }
   if (answer !== 200) {
-    return item('ports_taken', 'fail', `${read.join('; ')}; another process holds port ${port} on ${HOST} and answered an empty export with HTTP ${answer}, so the hub runs without its receiver`,
+    const said = answer === 0 ? `gave no HTTP answer to an empty export within ${PROBE_MS} ms` : `answered an empty export with HTTP ${answer}`;
+    return item('ports_taken', 'fail', `${read.join('; ')}; another process holds port ${port} on ${HOST} and ${said}, so the hub runs without its receiver`,
       `Stop the process that holds port ${port} on ${HOST}, then restart the hub (deep hub stop, deep hub start) so its receiver takes the port.`);
   }
   return item('healthy', 'ok', `${read.join('; ')}; the receiver answers at ${HOST}:${port}`, 'Nothing: the receiver reads the telemetry Claude Code sends.');
@@ -108,7 +109,7 @@ async function probe(url: string): Promise<number | null> {
     const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}', signal: AbortSignal.timeout(PROBE_MS) });
     await res.body?.cancel();
     return res.status;
-  } catch {
-    return null;
+  } catch (error) {
+    return (error as { cause?: { code?: string } }).cause?.code === 'ECONNREFUSED' ? null : 0;
   }
 }

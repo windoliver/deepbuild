@@ -21,6 +21,8 @@ import type { CoreOptions } from './wire.js';
 import { Intake } from './intake.js';
 import { Workspaces } from './workspaces.js';
 
+const RECEIVER_CLOSE_MS = 5000;
+
 /** Synchronous construction; started() still waits for the original ordered asynchronous initialization. */
 export function createCore(
   options: CoreOptions,
@@ -82,7 +84,10 @@ export function createCore(
     },
     forge: { open: openGitHub, gateTokens, repoOf, revoke, sessionToken },
     workspaces: { create: (o) => new Workspaces(o), renamedSince, intake: (o) => new Intake(o) },
-    telemetry: async (o) => (await import('@deepbuild/otlp')).startReceiver(o),
+    telemetry: async (o) => {
+      const receiver = await (await import('@deepbuild/otlp')).startReceiver(o);
+      return { close: () => Promise.race([receiver.close(), new Promise<void>((done) => { setTimeout(done, RECEIVER_CLOSE_MS).unref(); })]) };
+    },
   };
   return new Core(options, emit, providers, asking, acking, scrubbing, forgot, replayTold);
 }
