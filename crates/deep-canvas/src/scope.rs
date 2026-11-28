@@ -1434,6 +1434,15 @@ impl Scope {
             json!({"by": by, "key": key})
         });
         let view = &self.view;
+        let mut camera = self.pose().to_json();
+        let Offsets {
+            azimuth,
+            elevation,
+            zoom,
+            pan,
+        } = self.offsets;
+        camera["user"] =
+            json!({"azimuth": azimuth, "elevation": elevation, "zoom": zoom, "pan": pan});
         json!({
             "view": {
                 "filter": (!view.kinds.is_empty() || !view.writers.is_empty())
@@ -1447,7 +1456,7 @@ impl Scope {
             "changed": changed,
             "lens": lens,
             "stale_if_changed": self.stale_if_changed(doc, verdicts),
-            "camera": self.pose().to_json(),
+            "camera": camera,
             "rect": self.rect(),
             "full_screen": self.full_screen,
             "buttons": self

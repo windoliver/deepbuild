@@ -71875,6 +71875,139 @@ impl Contract for LandingMade {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct LayerRefusedV;
+
+impl Contract for LayerRefusedV {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "1").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("1").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LayerRefusedKind;
+
+impl Contract for LayerRefusedKind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"layer.refused\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"layer.refused\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LayerRefusedWriter;
+
+impl Contract for LayerRefusedWriter {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"core\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"core\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LayerRefusedData {
+    pub doc: String,
+    pub rev: i64,
+    pub layer: String,
+    pub reason: String,
+}
+
+impl Contract for LayerRefusedData {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["doc", "rev", "layer", "reason"])?;
+        deep_contracts::check_member(members, at, "doc", &RULE_161)?;
+        deep_contracts::check_member(members, at, "rev", &RULE_4)?;
+        deep_contracts::check_member(members, at, "layer", &RULE_6)?;
+        deep_contracts::check_member(members, at, "reason", &RULE_6)?;
+        Ok(Self {
+            doc: deep_contracts::required(members, at, "doc")?,
+            rev: deep_contracts::required(members, at, "rev")?,
+            layer: deep_contracts::required(members, at, "layer")?,
+            reason: deep_contracts::required(members, at, "reason")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("doc".to_string(), self.doc.to_json()));
+        members.push(("rev".to_string(), self.rev.to_json()));
+        members.push(("layer".to_string(), self.layer.to_json()));
+        members.push(("reason".to_string(), self.reason.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LayerRefused {
+    pub v: LayerRefusedV,
+    pub id: String,
+    pub kind: LayerRefusedKind,
+    pub subject: String,
+    pub writer: LayerRefusedWriter,
+    pub actor: String,
+    pub scope: String,
+    pub ts: i64,
+    pub seq: Option<deep_contracts::Seq>,
+    pub log_pos: Option<i64>,
+    pub data: LayerRefusedData,
+    pub evidence: Option<Vec<String>>,
+}
+
+impl Contract for LayerRefused {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["v", "id", "kind", "subject", "writer", "actor", "scope", "ts", "seq", "log_pos", "data", "evidence"])?;
+        deep_contracts::check_member(members, at, "id", &RULE_0)?;
+        deep_contracts::check_member(members, at, "subject", &RULE_2)?;
+        deep_contracts::check_member(members, at, "actor", &RULE_3)?;
+        deep_contracts::check_member(members, at, "scope", &RULE_3)?;
+        deep_contracts::check_member(members, at, "ts", &RULE_4)?;
+        deep_contracts::check_member(members, at, "log_pos", &RULE_5)?;
+        deep_contracts::check_member(members, at, "evidence", &RULE_9)?;
+        Ok(Self {
+            v: deep_contracts::required(members, at, "v")?,
+            id: deep_contracts::required(members, at, "id")?,
+            kind: deep_contracts::required(members, at, "kind")?,
+            subject: deep_contracts::required(members, at, "subject")?,
+            writer: deep_contracts::required(members, at, "writer")?,
+            actor: deep_contracts::required(members, at, "actor")?,
+            scope: deep_contracts::required(members, at, "scope")?,
+            ts: deep_contracts::required(members, at, "ts")?,
+            seq: deep_contracts::optional(members, at, "seq")?,
+            log_pos: deep_contracts::optional(members, at, "log_pos")?,
+            data: deep_contracts::required(members, at, "data")?,
+            evidence: deep_contracts::optional(members, at, "evidence")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("v".to_string(), self.v.to_json()));
+        members.push(("id".to_string(), self.id.to_json()));
+        members.push(("kind".to_string(), self.kind.to_json()));
+        members.push(("subject".to_string(), self.subject.to_json()));
+        members.push(("writer".to_string(), self.writer.to_json()));
+        members.push(("actor".to_string(), self.actor.to_json()));
+        members.push(("scope".to_string(), self.scope.to_json()));
+        members.push(("ts".to_string(), self.ts.to_json()));
+        if let Some(value) = &self.seq {
+            members.push(("seq".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.log_pos {
+            members.push(("log_pos".to_string(), value.to_json()));
+        }
+        members.push(("data".to_string(), self.data.to_json()));
+        if let Some(value) = &self.evidence {
+            members.push(("evidence".to_string(), value.to_json()));
+        }
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct LayerRowsV;
 
 impl Contract for LayerRowsV {
@@ -118093,6 +118226,7 @@ pub fn roundtrip(schema: &str, json: &str) -> Result<String, String> {
         "job.event@1" => <JobEvent as Contract>::from_json(&value, "")?.to_json(),
         "job.recorded@1" => <JobRecorded as Contract>::from_json(&value, "")?.to_json(),
         "landing.made@1" => <LandingMade as Contract>::from_json(&value, "")?.to_json(),
+        "layer.refused@1" => <LayerRefused as Contract>::from_json(&value, "")?.to_json(),
         "layer.rows@1" => <LayerRows as Contract>::from_json(&value, "")?.to_json(),
         "learn.applied@1" => <LearnApplied as Contract>::from_json(&value, "")?.to_json(),
         "learn.proposed@1" => <LearnProposed as Contract>::from_json(&value, "")?.to_json(),

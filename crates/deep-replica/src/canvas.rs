@@ -87,7 +87,7 @@ mod panel {
                     cx: &mut HeadlessAppContext,
                     at: &mut BTreeMap<String, u64>|
          -> Result<(), String> {
-            let presented = hub.take().map_err(|e| format!("{e:?}"))?;
+            let presented = hub.take(&[]).map_err(|e| format!("{e:?}"))?;
             for p in presented {
                 let line = p.drawn_json();
                 at.insert(p.doc.clone(), p.rev);

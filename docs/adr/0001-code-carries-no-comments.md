@@ -57,6 +57,7 @@ One page per module topic. Each decision names the file and the symbol it govern
 - [0016](0016-scene-renderer-shared-targets.md): the scene renderer's shared depth and resolved image
 - [0017](0017-logic-circuit-and-shell.md): the logic module's circuit judge and its course shell
 - [0018](0018-moved-for-size-canvas.md): what the canvas code moved for size said in comments: deep-show, deep-canvas, deep-gpu-layer and deep-scene3d-render
+- [0019](0019-app-3d-view.md): what the app's 3D view draws, what the hub hands it, and the count of what it refuses
 - [0021](0021-a-budgets-work.md): the work a budget's run reports
 
 ## Open

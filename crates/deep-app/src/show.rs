@@ -162,8 +162,12 @@ impl Presentations {
     }
 
     /// The revisions presented since the last call, in order.
-    pub fn take(&mut self) -> Result<Vec<Presented>, HubError> {
-        let reply = self.client.call("canvas.drawn", json!({}))?;
+    pub fn take(&mut self, refused: &[Value]) -> Result<Vec<Presented>, HubError> {
+        let drawn = match refused {
+            [] => json!({}),
+            refused => json!({ "refused": refused }),
+        };
+        let reply = self.client.call("canvas.drawn", drawn)?;
         Ok(reply["presented"]
             .as_array()
             .into_iter()
@@ -193,6 +197,7 @@ struct View3 {
     layer: String,
     scene: String,
     view: Rc<RefCell<crate::scene_view::SceneView>>,
+    reported: Option<String>,
 }
 
 /// #1431: the panel's pictures (`CanvasPanel.pictures`), decoded in the heap: only those a shown or waiting revision
@@ -231,6 +236,8 @@ pub struct CanvasPanel {
     /// #1485's fixture: the pictures the last frame painted, in paint order.
     #[cfg(feature = "canvas-fixture")]
     pub(crate) painted: Vec<String>,
+    #[cfg(feature = "canvas-fixture")]
+    pub(crate) reasons: Vec<(String, String)>,
     /// #1498: where the panel's area was last drawn in the window, the core's text selection on the session's page
     /// as boxes in the panel's px, and whether your press on it is down.
     area: Rc<Cell<Option<Bounds<Pixels>>>>,
@@ -277,6 +284,8 @@ impl CanvasPanel {
             views: Vec::new(),
             #[cfg(feature = "canvas-fixture")]
             painted: Vec::new(),
+            #[cfg(feature = "canvas-fixture")]
+            reasons: Vec::new(),
             area: Rc::new(Cell::new(None)),
             outline: Vec::new(),
             pressing: false,
@@ -328,6 +337,8 @@ impl CanvasPanel {
         else {
             return;
         };
+        #[cfg(target_os = "macos")]
+        self.took(&reply);
         if let Some(p) = Presented::from_json(&reply["presented"]) {
             self.present(p, cx);
         }
@@ -496,12 +507,14 @@ impl CanvasPanel {
                     layer: l.layer.clone(),
                     scene: String::new(),
                     view: Rc::new(RefCell::new(view)),
+                    reported: None,
                 });
                 self.views.len() - 1
             });
             let view = &mut self.views[at];
             if view.scene != scene {
                 view.scene = scene.to_owned();
+                view.reported = None;
                 view.view.borrow_mut().show(scene);
             }
         }
@@ -512,6 +525,56 @@ impl CanvasPanel {
     fn view_of(&self, rect: [f32; 4], l: &Layer) -> Option<&View3> {
         let held = |v: &&View3| v.rect == rect && v.layer == l.layer;
         self.views.iter().find(held).filter(|_| l.scene.is_some())
+    }
+
+    pub fn refused(&self) -> Vec<Value> {
+        #[cfg(target_os = "macos")]
+        let refused = (self.shown.iter())
+            .flat_map(|p| p.layers.iter().map(move |l| (p, l)))
+            .filter_map(|(p, l)| {
+                let view = self.view_of(p.rect, l)?;
+                let reason = view.view.borrow().reason()?.recorded;
+                (view.reported.as_ref() != Some(&reason)).then(
+                    || json!({"doc": p.doc, "rev": p.rev, "layer": l.layer, "reason": reason}),
+                )
+            })
+            .collect();
+        #[cfg(not(target_os = "macos"))]
+        let refused = Vec::new();
+        #[cfg(feature = "canvas-fixture")]
+        let refused = match crate::canvas_fixture::records_nothing() {
+            true => Vec::new(),
+            false => refused,
+        };
+        refused
+    }
+
+    pub fn recorded(&mut self, refused: &[Value]) {
+        #[cfg(target_os = "macos")]
+        for r in refused {
+            let shown = self.shown.iter().find(|p| r["doc"] == p.doc.as_str());
+            let Some(rect) = shown.map(|p| p.rect) else {
+                continue;
+            };
+            let held = |v: &&mut View3| v.rect == rect && r["layer"] == v.layer.as_str();
+            if let Some(view) = self.views.iter_mut().find(held) {
+                view.reported = r["reason"].as_str().map(str::to_owned);
+            }
+        }
+        #[cfg(not(target_os = "macos"))]
+        let _ = refused;
+    }
+
+    #[cfg(target_os = "macos")]
+    pub(crate) fn took(&mut self, reply: &Value) {
+        let Some(session) = crate::scene_view::Session::of(&reply["state"]) else {
+            return;
+        };
+        let drawn =
+            (self.shown.iter()).filter(|p| self.session.as_deref().is_none_or(|s| of(p, s)));
+        for view in drawn.flat_map(|p| p.layers.iter().filter_map(|l| self.view_of(p.rect, l))) {
+            view.view.borrow_mut().steer(session);
+        }
     }
 
     /// #2494's fixture: the GPU-layer slots the last frame painted, in paint order: each one's layer, the frame it
@@ -549,24 +612,28 @@ pub fn follow(panel: Entity<CanvasPanel>, cx: &mut App) {
             cx.background_executor()
                 .timer(std::time::Duration::from_millis(wait))
                 .await;
-            let (kept, took) = cx
+            let refused = cx.update(|cx| panel.read(cx).refused());
+            let (kept, took, refused) = cx
                 .background_spawn(async move {
                     let root = crate::hub::root();
                     let token = root.join("control.token");
                     let mut hub =
                         hub.or_else(|| Presentations::open(&crate::hub::address(), &token).ok());
-                    let took = hub.as_mut().map(Presentations::take);
-                    (hub, took)
+                    let took = hub.as_mut().map(|hub| hub.take(&refused));
+                    (hub, took, refused)
                 })
                 .await;
             hub = kept;
             match took {
-                Some(Ok(presented)) if !presented.is_empty() => cx.update(|cx| {
-                    panel.update(cx, |panel, cx| {
-                        presented.into_iter().for_each(|p| panel.present(p, cx))
-                    });
-                    cx.refresh_windows();
-                }),
+                Some(Ok(presented)) if !(presented.is_empty() && refused.is_empty()) => {
+                    cx.update(|cx| {
+                        panel.update(cx, |panel, cx| {
+                            panel.recorded(&refused);
+                            presented.into_iter().for_each(|p| panel.present(p, cx))
+                        });
+                        cx.refresh_windows();
+                    })
+                }
                 Some(Err(_)) => hub = None,
                 _ => {}
             }
@@ -646,13 +713,29 @@ impl Render for CanvasPanel {
                 .filter(|sha| self.image(sha).is_some())
                 .collect();
         }
+        #[cfg(all(feature = "canvas-fixture", target_os = "macos"))]
+        {
+            let drawn = self
+                .shown
+                .iter()
+                .filter(|p| self.session.as_deref().is_none_or(|session| of(p, session)));
+            self.reasons = drawn
+                .flat_map(|p| p.layers.iter().map(move |l| (p.rect, l)))
+                .filter_map(|(rect, l)| {
+                    let why = self.view_of(rect, l)?.view.borrow().reason()?;
+                    Some((l.layer.clone(), why.recorded))
+                })
+                .collect();
+        }
         // Every picture held is a shown revision's, so this frame paints them all.
         for held in &mut self.pictures {
             held.painted = true;
         }
         let names = layers.iter().filter_map(|(_, _, n)| n.clone());
         #[cfg(target_os = "macos")]
-        let names = names.chain(views.iter().flatten().filter_map(|(_, why)| why.clone()));
+        let names = names.chain(
+            (views.iter().flatten()).filter_map(|(_, why)| why.as_ref().map(|w| w.shown.clone())),
+        );
         let names: Vec<Label> = names.map(Label::new).collect();
         let chrome = crate::chrome::of(window);
         let (muted, ground) = (chrome.ink_secondary, chrome.ground);
@@ -726,15 +809,20 @@ impl Render for CanvasPanel {
                                         let at = point(s.space(0), s.body.line + s.hairline);
                                         paint_label(
                                             panel.origin + at,
-                                            &Label::new(why.clone()),
+                                            &Label::new(why.shown.clone()),
                                             muted,
                                             w,
                                         );
                                     }
                                 }
+                                #[cfg(target_os = "macos")]
+                                let whole = !matches!(&views[i], Some((_, Some(_))));
                                 #[cfg(not(target_os = "macos"))]
-                                let _ = i;
-                                if let Some(picture) = picture {
+                                let whole = {
+                                    let _ = i;
+                                    true
+                                };
+                                if let Some(picture) = picture.as_ref().filter(|_| whole) {
                                     let _ = w.paint_image(
                                         *panel,
                                         *panel,

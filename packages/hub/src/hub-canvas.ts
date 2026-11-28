@@ -63,6 +63,8 @@ export class HubCanvas {
   private untaken: Obj[] = [];
   private untakenFrom = 0;
 
+  private readonly refusedLayers = new Set<string>();
+
   /** The documents deep_show has named, each on the app's canvas panel. */
   private readonly shownDocs = new Set<string>();
   private readonly unshown = new Set<string>();
@@ -546,7 +548,8 @@ export class HubCanvas {
    * What the app has yet to draw: every revision presented since it last asked; or, as it connects or once it fell
    * behind, the newest of each document it hasn't taken, never the history (#1866).
    */
-  drawnBy(context: CallContext): Obj {
+  async drawnBy(params: Obj, context: CallContext): Promise<Obj> {
+    await this.recordRefused(params.refused);
     this.appSeen = Date.now();
     const app = context.conn ?? 0;
     const from = this.drawnUpTo.get(app) ?? -1;
@@ -558,6 +561,23 @@ export class HubCanvas {
     this.untaken = [];
     this.untakenFrom = this.presentations;
     return { presented };
+  }
+  private async recordRefused(refused: unknown): Promise<void> {
+    if (refused === undefined) return;
+    if (!Array.isArray(refused)) throw refuse('type', '/params/refused', 'Give refused as a list of {doc, rev, layer, reason}.', refused);
+    for (const [i, r] of refused.entries()) {
+      if (!isObj(r) || typeof r.doc !== 'string' || !/^[0-9A-Za-z]+$/.test(r.doc) || !Number.isSafeInteger(r.rev) || typeof r.layer !== 'string' || typeof r.reason !== 'string' || !r.reason) {
+        throw refuse('type', `/params/refused/${i}`, 'Give each refused layer as {doc, rev, layer, reason}.', r);
+      }
+      const key = `${r.doc}@${String(r.rev)}/${r.layer}: ${r.reason}`;
+      if (this.refusedLayers.has(key)) continue;
+      const ts = this.options.now();
+      await this.options.events.append(this.options.events.connection('core'), {
+        v: 1, id: ulid(ts), kind: 'layer.refused', ts, subject: `doc:${r.doc}`,
+        data: { doc: `doc:${r.doc}`, rev: Number(r.rev), layer: r.layer, reason: r.reason } as JsonValue,
+      });
+      this.refusedLayers.add(key);
+    }
   }
   close(): void { this.canvasCore?.close(); }
 }

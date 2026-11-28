@@ -1,0 +1,28 @@
+{
+  "format": 1,
+  "profile": "scene",
+  "title": "A box that asks for physics",
+  "description": "A red box under a blue sky, still, in a document that requires the physics module: a #3517 acceptance fixture for a layer the app's view refuses.",
+  "size": [480, 360],
+  "camera": "cam",
+  "transport": { "span": "4s" },
+  "requires": { "modules": { "scene3d": "^1", "physics": "^1" } },
+  "items": {
+    "cam": {
+      "id": "cam", "name": "cam", "order": "a000", "kind": "camera@1",
+      "params": { "projection": "perspective", "position": [0, 0, 24], "target": [0, 0, 0], "fov": 30, "near": 0.5, "far": 200 }
+    },
+    "sky": {
+      "id": "sky", "name": "sky", "order": "a001", "kind": "sky@1",
+      "params": { "top": [0.05, 0.1, 0.4, 1], "low": [0.05, 0.1, 0.4, 1], "ambient_top": [0, 0, 0], "ambient_low": [0, 0, 0] }
+    },
+    "red": {
+      "id": "red", "name": "red", "order": "a002", "kind": "material@1",
+      "params": { "base_color": [0.8, 0.05, 0.05, 1], "unlit": true, "alpha_mode": "opaque", "alpha": 1, "double_sided": true }
+    },
+    "box": {
+      "id": "box", "name": "box", "order": "a003", "kind": "mark.box@1",
+      "params": { "size": [8, 4, 1] }, "material": "red"
+    }
+  }
+}

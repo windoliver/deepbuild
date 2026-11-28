@@ -1,0 +1,27 @@
+{
+  "format": 1,
+  "profile": "scene",
+  "title": "A box in a look of its own",
+  "description": "A box painted in the accent role on the look's ground, still, in a look the document names: a #3517 acceptance fixture for a document's look.",
+  "size": [320, 240],
+  "camera": "cam",
+  "transport": { "span": "8s" },
+  "requires": { "modules": { "scene3d": "^1" } },
+  "look": { "asset": "brick-3517@1" },
+  "assets": {
+    "brick-3517": {
+      "sha256": "f29e2e8f0a13588ceff1dfa133e3869431cc71119b17c134eab5f84f1fde857f",
+      "license": { "id": "Apache-2.0", "terms": "https://www.apache.org/licenses/LICENSE-2.0", "shareable": true, "credit": "Made by this suite" }
+    }
+  },
+  "items": {
+    "cam": {
+      "id": "cam", "name": "cam", "order": "a000", "kind": "camera@1",
+      "params": { "projection": "perspective", "target": [0, 0, 0], "orbit": { "azimuth": 30, "elevation": 25, "distance": 12 }, "fov": 30, "near": 0.5, "far": 200 }
+    },
+    "box": {
+      "id": "box", "name": "box", "order": "a001", "kind": "mark.box@1",
+      "params": { "size": [3, 2, 2], "paint": { "fill": { "role": "accent" } } }
+    }
+  }
+}

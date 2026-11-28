@@ -358,7 +358,7 @@ export class HubControl {
       case 'canvas.revisions': return this.options.services.canvasSide.canvasCall({ call: 'revisions', doc: String(params.doc) });
       case 'canvas.messages': return this.options.services.canvasSide.canvasCall({ call: 'messages', session: String(params.session) });
       case 'canvas.user': return this.options.services.canvasSide.canvasUser(params, context);
-      case 'canvas.drawn': return this.options.services.canvasSide.drawnBy(context);
+      case 'canvas.drawn': return this.options.services.canvasSide.drawnBy(params, context);
       case 'work.fix': return await this.work.workspaceCall(() => this.work.fixItem(String(params.id ?? ''), typeof params.cwd === 'string' ? params.cwd : homedir()));
       case 'workspace.new': return await this.work.workspaceCall(() => this.options.services.spaces.make(String(params.topic ?? ''), typeof params.folder === 'string' ? params.folder : undefined));
       case 'workspace.move': return await this.work.workspaceCall(() => this.options.services.spaces.move(String(params.id), String(params.folder)));

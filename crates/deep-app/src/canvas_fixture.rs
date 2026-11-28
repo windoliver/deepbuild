@@ -34,6 +34,89 @@ pub(crate) fn reads_back() -> bool {
     std::env::var("DEEP_CANVAS_PLANT").is_ok_and(|p| p == "reads_every_frame_back")
 }
 
+#[cfg(target_os = "macos")]
+fn planted(name: &str) -> bool {
+    std::env::var("DEEP_CANVAS_PLANT").is_ok_and(|p| p == name)
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) fn keeps_own_clock() -> bool {
+    planted("keeps_own_clock")
+}
+
+pub(crate) fn records_nothing() -> bool {
+    std::env::var("DEEP_CANVAS_PLANT").is_ok_and(|p| p == "paints_reason_records_nothing")
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) fn draws_default_look() -> bool {
+    planted("draws_in_default_look")
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) fn draws_first_camera() -> bool {
+    planted("draws_at_first_camera")
+}
+
+#[cfg(target_os = "macos")]
+fn documents(folder: &Path, into: &mut Vec<PathBuf>) {
+    for entry in std::fs::read_dir(folder).into_iter().flatten().flatten() {
+        let path = entry.path();
+        if path.is_dir() && entry.file_name() != "node_modules" {
+            documents(&path, into);
+        } else if path.extension().is_some_and(|e| e == "json") {
+            into.push(path);
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn by_hash(folder: &Path) -> std::collections::BTreeMap<String, PathBuf> {
+    use sha2::{Digest, Sha256};
+    let mut held = Vec::new();
+    documents(folder, &mut held);
+    let hashed = |file: PathBuf| {
+        let bytes = std::fs::read(&file).ok()?;
+        Some((format!("{:x}", Sha256::digest(&bytes)), file))
+    };
+    held.into_iter().filter_map(hashed).collect()
+}
+
+#[cfg(target_os = "macos")]
+pub fn count(tree: &Path) -> Value {
+    let mut files = Vec::new();
+    for folder in ["packs/examples", "tests/acceptance"] {
+        documents(&tree.join(folder), &mut files);
+    }
+    files.sort();
+    let mut counted = 0_u64;
+    let mut refused = std::collections::BTreeMap::<String, Vec<String>>::new();
+    let stores = std::cell::RefCell::new(std::collections::BTreeMap::new());
+    for file in files {
+        let read = std::fs::read(&file).ok();
+        let Some(doc) = read.and_then(|b| serde_json::from_slice::<Value>(&b).ok()) else {
+            continue;
+        };
+        if !doc.is_object() || !deep_canvas_scene3d::scene::has_3d(&doc) {
+            continue;
+        }
+        counted += 1;
+        let path = file.strip_prefix(tree).unwrap_or(&file);
+        let depth = if path.starts_with("tests") { 3 } else { 2 };
+        let beside = tree.join(path.components().take(depth).collect::<PathBuf>());
+        let asset = |sha: &str| {
+            let mut stores = stores.borrow_mut();
+            let store = (stores.entry(beside.clone())).or_insert_with(|| by_hash(&beside));
+            std::fs::read(store.get(sha)?).ok()
+        };
+        if let Some(why) = crate::scene_view::undrawn(doc, &asset) {
+            let listed = refused.entry(why.recorded).or_default();
+            listed.push(path.to_string_lossy().into_owned());
+        }
+    }
+    serde_json::json!({"counted": counted, "refused": refused})
+}
+
 /// The planted decode: the thread decoding a picture stays busy for `decode_ms` first, spinning, never sleeping.
 pub(crate) fn planted_decode() {
     let until = Instant::now() + Duration::from_millis(DECODE_MS.load(Ordering::Relaxed));
@@ -54,6 +137,8 @@ pub struct Scenario {
     /// #2494: the times frames are captured from, and the folder their files go under.
     capture_ms: Vec<f64>,
     out: PathBuf,
+    replies: Vec<(f64, Value)>,
+    follow: bool,
 }
 
 impl Scenario {
@@ -89,6 +174,11 @@ impl Scenario {
                 .filter_map(Value::as_f64)
                 .collect(),
             out: PathBuf::from(v["out"].as_str().unwrap_or_default()),
+            replies: (v["replies"].as_array().into_iter().flatten())
+                .map(|r| Some((r["at_ms"].as_f64()?, r["reply"].clone())))
+                .collect::<Option<Vec<_>>>()
+                .ok_or("each reply is {at_ms, reply}")?,
+            follow: v["follow"].as_bool().unwrap_or(false),
         })
     }
 }
@@ -139,6 +229,7 @@ mod live {
         captures: VecDeque<f64>,
         out: PathBuf,
         capturing: bool,
+        replies: VecDeque<(f64, Value)>,
     }
 
     impl Run {
@@ -182,6 +273,8 @@ mod live {
             capture_ms,
             out,
             read_every_ms,
+            replies,
+            follow,
             ..
         } = scenario;
         open_window(options, cx, move |window, cx| {
@@ -192,6 +285,9 @@ mod live {
                 native.orderFrontRegardless();
             }
             let panel = cx.new(|_| CanvasPanel::new(evidence));
+            if follow {
+                crate::show::follow(panel.clone(), cx);
+            }
             let run = Run {
                 panel: panel.clone(),
                 revisions: revisions.into(),
@@ -203,6 +299,7 @@ mod live {
                 captures: capture_ms.into(),
                 out,
                 capturing: false,
+                replies: replies.into(),
                 read_every: read_every_ms,
                 read_next: 0.0,
                 readings: Vec::new(),
@@ -262,6 +359,11 @@ mod live {
                 run.panel.update(cx, |panel, cx| panel.present(p, cx));
                 cx.refresh_windows();
             }
+            while run.replies.front().is_some_and(|(due, _)| *due <= at) {
+                let (_, reply) = run.replies.pop_front().expect("one is due");
+                run.panel.update(cx, |panel, _| panel.took(&reply));
+                cx.refresh_windows();
+            }
             let now = (
                 run.start.elapsed().as_secs_f64() * 1e3,
                 thread_cpu_ms(),
@@ -270,10 +372,14 @@ mod live {
             let captured = std::mem::take(&mut run.capturing);
             let panel = run.panel.read(cx);
             let (painted, held) = (panel.painted.clone(), panel.held());
+            let reasons: Vec<Value> = (panel.reasons.iter())
+                .map(|(layer, reason)| json!({"layer": layer, "reason": reason}))
+                .collect();
             // #2494: the slots frame `k - 1` painted; captured, each with its own bytes, and the window's drawable.
             let slots: Vec<Value> = (panel.slots().into_iter())
                 .map(|(layer, frame, view)| {
-                    let mut slot = json!({"layer": layer, "frame_seq": frame, "path": crate::scene_view::PATH.name()});
+                    let t = view.borrow().time_of(frame);
+                    let mut slot = json!({"layer": layer, "frame_seq": frame, "path": crate::scene_view::PATH.name(), "t": t});
                     let pixels = captured.then(|| view.borrow().read(frame)).flatten();
                     let file = pixels.and_then(|(mut bgra, size)| {
                         for p in bgra.as_chunks_mut::<4>().0 {
@@ -288,7 +394,7 @@ mod live {
                 })
                 .collect();
             let mut frame = json!({"frame": k - 1, "at_ms": at, "cpu_ms": now.1 - cpu, "pictures": painted,
-                                   "held": held, "slots": slots, "readback_buffers": readbacks});
+                                   "held": held, "slots": slots, "readback_buffers": readbacks, "reasons": reasons});
             let window_file = run.out.join(format!("window-{}.png", k - 1));
             let drawable = captured.then(layer_colorspace::take_frame).flatten();
             if drawable.is_some_and(|image| image.save(&window_file).is_ok()) {

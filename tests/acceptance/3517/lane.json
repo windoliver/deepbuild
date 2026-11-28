@@ -1,0 +1,1 @@
+{ "alone": true, "why": "shared: the GPU, since each file but ac1 opens the app's window and draws 3D frames on the Metal device under the machine's GPU lease, starts hubs of its own and builds the app, deep-show and deep-hook with cargo" }

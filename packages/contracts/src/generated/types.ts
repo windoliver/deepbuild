@@ -9492,6 +9492,27 @@ export interface LandingMade {
   evidence?: Array<string>;
 }
 
+/** layer.refused@1 */
+export interface LayerRefused {
+  v: 1;
+  id: string;
+  kind: "layer.refused";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    doc: string;
+    rev: number;
+    layer: string;
+    reason: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** layer.rows@1 */
 export interface LayerRows {
   v: 1;

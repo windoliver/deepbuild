@@ -132,6 +132,17 @@ fn main() {
         canvas::run(std::env::args().nth(2));
         return;
     }
+    #[cfg(all(feature = "canvas-fixture", target_os = "macos"))]
+    if std::env::args().nth(1).as_deref() == Some("--view-count") {
+        let tree = std::env::args()
+            .nth(2)
+            .expect("usage: deep-app --view-count <tree>");
+        println!(
+            "{}",
+            deep_app::canvas_fixture::count(std::path::Path::new(&tree))
+        );
+        return;
+    }
     #[cfg(feature = "panel-check")]
     {
         let all: Vec<String> = std::env::args().skip(1).collect();

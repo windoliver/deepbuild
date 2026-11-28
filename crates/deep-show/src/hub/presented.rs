@@ -18,8 +18,6 @@ impl Hub<'_> {
     /// #806: a document's current revision as the hub records it once presented: its writer, the
     /// layer the connection stamped and its canonical document, kept in the evidence store by the
     /// hash it names; and every layer on screen on its panel, back to front, as the app draws them.
-    /// #2494: a layer whose revision holds 3D items has no picture: it names that revision's
-    /// canonical document (`scene`), which the app's GPU-layer view draws.
     pub fn presented_revision(&self, doc: &str) -> Option<Value> {
         let row = self.current(doc)?;
         let kinds = self.startup.sealed.kinds();
@@ -55,25 +53,48 @@ impl Hub<'_> {
                 // A 3D document is one frame, its writers' layers together: the first one names it.
                 let three = current.filter(|r| deep_canvas_scene3d::scene::has_3d(&r.doc));
                 let first = three.is_some() && framed.insert(b.doc.clone());
-                let scene = three
-                    .filter(|_| first)
-                    .and_then(|r| canonical_in(&r.doc, &kinds).ok())
-                    .and_then(|c| evidence::put(&self.scenario.evidence, c.bytes.as_bytes()).ok());
+                let scene = three.filter(|_| first).and_then(|r| {
+                    let form = self.expanded3d(&r.doc);
+                    let form = form.as_ref().unwrap_or(&r.doc);
+                    let bytes = match canonical_in(form, &kinds) {
+                        Ok(c) => c.bytes.into_bytes(),
+                        Err(_) => serde_json::to_vec(form).ok()?,
+                    };
+                    evidence::put(&self.scenario.evidence, &bytes).ok()
+                });
+                let over = three.filter(|_| first).map(|r| {
+                    let flat = crate::over3d::only(&shared::drawable(&r.doc), |_| true);
+                    (flat, self.look_of(&r.doc))
+                });
+                let flat = match (&over, three) {
+                    (Some((flat, _)), _) => Some(flat),
+                    (None, Some(_)) => None,
+                    (None, None) => own.as_deref(),
+                };
+                let pictured = flat.filter(|d| {
+                    three.is_none() || d["items"].as_object().is_some_and(|i| !i.is_empty())
+                });
+                let look =
+                    (over.as_ref().and_then(|(_, named)| named.as_ref())).unwrap_or(&self.look);
                 // The layer's picture in its panel, with no ground, as the compositor rasterizes it:
                 // kept in the evidence store for the app to draw, by its hash.
-                let picture = own.as_ref().filter(|_| three.is_none()).and_then(|d| {
+                let picture = pictured.and_then(|d| {
                     let doc = d.as_object()?;
                     let mut renderer = Renderer::new();
                     let d = renderer
                         .prepare(
                             doc,
                             0,
-                            &self.look.light,
-                            self.look.status.as_ref(),
+                            &look.light,
+                            look.status.as_ref(),
                             &record,
                             &self.scenario.evidence,
                         )
                         .ok()?;
+                    let size = match three {
+                        Some(_) => size.map(|side| side.saturating_mul(2)),
+                        None => size,
+                    };
                     let png = snapshot::png(renderer.raster(&d, size, None), size);
                     evidence::put(&self.scenario.evidence, &png).ok()
                 });
