@@ -2,7 +2,7 @@
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, expect, it } from 'vitest';
-import { asks, doc, fetchA, kinds, newAsks, readyWorld, show, stored, until, yes, type PackWorld } from '../../../tests/acceptance/1820/helpers.ts';
+import { asks, doc, fetchA, job, newAsks, readyWorld, show, stored, until, yes, type PackWorld } from '../../../tests/acceptance/1820-redraft-3525/helpers.ts';
 import { A, PACK_A, PACK_A_VERSION, sha256 } from '../../../tests/acceptance/1820/pack.ts';
 
 let w: PackWorld;
@@ -21,7 +21,7 @@ it('a document starts its missing asset job; corrupt cached bytes are never a fe
   const hash = sha256(A.pad.listed);
   writeFileSync(join(w.hub.root, 'evidence', hash.slice(0, 2), hash.slice(2)), Buffer.from('corrupted cache bytes'));
   await w.packs.close();
-  const cached = await kinds(w, fetchA(A.pad));
+  const cached = await job(w, fetchA(A.pad));
   expect(cached.value.status, cached.text).not.toBe('fetched');
   const used = await show(w, document);
   expect(used.reply?.outcome).toBe('refused');

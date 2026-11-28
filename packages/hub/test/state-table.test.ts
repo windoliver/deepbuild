@@ -69,7 +69,7 @@ it('a claim is a state: says done until its verdict, PASS under new work, sent b
     await w.core('verdict.made', 1, verdict(second, 'FAIL', '01K74G4B6D8F0H2K4M6P8R0T3V'));
     await w.hook('user.ask', 1, prompt('DeepBuild sent this back'));
     const back = await w.read();
-    expect([back.state, back.waits_on, back.plain]).toEqual(['sent back', 'agent', 'its checks sent its claim back, round 1 of 3']);
+    expect([back.state, back.waits_on, back.plain]).toEqual(['sent back', 'agent', 'its checks sent it back to its agent, round 1 of 3']);
   });
 });
 

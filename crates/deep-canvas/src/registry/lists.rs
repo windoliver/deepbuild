@@ -181,6 +181,28 @@ impl KitResult {
         self.rules.iter().all(|r| r.pass)
     }
 
+    pub fn kept(&self) -> Value {
+        let rule = |r: &RuleResult| json!({"rule": r.rule, "pass": r.pass, "why": r.why, "report": r.report});
+        json!({"entry": self.entry, "rules": self.rules.iter().map(rule).collect::<Vec<_>>()})
+    }
+
+    pub fn from_kept(kit: &[KitRule], kept: &Value) -> Option<KitResult> {
+        let rules = kept.get("rules")?.as_array()?.iter().map(|r| {
+            let of = kit.iter().find(|k| r["rule"] == k.rule)?;
+            Some(RuleResult {
+                rule: of.rule,
+                pass: r.get("pass")?.as_bool()?,
+                message: of.message,
+                why: r.get("why")?.as_str()?.into(),
+                report: r.get("report").filter(|v| !v.is_null()).cloned(),
+            })
+        });
+        Some(KitResult {
+            entry: kept.get("entry")?.as_str()?.into(),
+            rules: rules.collect::<Option<_>>()?,
+        })
+    }
+
     /// The rules the entry breaks.
     pub fn failed(&self) -> Vec<&'static str> {
         self.rules
