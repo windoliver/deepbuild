@@ -112,7 +112,7 @@ An `affected.mjs` run builds its `DEEP_BIN_DIR` binaries before it asks for its 
 
 ## 6. Scheduling: a per-machine throttle table
 
-Budgets refuse to count at a load above the core count, so two sessions proving at once turn each other's budgets INCONCLUSIVE. `scripts/throttle.mjs` (T5) is a host-local, flock-based lock table under `~/.deepbuild/throttle/` with four classes. The folder is the user's home from the password database, never `HOME`, so a run with a `HOME` of its own still shares the machine's table (#2744):
+Budgets refuse to count at a load above the core count, so two sessions proving at once turn each other's budgets INCONCLUSIVE. `scripts/throttle.mjs` (T5) is a host-local, flock-based lock table under `~/.deepbuild/throttle/` with four classes. The folder is the user's home from the password database, never `HOME`, so a run with a `HOME` of its own still shares the machine's table (#2744): A holder of a grant or of the table's lock, and a waiting request's process, is gone once it has exited, though its parent hasn't reaped it yet: a lock left by one that never is would otherwise hold every request on the machine, its own parent's too (#3549).
 
 | Class | Mac | Spark | Holds |
 |---|---|---|---|
