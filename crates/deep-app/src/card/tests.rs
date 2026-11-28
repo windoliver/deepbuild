@@ -4,6 +4,7 @@ use gpui_kit::{point, px, size, AppContext as _, Bounds, Empty, TestAppContext, 
 
 use super::{Card, Controller};
 use crate::arming::{Slot, ARM_AFTER};
+use crate::chrome::sizes;
 
 fn left_after_a_draw(
     cx: &mut TestAppContext,
@@ -39,7 +40,7 @@ fn left_after_a_draw(
         )
     });
     cx.simulate_window_visibility_change(window.into(), visibility);
-    let whole = Bounds::new(point(px(0.), px(0.)), size(px(100.), px(100.)));
+    let whole = Bounds::new(point(px(0.), px(0.)), size(sizes().band, sizes().band));
     cx.update_window(window.into(), |_, window, cx| {
         card.update(cx, |card, cx| {
             card.pictures.borrow_mut().push((hash, whole));
