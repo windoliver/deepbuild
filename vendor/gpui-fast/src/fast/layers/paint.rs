@@ -808,7 +808,7 @@ pub(crate) fn draw_into_frame<'a>(
 fn clip_primitive(primitive: &mut Primitive, viewports: Viewports) {
     let mask = match primitive {
         Primitive::Path(_) => &viewports.exact,
-        _ => &viewports.snapped,
+        Primitive::Shadow(_) | Primitive::Quad(_) | Primitive::Underline(_) | Primitive::MonochromeSprite(_) | Primitive::SubpixelSprite(_) | Primitive::PolychromeSprite(_) | Primitive::Surface(_) | Primitive::NativeView(_) | Primitive::Chrome(_) => &viewports.snapped, // DeepBuild patch (windoliver/deepbuild#1434), by hand: gpui-fast's own match, every variant named so a new one fails to compile
     };
     let clip = |content_mask: &mut ContentMask<ScaledPixels>| {
         content_mask.bounds = content_mask.bounds.intersect(mask);

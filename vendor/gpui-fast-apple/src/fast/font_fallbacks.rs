@@ -91,9 +91,9 @@ mod tests {
 
     use crate::AppleTextSystem;
 
-    const LILEX: &[u8] = include_bytes!("../../../../assets/fonts/lilex/Lilex-Regular.ttf");
+    const LILEX: &[u8] = include_bytes!("../../../gpui-fast/upstream/assets/fonts/lilex/Lilex-Regular.ttf"); // DeepBuild patch (windoliver/deepbuild#3625): upstream's file, kept in vendor/gpui-fast/upstream since the release doesn't ship it
     const PLEX: &[u8] =
-        include_bytes!("../../../../assets/fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf");
+        include_bytes!("../../../gpui-fast/upstream/assets/fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf"); // DeepBuild patch (windoliver/deepbuild#3625): upstream's file, kept in vendor/gpui-fast/upstream since the release doesn't ship it
 
     /// Lilex draws `TEXT`, a box-drawing line, and IBM Plex Sans does not.
     /// Neither is a font the system has, so a line drawn with Lilex was

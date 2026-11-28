@@ -1,0 +1,31 @@
+#3625 twins: the judges against planted wrong programs
+Base commit 0beb4a141 (main); vendored gpui-fast, gpui-fast-apple, gpui-fast-macos 0.1.19 as #3622 left them.
+Machine: this Mac (no Metal shader compiler, so gpui-fast-apple/runtime_shaders); cargo 1.99.1 through scripts/lease; run 2026-11-28.
+Home folders are written ~, temp folders <tmp>.
+
+===== node --test tests/acceptance/3625/twins.test.mjs
+# cargo check -p gpui-fast -p gpui-fast-apple -p gpui-fast-macos --all-targets --keep-going --message-format=json --features gpui-fast/test-support,gpui-fast-apple/test-support,gpui-fast-macos/test-support,gpui-fast-apple/runtime_shaders in <tmp>/da3625-cargo-j03AtR: exit 101 after 26 s
+# twin judged, 9 problems; those naming vendor/gpui-fast/src/fast/layers/input.rs: test-support: vendor/gpui-fast/src/fast/layers/input.rs:98: E0063 missing field `element` in initializer of `window::Hitbox` | test-support: vendor/gpui-fast/src/fast/layers/input.rs:98: E0063 missing field `element` in initializer of `window::Hitbox`
+✔ AC1 #3625.a44f8c65 twin: a gpui-fast copy of a hitbox that leaves out Hitbox::element fails the test-support check, naming the file (27799.984083ms)
+# twin judged: FAIL vendor/gpui-fast/src/fast/a11y.rs:4: no row in the carried-patch table
+# carried src/fast/ match sites over PrimitiveBatch, Primitive, PaintOperation, ColorSpace, AtlasKey: 24
+# twin judged, arms: vendor/gpui-fast-apple/src/fast/frame.rs:220: a catch-all arm `_ =>` added to the match over PrimitiveBatch at line 151
+# the planted variant fails to compile at vendor/gpui-fast-apple/src/fast/frame.rs:152 (E0004)
+# twin judged: a planted `PrimitiveBatch::Planted3625` compiles in vendor/gpui-fast-apple/src/fast/frame.rs, and gpui-fast-apple builds with it | no error in vendor/gpui-fast-apple/src/fast/frame.rs names a planted `PrimitiveBatch::Planted3625`; gpui-fast-apple stops at: vendor/gpui-fast-apple/src/metal_renderer.rs:900: E0004 non-exhaustive patterns: `PrimitiveBatch::Planted3625` not covered | no error in vendor/gpui-fast-apple/src/fast/frame.rs names a planted `PrimitiveBatch::Planted3625`; gpui-fast-apple stops at: vendor/gpui-fast-apple/src/metal_renderer/chrome_layers.rs:36: E0432 unresolved import
+✔ AC1 #3625.a44f8c65 twin: a touched src/fast/ file with no carried-patch row fails vendor-rebase check, naming the file and line (3196.315084ms)
+✔ AC2 #3625.ef5828e4 twin: frame.rs's PrimitiveBatch::Chrome arm turned into a catch-all fails the arm judge, naming its line (1249.589125ms)
+✔ AC2 #3625.ef5828e4 twin: the planted-variant judge fails a gpui-fast-apple whose frame.rs swallows the variant, and one that stops before frame.rs (0.848542ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 32493.751166
+exit 0 after 33 s
+
+===== AC3's own plant (a replay that drops Hitbox::element), from the base run of ac3-retained-hits.test.mjs
+# plant: a replay of last frame's hitboxes with Hitbox::element dropped, in src/fast/splice.rs, src/window.rs
+# the planted replay: test result FAILED; panic: assertion `left == right` failed: the hit at (10px, 30px) on a frame replayed from retention after its sibling changed: hit 0 names the element `` where a refreshed frame names `view-4294967297.view-4294967299.target.inner` (refreshed ["view-4294967297.view-4294967299.target.inner", "view-4294967297.view-4294967299.target"], replayed ["", ""])
+✔ AC3 #3625.406aa15e with view retention on, Window::hits_at on a replayed view names the same Hitbox::element as a refreshed frame, and a planted replay that drops it fails naming the hit (62829.396041ms)

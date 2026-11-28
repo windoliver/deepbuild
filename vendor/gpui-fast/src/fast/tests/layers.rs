@@ -227,6 +227,8 @@ fn content_in_parts_draws_each_tile_as_one_scene_does() {
             PaintOperation::Primitive(primitive) => whole.insert_primitive(primitive.clone()),
             PaintOperation::StartLayer(bounds) => whole.push_layer(*bounds),
             PaintOperation::EndLayer => whole.pop_layer(),
+            PaintOperation::StartChrome(open) => whole.push_chrome_layer(open.clone()), // DeepBuild patch (windoliver/deepbuild#1434), by hand: gpui-fast's own match
+            PaintOperation::EndChrome => whole.pop_chrome_layer(),
             PaintOperation::FastRoundedClip(clip) => {
                 crate::fast::rounded_clip::record(&mut whole, *clip)
             }
@@ -244,6 +246,8 @@ fn content_in_parts_draws_each_tile_as_one_scene_does() {
                 }
                 PaintOperation::StartLayer(bounds) => PaintOperation::StartLayer(*bounds),
                 PaintOperation::EndLayer => PaintOperation::EndLayer,
+                PaintOperation::StartChrome(open) => PaintOperation::StartChrome(open.clone()), // DeepBuild patch (windoliver/deepbuild#1434), by hand: gpui-fast's own match
+                PaintOperation::EndChrome => PaintOperation::EndChrome,
                 PaintOperation::FastRoundedClip(clip) => PaintOperation::FastRoundedClip(*clip),
             })
             .collect();

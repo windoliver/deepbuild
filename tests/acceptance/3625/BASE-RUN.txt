@@ -1,0 +1,105 @@
+#3625 acceptance suite on the base
+Base commit 0beb4a141 (main); vendored gpui-fast, gpui-fast-apple, gpui-fast-macos 0.1.19 as #3622 left them.
+Machine: this Mac (no Metal shader compiler, so gpui-fast-apple/runtime_shaders); cargo 1.99.1 through scripts/lease; run 2026-11-28.
+Home folders are written ~, temp folders <tmp>.
+
+===== node --test tests/acceptance/3625/ac1-vendored-check.test.mjs
+# cargo check -p gpui-fast -p gpui-fast-apple -p gpui-fast-macos --all-targets --keep-going --message-format=json --features gpui-fast-apple/runtime_shaders in <tmp>/da3625-cargo-3l3r1j: exit 101 after 16 s
+# cargo check -p gpui-fast -p gpui-fast-apple -p gpui-fast-macos --all-targets --keep-going --message-format=json --features gpui-fast/test-support,gpui-fast-apple/test-support,gpui-fast-macos/test-support,gpui-fast-apple/runtime_shaders in <tmp>/da3625-cargo-3l3r1j: exit 101 after 14 s
+✖ AC1 #3625.a44f8c65 cargo check -p gpui-fast -p gpui-fast-apple -p gpui-fast-macos --all-targets passes on the vendored 0.1.19 trees with default features and with test-support (30228.676708ms)
+# vendor-rebase check exit 1 in a copy holding only the three gpui-fast trees: 177 FAIL or BLOCKED lines, read only where they name a src/fast/ file or block a gpui-fast tree; those naming a vendored gpui-fast file:
+#   none
+✔ AC1 #3625.a44f8c65 node scripts/vendor-rebase.mjs check passes on every touched src/fast/ file of the vendored 0.1.19 trees (1593.344833ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 1
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 32171.870042
+✖ failing tests:
+test at tests/acceptance/3625/ac1-vendored-check.test.mjs:5:1
+✖ AC1 #3625.a44f8c65 cargo check -p gpui-fast -p gpui-fast-apple -p gpui-fast-macos --all-targets passes on the vendored 0.1.19 trees with default features and with test-support (30228.676708ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  + [
+  +   "default features: vendor/gpui-fast/src/gpui.rs:9: E0463 can't find crate for `proptest`",
+  +   "default features: vendor/gpui-fast/src/platform.rs:3722: error couldn't read `vendor/gpui-fast/src/../examples/image/exif-orientation-rotate-180.jpg`: No such file or directory (os error 2)",
+  +   "default features: vendor/gpui-fast/src/svg_renderer.rs:554: error couldn't read `vendor/gpui-fast/src/../../../assets/fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf`: No such file or directory (os error 2)",
+  +   "default features: vendor/gpui-fast/src/svg_renderer.rs:555: error couldn't read `vendor/gpui-fast/src/../../../assets/fonts/lilex/Lilex-Regular.ttf`: No such file or directory (os error 2)",
+  +   'default features: vendor/gpui-fast/src/randomized_element_tree.rs:1963: error attribute value must be a literal',
+  +   'default features: vendor/gpui-fast/src/app/test_context.rs:740: E0433 cannot find module or crate `futures_concurrency` in this scope',
+  +   'default features: vendor/gpui-fast/src/app/test_context.rs:800: E0433 cannot find module or crate `postage` in this scope',
+  +   'default features: vendor/gpui-fast/src/app/test_context.rs:829: E0433 cannot find module or crate `postage` in this scope',
+  +   "default features: vendor/gpui-fast-apple/src/fast/layers/tests.rs:31: error couldn't find file `vendor/gpui-fast-apple/src/fast/layers/../../../../gpui/src/fast/rounded_clip_fixtures.rs`",
+  +   'default features: vendor/gpui-fast-apple/src/metal_renderer/chrome_layers.rs:36: E0432 unresolved imports `objc2_metal::MTLSamplerAddressMode`, `objc2_metal::MTLSamplerDescriptor`, `objc2_metal::MTLSamplerMinMagFilter`, `objc2_metal::MTLSamplerState`',
+  +   "test-support: vendor/gpui-fast/src/platform.rs:3722: error couldn't read `vendor/gpui-fast/src/../examples/image/exif-orientation-rotate-180.jpg`: No such file or directory (os error 2)",
+  +   "test-support: vendor/gpui-fast/src/svg_renderer.rs:554: error couldn't read `vendor/gpui-fast/src/../../../assets/fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf`: No such file or directory (os error 2)",
+  +   "test-support: vendor/gpui-fast/src/svg_renderer.rs:555: error couldn't read `vendor/gpui-fast/src/../../../assets/fonts/lilex/Lilex-Regular.ttf`: No such file or directory (os error 2)",
+  +   'test-support: vendor/gpui-fast/src/style.rs:1338: E0432 unresolved import `util_macros`',
+  +   'test-support: vendor/gpui-fast-apple/src/metal_renderer/chrome_layers.rs:36: E0432 unresolved imports `objc2_metal::MTLSamplerAddressMode`, `objc2_metal::MTLSamplerDescriptor`, `objc2_metal::MTLSamplerMinMagFilter`, `objc2_metal::MTLSamplerState`',
+  +   'test-support: vendor/gpui-fast/src/fast/scene.rs:182: E0004 non-exhaustive patterns: `&scene::PaintOperation::StartChrome(_)` and `&scene::PaintOperation::EndChrome` not covered',
+  +   "test-support: vendor/gpui-fast-apple/src/fast/layers/tests.rs:31: error couldn't find file `vendor/gpui-fast-apple/src/fast/layers/../../../../gpui/src/fast/rounded_clip_fixtures.rs`",
+  +   'test-support: vendor/gpui-fast/src/fast/tests/layers.rs:226: E0004 non-exhaustive patterns: `&scene::PaintOperation::StartChrome(_)` and `&scene::PaintOperation::EndChrome` not covered',
+  +   'test-support: vendor/gpui-fast/src/fast/tests/layers.rs:241: E0004 non-exhaustive patterns: `&scene::PaintOperation::StartChrome(_)` and `&scene::PaintOperation::EndChrome` not covered'
+  + ]
+  - []
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ "default features: vendor/gpui-fast/src/gpui.rs:9: E0463 can't find crate for `proptest`", "default features: vendor/gpui-fast/src/platform.rs:3722: error couldn't read `vendor/gpui-fast/src/../examples/image/exif-orientation-rotate-180.jpg`: No such file or directory (os error 2)", "default features: vendor/gpui-fast/src/svg_renderer.rs:554: error couldn't read `vendor/gpui-fast/src/../../../assets/fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf`: No such file or directory (os error 2)", "default features: vendor/gpui-fast/src/svg_renderer.rs:555: error couldn't read `vendor/gpui-fast/src/../../../assets/fonts/lilex/Lilex-Regular.ttf`: No such file or directory (os error 2)", 'default features: vendor/gpui-fast/src/randomized_element_tree.rs:1963: error attribute value must be a literal', 'default features: vendor/gpui-fast/src/app/test_context.rs:740: E0433 cannot find module or crate `futures_concurrency` in this scope', 'default features: vendor/gpui-fast/src/app/test_context.rs:800: E0433 cannot find module or crate `postage` in this scope', 'default features: vendor/gpui-fast/src/app/test_context.rs:829: E0433 cannot find module or crate `postage` in this scope', "default features: vendor/gpui-fast-apple/src/fast/layers/tests.rs:31: error couldn't find file `vendor/gpui-fast-apple/src/fast/layers/../../../../gpui/src/fast/rounded_clip_fixtures.rs`", 'default features: vendor/gpui-fast-apple/src/metal_renderer/chrome_layers.rs:36: E0432 unresolved imports `objc2_metal::MTLSamplerAddressMode`, `objc2_metal::MTLSamplerDescriptor`, `objc2_metal::MTLSamplerMinMagFilter`, `objc2_metal::MTLSamplerState`', "test-support: vendor/gpui-fast/src/platform.rs:3722: error couldn't read `vendor/gpui-fast/src/../examples/image/exif-orientation-rotate-180.jpg`: No such file or directory (os error 2)", "test-support: vendor/gpui-fast/src/svg_renderer.rs:554: error couldn't read `vendor/gpui-fast/src/../../../assets/fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf`: No such file or directory (os error 2)", "test-support: vendor/gpui-fast/src/svg_renderer.rs:555: error couldn't read `vendor/gpui-fast/src/../../../assets/fonts/lilex/Lilex-Regular.ttf`: No such file or directory (os error 2)", 'test-support: vendor/gpui-fast/src/style.rs:1338: E0432 unresolved import `util_macros`', 'test-support: vendor/gpui-fast-apple/src/metal_renderer/chrome_layers.rs:36: E0432 unresolved imports `objc2_metal::MTLSamplerAddressMode`, `objc2_metal::MTLSamplerDescriptor`, `objc2_metal::MTLSamplerMinMagFilter`, `objc2_metal::MTLSamplerState`', 'test-support: vendor/gpui-fast/src/fast/scene.rs:182: E0004 non-exhaustive patterns: `&scene::PaintOperation::StartChrome(_)` and `&scene::PaintOperation::EndChrome` not covered', "test-support: vendor/gpui-fast-apple/src/fast/layers/tests.rs:31: error couldn't find file `vendor/gpui-fast-apple/src/fast/layers/../../../../gpui/src/fast/rounded_clip_fixtures.rs`", 'test-support: vendor/gpui-fast/src/fast/tests/layers.rs:226: E0004 non-exhaustive patterns: `&scene::PaintOperation::StartChrome(_)` and `&scene::PaintOperation::EndChrome` not covered', 'test-support: vendor/gpui-fast/src/fast/tests/layers.rs:241: E0004 non-exhaustive patterns: `&scene::PaintOperation::StartChrome(_)` and `&scene::PaintOperation::EndChrome` not covered' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+exit 1 after 32 s
+
+===== node --test tests/acceptance/3625/ac2-explicit-arms.test.mjs
+# carried src/fast/ match sites over PrimitiveBatch, Primitive, PaintOperation, ColorSpace, AtlasKey: 24
+# cargo check -p gpui-fast-apple --lib --message-format=json --features gpui-fast-apple/runtime_shaders in <tmp>/da3625-cargo-uZymm2: exit 101 after 13 s
+# round 1: gave 1 of gpui-fast's own matches an arm for the planted variant, as rustc suggests
+# cargo check -p gpui-fast-apple --lib --message-format=json --features gpui-fast-apple/runtime_shaders in <tmp>/da3625-cargo-uZymm2: exit 101 after 20 s
+✔ AC2 #3625.ef5828e4 no carried src/fast/ match over PrimitiveBatch, Primitive, PaintOperation, ColorSpace or AtlasKey gains a catch-all arm (873.8535ms)
+✖ AC2 #3625.ef5828e4 a planted variant added to PrimitiveBatch fails to compile in gpui-fast-apple's src/fast/frame.rs (33791.265ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 1
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 34850.473
+✖ failing tests:
+test at tests/acceptance/3625/ac2-explicit-arms.test.mjs:9:1
+✖ AC2 #3625.ef5828e4 a planted variant added to PrimitiveBatch fails to compile in gpui-fast-apple's src/fast/frame.rs (33791.265ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  + [
+  +   'no error in vendor/gpui-fast-apple/src/fast/frame.rs names a planted `PrimitiveBatch::Planted3625`; gpui-fast-apple stops at: vendor/gpui-fast-apple/src/metal_renderer/chrome_layers.rs:36: E0432 unresolved imports `objc2_metal::MTLSamplerAddressMode`, `objc2_metal::MTLSamplerDescriptor`, `objc2_metal::MTLSamplerMinMagFilter`, `objc2_metal::MTLSamplerState`'
+  + ]
+  - []
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ 'no error in vendor/gpui-fast-apple/src/fast/frame.rs names a planted `PrimitiveBatch::Planted3625`; gpui-fast-apple stops at: vendor/gpui-fast-apple/src/metal_renderer/chrome_layers.rs:36: E0432 unresolved imports `objc2_metal::MTLSamplerAddressMode`, `objc2_metal::MTLSamplerDescriptor`, `objc2_metal::MTLSamplerMinMagFilter`, `objc2_metal::MTLSamplerState`' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+exit 1 after 35 s
+
+===== node --test tests/acceptance/3625/ac3-retained-hits.test.mjs
+# cargo test --features test-support --test retained_hits -- --test-threads=1 in <tmp>/da3625-hits-ckFK3v/gpui-fast: exit 0 after 37 s
+# vendor/gpui-fast: test result ok; no panic
+# plant: a replay of last frame's hitboxes with Hitbox::element dropped, in src/fast/splice.rs, src/window.rs
+# cargo test --features test-support --test retained_hits -- --test-threads=1 in <tmp>/da3625-hits-ckFK3v/gpui-fast: exit 101 after 26 s
+# the planted replay: test result FAILED; panic: assertion `left == right` failed: the hit at (10px, 30px) on a frame replayed from retention after its sibling changed: hit 0 names the element `` where a refreshed frame names `view-4294967297.view-4294967299.target.inner` (refreshed ["view-4294967297.view-4294967299.target.inner", "view-4294967297.view-4294967299.target"], replayed ["", ""])
+✔ AC3 #3625.406aa15e with view retention on, Window::hits_at on a replayed view names the same Hitbox::element as a refreshed frame, and a planted replay that drops it fails naming the hit (62829.396041ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 62927.665583
+exit 0 after 63 s

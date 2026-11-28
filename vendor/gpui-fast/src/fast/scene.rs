@@ -188,6 +188,8 @@ impl Scene {
                     lines.push(format!("rounded clip {clip:?}"))
                 }
                 crate::PaintOperation::Primitive(..) => {}
+                crate::PaintOperation::StartChrome(open) => lines.push(format!("chrome {:?} {:?}", open.bounds, open.layer)), // DeepBuild patch (windoliver/deepbuild#1434), by hand: gpui-fast's own match
+                crate::PaintOperation::EndChrome => lines.push("end chrome".into()),
             }
         }
         lines.extend(self.shadows.iter().map(|shadow| format!("{shadow:?}")));

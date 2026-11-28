@@ -1335,9 +1335,9 @@ mod tests {
 
     use super::*;
 
-    use util_macros::perf;
+    // DeepBuild patch (windoliver/deepbuild#3625): upstream's perf tag comes from a crate the release doesn't declare, so these are plain tests
 
-    #[perf]
+    // DeepBuild patch (windoliver/deepbuild#3625): upstream's #[perf] tag
     fn test_basic_highlight_style_combination() {
         let style_a = HighlightStyle::default();
         let style_b = HighlightStyle::default();
@@ -1422,7 +1422,7 @@ mod tests {
         );
     }
 
-    #[perf]
+    // DeepBuild patch (windoliver/deepbuild#3625): upstream's #[perf] tag
     fn test_combine_highlights() {
         assert_eq!(
             combine_highlights(
@@ -1511,7 +1511,7 @@ mod tests {
         );
     }
 
-    #[perf]
+    // DeepBuild patch (windoliver/deepbuild#3625): upstream's #[perf] tag
     fn test_text_style_refinement() {
         let mut style = Style::default();
         style.refine(&StyleRefinement::default().text_size(px(20.0)));

@@ -1,0 +1,88 @@
+# Base 0beb4a141 (worktree HEAD 9bbe0f24c, no change to vendor/ or scripts/ since 0beb4a141), 2026-11-28, Mac with no Metal compiler, cargo through scripts/lease
+# node --test tests/acceptance/3625-redraft-ac1/ac1.test.mjs
+# Expected: the cargo check fails on the carry's unhandled variants in src/fast/ (E0004 at src/fast/scene.rs and src/fast/tests/layers.rs) among other errors;
+# check's reading on the touched src/fast/ files is INCONCLUSIVE in this checkout: node_modules is installed (npm ci --ignore-scripts) but the
+# workspace packages are not built, so Vitest cannot load its config and check cannot list the rows' .ts tests.
+
+# cargo check -p gpui-fast -p gpui-fast-apple -p gpui-fast-macos --all-targets --keep-going --message-format=json --features gpui-fast/test-support,gpui-fast-apple/test-support,gpui-fast-macos/test-support,gpui-fast-apple/runtime_shaders exit 101
+✖ AC1 #3625.a44f8c65 cargo check -p gpui-fast -p gpui-fast-apple -p gpui-fast-macos --all-targets passes on the vendored 0.1.19 trees with default and test-support features enabled (32325.143292ms)
+# touched src/fast/ files: 14
+# check exit 1
+✖ AC1 #3625.a44f8c65 node scripts/vendor-rebase.mjs check passes on every touched src/fast/ file of the three vendored trees (10832.516125ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 43765.800417
+
+✖ failing tests:
+
+test at tests/acceptance/3625-redraft-ac1/ac1.test.mjs:7:1
+✖ AC1 #3625.a44f8c65 cargo check -p gpui-fast -p gpui-fast-apple -p gpui-fast-macos --all-targets passes on the vendored 0.1.19 trees with default and test-support features enabled (32325.143292ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + [
+  +   "vendor/gpui-fast/src/platform.rs:3722: error: couldn't read `gpui-fast/src/../examples/image/exif-orientation-rotate-180.jpg`: No such file or directory (os error 2)",
+  +   "vendor/gpui-fast/src/svg_renderer.rs:554: error: couldn't read `gpui-fast/src/../../../assets/fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf`: No such file or directory (os error 2)",
+  +   "vendor/gpui-fast/src/svg_renderer.rs:555: error: couldn't read `gpui-fast/src/../../../assets/fonts/lilex/Lilex-Regular.ttf`: No such file or directory (os error 2)",
+  +   'vendor/gpui-fast/src/style.rs:1338: error[E0432]: unresolved import `util_macros`',
+  +   "vendor/gpui-fast-apple/src/fast/layers/tests.rs:31: error: couldn't find file `gpui-fast-apple/src/fast/layers/../../../../gpui/src/fast/rounded_clip_fixtures.rs`",
+  +   'vendor/gpui-fast-apple/src/metal_renderer/chrome_layers.rs:36: error[E0432]: unresolved imports `objc2_metal::MTLSamplerAddressMode`, `objc2_metal::MTLSamplerDescriptor`, `objc2_metal::MTLSamplerMinMagFilter`, `objc2_metal::MTLSamplerState`',
+  +   'vendor/gpui-fast/src/fast/scene.rs:182: error[E0004]: non-exhaustive patterns: `&scene::PaintOperation::StartChrome(_)` and `&scene::PaintOperation::EndChrome` not covered',
+  +   'vendor/gpui-fast/src/fast/tests/layers.rs:226: error[E0004]: non-exhaustive patterns: `&scene::PaintOperation::StartChrome(_)` and `&scene::PaintOperation::EndChrome` not covered',
+  +   'vendor/gpui-fast/src/fast/tests/layers.rs:241: error[E0004]: non-exhaustive patterns: `&scene::PaintOperation::StartChrome(_)` and `&scene::PaintOperation::EndChrome` not covered'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/3625-redraft-ac1/ac1.test.mjs:11:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ "vendor/gpui-fast/src/platform.rs:3722: error: couldn't read `gpui-fast/src/../examples/image/exif-orientation-rotate-180.jpg`: No such file or directory (os error 2)", "vendor/gpui-fast/src/svg_renderer.rs:554: error: couldn't read `gpui-fast/src/../../../assets/fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf`: No such file or directory (os error 2)", "vendor/gpui-fast/src/svg_renderer.rs:555: error: couldn't read `gpui-fast/src/../../../assets/fonts/lilex/Lilex-Regular.ttf`: No such file or directory (os error 2)", 'vendor/gpui-fast/src/style.rs:1338: error[E0432]: unresolved import `util_macros`', "vendor/gpui-fast-apple/src/fast/layers/tests.rs:31: error: couldn't find file `gpui-fast-apple/src/fast/layers/../../../../gpui/src/fast/rounded_clip_fixtures.rs`", 'vendor/gpui-fast-apple/src/metal_renderer/chrome_layers.rs:36: error[E0432]: unresolved imports `objc2_metal::MTLSamplerAddressMode`, `objc2_metal::MTLSamplerDescriptor`, `objc2_metal::MTLSamplerMinMagFilter`, `objc2_metal::MTLSamplerState`', 'vendor/gpui-fast/src/fast/scene.rs:182: error[E0004]: non-exhaustive patterns: `&scene::PaintOperation::StartChrome(_)` and `&scene::PaintOperation::EndChrome` not covered', 'vendor/gpui-fast/src/fast/tests/layers.rs:226: error[E0004]: non-exhaustive patterns: `&scene::PaintOperation::StartChrome(_)` and `&scene::PaintOperation::EndChrome` not covered', 'vendor/gpui-fast/src/fast/tests/layers.rs:241: error[E0004]: non-exhaustive patterns: `&scene::PaintOperation::StartChrome(_)` and `&scene::PaintOperation::EndChrome` not covered' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3625-redraft-ac1/ac1.test.mjs:14:1
+✖ AC1 #3625.a44f8c65 node scripts/vendor-rebase.mjs check passes on every touched src/fast/ file of the three vendored trees (10832.516125ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + [
+  +   "INCONCLUSIVE: check couldn't list the test of a row carrying vendor/gpui-fast-apple/src/fast/release_gpui/src/color.rs (no node_modules/vitest, or its suite didn't load): FAIL row #391 The exact gradient mode: `ColorSpace::OklabExact`, through the sRGB curve, premultiplied, with no dither: the test tests/acceptance/391/gradient.test.ts › AC6 a two-stop OKLab gradient from black to sRGB 0.2, drawn by GPUI through the patch's exact gradient mode, reads 13 at its midpoint, with identical rows › AC6 the exact mode: the midpoint reads 13 and every row of the horizontal gradient is identical can't be checked: its suite gave no list",
+  +   "INCONCLUSIVE: check couldn't list the test of a row carrying vendor/gpui-fast/src/fast/retained.rs (no node_modules/vitest, or its suite didn't load): FAIL row #1482 Frame counts, in a test-support build: `App::notify` records the entity it was given, and each frame a window draws records whether it was a refresh, each view it rendered or reused with the view it sits in, and the elements it laid out, which `take_frame_counts`, `take_notified`, `view_of` and `type_of` give a replica; counters only, no clocks: the test tests/acceptance/1482/hover.test.ts › #1482 the hover journey over the 1,000-row list, judged from its own report › AC2 AC3 AC5 AC6 the shipped app reads PASS: each move draws, every frame names its notify and its views, no view outside the list is notified, and at most 1% of frames change no tile can't be checked: its suite gave no list",
+  +   "INCONCLUSIVE: check couldn't list the test of a row carrying vendor/gpui-fast/src/fast/layers/input.rs (no node_modules/vitest, or its suite didn't load): FAIL row #124 Hits at a point: `Hitbox::element` and `Window::hits_at`, the hit test a replica asks before a pointer action, so it names what covers the target: the test tests/acceptance/124/ac6-scrim.test.ts › ${AC.scrim} a click on Save under a transparent scrim is refused naming it, delivered once it is gone, and the probe names it without dismissing it › ${AC.scrim} the probe on Save names the scrim without dismissing it, and answers the same hit test as the click can't be checked: its suite gave no list",
+  +   "INCONCLUSIVE: check couldn't list the test of a row carrying vendor/gpui-fast/src/fast/composition.rs, vendor/gpui-fast/src/fast/rounded_clip_scene.rs, vendor/gpui-fast/src/fast/scene.rs, vendor/gpui-fast/src/fast/layers/background.rs, vendor/gpui-fast/src/fast/layers/lists.rs, vendor/gpui-fast/src/fast/layers/overlay.rs, vendor/gpui-fast/src/fast/layers/paint.rs, vendor/gpui-fast/src/fast/layers/scene.rs, vendor/gpui-fast/src/fast/layers/tiles.rs, vendor/gpui-fast/src/fast/layers/verify.rs (no node_modules/vitest, or its suite didn't load): FAIL row #1434 Chrome layers in the scene: `Window::paint_chrome_layer`, `paint_chrome_backdrop`, `paint_chrome_effect` and `guard_from_chrome`, a layer's subtree drawn to its own scene while its paint stays in the root's, and the planted twins `plant_multiplies_per_element` and `plant_effects_after_frame`: the test tests/acceptance/1434/ac1-group-opacity.test.ts › #1434 AC1 two overlapping quads in a 50% layer: every pixel of the overlap equals the composite of the group › AC1 a planted renderer that multiplies 0.5 per element (DEEP_CHROME_PLANT=multiplies_per_element) fails, naming the pixel can't be checked: its suite gave no list",
+  +   "INCONCLUSIVE: check couldn't list the test of a row carrying vendor/gpui-fast-apple/src/fast/frame.rs (no node_modules/vitest, or its suite didn't load): FAIL row #1434 Chrome layers on Metal: a layer's offscreen target composited once, a backdrop copied from the drawable at full, half or quarter scale, a registered operator's runs, and the slot drawn premultiplied with its clip and edge, with the planted twin `Planted::StraightAlpha`: the test tests/acceptance/1434/ac3-slot-order.test.ts › #1434 AC3 a slot between two elements draws in order, with rounded corners within one code value of the reference › AC3 a planted straight-alpha path (DEEP_CHROME_PLANT=straight_alpha_slot) multiplies translucent pixels twice and fails, naming one can't be checked: its suite gave no list"
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/3625-redraft-ac1/ac1.test.mjs:19:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ "INCONCLUSIVE: check couldn't list the test of a row carrying vendor/gpui-fast-apple/src/fast/release_gpui/src/color.rs (no node_modules/vitest, or its suite didn't load): FAIL row #391 The exact gradient mode: `ColorSpace::OklabExact`, through the sRGB curve, premultiplied, with no dither: the test tests/acceptance/391/gradient.test.ts › AC6 a two-stop OKLab gradient from black to sRGB 0.2, drawn by GPUI through the patch's exact gradient mode, reads 13 at its midpoint, with identical rows › AC6 the exact mode: the midpoint reads 13 and every row of the horizontal gradient is identical can't be checked: its suite gave no list", "INCONCLUSIVE: check couldn't list the test of a row carrying vendor/gpui-fast/src/fast/retained.rs (no node_modules/vitest, or its suite didn't load): FAIL row #1482 Frame counts, in a test-support build: `App::notify` records the entity it was given, and each frame a window draws records whether it was a refresh, each view it rendered or reused with the view it sits in, and the elements it laid out, which `take_frame_counts`, `take_notified`, `view_of` and `type_of` give a replica; counters only, no clocks: the test tests/acceptance/1482/hover.test.ts › #1482 the hover journey over the 1,000-row list, judged from its own report › AC2 AC3 AC5 AC6 the shipped app reads PASS: each move draws, every frame names its notify and its views, no view outside the list is notified, and at most 1% of frames change no tile can't be checked: its suite gave no list", "INCONCLUSIVE: check couldn't list the test of a row carrying vendor/gpui-fast/src/fast/layers/input.rs (no node_modules/vitest, or its suite didn't load): FAIL row #124 Hits at a point: `Hitbox::element` and `Window::hits_at`, the hit test a replica asks before a pointer action, so it names what covers the target: the test tests/acceptance/124/ac6-scrim.test.ts › ${AC.scrim} a click on Save under a transparent scrim is refused naming it, delivered once it is gone, and the probe names it without dismissing it › ${AC.scrim} the probe on Save names the scrim without dismissing it, and answers the same hit test as the click can't be checked: its suite gave no list", "INCONCLUSIVE: check couldn't list the test of a row carrying vendor/gpui-fast/src/fast/composition.rs, vendor/gpui-fast/src/fast/rounded_clip_scene.rs, vendor/gpui-fast/src/fast/scene.rs, vendor/gpui-fast/src/fast/layers/background.rs, vendor/gpui-fast/src/fast/layers/lists.rs, vendor/gpui-fast/src/fast/layers/overlay.rs, vendor/gpui-fast/src/fast/layers/paint.rs, vendor/gpui-fast/src/fast/layers/scene.rs, vendor/gpui-fast/src/fast/layers/tiles.rs, vendor/gpui-fast/src/fast/layers/verify.rs (no node_modules/vitest, or its suite didn't load): FAIL row #1434 Chrome layers in the scene: `Window::paint_chrome_layer`, `paint_chrome_backdrop`, `paint_chrome_effect` and `guard_from_chrome`, a layer's subtree drawn to its own scene while its paint stays in the root's, and the planted twins `plant_multiplies_per_element` and `plant_effects_after_frame`: the test tests/acceptance/1434/ac1-group-opacity.test.ts › #1434 AC1 two overlapping quads in a 50% layer: every pixel of the overlap equals the composite of the group › AC1 a planted renderer that multiplies 0.5 per element (DEEP_CHROME_PLANT=multiplies_per_element) fails, naming the pixel can't be checked: its suite gave no list", "INCONCLUSIVE: check couldn't list the test of a row carrying vendor/gpui-fast-apple/src/fast/frame.rs (no node_modules/vitest, or its suite didn't load): FAIL row #1434 Chrome layers on Metal: a layer's offscreen target composited once, a backdrop copied from the drawable at full, half or quarter scale, a registered operator's runs, and the slot drawn premultiplied with its clip and edge, with the planted twin `Planted::StraightAlpha`: the test tests/acceptance/1434/ac3-slot-order.test.ts › #1434 AC3 a slot between two elements draws in order, with rounded corners within one code value of the reference › AC3 a planted straight-alpha path (DEEP_CHROME_PLANT=straight_alpha_slot) multiplies translucent pixels twice and fails, naming one can't be checked: its suite gave no list" ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+exit 1
+
+# For comparison: the same scratch workspace built from the pristine static.crates.io 0.1.19 releases, same flags
+# (an earlier draft ran defaults alone first; only the defaults-plus-test-support reading is the criterion's run, kept here):
+default and test-support features:
+vendor/gpui-fast/src/platform.rs:3708: error: couldn't read `gpui-fast/src/../examples/image/exif-orientation-rotate-180.jpg`: No such file or directory (os error 2)
+vendor/gpui-fast/src/svg_renderer.rs:554: error: couldn't read `gpui-fast/src/../../../assets/fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf`: No such file or directory (os error 2)
+vendor/gpui-fast/src/svg_renderer.rs:555: error: couldn't read `gpui-fast/src/../../../assets/fonts/lilex/Lilex-Regular.ttf`: No such file or directory (os error 2)
+vendor/gpui-fast/src/style.rs:1338: error[E0432]: unresolved import `util_macros`
+vendor/gpui-fast-apple/src/fast/layers/tests.rs:31: error: couldn't find file `gpui-fast-apple/src/fast/layers/../../../../gpui/src/fast/rounded_clip_fixtures.rs`

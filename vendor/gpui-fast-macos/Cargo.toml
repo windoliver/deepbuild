@@ -332,3 +332,7 @@ features = ["serde"]
 [lints.rust.unexpected_cfgs]
 level = "allow"
 priority = 0
+
+[dev-dependencies] # DeepBuild patch (windoliver/deepbuild#3625): upstream's workspace builds these tests with test-support on
+gpui = { package = "gpui-fast", version = "0.1.19", features = ["test-support"] }
+gpui_apple = { package = "gpui-fast-apple", version = "0.1.19", features = ["test-support"] }

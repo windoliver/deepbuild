@@ -9,6 +9,7 @@ use objc2_metal::{
     MTLDevice, MTLOrigin, MTLPixelFormat, MTLRegion, MTLSize, MTLStorageMode, MTLTexture,
     MTLTextureDescriptor, MTLTextureUsage,
 };
+use objc2_metal::MTLResource as _; // DeepBuild patch (windoliver/deepbuild#1431): a texture's allocatedSize
 use parking_lot::Mutex;
 use std::{borrow::Cow, ptr::NonNull};
 

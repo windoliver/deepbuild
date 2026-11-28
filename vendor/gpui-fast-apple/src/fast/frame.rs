@@ -217,10 +217,12 @@ impl MetalRenderer {
                     self.draw_native_views(range, instance_bindings, command_encoder)
                 }
                 PrimitiveBatch::SubpixelSprites { .. } => unreachable!(),
-                PrimitiveBatch::Chrome(_) => {} // DeepBuild patch (windoliver/deepbuild#1434): not drawn in a frame with scroll layers yet (#3629)
+                PrimitiveBatch::Chrome(index) => pass_over_chrome(index), // DeepBuild patch (windoliver/deepbuild#1434): not drawn in a frame with scroll layers, path intermediates or rounded clips yet (#3629)
             }
         }
 
         Ok(())
     }
 }
+
+fn pass_over_chrome(_index: usize) {} // DeepBuild patch (windoliver/deepbuild#1434): the marker #3629 deletes with its chrome pass, so every path that passes chrome over stops compiling

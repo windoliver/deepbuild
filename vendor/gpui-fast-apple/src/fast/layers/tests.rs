@@ -27,7 +27,7 @@ use crate::metal_renderer::{InstanceBufferPool, MetalRenderer};
 
 const TILE: u32 = 512;
 
-#[path = "../../../../gpui/src/fast/rounded_clip_fixtures.rs"]
+#[path = "../../../../gpui-fast/src/fast/rounded_clip_fixtures.rs"] // DeepBuild patch (windoliver/deepbuild#3625): the vendored sibling's folder
 mod rounded_clip_tests;
 
 #[gpui::test]
@@ -1008,5 +1008,5 @@ impl Harness {
     }
 }
 
-#[path = "../../../../gpui_linux/src/fast/composition/occluders.rs"]
+#[path = "../../../../gpui-fast/upstream/crates/gpui_linux/src/fast/composition/occluders.rs"] // DeepBuild patch (windoliver/deepbuild#3625): upstream's file, kept in vendor/gpui-fast/upstream since the release doesn't ship it
 mod x11_occluder_tests;
