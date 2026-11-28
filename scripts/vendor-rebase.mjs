@@ -13,6 +13,9 @@ import { pathToFileURL } from 'node:url';
 const TABLE = 'vendor/gpui-pre-apple/upstream/README.md';
 const HEADING = '## Carried patches';
 const COLUMNS = 'Behavior|Issue|Files|Test|Budget|Removal';
+const RETIRED = '## Retired on gpui-fast 0.1.19';
+const RETIRED_COLUMNS = 'Behavior|Issue|Upstream change';
+const FAST_TWIN = /^vendor\/gpui-pre(-apple|-macos)?\//;
 const HUNK_BUDGET = 8; // lines, added and removed
 const FILE_BUDGET = 40; // lines added
 const MARK = /DeepBuild patch \(windoliver\/deepbuild#(\d+)\)/g;
@@ -137,9 +140,9 @@ function marksOf(hunk, lines) {
   return [...lines.slice(from - 1, to).join('\n').matchAll(MARK)].map(([, issue]) => `#${issue}`);
 }
 
-function readTable() {
+function readSection(heading, columns) {
   const lines = existsSync(TABLE) ? readFileSync(TABLE, 'utf8').split('\n') : [];
-  const start = lines.indexOf(HEADING);
+  const start = lines.indexOf(heading);
   if (start < 0) return null;
   const table = [];
   for (let at = start + 1; at < lines.length && !lines[at].startsWith('#'); at += 1) {
@@ -147,8 +150,12 @@ function readTable() {
     else if (table.length) break;
   }
   const cells = (line) => line.trim().replace(/^\||\|$/g, '').split('|').map((cell) => cell.trim());
-  if (table.length < 2 || cells(table[0]).join('|') !== COLUMNS) return null;
-  return table.slice(2).map(cells).map(([behavior, issue, files, test, budget, removal]) => ({
+  if (table.length < 2 || cells(table[0]).join('|') !== columns) return null;
+  return table.slice(2).map(cells);
+}
+
+function readTable() {
+  return readSection(HEADING, COLUMNS)?.map(([behavior, issue, files, test, budget, removal]) => ({
     behavior, issue, test, budget: budget ?? '', removal: removal ?? '', files: [...(files ?? '').matchAll(/`([^`]+)`/g)].map(([, file]) => file), hunks: [], overFiles: [],
   }));
 }
@@ -231,6 +238,28 @@ function judgeRow(row, fail) {
   for (const { path: file, added } of row.overFiles) fail(`${file}: ${added} added, over the budget of ${FILE_BUDGET} a file`);
 }
 
+function judgePort(row, retired, fail) {
+  const name = `${row.issue} ${row.behavior}`;
+  const carried = new Set(row.hunks.map(({ path }) => path));
+  for (const file of row.files) if (!carried.has(file)) fail(`row ${name}: ${file} holds none of its marked hunks`);
+  const onPre = row.files.some((file) => FAST_TWIN.test(file));
+  const onFast = row.files.some((file) => file.startsWith('vendor/gpui-fast'));
+  const retiredAs = retired.find((entry) => entry.issue === row.issue && entry.behavior === row.behavior);
+  if (retiredAs && onFast) fail(`row ${name}: retired on gpui-fast 0.1.19, yet it lists ${row.files.find((file) => file.startsWith('vendor/gpui-fast'))}`);
+  if (onPre && !onFast && !retiredAs) {
+    fail(`row ${name}: carried on gpui-pre but on no gpui-fast 0.1.19 file; port it, or retire it under ${RETIRED} naming the upstream change`);
+  }
+}
+
+function judgeRetired(retired, rows, fail) {
+  for (const entry of retired) {
+    const name = `${entry.issue} ${entry.behavior}`;
+    if (!rows.some((row) => row.issue === entry.issue && row.behavior === entry.behavior)) fail(`retired ${name}: no carried row has that issue and behavior`);
+    if (!entry.change || /^(?:[—–-]|none:?)$/i.test(entry.change)) fail(`retired ${name}: no upstream change named that meets its removal condition`);
+    say(`RETIRED ${name}: ${entry.change}`);
+  }
+}
+
 async function check() {
   let refused = 0;
   const refuse = (line) => { refused += 1; say(line); };
@@ -246,7 +275,7 @@ async function check() {
     for (const { path, lines, hunks } of rows ? changesIn(crate, pinned) : []) {
       const listed = rows.filter(({ files }) => files.includes(path));
       if (!listed.length) {
-        fail(`${path}: no row in the carried-patch table`);
+        fail(`${path}:${hunks[0]?.line ?? 1}: no row in the carried-patch table`);
         continue;
       }
       for (const hunk of hunks) {
@@ -259,7 +288,12 @@ async function check() {
       if (added > FILE_BUDGET) for (const row of listed) row.overFiles.push({ path, added });
     }
   }
-  for (const row of rows ?? []) judgeRow(row, fail);
+  const retired = (readSection(RETIRED, RETIRED_COLUMNS) ?? []).map(([behavior, issue, change]) => ({ behavior, issue, change }));
+  for (const row of rows ?? []) {
+    judgeRow(row, fail);
+    judgePort(row, retired, fail);
+  }
+  judgeRetired(retired, rows ?? [], fail);
   return refused ? 1 : 0;
 }
 

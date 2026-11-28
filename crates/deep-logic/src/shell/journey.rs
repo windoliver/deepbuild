@@ -531,6 +531,10 @@ pub fn play(
         .unwrap_or([1512.0, 982.0]);
     let policy = Policy::of(spec.get("level"));
     let mut run = Run::new(shell, stored, screens, plants, size);
+    run.keeper = super::profile::Keeper::new(call, plants.done_in_save);
+    let fresh = call.get("fresh") == Some(&Value::Bool(true))
+        || spec.get("launch").and_then(Value::as_str) == Some("fresh");
+    let profile = run.keeper.open(shell, &mut run.state, fresh);
     let mut extra = Map::new();
     let stopped = {
         let mut j = J {
@@ -573,8 +577,10 @@ pub fn play(
                                       "text": c.text.as_ref().and_then(|t| items.get(t)), "does": does}))
             })
             .collect();
-        let frame = run.screens.frame(&run.prompted(s), size, 0.0);
-        let mut v = json!({"controls": controls, "frame": frame, "size": size,
+        let doc = run.prompted(s);
+        let frame = run.screens.frame(&doc, size, 0.0);
+        let texts = run.screens.texts(&doc, size).unwrap_or_default();
+        let mut v = json!({"controls": controls, "frame": frame, "size": size, "texts": texts,
                            "items": items.iter().map(|(k, b)| (k.clone(), json!(b))).collect::<Map<_, _>>()});
         if let Some(e) = screen.ends {
             v["ends"] = json!(e);
@@ -596,12 +602,18 @@ pub fn play(
         }
         shown.insert(screen.name.clone(), v);
     }
+    if let Some(l) = run.level.as_ref() {
+        let t = l.given_track();
+        run.tracks.push(t);
+    }
     let recording = extra.remove("recording").filter(|r| !r.is_null());
     let mut out = json!({
         "journey": journey, "device": device, "size": size,
         "steps": run.rows, "screens": shown, "entered": run.entered, "carry": run.carry,
         "track": run.track, "refused": null, "stopped": stopped.err(), "recording": recording,
         "levels": shell.levels.len(),
+        "profile": profile, "profiles": run.keeper.written, "level_tracks": run.tracks,
+        "completions": run.completions,
     });
     for (k, v) in extra {
         out[k] = v;
@@ -799,11 +811,74 @@ fn script(
             }
         }
         "layout" => {}
+        "moves" | "relaunch" => {
+            for m in spec
+                .get("moves")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+            {
+                moved(j, m, policy)?;
+            }
+        }
         other => {
             return Err(json!({"code": "bad_input", "message": format!("no journey {other}")}))
         }
     }
     Ok(())
+}
+
+fn moved(j: &mut J, m: &Value, policy: &Policy) -> Result<(), Stop> {
+    if let Some(id) = m.get("activate").and_then(Value::as_str) {
+        let known = j
+            .run
+            .shown()
+            .is_some_and(|s| j.shell().screens[s].controls.iter().any(|c| c.id == id));
+        if !known {
+            let screen = j.screen_name();
+            return Err(
+                json!({"code": "shell.device", "screen": screen, "control": id,
+                "message": format!("the {screen} screen shows no control {id} to activate")}),
+            );
+        }
+        return j.activate(id);
+    }
+    if let Some(id) = m.get("set").and_then(Value::as_str) {
+        let control = j.run.shown().and_then(|s| {
+            j.shell().screens[s]
+                .controls
+                .iter()
+                .find(|c| c.id == id)
+                .cloned()
+        });
+        let Some(c) = control else {
+            let screen = j.screen_name();
+            return Err(
+                json!({"code": "shell.device", "screen": screen, "control": id,
+                "message": format!("the {screen} screen shows no control {id} to set")}),
+            );
+        };
+        let want = m.get("value").and_then(Value::as_f64).unwrap_or(0.0);
+        let steps = match c.kind {
+            Kind::Choice => c.options.iter().position(|o| o.as_f64() == Some(want)).ok_or_else(|| {
+                json!({"code": "shell.device", "control": id, "message": format!("{id} has no option {want}")})
+            })? as i64,
+            _ => ((want - c.range[0]) / c.increment.max(1e-9)).round() as i64,
+        };
+        j.set(id, steps)?;
+        return j.settle();
+    }
+    if m.get("back").is_some() {
+        return j.back();
+    }
+    if m.get("pause").is_some() {
+        return j.pause();
+    }
+    match m.get("play") {
+        Some(Value::Number(k)) => j.play(policy, Some(k.as_i64().unwrap_or(0) + 1)),
+        Some(_) => j.play(policy, None),
+        None => Err(json!({"code": "bad_input", "message": format!("no move {m}")})),
+    }
 }
 
 /// On screen `s`: the first input, then the device's down through every control and each setting changed in turn.

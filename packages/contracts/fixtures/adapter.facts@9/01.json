@@ -886,8 +886,13 @@
             "from": "subagent"
           },
           {
-            "match": { "turnOrigin": "peer" },
+            "match": { "turnOrigin": "peer", "origin.kind": "peer" },
             "from": "session"
+          },
+          {
+            "match": { "turnOrigin": "peer", "origin.kind": "channel" },
+            "from": "channel",
+            "data": { "server": "origin.server" }
           },
           {
             "match": { "turnOrigin": "scheduled" },

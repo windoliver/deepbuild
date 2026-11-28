@@ -9,8 +9,8 @@ import { homedir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import type { CheckContext, Failure } from '@deepbuild/conformance';
 import {
-  approve, cantFail, clock, escape, exec, finish, LEAN_FLAGS, lineAt, Missing, missingRun, Overran, overranRun, redact, sources, toolsOf,
-  unfoundCause, workCopy,
+  approve, cantFail, clock, escape, exec, finish, lineAt, Missing, missingRun, Overran, overranRun, redact, sources, unfoundCause, versionOf,
+  workCopy,
 } from './run.js';
 import type { Exec, Locate } from './run.js';
 import type { Cause, Checked, Fault, MutantReport, ProofSpec } from './types.js';
@@ -21,6 +21,8 @@ const CHALLENGE = 'DeepProofChallenge';
 const SOLUTION = 'DeepProofSolution';
 /** Mutants tried per check, at most. */
 const MUTANTS = 12;
+const LEAN_FLAGS = process.platform === 'darwin' ? ['--inadvisably-no-sandbox'] : [];
+const toolsOf = (version: string): Record<string, string> => ({ lean4: version, 'lean4.comparator': LEAN_FLAGS.join(' ') });
 
 type Lake = (args: string[], into?: string) => Exec;
 /** Where a theorem is declared: its file, the line of `theorem <name>`, and the last line before the next declaration. */
@@ -107,7 +109,7 @@ export function lean(spec: ProofSpec, ctx: CheckContext, fault: Fault): Checked 
     const failures: Failure[] = [];
     const evidence = [`lean ${version}`];
     const done = (receipt: string, testsRun = 0): Checked =>
-      finish({ testsRun, failures, causes, proposals, tools: toolsOf(spec, version), read, evidence, receipt: `comparator on Lean ${version}: ${receipt}`, smallest: null });
+      finish({ testsRun, failures, causes, proposals, tools: toolsOf(version), read, evidence, receipt: `comparator on Lean ${version}: ${receipt}`, smallest: null });
 
     // The build is never the result, but a failed one is the checker refusing at the file and line it names.
     const built = lake(['build']);
@@ -172,8 +174,8 @@ export function lean(spec: ProofSpec, ctx: CheckContext, fault: Fault): Checked 
     const where = process.platform === 'darwin' ? 'unsandboxed (macOS has no bubblewrap), in a hermetic run of the check\'s temporary checkout' : 'in comparator\'s sandbox';
     return done(`${found.join(', ')} judged against the approved statements, on exports the runner built, ${where}`, found.length);
   } catch (error) {
-    if (error instanceof Overran) return overranRun(spec, ctx.deadline);
-    if (error instanceof Missing) return missingRun(spec, error.message);
+    if (error instanceof Overran) return overranRun(toolsOf(versionOf(spec)), ctx.deadline);
+    if (error instanceof Missing) return missingRun(toolsOf(versionOf(spec)), error.message);
     throw error;
   } finally {
     rmSync(work, { recursive: true, force: true });

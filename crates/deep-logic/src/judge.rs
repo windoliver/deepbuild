@@ -104,10 +104,10 @@ impl Logic {
                 .into()
         };
         for item in &piece.items {
-            // #1181: circuit@1's rules read the arrays its library writes at every step.
             if let Some(c) = &item.circuit {
                 let rules = line.get("rules").unwrap_or(&Value::Null);
-                let mut judge = circuit::Judge::new(item, c, rules).map_err(|e| bad(&e))?;
+                let mut judge =
+                    circuit::Judge::new(item, c, rules, &entries).map_err(|e| bad(&e))?;
                 let mut player = bake::Player::new(&rec, item);
                 for k in 0..steps {
                     if let Some(b) = player.at(k) {

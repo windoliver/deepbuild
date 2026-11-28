@@ -39,6 +39,7 @@ mod pace;
 pub mod present;
 pub mod program;
 pub mod quat;
+pub mod relations;
 pub mod remap;
 mod rows;
 pub mod schedule;

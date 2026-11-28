@@ -1,0 +1,28 @@
+{
+  "benchmarks/hub-launchd.mjs": [
+    {
+      "find": [
+        "    for (const [side, said] of [['chosen', \"the build's type\"], ['background', 'the type planted as Background']]) {"
+      ],
+      "wrong": [
+        "    for (const [side, said] of [['chosen', \"the build's type\"]]) {"
+      ]
+    },
+    {
+      "find": [
+        "    const said = `${ratio.chosen.toFixed(2)} times the terminal's, and ${ratio.background.toFixed(2)} times with the type planted as Background`;"
+      ],
+      "wrong": [
+        "    const said = `${ratio.chosen.toFixed(2)} times the terminal's`;"
+      ]
+    },
+    {
+      "find": [
+        "    return ratio.background > limit ? { status: 'PASS', reason: said, ratio } : { status: 'INCONCLUSIVE', reason: `${said}, within ${limit} times as well: this Mac doesn't tell the limits apart`, ratio };"
+      ],
+      "wrong": [
+        "    return { status: 'PASS', reason: said, ratio };"
+      ]
+    }
+  ]
+}

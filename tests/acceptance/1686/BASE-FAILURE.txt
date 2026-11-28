@@ -1,0 +1,24 @@
+# Base run of tests/acceptance/1686 at d303e2b64 (d303e2b649c275e6ae96e71ad28648bc5681536f), 2026-11-26, Node v24.22.0, macOS (arm64), shared Mac under load (1-min load 30 at start, 40 at end)
+# The base already holds 4b4e5fd88 ("Test: agents' facts are read through @deepbuild/adapters alone (#1686)"), tests/facts-entry.test.mjs and readFacts: the whole suite passes here, so every tagged test needs a twin.
+# ./node_modules/.bin/vitest run --reporter=verbose tests/acceptance/1686, then ./node_modules/.bin/tsc --noEmit -p tests/acceptance/1686/tsconfig.json
+# No cargo build was run: target/ holds no deep-hook (see README, packages/hub/test/mods-start.test.ts).
+
+21:26  up 7 days,  1:53, 3 users, load averages: 29.99 32.86 37.37
+
+ RUN  v5.0.5 <repo>
+
+ ✓ tests/acceptance/1686/facts-entry.test.ts > #1686.b9fba25b tests/facts-entry.test.mjs, which lists every line in a package's src outside adapters and the CLI that names the adapters/ folder by path, passes on this checkout 226ms
+ ✓ tests/acceptance/1686/facts-entry.test.ts > #1686.0140ed0a readFacts('loops.facts.json') equals the file on disk, and readFacts('../package.json') is refused 1ms
+ ✓ tests/acceptance/1686/unit-tests.test.ts > #1686.1341dfbb the unit tests of otlp pass: every test under packages/otlp/test 5592ms
+ ✓ tests/acceptance/1686/unit-tests.test.ts > #1686.1341dfbb the unit tests of adapters pass: every test in tests/adapters.test.mjs 181ms
+ ✓ tests/acceptance/1686/unit-tests.test.ts > #1686.1341dfbb the unit tests of the hub's mods pass: every test in packages/hub/test/mods.test.ts 1970ms
+ ✓ tests/acceptance/1686/runner-unit-tests.test.ts > #1686.1341dfbb the unit tests of runner pass: every test under packages/runner/test 38715ms
+
+ Test Files  3 passed (3)
+      Tests  6 passed (6)
+   Start at  21:26:49
+   Duration  38.97s (tests 100%)
+
+exit 0
+21:27  up 7 days,  1:54, 3 users, load averages: 39.77 35.53 38.17
+tsc exit 0
