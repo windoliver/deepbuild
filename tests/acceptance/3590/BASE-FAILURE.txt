@@ -1,0 +1,94 @@
+# node --test 'tests/acceptance/3590/*.test.mjs' at the merge base 5f95d82bb, on the Spark (Linux, 20 cores, 1-minute load 274 to 315), 2026-11-26.
+# Paths redacted: <checkout> is the checkout the suite ran from.
+
+✖ #3590.14b452d8 with DEEP_TEST_GRANT_STALL unset and the table free, claimPair returns a pair and its top-level bay-pair grant is logged with stall: 720 and no wait (1514.36799ms)
+✔ #3590.e0489985 with DEEP_TEST_GRANT_STALL at 0.05, a claim behind a line of bay-pair holders whose grants change hands every 2 s for 20 s returns a pair (34372.207355ms)
+✔ #3590.da82cdc0 a copy of the repository is refused at once with every pair held: claimPair returns { refused } and the log holds no bay-pair request of its process (7142.734427ms)
+✖ #3590.e8f50f42 with DEEP_TEST_GRANT_STALL at 0.05 and every bay pair held still, bays.mjs change prints "INCONCLUSIVE no grant: no bay pair changed hands within 0.05 min" and exits 3 within 5 minutes, its command unrun, its timeout logged with stall: 0.05 (305086.690462ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 2
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 305599.188933
+
+✖ failing tests:
+
+test at tests/acceptance/3590/claim.test.mjs:7:1
+✖ #3590.14b452d8 with DEEP_TEST_GRANT_STALL unset and the table free, claimPair returns a pair and its top-level bay-pair grant is logged with stall: 720 and no wait (1514.36799ms)
+  AssertionError [ERR_ASSERTION]: the claim's granted entry carries {"wait":30}, not stall: 720
+  {"at":"2026-11-26T10:26:32.776Z","event":"granted","class":"bay-pair","grant":"top-level","id":"3d34f2fd7f447640","pid":778942,"index":1,"load":274.25,"cores":20,"wait":30}
+  
+  undefined !== 720
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3590/claim.test.mjs:18:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: 720,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3590/stall.test.mjs:10:1
+✖ #3590.e8f50f42 with DEEP_TEST_GRANT_STALL at 0.05 and every bay pair held still, bays.mjs change prints "INCONCLUSIVE no grant: no bay pair changed hands within 0.05 min" and exits 3 within 5 minutes, its command unrun, its timeout logged with stall: 0.05 (305086.690462ms)
+  AssertionError [ERR_ASSERTION]: bays.mjs did not end within 300 s
+  exit null (SIGKILL)
+  stdout:
+  
+  stderr:
+  
+      at finished (file://<checkout>/tests/acceptance/1117/helpers.mjs:252:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file://<checkout>/tests/acceptance/3590/stall.test.mjs:16:18)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'fail',
+    diff: 'simple'
+  }
+
+# The throwaway guess (claimPair on acquire('bay-pair', { stall }), DEEP_TEST_GRANT_STALL else 720), run 1:
+✔ #3590.14b452d8 with DEEP_TEST_GRANT_STALL unset and the table free, claimPair returns a pair and its top-level bay-pair grant is logged with stall: 720 and no wait (3582.831559ms)
+✔ #3590.e0489985 with DEEP_TEST_GRANT_STALL at 0.05, a claim behind a line of bay-pair holders whose grants change hands every 2 s for 20 s returns a pair (34174.644043ms)
+✔ #3590.da82cdc0 a copy of the repository is refused at once with every pair held: claimPair returns { refused } and the log holds no bay-pair request of its process (3834.205045ms)
+✔ #3590.e8f50f42 with DEEP_TEST_GRANT_STALL at 0.05 and every bay pair held still, bays.mjs change prints "INCONCLUSIVE no grant: no bay pair changed hands within 0.05 min" and exits 3 within 5 minutes, its command unrun, its timeout logged with stall: 0.05 (11604.754604ms)
+ℹ pass 4
+ℹ fail 0
+ℹ duration_ms 37997.744918
+
+# The guess, run 2:
+✔ #3590.14b452d8 with DEEP_TEST_GRANT_STALL unset and the table free, claimPair returns a pair and its top-level bay-pair grant is logged with stall: 720 and no wait (2249.358961ms)
+✔ #3590.e0489985 with DEEP_TEST_GRANT_STALL at 0.05, a claim behind a line of bay-pair holders whose grants change hands every 2 s for 20 s returns a pair (26604.361603ms)
+✔ #3590.da82cdc0 a copy of the repository is refused at once with every pair held: claimPair returns { refused } and the log holds no bay-pair request of its process (1893.533968ms)
+✔ #3590.e8f50f42 with DEEP_TEST_GRANT_STALL at 0.05 and every bay pair held still, bays.mjs change prints "INCONCLUSIVE no grant: no bay pair changed hands within 0.05 min" and exits 3 within 5 minutes, its command unrun, its timeout logged with stall: 0.05 (5862.52393ms)
+ℹ pass 4
+ℹ fail 0
+ℹ duration_ms 29162.340758
+
+# The guess with twins/fixed-wait/lines.json laid over scripts/bays.mjs:
+✖ #3590.14b452d8 with DEEP_TEST_GRANT_STALL unset and the table free, claimPair returns a pair and its top-level bay-pair grant is logged with stall: 720 and no wait (2409.103946ms)
+✖ #3590.e0489985 with DEEP_TEST_GRANT_STALL at 0.05, a claim behind a line of bay-pair holders whose grants change hands every 2 s for 20 s returns a pair (10652.362946ms)
+✔ #3590.da82cdc0 a copy of the repository is refused at once with every pair held: claimPair returns { refused } and the log holds no bay-pair request of its process (2716.202236ms)
+✖ #3590.e8f50f42 with DEEP_TEST_GRANT_STALL at 0.05 and every bay pair held still, bays.mjs change prints "INCONCLUSIVE no grant: no bay pair changed hands within 0.05 min" and exits 3 within 5 minutes, its command unrun, its timeout logged with stall: 0.05 (8882.986887ms)
+ℹ pass 1
+ℹ fail 3
+ℹ duration_ms 13261.521207
+  AssertionError [ERR_ASSERTION]: the claim's granted entry carries {"wait":0.05}, not stall: 720
+  AssertionError [ERR_ASSERTION]: claimPair returned { blocked: "INCONCLUSIVE no grant: no bay pair came within 0.05 min" } behind a line whose grants changed hands every 2 s
+  AssertionError [ERR_ASSERTION]: bays.mjs printed no line starting "INCONCLUSIVE no grant: no bay pair changed hands within 0.05 min"; its INCONCLUSIVE line: "INCONCLUSIVE no grant: no bay pair came within 0.05 min"
+
+# The guess with a claimPair that asks acquire('bay-pair', { wait: 0.05 }) before its refusal (refusal.test.mjs alone):
+✖ #3590.da82cdc0 a copy of the repository is refused at once with every pair held: claimPair returns { refused } and the log holds no bay-pair request of its process (4898.572094ms)
+ℹ pass 0
+ℹ fail 1
+ℹ duration_ms 5054.785275
+  AssertionError [ERR_ASSERTION]: the log holds bay-pair entries of the refused claim's process (pid 970941)

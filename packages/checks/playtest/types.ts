@@ -1,4 +1,4 @@
-// The playtest's shapes (canvas primitives: Check input: playtest; Check input: plug-in reads).
+// The playtest's shapes (canvas primitives: Check input: playtest; Check input: extension reads).
 import type { PlayIface } from './iface.ts';
 
 /** A policy: data, like a tour. Keys set controls at their times; each pick sets its control every `every` seconds to a value drawn by hash(the run's seed, the control, the step). A value may name a play interface's action on that control (#555). */
@@ -48,7 +48,7 @@ export interface PlaytestInput {
   soak?: { bot: Bot; steps: number; every?: number; limits: { memory?: number; save?: number; step?: number } };
 }
 
-/** What `deep.canvas.play` answers (Check input: plug-in reads). */
+/** What `deep.canvas.play` answers (Check input: extension reads). */
 export interface PlayAnswer {
   steps: number;
   /** One step's length, in flicks. */

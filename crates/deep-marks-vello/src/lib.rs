@@ -18,6 +18,7 @@
 //! color at the arc length of the nearest point on the path, so the stroke has no seams where its
 //! segments meet.
 
+mod fetched;
 pub mod tables;
 
 use std::sync::Arc;

@@ -1,0 +1,51 @@
+{
+  "record": {
+    "sha256": "2d533b39ea04309ad849bf6242c0acb949927c70254e2faf7675f73e2dc58c25",
+    "pack": "fixture/tables2@1.0.0",
+    "id": "d-unlisted.csv",
+    "license": {
+      "id": "CC0-1.0",
+      "terms": "CC0-1.0: a public domain dedication.",
+      "shareable": true,
+      "credit": null
+    },
+    "upstream": {
+      "url": "https://127.0.0.1:59357/fixture/tables2/d-unlisted.csv",
+      "version": "1.0.0",
+      "modified": "2026-01-01T00:00:00Z"
+    },
+    "files": [
+      {
+        "path": "d-unlisted.csv",
+        "bytes": 27,
+        "sha256": "2d533b39ea04309ad849bf6242c0acb949927c70254e2faf7675f73e2dc58c25"
+      }
+    ],
+    "fetched": {
+      "url": "https://127.0.0.1:59357/fixture/tables2/d-unlisted.csv",
+      "at": 1795832862818
+    },
+    "source": {
+      "url": "https://127.0.0.1:59357/fixture/tables2/d-unlisted.csv",
+      "fetched": 1795832862818
+    }
+  },
+  "rows": [
+    {
+      "group": "Tarn Vale Residents Register",
+      "fields": {
+        "title": "Metro area population",
+        "publisher": "Tarn Vale Residents Register",
+        "edition": "2022"
+      }
+    },
+    {
+      "group": "127.0.0.1",
+      "fields": {
+        "title": "–",
+        "publisher": "–",
+        "edition": "–"
+      }
+    }
+  ]
+}

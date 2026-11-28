@@ -1,0 +1,12 @@
+{
+  "scripts/benchmark.mjs": [
+    {
+      "find": [
+        "  const refused = unlike.filter((count) => !approved.includes(proposal(id, count)));"
+      ],
+      "wrong": [
+        "  const refused = unlike.filter(({ field, before, after }) => !approved.some((item) => item.endsWith(` › ${field} ${shown(before)} → ${shown(after)}`)));"
+      ]
+    }
+  ]
+}
