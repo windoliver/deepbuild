@@ -47,6 +47,9 @@ license = "Apache-2.0"
 repository = "https://github.com/longbridge/gpui-fast"
 resolver = "2"
 
+[dev-dependencies] # DeepBuild patch (windoliver/deepbuild#3625): upstream's workspace builds these tests with test-support on
+gpui = { package = "gpui-fast", path = ".", features = ["test-support"] }
+
 [features]
 bench = ["bench-support"]
 bench-support = [

@@ -180,6 +180,7 @@ default-features = false
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies.objc2-core-video]
 version = "0.3.2"
 features = [
+    "CVBase", # DeepBuild patch (windoliver/deepbuild#3625): the renderer's own tests lock a pixel buffer
     "CVBuffer",
     "CVImageBuffer",
     "CVPixelBuffer",
@@ -297,3 +298,6 @@ default-features = false
 [lints.rust.unexpected_cfgs]
 level = "allow"
 priority = 0
+
+[dev-dependencies] # DeepBuild patch (windoliver/deepbuild#3625): upstream's workspace builds these tests with test-support on
+gpui = { package = "gpui-fast", version = "0.1.19", features = ["test-support"] }
