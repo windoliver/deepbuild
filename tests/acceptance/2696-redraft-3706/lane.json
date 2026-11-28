@@ -1,0 +1,1 @@
+{ "alone": true, "why": "shared: the checkout's built packages, which tests/acceptance/2696/lint.test.mjs plants an unescaped file into while none-above.test.mjs reads them; same-text.test.mjs and heap.test.mjs each build a copy of the checkout and heap.test.mjs starts ten hubs", "slow": ["same-text.test.mjs", "heap.test.mjs"] }

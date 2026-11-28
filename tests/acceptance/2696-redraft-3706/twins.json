@@ -1,0 +1,29 @@
+{
+  "#2696.5a61170b": [
+    "skips-core-js",
+    "escapes-json-only"
+  ],
+  "#3706.61c191d3": [
+    "skips-core-js",
+    "escapes-json-only"
+  ],
+  "#2696.534150b4": [
+    "adds-a-line"
+  ],
+  "#3706.414a9c5f": [
+    "adds-a-line"
+  ],
+  "#2696.6fbf771a": [
+    "doubles-escapes"
+  ],
+  "#2696.be4d3304": [
+    "escapes-json-only"
+  ],
+  "#3706.c1a4b78e": [
+    "doubles-escapes",
+    "escapes-json-only"
+  ],
+  "#3706.75c61bdf": [
+    "hands-the-whole-folder"
+  ]
+}

@@ -1,0 +1,32 @@
+# npx vitest run tests/acceptance/2669 --reporter=verbose, once, on the base
+base: b4e6a09c05d015c22aef5982e27e5f55b7e054c6
+date: 2026-11-23T19:48:33Z
+node: v24.22.0
+load at start: { 100.63 94.06 90.68 }
+load at end: { 133.56 101.37 93.32 }
+(the clone's path is shown as <clone>)
+
+
+ RUN  v5.0.5 <clone>
+
+ × tests/acceptance/2669/late.test.ts > #2669.3a6c6d5b A status question after a session outside any repo opened its first task is answered from the record, however late the task lands > #2669.3a6c6d5b a session outside any repo whose first task lands after its first prompt's reply: "still going?" typed as the next prompt is answered from the record (the reply blocks it with the answer) and the hook log shows no model call for it 2576ms
+   → "still going?", typed as the next prompt after the session's first task landed late, is answered from the record (the UserPromptSubmit reply blocks the prompt with the answer as its reason): {"shown":["says done · next: DeepBuild (for 0s) · needs you: 0\nwork: /private/tmp/dh83-Ubgswb/w17bd44 · session a279aefe (claude-code) · resume: claude --resume a279aefe-9149-4da9-8f03-930b099ae588 · deep://sessions/a279aefe-9149-4da9-8f03-930b099ae588"],"model":true,"runs":[{"command":"exec '<scratch>","code":0,"signal":null,"timedOut":false,"stdout":"{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"DeepBuild: this session is outside any repo, so this task's home is the workspace at /private/tmp/dh83-Ubgswb/h/.deepbuild/workspaces/fixthecarttotalthenstop-f1919e24. Keep what you build there, as code where you can; your work there is committed for you at each stop.\"},\"systemMessage\":\"says done · next: DeepBuild (for 0s) · needs you: 0\\nwork: /private/tmp/dh83-Ubgswb/w17bd44 · session a279aefe (claude-code) · resume: claude --resume a279aefe-9149-4da9-8f03-930b099ae588 · deep://sessions/a279aefe-9149-4da9-8f03-930","stderr":""}]}: expected undefined to be defined
+ ✓ tests/acceptance/2669/late.test.ts > #2669.8fb05bc5 The workspace notice still reaches the agent once, at the first prompt or at the next prompt that goes to the model > #2669.8fb05bc5 first task landing late: across "Fix the cart total, then stop.", "still going?" and "Now add a test for total.ts.", the workspace notice reaches the agent exactly once, at the next prompt that goes to the model 2625ms
+ ✓ tests/acceptance/2669/late.test.ts > #2669.8fb05bc5 The workspace notice still reaches the agent once, at the first prompt or at the next prompt that goes to the model > #2669.8fb05bc5 first task opened as usual (its transcript entry before the hook): across "Fix the cart total, then stop." and "Now add a test for total.ts." after the stop, the workspace notice reaches the agent exactly once, with one of those prompts 2269ms
+ ✓ tests/acceptance/2669/status83.test.ts > #2669.6995f057 tests/acceptance/83/status.test.ts passes > #2669.6995f057 the repo's vitest runs tests/acceptance/83/status.test.ts and every test in it passes 12473ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2669/late.test.ts > #2669.3a6c6d5b A status question after a session outside any repo opened its first task is answered from the record, however late the task lands > #2669.3a6c6d5b a session outside any repo whose first task lands after its first prompt's reply: "still going?" typed as the next prompt is answered from the record (the reply blocks it with the answer) and the hook log shows no model call for it
+AssertionError: "still going?", typed as the next prompt after the session's first task landed late, is answered from the record (the UserPromptSubmit reply blocks the prompt with the answer as its reason): {"shown":["says done · next: DeepBuild (for 0s) · needs you: 0\nwork: /private/tmp/dh83-Ubgswb/w17bd44 · session a279aefe (claude-code) · resume: claude --resume a279aefe-9149-4da9-8f03-930b099ae588 · deep://sessions/a279aefe-9149-4da9-8f03-930b099ae588"],"model":true,"runs":[{"command":"exec '<scratch>","code":0,"signal":null,"timedOut":false,"stdout":"{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"DeepBuild: this session is outside any repo, so this task's home is the workspace at /private/tmp/dh83-Ubgswb/h/.deepbuild/workspaces/fixthecarttotalthenstop-f1919e24. Keep what you build there, as code where you can; your work there is committed for you at each stop.\"},\"systemMessage\":\"says done · next: DeepBuild (for 0s) · needs you: 0\\nwork: /private/tmp/dh83-Ubgswb/w17bd44 · session a279aefe (claude-code) · resume: claude --resume a279aefe-9149-4da9-8f03-930b099ae588 · deep://sessions/a279aefe-9149-4da9-8f03-930","stderr":""}]}: expected undefined to be defined
+ ❯ tests/acceptance/2669/late.test.ts:55:236
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 3 passed (4)
+   Start at  11:48:34
+   Duration  12.74s (tests 99%)
+

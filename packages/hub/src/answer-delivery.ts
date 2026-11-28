@@ -173,6 +173,11 @@ export class AnswerDelivery {
     this.routesOf(session, cwd).later.push(text);
   }
 
+  notice(session: string, cwd: string, text: string): void {
+    const r = this.routesOf(session, cwd);
+    (r.notices ??= []).push(text);
+  }
+
   /**
    * The checks a stop's last message promises for later: the first sets the session's wake-up, or sets it again,
    * keeping its first end; a wake-up never sets itself again. A promise set a fourth time, or due past its end, is
@@ -512,6 +517,7 @@ export class AnswerDelivery {
       // A continue parked for the next prompt goes with the first prompt after a resume (#85); a clear or a
       // compaction starts a new session ID, and the cleared one's continues end with it.
       if (old) fresh.later = [...(old.handed ?? []), ...old.later];
+      if (old?.notices?.length) fresh.notices = old.notices;
       if (old?.places) fresh.places = true;
       // A session this hub forgot, or never met: the record holds what its resume needs (#1866).
       if (!old && meta.fields?.source === 'resume' && !this.options.state().sessions.has(meta.session)) void this.options.schedule.queue(() => this.recall(meta.session)).catch(() => undefined);
@@ -535,6 +541,7 @@ export class AnswerDelivery {
       // Its parked continues wait for the session to be resumed (#85), in an entry of no folder, so nothing reads
       // it as the folder's last session.
       if (r.later.length || r.handed?.length) this.routesOf(meta.session).later = [...(r.handed ?? []), ...r.later];
+      if (r.notices?.length) this.routesOf(meta.session).notices = r.notices;
       this.over(meta.session);
     } else if (meta.event === 'StopFailure') {
       // A turn that ends on an API error ends like a Stop, and Claude Code starts its waiter as at a Stop; one an

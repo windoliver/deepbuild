@@ -86,6 +86,7 @@ export interface Routes {
   cwd: string; shown: Set<string>; covered: boolean; holding: number; busy: number; ended: number; prompt?: string | undefined; handed?: string[];
   waiter?: { key: number; at: number; since: number; give(reply: Obj): void } | undefined;
   continued: number; capped: boolean; sendBacks: string[]; later: string[]; wakes?: boolean;
+  notices?: string[];
   /** The claims whose slow checks a stop wasn't held for (#39): each one's verdict goes with the next prompt after it ends. */
   slowClaims?: string[];
   /** Its waiter is the agent's own package, which places an answer itself, busy or idle, and says what became of each (#40). */
