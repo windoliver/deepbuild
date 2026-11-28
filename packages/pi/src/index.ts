@@ -161,12 +161,14 @@ function spool(request: string): void {
  * when the hub can't be reached or doesn't answer in time. The hub posts a hook in the step it acknowledges it, so the
  * next one, sent only after this acknowledgement, lands after it.
  */
-function sendHook(socket: string, request: string, when: Fired, acked: () => void): Promise<Reply | undefined> {
+function sendHook(socket: string, request: string, id: string, when: Fired, acked: () => void): Promise<Reply | undefined> {
   return new Promise((resolve) => {
     const due = when.start + ACK_MS;
     let done = false;
     let timer: NodeJS.Timeout | undefined;
     let sock: net.Socket | undefined;
+    let connected = false;
+    let expired = false;
     const end = (value: Reply | undefined, late: boolean) => {
       if (done) return;
       done = true;
@@ -176,9 +178,9 @@ function sendHook(socket: string, request: string, when: Fired, acked: () => voi
       if (!value) spool(late && plant !== 'late-unmarked' ? `${request.slice(0, -2)},"late":true}\n` : request);
       resolve(value);
     };
-    if (performance.now() >= due) return end(undefined, true);
     sock = net.connect(socket);
-    timer = setTimeout(() => end(undefined, true), due - performance.now());
+    sock.on('connect', () => { connected = true; if (expired) end(undefined, true); });
+    timer = setTimeout(() => { if (connected) end(undefined, true); else expired = true; }, Math.max(0, due - performance.now()));
     let buffer = '';
     let greeted = false;
     sock.on('error', () => end(undefined, false));
@@ -193,6 +195,7 @@ function sendHook(socket: string, request: string, when: Fired, acked: () => voi
           greeted = true;
           sock!.write(request);
         } else if ('ack' in message) {
+          if (message.ack !== id) return end(undefined, false);
           acked();
           const hold = message.hold_until_ms;
           clearTimeout(timer);
@@ -307,10 +310,11 @@ export default function deepbuild(pi: Pi): void {
     const payload = { hook_event_name: event, session_id: session, cwd: ctx?.cwd ?? process.cwd(), ...(file ? { transcript_path: file } : {}), ...(version ? { agent_version: version } : {}), ...fields };
     const at = BigInt(when.at) * 1_000_000n;
     lastSeq = at > lastSeq ? at : lastSeq + 1n;
-    const request = line({ agent: 'pi', event, seq: lastSeq.toString(), id: ulid(when.at), pid: process.pid, ppid: process.pid, matched: ruling?.matched ?? [], ...(ruling?.notes ? { notes: ruling.notes } : {}), ...(ruling?.stage ? { stage: ruling.stage } : {}), payload });
+    const id = ulid(when.at);
+    const request = line({ agent: 'pi', event, seq: lastSeq.toString(), id, pid: process.pid, ppid: process.pid, matched: ruling?.matched ?? [], ...(ruling?.notes ? { notes: ruling.notes } : {}), ...(ruling?.stage ? { stage: ruling.stage } : {}), payload });
     let acked!: () => void;
     const ack = new Promise<void>((done) => { acked = done; });
-    const reply = sending.then(() => sendHook(socket, request, when, acked));
+    const reply = sending.then(() => sendHook(socket, request, id, when, acked));
     sending = ack;
     return reply;
   }
