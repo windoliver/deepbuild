@@ -255,7 +255,6 @@ export class JobTools {
    * `{outputs}` the same way on stdout. It reads no path, name or time of an input: only the bytes it is given. A tool
    * that calls a provider is also given `call` (#1923), and may reach that one host and write its call journal's folder.
    * Its counters come as lines on stderr while it runs (`counterOf`), each handed to `watch` (#1925); its other text is its own.
-   * What its run used, as the supervisor's scans of its tree read it (#3220), goes to `usage` once it has ended (#3570).
    */
   private async runTool(folder: string, tool: JobTool, params: Record<string, JsonValue>, inputs: JobBytes, call?: JobCall, stop?: AbortSignal, watch?: (counter: JobCounter) => void, usage?: (used: Used) => void): Promise<Record<string, Uint8Array>> {
     const input = Buffer.from(JSON.stringify({ params, inputs: encodedInputs(inputs), ...(call ? { call } : {}) }));
@@ -353,7 +352,6 @@ export class JobTools {
         const why = await this.coreQualifies(held.qualification.core, kind, tool, descriptor, entry.folder);
         if (why) return refuse(`${entry.id}'s tool ${tool} fails ${kind}'s qualification: ${why}, and it doesn't join ${kind}`);
       }
-      // A tool that writes some of its kind's outputs (#3570) names only outputs the kind declares.
       const unknown = (descriptor.outputs ?? []).filter((o) => !Object.hasOwn(held.outputs, o));
       if (unknown.length) refuse(`${entry.id}'s tool ${tool} names the outputs ${unknown.join(', ')}, which ${kind} doesn't declare`);
       // A fixture runs on the tools whose own params take it (#3035), so a kind of several formats qualifies each

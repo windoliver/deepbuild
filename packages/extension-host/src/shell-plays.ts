@@ -20,7 +20,6 @@ const SHELL_ALL = {
 export function shellRefusal(input: ShellInput, shell: unknown): string | undefined {
   const s = (isPlain(shell) ? shell : {}) as Record<string, unknown>;
   const list = (v: unknown, all: unknown[]): string[] => (Array.isArray(v) ? v : all).map(canonical);
-  // #3605: a moves journey's check replays each level track its plays recorded, with no shell.
   const journeys = list(input.journeys, SHELL_ALL.journeys);
   const replay = s.journey === 'replay' && journeys.includes(canonical('moves'));
   if (!replay && !journeys.includes(canonical(s.journey))) return `the journey ${String(s.journey)} isn't one it gives`;
@@ -30,7 +29,6 @@ export function shellRefusal(input: ShellInput, shell: unknown): string | undefi
   return undefined;
 }
 
-/** #3605: a shell play's level tracks, each a track of this run the check may replay with no shell. */
 export function levelTracks(reply: Record<string, unknown>): unknown[] {
   const shell = (isPlain(reply.shell) ? reply.shell : {}) as { level_tracks?: unknown };
   return Array.isArray(shell.level_tracks) ? shell.level_tracks.map((t) => (isPlain(t) ? t.entries : undefined)) : [];
