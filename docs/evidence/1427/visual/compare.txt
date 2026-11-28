@@ -1,0 +1,48 @@
+drive: no error, no panic
+drive: no error, no panic
+drive: no error, no panic
+main rc=0
+drive: no error, no panic
+drive: no error, no panic
+drive: no error, no panic
+head rc=0
+needs-you-hover+0000ms: identical (byte-equal PNG)
+needs-you-hover+0050ms: identical (byte-equal PNG)
+needs-you-hover+0100ms: identical (byte-equal PNG)
+needs-you-hover+0200ms: identical (byte-equal PNG)
+needs-you-hover+1000ms: identical (byte-equal PNG)
+needs-you-hover+1500ms: 21744 px differ of 12386304 (0.1755%), box (261, 130, 681, 182), max channel delta 84
+needs-you-hover+1550ms: 21713 px differ of 12386304 (0.1753%), box (261, 130, 681, 182), max channel delta 68
+needs-you-hover+1600ms: identical (byte-equal PNG)
+needs-you-hover+1650ms: identical (byte-equal PNG)
+needs-you-hover+1700ms: identical (byte-equal PNG)
+needs-you-hover+2000ms: identical (byte-equal PNG)
+needs-you-hover+3000ms: identical (byte-equal PNG)
+needs-you-launch: identical (byte-equal PNG)
+project-hover+0000ms: identical (byte-equal PNG)
+project-hover+0050ms: identical (byte-equal PNG)
+project-hover+0100ms: identical (byte-equal PNG)
+project-hover+0200ms: identical (byte-equal PNG)
+project-hover+1000ms: identical (byte-equal PNG)
+project-hover+1500ms: 20068 px differ of 12386304 (0.1620%), box (261, 2770, 649, 2822), max channel delta 52
+project-hover+1550ms: 20051 px differ of 12386304 (0.1619%), box (261, 2770, 649, 2822), max channel delta 68
+project-hover+1600ms: identical (byte-equal PNG)
+project-hover+1650ms: identical (byte-equal PNG)
+project-hover+1700ms: identical (byte-equal PNG)
+project-hover+2000ms: identical (byte-equal PNG)
+project-hover+3000ms: identical (byte-equal PNG)
+project-launch: identical (byte-equal PNG)
+session-hover+0000ms: identical (byte-equal PNG)
+session-hover+0050ms: identical (byte-equal PNG)
+session-hover+0100ms: identical (byte-equal PNG)
+session-hover+0200ms: identical (byte-equal PNG)
+session-hover+1000ms: identical (byte-equal PNG)
+session-hover+1500ms: 20038 px differ of 12386304 (0.1618%), box (261, 2770, 649, 2822), max channel delta 62
+session-hover+1550ms: 20051 px differ of 12386304 (0.1619%), box (261, 2770, 649, 2822), max channel delta 68
+session-hover+1600ms: identical (byte-equal PNG)
+session-hover+1650ms: identical (byte-equal PNG)
+session-hover+1700ms: identical (byte-equal PNG)
+session-hover+2000ms: identical (byte-equal PNG)
+session-hover+3000ms: identical (byte-equal PNG)
+session-launch: identical (byte-equal PNG)
+done 2026-11-28T04:45:44Z
