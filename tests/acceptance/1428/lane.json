@@ -1,0 +1,1 @@
+{ "alone": true, "why": "shared: the GPU; four files build deep-gpu with the test-meter feature through the throttle and run every WGSL pass's analytic fixture and planted twins on the Metal device, and the two lane files copy the checkout into a scratch folder", "slow": ["ac1-fixtures.test.ts"] }
