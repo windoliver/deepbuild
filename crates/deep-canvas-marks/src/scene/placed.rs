@@ -290,6 +290,7 @@ pub(super) fn placed(
         }
         // #269: a grid image draws its logic grid as one image.
         "grid_image@1" => crate::grid_image::marks(id, params, ctx.palette, pos)?,
+        "sources@1" => crate::sources::marks(id, item, ctx.paints.doc, ctx.palette, pos)?,
         "marks@1" if crate::atlas::is_atlas(params) => {
             let rows = data::rows(
                 id,

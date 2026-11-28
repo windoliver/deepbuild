@@ -15,7 +15,9 @@ export interface PackAsset {
   path: string; url: string; sha256: string; size: number;
   license: { id: string; terms: string; shareable: boolean; credit: string | null };
   upstream: { url: string; version: string; modified: string };
+  title?: string; publisher?: string; edition?: string;
 }
+export const PUBLICATION_FIELDS = ['title', 'publisher', 'edition'] as const;
 export interface PackVersion {
   id: string; version: string; ref: string; digest: string; manifest: Obj; assets: PackAsset[];
   /** How many times the canvas core's pack check ran on this version, for a pack the release ships (#1720). */
@@ -52,6 +54,7 @@ export function readPack(from: string, shipped = false): PackVersion {
     if (a.url === undefined) { a.hex = local(from, a.path).toString('hex'); continue; }
     const l = a.license, u = a.upstream;
     if (typeof a.url !== 'string' || !object(l) || typeof l.id !== 'string' || !l.id || typeof l.terms !== 'string' || !l.terms || typeof l.shareable !== 'boolean' || (l.credit !== null && typeof l.credit !== 'string') || !object(u) || typeof u.url !== 'string' || typeof u.version !== 'string' || typeof u.modified !== 'string') throw Error(`${m.id}: ${a.path} needs its URL, license terms and pinned upstream`);
+    for (const field of PUBLICATION_FIELDS) if (a[field] !== undefined && (typeof a[field] !== 'string' || !a[field])) throw Error(`${m.id}: ${a.path} names its ${field} as text, or leaves it out`);
     urlOf(a.url); urlOf(u.url);
     if (/^https:\/\//.test(l.terms)) urlOf(l.terms);
     else l.terms = local(from, l.terms).toString('utf8');

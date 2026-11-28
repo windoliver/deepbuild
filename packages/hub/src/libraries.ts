@@ -19,7 +19,7 @@ import type { License } from '@deepbuild/evidence';
 import type { ExtensionHost } from '@deepbuild/extension-host';
 import type { PlanInput } from '@deepbuild/asks';
 import { freeBytes } from './disk.js';
-import { forbiddenLicense, Packs } from './packs.js';
+import { forbiddenLicense, Packs, PUBLICATION_FIELDS } from './packs.js';
 import { isRecord as isObj } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
@@ -36,14 +36,17 @@ export interface AssetRow {
   thumbnail: string | null; url: string; from: { library: string } | { pack: string }; stale?: true; age_ms?: number;
 }
 export interface FileRef { path: string; bytes: number; sha256: string }
+export interface Publication { title?: string; publisher?: string; edition?: string }
+export interface FetchedFile extends Publication { url: string; fetched: number; bytes: number; license: AssetLicense }
 /** A fetched asset as the store keeps it: its main file's hash, its files, its license and its upstream. */
 export interface AssetRecord {
   sha256: string; library?: string; pack?: string; id: string; license: AssetLicense; upstream: { url: string; version: string; modified: string }; files: FileRef[];
   /** The URL the hub fetched the file from and when, in ms (#3570): what a table a job read from it traces to. */
   fetched?: { url: string; at: number };
+  source?: { url: string; fetched: number } & Publication;
 }
 /** What a fill's fetch answers: the file, its sidecars, the license and the upstream from the library's own record. */
-interface Picked { file: FileRef; sidecars: FileRef[]; license: AssetLicense; upstream: AssetRecord['upstream']; pack?: { ref: string; url: string } }
+interface Picked extends Publication { file: FileRef; sidecars: FileRef[]; license: AssetLicense; upstream: AssetRecord['upstream']; pack?: { ref: string; url: string } }
 
 /**
  * The licenses DeepBuild knows the terms of, by SPDX ID. Anything else, a LicenseRef or an ID not listed, is unknown:
@@ -254,7 +257,7 @@ export class Libraries {
     if (BigInt(free) * 5n < BigInt(ref.size) * 11n) return { status: 'refused', reason: `${pack}: ${path} is ${ref.size} bytes and needs 2.2× free; only ${free} bytes free on disk` };
     const urls = [ref.url, ...(/^https:\/\//.test(ref.license.terms) && !BUNDLED_TERMS[ref.license.terms] ? [ref.license.terms] : [])];
     for (const url of urls) if (!await this.d.host()!.assetOnline(pack, url)) return this.offline(library, path);
-    const picked: Picked = { file: { path, bytes: ref.size, sha256: ref.sha256 }, sidecars: [], license: ref.license, upstream: ref.upstream, pack: { ref: pack, url: ref.url } };
+    const picked: Picked = { file: { path, bytes: ref.size, sha256: ref.sha256 }, sidecars: [], license: ref.license, upstream: ref.upstream, pack: { ref: pack, url: ref.url }, ...publication(ref) };
     return this.authorize(library, path, picked, this.saved.packRules?.[this.packs.get(pack)!.id]);
   }
 
@@ -317,11 +320,12 @@ export class Libraries {
     const credit = picked.license.credit ? ` (credit: ${picked.license.credit})` : '';
     const files = 1 + picked.sidecars.length;
     const source = picked.pack ? `${library} (${picked.pack.url}; terms ${picked.license.terms})` : library;
-    const question = `Fetch ${id} from ${source}: ${bytes} bytes in ${files} file${files === 1 ? '' : 's'}, under ${license}${credit}?`;
+    const named = PUBLICATION_FIELDS.some((f) => picked[f]) ? `; ${PUBLICATION_FIELDS.map((f) => `${f}: ${picked[f] ?? '–'}`).join(', ')}` : '';
+    const question = `Fetch ${id} from ${source}: ${bytes} bytes in ${files} file${files === 1 ? '' : 's'}, under ${license}${credit}${named}?`;
     const ask = await this.d.raise('library.fetch', {
       kind: 'authority', may_answer: 'trusted_path', question, options: [{ id: 'fetch', label: 'Fetch it', decision: 'allow' }, { id: 'decline', label: "Don't fetch it", decision: 'deny' }],
       recommended: null, deadline: this.d.now() + DAY, fallback: 'you', default: 'decline', provisional: false, owner: 'you', key: ref, pinned_to: { kind: 'evidence', ref },
-    }, { steps: [{ does: `Download ${id} from ${source}, ${bytes} bytes, into the evidence store under ${license}${credit}, then import it`, changes: [`evidence:${picked.file.sha256}`], undo: null, public: false, cost: 0 }], diff: ref });
+    }, { steps: [{ does: `Download ${id} from ${source}, ${bytes} bytes, into the evidence store under ${license}${credit}${named}, then import it`, changes: [`evidence:${picked.file.sha256}`], undo: null, public: false, cost: 0 }], diff: ref });
     this.fetches.set(key, { state: 'held', ask, picked });
     this.held.set(ask, key);
     (this.saved.held ??= {})[key] = { ask, picked };
@@ -421,7 +425,8 @@ export class Libraries {
       return { status: 'refused', reason };
     }
     for (const file of staged) await rm(file, { force: true });
-    const asset: AssetRecord = { sha256: picked.file.sha256, ...(picked.pack ? { pack: picked.pack.ref } : { library }), id, license: picked.license, upstream: picked.upstream, files, fetched: { url: picked.pack?.url ?? picked.upstream.url, at: this.d.now() } };
+    const fetched = { url: picked.pack?.url ?? picked.upstream.url, at: this.d.now() };
+    const asset: AssetRecord = { sha256: picked.file.sha256, ...(picked.pack ? { pack: picked.pack.ref } : { library }), id, license: picked.license, upstream: picked.upstream, files, fetched, source: { url: fetched.url, fetched: fetched.at, ...publication(picked) } };
     if (!asset.pack) this.saved.assets[asset.sha256] = asset;
     (this.saved.cache ??= {})[key] = asset;
     this.save();
@@ -430,9 +435,9 @@ export class Libraries {
   }
 
   /** The URL and time the hub fetched a file from, by its hash, from any library or pack; undefined for a file it never fetched. */
-  fetchedFile(sha: string): { url: string; fetched: number } | undefined {
+  fetchedFile(sha: string): FetchedFile | undefined {
     const found = [...Object.values(this.saved.cache ?? {}), ...Object.values(this.saved.assets)].find((a) => a.sha256 === sha && a.fetched);
-    return found?.fetched && { url: found.fetched.url, fetched: found.fetched.at };
+    return found?.fetched && { url: found.fetched.url, fetched: found.fetched.at, bytes: found.files[0]!.bytes, license: found.license, ...publication(found.source ?? {}) };
   }
 
   /** A fetched asset by its file's hash, with the license it was kept with; undefined for any other hash. */
@@ -450,6 +455,9 @@ function rowOf(v: unknown): Omit<AssetRow, 'from'> | undefined {
   const triangles = num(v.triangles);
   if (typeof v.id !== 'string' || typeof v.name !== 'string' || !KINDS.includes(v.kind as AssetKind) || !license || size === undefined || triangles === undefined || typeof v.url !== 'string') return undefined;
   return { id: v.id, name: v.name, kind: v.kind as AssetKind, license, size_m: size, triangles, thumbnail: typeof v.thumbnail === 'string' ? v.thumbnail : null, url: v.url };
+}
+function publication(v: Publication): Publication {
+  return Object.fromEntries(PUBLICATION_FIELDS.filter((f) => v[f]).map((f) => [f, v[f]]));
 }
 function licenseOf(v: unknown): AssetLicense | undefined {
   if (!isObj(v) || typeof v.id !== 'string' || !v.id || typeof v.terms !== 'string' || typeof v.shareable !== 'boolean' || (v.credit !== null && typeof v.credit !== 'string')) return undefined;

@@ -456,7 +456,7 @@ export class Jobs {
     // A table output is a table asset (#3570): its record names the job and its inputs, each with the URL and fetch time
     // the hub recorded, so a number read from it traces through the job to the file the hub fetched.
     if (tables !== undefined && isObj(record)) {
-      await this.d.table?.(kept.table!, { ...record, sha256: kept.table!, kind: 'table', source: { job: { kind, tool, input: params[tables] ?? null } }, lineage: kept.lineage! });
+      await this.d.table?.(kept.table!, { ...record, sha256: kept.table!, kind: 'table', source: { job: { kind, tool, input: params[tables] ?? null, params } }, lineage: kept.lineage! });
     } else if (kept['table']) {
       const input = Object.fromEntries(Object.entries(hashes(bytes)).map(([n, h]) => [n, (Array.isArray(h) ? h : [h]).map((sha) => ({ sha256: sha, ...(this.d.fetched?.(sha) ?? { origin: 'agent' }) }))]));
       const tableRec = tableRecord(kept['table'], wrote['table']!, params['key'], { job: { kind, tool, input } });

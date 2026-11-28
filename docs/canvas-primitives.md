@@ -2724,6 +2724,28 @@ For: deciding when a reading can be compared, or acted on without a person
 
 **Lands:** R1 a time scale and one axis for the line; R2 the rest; R6 periods, standing, reveal and emphasis; R6 the z range and continuous color ramps
 
+#### Sources list `sources@1`
+
+For: a piece built from public data: the files it reads, each with its publisher's own name for the release, its license and its URL
+
+**Fields**
+
+- `of: document | [item ID] = document`
+- `fields: [title | publisher | edition | license | credit | url | fetched | sha256 | bytes | used_by]`
+- `group: none | publisher = none`
+- A text mark set's column read `{from, column}` takes `show: {source: bool = false}`
+- Check `data.sources`
+
+**Semantics:** A 2D item of the data module that draws one row for each fetched file a number shown by the named items traces to, through tables, jobs and their inputs: the walk honest numbers makes. Every field is read from the file's record and none is typed: `url`, `fetched`, `sha256` and `bytes` are what the hub wrote at the fetch, `title`, `publisher` and `edition` are what the fetch's approved plan named (Pack: assets fetched on first use), and `license` and `credit` are the asset's license. A row shows each value as the record holds it, a time as the record's own digits, and a field the record lacks as a dash; with `group: publisher` a file approved without a publisher lists under the host of its URL, never under a guessed name. `used_by` is the count of items whose numbers trace to the file. A file no shown number traces to has no row, and a table an agent wrote adds none: its numbers stay story numbers. The list is text: a URL is shown whole, a row selects and copies as text, and nothing in the piece opens or fetches it. In honest numbers a row's digits are quotation of the record, listed and never counted, as a code item's quote is. With `show.source`, hover or focus on a column read's number shows one line written from the records: each file's title and edition, the column's name and unit, the row's key, and for a derived table the step that wrote the cell with the count of rows it read. `data.sources` holds, in a document with a `sources@1` item, that every shown number that traces to a fetched file finds that file in a list and that every row equals its file's record byte for byte; a field other than `of`, `fields` and `group` is refused, naming the item.
+
+**As built (#3575):** The hub writes each fetched input of a job with its size and license beside its URL, fetch time, title, publisher and edition, and a derived table's record keeps its job's params, so the list and the line read only the evidence store. A row lists in the order its file is first used. The app's replica holds each row as a row of its accessibility tree.
+
+**Cost:** O(shown numbers) when the list is laid out; no fetch, ever. Budget class: any class with data.
+
+**It can never:** Be typed or patched row by row; list a file no shown number traces to; leave out one a shown number traces to; show a URL, a time or a hash the hub didn't write; fetch
+
+**Lands:** R6
+
 #### Series and decimation `series@1`
 
 **Fields**
@@ -4038,7 +4060,7 @@ For: sample libraries (1.4 GB), speech weights and a transcriber's weights: anyt
 
 **Fields**
 
-- `assets: [{path, url, sha256, size: bytes, license: {id, terms, shareable, credit}, upstream: {url, version, modified}}]` (on Pack)
+- `assets: [{path, url, sha256, size: bytes, license: {id, terms, shareable, credit}, upstream: {url, version, modified}, title, publisher, edition}]` (on Pack; `title`, `publisher` and `edition`, the publisher's own name for the release such as a survey's year, are optional: the fetch's ask shows them beside the size and the license, and your approval stores them with the asset)
 - A pack's catalog: the `catalog` job reads each asset once and writes one `asset.catalog@1` table, a row per asset with its path, name, words and category from the file's own metadata and path, and its size in metres after the file's units and up axis, triangles, materials, textures, bytes and a thumbnail, every number measured from the geometry and the files, never read from metadata text. `deep_kinds` searches it by words, a size range, a category and a limit of at most 50, ranked by words matched and then by size fit, and fetches nothing; a placed asset is fetched alone on its first use. The `batch` job runs a chain of asset jobs over a catalog's rows under a cap on bytes and triangles a row, each step an ordinary asset job keyed by hash, so a rerun redoes only the rows that changed, and writes a web-ready catalog whose rows name a copy only when every step, the cap and `asset.same_look` passed, listing each failure with its step and reason. `asset.same_look`, the asset-tools plug-in's check, renders the source and the copy from 16 views in studio@1's neutral rig with no tone map on one machine and compares them per pixel in OKLab and by coverage, naming the asset, the view and the measure. The web player takes web copies only: a mesh item that names a source with a web-ready row is refused at export, naming the item
 - Each catalog row also has an `id`, unique within its pack and the same in every version of it: the path the asset had in the version where it first appeared. A pack version may carry `moved: {old path: new path}` for the assets it renamed or moved, the catalog job gives a moved asset the `id` its old path had, and two rows with one `id` in one version refuse the catalog, naming both paths. A document moved to a later version of a pack resolves each asset it names through `moved`, and rows are never merged by hash or by name: two assets with the same bytes keep two rows, each with its own license and source, and the store holds the bytes once. A catalog becomes the one `deep_kinds` answers from in one step, after every row, thumbnail and check of it has passed; until then a search answers from the catalog before it, and a catalog job that stopped midway resumes with only the thumbnails it lacks. A model whose scene file names a texture or a layer file the pack's asset list doesn't hold gets a row marked `incomplete`, naming each missing file, which a search leaves out and a batch gives no copy
 
@@ -8091,7 +8113,8 @@ For: a data story's dataset; a chart's values and labels; a template's numbers: 
 
 - `kind: … | table` (CSV or JSON lines, ≤ 16 MB*)
 - `probe: {table: {rows: u32, columns: [{name, dtype, unit}], key: column}}`
-- `source: {url, fetched: time} | handle | agent` (written by what brought it: the hub for a fetch, the record for a handle, and `agent` for a table an agent wrote)
+- `source: {url, fetched: time, title, publisher, edition} | handle | agent` (written by what brought it: the hub for a fetch, the record for a handle, and `agent` for a table an agent wrote; `title`, `publisher` and `edition` are the fetch's approved plan's, and any other file the hub fetched for a job carries the same three)
+- A column read takes `show: {source: bool = false}` (Sources list `sources@1`)
 - `source` also takes `job {kind, tool, input}` for a table an import job wrote (Asset job: imports)
 
 **Semantics:** Probed once in the decode worker into typed columns, with a header, a unit per column and a key column, so a mark set reads a column by name and a chart's labels trace to the file by hash. A text cell keeps its raw bytes and their range in the file, untouched by line ends or Unicode normalization; a label draws the cell's display form, NFC, and a trace or a check that quotes a cell compares its raw bytes. A table fetched through the Source block keeps its URL and fetch time, which the hub writes, never the agent. A table an agent wrote is its own word: its numbers count as story numbers, which pass only where the document binds no status and no reading.
@@ -9985,7 +10008,7 @@ For: every film an agent makes from a one-line ask: at most one early question, 
 - `scan: all displayed text`
 - `names: [string]`, or `{name: true}` on a text item (marked names)
 - `number_words: bool = true`
-- `quotes`: a code item's `quote` and a cell grid's recording (their digits are quotation: listed, never counted)
+- `quotes`: a code item's `quote`, a cell grid's recording and a sources list's rows (their digits are quotation: listed, never counted)
 - `formulas`: a vector's `alt` is scanned as displayed text; its integers are notation, listed and never counted; a number with a fractional part, or one the vector maps in `numbers: {text → source path}`, must trace to a source
 - `sources`: bound values, drivers, and `data` constants with a source, or with `source: story` (a story number) in a document that binds no status and no reading
 - `lengths`: each driver var that writes a part's position, length or scale from a logic output or a bound value, and each driver or channel with an `exaggerate`; the row's record `lengths: [{mapping, var, reads, unit, target, item, assembly, shown_at, exaggerate, checked, at, ratio, expected, result: pass | refused | unchecked, why}]`; codes `length.ratio_undeclared` and `length.disclosure_hidden`
