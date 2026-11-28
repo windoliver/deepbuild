@@ -1,10 +1,6 @@
-// The import job's check on a table it wrote (#3570; canvas primitives: Asset: tables, as #397's probe reads one):
-// UTF-8 CSV under the table cap, a header row of distinct, named columns first, and every row as many cells as it.
-// Nothing an item can name is kept until it passes.
 import { TABLE_MAX } from './cut.mjs';
 import { DELIMITERS, Rows } from './text.mjs';
 
-/** What is wrong with a table's bytes, in words, or undefined when it reads as a table. */
 export function tableProbe(bytes) {
   if (bytes.length > TABLE_MAX) return `the table is ${bytes.length} bytes, past the ${TABLE_MAX}-byte cap`;
   try {

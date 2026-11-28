@@ -873,6 +873,9 @@ byHand.push('tests/acceptance/96/commit.test.ts', 'tests/acceptance/96/proof.tes
 Object.assign(redrafted, { 'tests/acceptance/3295/late-close.test.mjs': 'tests/acceptance/3295-redraft-fae86cca/' });
 byHand.push('tests/acceptance/3295/late-close.test.mjs');
 
+Object.assign(redrafted, { 'tests/acceptance/3066/same-failures.test.mjs': 'tests/acceptance/3066-redraft-3699/' });
+byHand.push('tests/acceptance/3066/same-failures.test.mjs');
+
 timed.push('tests/acceptance/3257/ac7-budget.test.ts');
 
 timed.push('tests/acceptance/1857/cap.test.ts', 'tests/acceptance/1857/budgets.test.ts');
@@ -894,6 +897,9 @@ Object.assign(redrafted, Object.fromEntries([['2924', 'test-grants'], ['2924', '
   .map(([issue, file]) => [`tests/acceptance/${issue}/${file}.test.mjs`, `tests/acceptance/${issue}-redraft-3694/`])));
 byHand.push(...Object.keys(redrafted).filter((path) => redrafted[path].endsWith('-redraft-3694/')));
 
+Object.assign(redrafted, { 'tests/acceptance/1113/measured.test.mjs': 'tests/acceptance/1113-redraft-3296/' });
+byHand.push('tests/acceptance/1113/measured.test.mjs');
+
 timed.push('tests/acceptance/3507/ac3-timing.test.mjs');
 
 Object.assign(redrafted, { 'tests/acceptance/3507/ac2-classes.test.mjs': 'tests/acceptance/3507-redraft-ac2/' });
@@ -906,6 +912,30 @@ for (const name of ['ac1-section', 'ac3-agent-routes', 'ac5-taste-call']) {
   redrafted[`tests/acceptance/1352/${name}.test.mjs`] = 'tests/acceptance/1352-redraft-3402/';
   byHand.push(`tests/acceptance/1352/${name}.test.mjs`);
 }
+// #3525 moves the asset fetch from deep_kinds to deep_job and refuses deep_kinds' fetch, so the files below, which
+// brought an asset in through deep_kinds, no longer hold their scene; #2898's table, reads and repeats files state
+// deep_kinds' old hints. Each is kept as written, by hand only, and its blind redraft runs in its place, alone: each
+// starts a hub with a sandboxed fill (scripts/lanes.mjs names the shared resource).
+const redrafts3525 = {
+  '1731-redraft-3525': ['1731/fetch', '1731/off', '1731/offline', '1731/unknown'],
+  '1820-redraft-3525': ['1820/disk', '1820/fetch', '1820/license', '1820/offline', '1820/scope/license-file', '1820/scope/resume', '1820/scope/reuse', '1820/export-redraft/export'],
+  '154-redraft-3525': ['154/budgets', '154/cache', '154/fetch', '154/licences', '154/onsets'],
+  '154-redraft-3525b': ['154-redraft/budgets', '154-redraft/cache', '154-redraft/determinism', '154-redraft/loop', '154-redraft/offline', '154-redraft/onsets'],
+  '154-oracle-redraft-3525': ['154-oracle/sample-accurate'],
+  '154-oracle-redraft-redraft-3525': ['154-oracle-redraft/sample-accurate'],
+  '155-oracle-redraft-3525': ['155-oracle/sample-accurate'],
+  '2123-redraft-3525': ['2123/fetch-again'],
+  '2898-redraft-3525': ['2898/table', '2898/reads', '2898/repeats'],
+};
+for (const [folder, originals] of Object.entries(redrafts3525)) {
+  for (const file of originals) {
+    redrafted[`tests/acceptance/${file}.test.ts`] = `tests/acceptance/${folder}/`;
+    byHand.push(`tests/acceptance/${file}.test.ts`);
+  }
+  alone.push(`tests/acceptance/${folder}/`);
+}
+// The redrafted budget files time the six-stem render, as #154's and #154-redraft's do.
+timed.push('tests/acceptance/154-redraft-3525/budgets.test.ts', 'tests/acceptance/154-redraft-3525b/budgets.test.ts');
 
 for (const entry of laneFolders.filter((folder) => !unread.includes(folder))) {
   let text = '';

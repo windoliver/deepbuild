@@ -1,0 +1,268 @@
+ 2:58  up 7 days,  7:25, 3 users, load averages: 51.97 55.77 66.04
+c13122f6a
+✖ #3415.2e31d57b AC1: a planted line of prose in docs/technical-design.md holding each of the five phrases fails, naming the file, the line and the phrase (19996.950459ms)
+ℹ exit 0
+PASS glossary: GLOSSARY.md lists 60 terms in 8 groups, its links land, and AGENTS.md points to it
+
+✖ #3415.2e31d57b AC1: a planted line of prose in docs/canvas-primitives.md holding each of the five phrases fails, naming the file, the line and the phrase (20495.702041ms)
+ℹ exit 0
+PASS glossary: GLOSSARY.md lists 60 terms in 8 groups, its links land, and AGENTS.md points to it
+
+✖ #3415.2e31d57b AC1: the same phrases inside code pass, where the same phrases in prose at the same place fail (18828.310375ms)
+ℹ code only: exit 0
+PASS glossary: GLOSSARY.md lists 60 terms in 8 groups, its links land, and AGENTS.md points to it
+
+ℹ code and one line of prose: exit 0
+PASS glossary: GLOSSARY.md lists 60 terms in 8 groups, its links land, and AGENTS.md points to it
+
+✖ #3415.2e31d57b AC1: on the merge base's design docs the check fails, naming each phrase they hold in prose, and shows its count (20643.700417ms)
+ℹ merge base docs: exit 0
+PASS glossary: GLOSSARY.md lists 60 terms in 8 groups, its links land, and AGENTS.md points to it
+
+✖ #3415.e847772a AC2: a planted sentence giving an ask a definition of done fails, naming its line, and the Done gate line, the done-gate row and the queued row of States people see pass (19829.421167ms)
+ℹ exit 0
+PASS glossary: GLOSSARY.md lists 60 terms in 8 groups, its links land, and AGENTS.md points to it
+
+✖ #3415.7fecea8f AC3: the Check entry's list of kinds no longer holds the validity gate, and the Claim entry still says it runs before any check (4.868916ms)
+✖ #3415.7fecea8f AC3: a planted list of check kinds that names the validity gate fails the check, naming the line (23245.080625ms)
+ℹ exit 0
+PASS glossary: GLOSSARY.md lists 60 terms in 8 groups, its links land, and AGENTS.md points to it
+
+✖ #3415.9322769a AC4: the Ask-task heading reads Task and keeps #ask-task as an <a id>, and every link the open issues make into a heading it renames lands, by the design links lane with the open issues read (8.243041ms)
+✖ #3415.9322769a AC4: a planted rename of the Ask-task heading with no <a id> fails the design links lane, naming an issue that links it (24159.62425ms)
+✖ #3415.5803b056 AC5: the row under Decided reads "One open PR per thread.", and in a commit that touches only docs/technical-design.md, approved by a signed tag, it passes the edit guard (30.011708ms)
+✖ #3415.5803b056 AC5: the same edit in a commit that touches another file fails the edit guard, naming the row, under the same signed tag (28.402ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 0
+ℹ fail 11
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 147706.238666
+
+✖ failing tests:
+
+test at tests/acceptance/3415/ac1-phrases.test.mjs:9:3
+✖ #3415.2e31d57b AC1: a planted line of prose in docs/technical-design.md holding each of the five phrases fails, naming the file, the line and the phrase (19996.950459ms)
+  AssertionError [ERR_ASSERTION]: the check passes docs/technical-design.md with five planted lines of prose holding the phrases
+  PASS glossary: GLOSSARY.md lists 60 terms in 8 groups, its links land, and AGENTS.md points to it
+  
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-3455-blind-no-comments-611d3e/tests/acceptance/3415/ac1-phrases.test.mjs:15:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 0,
+    operator: 'notStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3415/ac1-phrases.test.mjs:9:3
+✖ #3415.2e31d57b AC1: a planted line of prose in docs/canvas-primitives.md holding each of the five phrases fails, naming the file, the line and the phrase (20495.702041ms)
+  AssertionError [ERR_ASSERTION]: the check passes docs/canvas-primitives.md with five planted lines of prose holding the phrases
+  PASS glossary: GLOSSARY.md lists 60 terms in 8 groups, its links land, and AGENTS.md points to it
+  
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-3455-blind-no-comments-611d3e/tests/acceptance/3415/ac1-phrases.test.mjs:15:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 0,
+    operator: 'notStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3415/ac1-phrases.test.mjs:24:1
+✖ #3415.2e31d57b AC1: the same phrases inside code pass, where the same phrases in prose at the same place fail (18828.310375ms)
+  AssertionError [ERR_ASSERTION]: the check does not fail the planted line of prose beside the code, so it never read that place
+  PASS glossary: GLOSSARY.md lists 60 terms in 8 groups, its links land, and AGENTS.md points to it
+  
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-3455-blind-no-comments-611d3e/tests/acceptance/3415/ac1-phrases.test.mjs:39:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3415/ac1-phrases.test.mjs:45:1
+✖ #3415.2e31d57b AC1: on the merge base's design docs the check fails, naming each phrase they hold in prose, and shows its count (20643.700417ms)
+  AssertionError [ERR_ASSERTION]: the check passes the merge base's design docs
+  PASS glossary: GLOSSARY.md lists 60 terms in 8 groups, its links land, and AGENTS.md points to it
+  
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-3455-blind-no-comments-611d3e/tests/acceptance/3415/ac1-phrases.test.mjs:50:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 0,
+    operator: 'notStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3415/ac2-definition.test.mjs:19:1
+✖ #3415.e847772a AC2: a planted sentence giving an ask a definition of done fails, naming its line, and the Done gate line, the done-gate row and the queued row of States people see pass (19829.421167ms)
+  AssertionError [ERR_ASSERTION]: the check passes a planted "the definition of done of each open ask"
+  PASS glossary: GLOSSARY.md lists 60 terms in 8 groups, its links land, and AGENTS.md points to it
+  
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-3455-blind-no-comments-611d3e/tests/acceptance/3415/ac2-definition.test.mjs:25:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 0,
+    operator: 'notStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3415/ac3-validity-gate.test.mjs:26:1
+✖ #3415.7fecea8f AC3: the Check entry's list of kinds no longer holds the validity gate, and the Claim entry still says it runs before any check (4.868916ms)
+  AssertionError [ERR_ASSERTION]: the list of check kinds still holds the validity gate
+  + actual - expected
+  
+  + [
+  +   'docs/technical-design.md:1039: - the validity gate: deliverables and citations, before anything else;'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-3455-blind-no-comments-611d3e/tests/acceptance/3415/ac3-validity-gate.test.mjs:29:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'docs/technical-design.md:1039: - the validity gate: deliverables and citations, before anything else;' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3415/ac3-validity-gate.test.mjs:36:1
+✖ #3415.7fecea8f AC3: a planted list of check kinds that names the validity gate fails the check, naming the line (23245.080625ms)
+  AssertionError [ERR_ASSERTION]: the check passes a list of check kinds that names the validity gate
+  PASS glossary: GLOSSARY.md lists 60 terms in 8 groups, its links land, and AGENTS.md points to it
+  
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-3455-blind-no-comments-611d3e/tests/acceptance/3415/ac3-validity-gate.test.mjs:44:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 0,
+    operator: 'notStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3415/ac4-links.test.mjs:39:1
+✖ #3415.9322769a AC4: the Ask-task heading reads Task and keeps #ask-task as an <a id>, and every link the open issues make into a heading it renames lands, by the design links lane with the open issues read (8.243041ms)
+  AssertionError [ERR_ASSERTION]: docs/technical-design.md still has the Ask-task heading
+  + actual - expected
+  
+  + [
+  +   '#### Ask-task'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-3455-blind-no-comments-611d3e/tests/acceptance/3415/ac4-links.test.mjs:41:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ '#### Ask-task' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3415/ac4-links.test.mjs:60:1
+✖ #3415.9322769a AC4: a planted rename of the Ask-task heading with no <a id> fails the design links lane, naming an issue that links it (24159.62425ms)
+  AssertionError [ERR_ASSERTION]: the renamed heading's old anchor #ask-task is kept by 0 <a id> lines of docs/technical-design.md, not one
+  
+  0 !== 1
+  
+      at renamed (file://~/private/deepbuild-core/.claude/worktrees/issue-3455-blind-no-comments-611d3e/tests/acceptance/3415/ac4-links.test.mjs:13:10)
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-3455-blind-no-comments-611d3e/tests/acceptance/3415/ac4-links.test.mjs:63:31)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3415/ac5-decided-row.test.mjs:32:1
+✖ #3415.5803b056 AC5: the row under Decided reads "One open PR per thread.", and in a commit that touches only docs/technical-design.md, approved by a signed tag, it passes the edit guard (30.011708ms)
+  AssertionError [ERR_ASSERTION]: the row under Decided reads "One open PR per thread of work. An adjacent fix folds into it, and the PR closes each issue it fixes.", not "One open PR per thread."
+      at theRow (file://~/private/deepbuild-core/.claude/worktrees/issue-3455-blind-no-comments-611d3e/tests/acceptance/3415/ac5-decided-row.test.mjs:24:10)
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-3455-blind-no-comments-611d3e/tests/acceptance/3415/ac5-decided-row.test.mjs:33:29)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3415/ac5-decided-row.test.mjs:40:1
+✖ #3415.5803b056 AC5: the same edit in a commit that touches another file fails the edit guard, naming the row, under the same signed tag (28.402ms)
+  AssertionError [ERR_ASSERTION]: the row under Decided reads "One open PR per thread of work. An adjacent fix folds into it, and the PR closes each issue it fixes.", not "One open PR per thread."
+      at theRow (file://~/private/deepbuild-core/.claude/worktrees/issue-3455-blind-no-comments-611d3e/tests/acceptance/3415/ac5-decided-row.test.mjs:24:10)
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-3455-blind-no-comments-611d3e/tests/acceptance/3415/ac5-decided-row.test.mjs:41:37)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+real	2m27.754s
+user	0m3.437s
+sys	0m45.962s

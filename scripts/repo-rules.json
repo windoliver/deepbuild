@@ -353,6 +353,10 @@
           "spec": "* path=../deep-marks-raster",
           "why": "Issue #1498: the replica's copy of the hub's canvas core: render-back's raster."
         },
+        "deep-marks-vello": {
+          "spec": "* path=../deep-marks-vello",
+          "why": "Issue #3575: the replica's copy of the hub's canvas core reads a document's table columns from its evidence folder, as the hub's render-back does."
+        },
         "deep-canvas-motion": {
           "spec": "* path=../deep-canvas-motion",
           "why": "Issue #3605: a shell screen's driven data values written where its templates read them, as the scheduler writes them, so a level select's chapter counts show the shell's done."
