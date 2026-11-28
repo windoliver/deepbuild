@@ -1,0 +1,54 @@
+#1334 blind redraft for #2570: runs at the base
+
+Machine: the shared Linux Spark (Linux 7.0.0-1025-nvidia aarch64, 20 cores), Node v24.22.0, fresh clone at
+254bdc87c7f2fc34676193463ee2e685b67a43df, each run in its own systemd user unit (MemoryMax=22G), one at a time.
+2026-11-28 UTC. Sandboxes /tmp/d1334-*.
+
+1. The dispute, on the base (scratch script under node --test, the #2565 helpers: first promotion, then the #2565
+   scene's restart). Load 104.5 -> 109.1, 07:44:51-07:45:16.
+     before: start 01M8GHTQPG78K3H6RD5FBQVYTB pid 200687
+     hub.stop with the token alone: hub.stop refused: {"code":"unconfirmed", ... "remediation":"deep hub stop changed
+       nothing: the call names no process for the peer check; run the deep command itself." ...}
+     deep hub start: 0 The hub is up; it was already running.
+     after: start 01M8GHTQPG78K3H6RD5FBQVYTB same start: true old pid alive: true
+   So the #2565 restart restarts nothing on the base.
+
+2. This folder on the base: node --test --test-concurrency=1 crash.test.mjs misjudge.test.mjs
+   Load 105.34 -> 127.89 (1-min), 07:45:27-07:50:13. sha256 helpers.mjs e92a1e5e…, crash ba3ea0b5…, misjudge 3e6abf15…,
+   fixtures/confirming-launcher.mjs acab676f….
+     #1334.775c65d4: INCONCLUSIVE: deep-hook itself couldn't hand 2 of the session's hook runs to the hub or its spool
+       within its 50 ms budget (PreToolUse, PreToolUse), at 1-minute load 106.4 on 20 cores
+     C2 versioned folder: pass
+     #1334.14e4b3e9: INCONCLUSIVE: 1 hook run (PreToolUse) not spooled in 50 ms, at 1-minute load 127.9
+   Both criterion tests read INCONCLUSIVE by the frozen budget check, before the restart's assertions. Not retried.
+
+3. Diagnostic, not a test run: this folder's rollbackScene ('crash') under node --test with its readings printed.
+   Load 146.1 -> 131.6, 07:50:51-07:52:28.
+     back 25.8 s after the planted build first ran; 9 turns meanwhile; 1 notice before the restart
+     inBefore {"start":"01M8GJ7E8EJQA6D2SKH24GFS91","pid":408092}
+     deep hub stop: exit 0, "The hub stopped. It starts again at your next login, or with deep hub start."
+     deep hub start: exit 0, "The hub is up."
+     inAfter {"start":"01M8GJ82SR1S0KZTZXC0VNBYRQ","pid":415360}; old pid runs: false; notices after restart: 1
+   So on the base the restart is real: the stop is accepted, the old process ends, a new start answers.
+
+4. Twins, unit b1334-twins, 07:52-08:56Z, one at a time. Each: a cp -a copy of the built checkout, `git checkout --
+   packages`, the twin's files laid over it, `npm run build --workspaces --if-present` (every twin built: it
+   type-checks), then its test file(s). Each run once; INCONCLUSIVE is reported as it reads, not rerun.
+
+   | Twin | File(s) run | Load (1-min) start -> end | First failure |
+   |---|---|---|---|
+   | notice-at-every-start | crash, misjudge | 65.95 -> 73.16 | crash: INCONCLUSIVE (1 hook run not spooled in 50 ms, at 62.0); misjudge: "#1334.14e4b3e9 one notice, never twice: after one restart of the hub the record holds 2 build.rolled_back events"; C2 pass |
+   | stop-stops-nothing | crash | 62.15 -> 76.39 | INCONCLUSIVE (2 hook runs, at 78.2): the restart's assertions weren't reached |
+   | slow-rollback | crash | 86.93 -> 88.77 | "the last good build answered again 75.6 s after the planted build first ran; the bound is 60 s" |
+   | two-notices | crash | 75.48 -> 83.03 | INCONCLUSIVE (3 hook runs, at 83.0) |
+   | notice-names-restored | crash | 83.40 -> 76.86 | "the rollback's notice must name the promoted commit d3cd942… in data.commit, not {"commit":"ec8fc8e…","restored":"d3cd942…",…}" |
+   | fresh-root-on-rollback | crash | 109.27 -> 138.99 | INCONCLUSIVE (3 hook runs, at 139.0) |
+   | loses-mid-outage | crash | 100.49 -> 135.63 | INCONCLUSIVE (9 hook runs, at 133.7) |
+   | pings-only | misjudge | 134.80 -> 209.78 | "the last good build (166e524) never came back: the planted build … starts and answers, so a health check that only pings the hub passes it …" |
+   | judges-in-promote | misjudge | 169.55 -> 118.62 | the same assertion (367fff3) |
+
+   Shown failing at their fault: notice-at-every-start (at "never twice", after a real restart, where the base's
+   diagnostic run in 3 read one notice), slow-rollback, notice-names-restored, pings-only, judges-in-promote.
+   Not shown on this machine, every time by the frozen 50 ms spool budget read before their assertion, at loads
+   62-139: stop-stops-nothing, two-notices, fresh-root-on-rollback, loses-mid-outage, and notice-at-every-start on the
+   crash file. No twin was found unable to fail for a reason in the twin itself; those four need a quieter run.

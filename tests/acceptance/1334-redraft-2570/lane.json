@@ -1,0 +1,1 @@
+{ "alone": true, "why": "shared: the sandbox's launchd stand-in, hub and main-watch lanes per test, the frozen 50 ms deep-hook spool budget read under load, and a person's deep hub stop run detached outside the test's process tree; each scene runs minutes" }

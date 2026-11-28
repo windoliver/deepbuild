@@ -950,6 +950,15 @@ byHand.push('tests/acceptance/2665/lowering.test.mjs');
 Object.assign(redrafted, { 'tests/acceptance/1503/inline.test.ts': 'tests/acceptance/1503-redraft-defaults/', 'tests/acceptance/1676/spellings.test.ts': 'tests/acceptance/1676-redraft-defaults/', 'tests/acceptance/1662/ac1-tree.test.ts': 'tests/acceptance/1662-redraft-config/' });
 byHand.push('tests/acceptance/1503/inline.test.ts', 'tests/acceptance/1676/spellings.test.ts', 'tests/acceptance/1662/ac1-tree.test.ts');
 
+for (const name of ['crash', 'misjudge']) {
+  redrafted[`tests/acceptance/1334-redraft-2565/${name}.test.mjs`] = 'tests/acceptance/1334-redraft-2570/';
+  byHand.push(`tests/acceptance/1334-redraft-2565/${name}.test.mjs`);
+}
+for (const file of ['2570/exiting', '2570/start', '2570-redraft-ac1/exiting', '2570-redraft-4/exiting', '2570-redraft-4/start']) {
+  redrafted[`tests/acceptance/${file}.test.mjs`] = 'tests/acceptance/2570-redraft-5/';
+  byHand.push(`tests/acceptance/${file}.test.mjs`);
+}
+
 for (const entry of laneFolders.filter((folder) => !unread.includes(folder))) {
   let text = '';
   try { text = readFileSync(join(root, entry, 'lane.json'), 'utf8'); } catch {}
