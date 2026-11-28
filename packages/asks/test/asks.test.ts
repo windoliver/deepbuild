@@ -270,6 +270,7 @@ describe('#349 resolvers are consulted outside the core\'s lock', () => {
     let read: unknown;
     asks.registerResolver('reader', async (a) => { read = await asks.refusals(a.ask); return undefined; });
     const raised = asks.raise(agent('S1'), 'deep_ask.taste', taste('header'));
+    // deadline: a raise the resolver deadlocks never returns
     const timer = new Promise<'stuck'>((resolve) => setTimeout(() => resolve('stuck'), 3_000));
     const handle = await Promise.race([raised, timer]);
     expect(handle, 'raise returned while the resolver read the core').toMatch(/^ask:/);
@@ -505,12 +506,14 @@ describe('an answer that saves a decision (#319.43d13eb3, #22)', () => {
     const handle = await asks.raise(agent('S1'), 'deep_ask.taste', taste('header'));
     let letGo!: () => void;
     const held = new Promise<void>((done) => { letGo = done; });
+    let reached!: () => void;
+    const asked = new Promise<void>((done) => { reached = done; });
     const real = record;
     // The record refuses the answer at once and takes the decision only when let go.
     const refusing = new Proxy(real, {
       get(target, key) {
         if (key === 'append') {
-          return (c: Parameters<typeof real.append>[0], e: Parameters<typeof real.append>[1]) => e.kind === 'ask.answered' ? Promise.reject(Error('refused')) : e.kind === 'decision.created' ? held.then(() => real.append(c, e)) : real.append(c, e);
+          return (c: Parameters<typeof real.append>[0], e: Parameters<typeof real.append>[1]) => e.kind === 'ask.answered' ? Promise.reject(Error('refused')) : e.kind === 'decision.created' ? (reached(), held.then(() => real.append(c, e))) : real.append(c, e);
         }
         const value = Reflect.get(target, key) as unknown;
         return typeof value === 'function' ? (value as (...a: unknown[]) => unknown).bind(target) : value;
@@ -520,7 +523,8 @@ describe('an answer that saves a decision (#319.43d13eb3, #22)', () => {
     let settled = false;
     const answering = asks.answer(card, handle, { option: 'green' }).finally(() => { settled = true; });
     answering.catch(() => undefined);
-    await new Promise((done) => setTimeout(done, 50));
+    await asked;
+    await new Promise((done) => setImmediate(done));
     expect(settled, 'the answer holds the asks until the decision it saves is through').toBe(false);
     letGo();
     await expect(answering).rejects.toThrow('refused');
@@ -541,12 +545,14 @@ describe('an answer that saves a decision (#319.43d13eb3, #22)', () => {
     }
     let letGo!: () => void;
     const held = new Promise<void>((done) => { letGo = done; });
+    let reached!: () => void;
+    const asked = new Promise<void>((done) => { reached = done; });
     const real = record;
     // The record refuses the new decision at once and takes the overruling only when let go.
     const refusing = new Proxy(real, {
       get(target, key) {
         if (key === 'append') {
-          return (c: Parameters<typeof real.append>[0], e: Parameters<typeof real.append>[1]) => e.kind === 'decision.created' ? Promise.reject(Error('refused')) : e.kind === 'decision.overruled' ? held.then(() => real.append(c, e)) : real.append(c, e);
+          return (c: Parameters<typeof real.append>[0], e: Parameters<typeof real.append>[1]) => e.kind === 'decision.created' ? Promise.reject(Error('refused')) : e.kind === 'decision.overruled' ? (reached(), held.then(() => real.append(c, e))) : real.append(c, e);
         }
         const value = Reflect.get(target, key) as unknown;
         return typeof value === 'function' ? (value as (...a: unknown[]) => unknown).bind(target) : value;
@@ -556,7 +562,8 @@ describe('an answer that saves a decision (#319.43d13eb3, #22)', () => {
     let settled = false;
     const overruling = asks.overrule(card, handle, { option: 'blue' }).finally(() => { settled = true; });
     overruling.catch(() => undefined);
-    await new Promise((done) => setTimeout(done, 50));
+    await asked;
+    await new Promise((done) => setImmediate(done));
     expect(settled, 'the overrule holds the asks until the overruling it writes is through').toBe(false);
     letGo();
     await expect(overruling).rejects.toThrow('refused');
