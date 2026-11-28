@@ -220,7 +220,7 @@ function locked(act) {
       if (error.code === 'ENOENT') continue;
       throw error;
     }
-    if (ended(holder)) {
+    if (holder.pid === process.pid || ended(holder)) {
       const aside = `${mark}.gone.${process.pid}`;
       try {
         renameSync(mark, aside);
