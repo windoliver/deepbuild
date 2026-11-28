@@ -1,0 +1,23 @@
+start; displays: 1 (Color LCD:); caffeinate 11 assertions; origin/main now 58b4a8cb264a 23:37:08 load { 74.47 90.86 82.44 } thermal 0 power [AC Power] lock 0 front [Windows App] free KB 71043212
+rd-base: merged origin/claude/blind-1172-ac5 (7c8d9a28dbdc488b383a77b46e466f4b309270e2) exit=0 23:38:02 load { 62.64 85.13 80.80 } thermal 0 power [AC Power] lock 0 front [Claude] free KB 66565292
+rd-base: merged origin/claude/blind-1546-planted-view (319dae31c334932d5a28edbbd0aa728919c7d770) exit=0 23:38:02 load { 62.64 85.13 80.80 } thermal 0 power [AC Power] lock 0 front [Claude] free KB 66542360
+rd-base at a61c622a44440b0f0d784c1571d309ca2b245d9c; parents 266e3c877b02f2c685fa52cacfe049c8d52ed523 319dae31c334932d5a28edbbd0aa728919c7d770 23:38:02 load { 62.64 85.13 80.80 } thermal 0 power [AC Power] lock 0 front [Claude] free KB 66541100
+setup rd-base exit=0 23:57:45 load { 86.62 121.48 111.26 } thermal 0 power [AC Power] lock 0 front [Claude] free KB 157231912
+base-1172-popout.txt: Tests 1 failed (1) exit=1 00:05:06 load { 57.37 99.02 105.47 } thermal 0 power [AC Power] lock 0 front [Claude] free KB 143361580
+base-1546-ac1.txt: Tests 4 failed | 2 passed (6) exit=1 00:08:26 load { 33.75 69.41 91.59 } thermal 0 power [AC Power] lock 0 front [Claude] free KB 138369020
+rd-base porcelain 0 00:08:26 load { 33.75 69.41 91.59 } thermal 0 power [AC Power] lock 0 front [Claude] free KB 138445252
+clone rd-base removed 00:08:34 load { 32.70 68.01 90.83 } thermal 0 power [AC Power] lock 0 front [Claude] free KB 162687508
+rd-fix-1172: merged origin/claude/blind-1172-ac5 (7c8d9a28dbdc488b383a77b46e466f4b309270e2) exit=0 00:09:14 load { 21.91 60.81 87.15 } thermal 1 power [AC Power] lock 0 front [Claude] free KB 160208624
+rd-fix-1172 at e315ca342a97b041d8c01b24ad488b692059ca90; parents dbbbd84f446b3419a25d78a43fd35e95f1730774 7c8d9a28dbdc488b383a77b46e466f4b309270e2 00:09:15 load { 21.91 60.81 87.15 } thermal 1 power [AC Power] lock 0 front [Claude] free KB 160208616
+setup rd-fix-1172 exit=0 00:15:09 load { 46.68 58.48 76.85 } thermal 0 power [AC Power] lock 0 front [Claude] free KB 137726488
+fix-1172-popout.txt: Tests 1 failed (1) exit=1 00:19:58 load { 98.79 84.90 83.69 } thermal 0 power [AC Power] lock 0 front [Claude] free KB 129823216
+fix-1172-rows.txt: Tests 2 failed (2) exit=1 00:20:22 load { 93.59 84.63 83.62 } thermal 0 power [AC Power] lock 0 front [Claude] free KB 129529512
+rd-fix-1172 porcelain 0 00:20:23 load { 93.59 84.63 83.62 } thermal 0 power [AC Power] lock 0 front [Claude] free KB 129522812
+clone rd-fix-1172 removed 00:20:29 load { 91.94 84.43 83.55 } thermal 0 power [AC Power] lock 0 front [Claude] free KB 155743116
+rd-fix-1546: merged origin/claude/blind-1546-planted-view (319dae31c334932d5a28edbbd0aa728919c7d770) exit=0 00:21:06 load { 69.69 79.77 81.89 } thermal 0 power [AC Power] lock 0 front [Claude] free KB 153689236
+rd-fix-1546 at 12cbbd915c46cd95dfa87c89e31cfdb89fec2fd9; parents 5630469a77e90ef5574ae545a6d406d7f4d26cf4 319dae31c334932d5a28edbbd0aa728919c7d770 00:21:06 load { 69.69 79.77 81.89 } thermal 0 power [AC Power] lock 0 front [Claude] free KB 153689196
+setup rd-fix-1546 exit=0 00:26:23 load { 72.50 72.17 76.80 } thermal 1 power [AC Power] lock 0 front [Claude] free KB 131547964
+fix-1546-ac1.txt: Tests 6 passed (6) exit=0 00:28:52 load { 44.21 62.43 72.20 } thermal 0 power [AC Power] lock 0 front [Claude] free KB 120594544
+rd-fix-1546 porcelain 0 00:28:53 load { 44.21 62.43 72.20 } thermal 0 power [AC Power] lock 0 front [Claude] free KB 120593352
+clone rd-fix-1546 removed 00:28:58 load { 41.39 61.54 71.83 } thermal 0 power [AC Power] lock 0 front [Claude] free KB 152554996
+ALL DONE 00:28:58 load { 41.39 61.54 71.83 } thermal 0 power [AC Power] lock 0 front [Claude] free KB 152554980
