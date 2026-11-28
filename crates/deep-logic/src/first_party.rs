@@ -7,8 +7,7 @@
 //! `packs/circuit-1.0.0`, which declares circuit@1 with its reference library (#1181),
 //! `packs/circuit-2.0.0`, which declares circuit@2 with its reference library (#3604), and
 //! `packs/sense-1.0.0`, which declares sense.lib@1 with its reference library sense.sight, held in
-//! the binary so every piece's links resolve against them, as the release's packs are installed for
-//! every document.
+//! the binary so every piece's links resolve against them.
 
 use std::sync::OnceLock;
 

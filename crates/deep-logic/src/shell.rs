@@ -109,11 +109,9 @@ pub struct Settings {
     pub volume: Vec<(String, f64)>,
     pub bindings: Vec<(String, Vec<String>)>,
     pub toggle: Vec<String>,
-    /// #3605: the piece's own settings, `settings.custom`, in the order declared.
     pub custom: Vec<Custom>,
 }
 
-/// #3605: one of the piece's own settings: a choice of numbers, a slider over a range, or a toggle.
 #[derive(Clone, Debug)]
 pub struct Custom {
     pub name: String,
@@ -124,7 +122,6 @@ pub struct Custom {
     pub default: f64,
 }
 
-/// #3605: at most this many of the piece's own settings.
 pub const CUSTOM_MAX: usize = 16;
 
 #[derive(Clone, Debug)]
@@ -176,8 +173,6 @@ impl Shell {
         self.screens.iter().position(|s| s.name == name)
     }
 
-    /// The settings' fields a `set` may name: text_size, reduced_motion, volume.<bus>, toggle.<action>,
-    /// custom.<name>.
     fn settable(&self, field: &str) -> bool {
         match field.split_once('.') {
             None => matches!(field, "text_size" | "reduced_motion"),
@@ -188,7 +183,6 @@ impl Shell {
         }
     }
 
-    /// #3605: the piece's own setting `name`'s place in `custom`.
     pub fn custom(&self, name: &str) -> Option<usize> {
         self.settings.custom.iter().position(|c| c.name == name)
     }
@@ -370,7 +364,6 @@ impl Shell {
                 .flatten()
             {
                 let mut control = control_of(name, cid, c, &sdoc, &names, shell.levels.len())?;
-                // #3605: a control that sets one of the piece's own settings takes what it doesn't give from it.
                 if let Some(Does::Set(f)) = &control.does {
                     let own = f.strip_prefix("custom.").and_then(|n| shell.custom(n));
                     if let Some(k) = own.map(|i| &shell.settings.custom[i]) {
@@ -399,7 +392,6 @@ impl Shell {
             }
             for c in &controls {
                 if let Some(Does::Set(f)) = &c.does {
-                    // #3605: a piece's own setting the shell doesn't declare is `shell.setting`.
                     let code = if f.starts_with("custom.") {
                         "shell.setting"
                     } else {
@@ -652,8 +644,6 @@ fn control_of(
     })
 }
 
-/// #3605: `settings.custom`, each a choice of numbers, a slider over a range or a toggle with its default, checked:
-/// at most 16, a choice's options numbers, and each default among its options or inside its range (`shell.setting`).
 fn custom_of(v: Option<&Value>) -> Result<Vec<Custom>, Value> {
     let Some(v) = v else { return Ok(Vec::new()) };
     let bad = |name: &str, what: String| refused("shell.setting", what, json!({"setting": name}));
