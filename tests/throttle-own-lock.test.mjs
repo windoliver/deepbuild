@@ -69,7 +69,9 @@ test('an admitted build that finds the table lock naming itself, left by an earl
   const go = join(sandbox.dir, 'go');
   const build = run(sandbox, ['build', '--stall', '30', '--', process.execPath, '-e', `const fs = require('node:fs'); const end = Date.now() + 60000; const wait = () => fs.existsSync(${JSON.stringify(go)}) || Date.now() > end ? process.exit(0) : setTimeout(wait, 50); wait();`]);
   assert.ok(await until(() => logged(sandbox).some((line) => line.event === 'turn'), 60_000), `the build never took its turn:\n${build.out()}`);
-  await plantLock(sandbox, { pid: build.pid, start: psStart(build.pid) });
+  const start = psStart(build.pid);
+  assert.match(start, /\d{4}$/, `ps printed no start for the build's throttle ${build.pid}: ${JSON.stringify(start)}`);
+  await plantLock(sandbox, { pid: build.pid, start });
   writeFileSync(go, '');
   assert.ok(await until(() => build.status !== null, 60_000), `the build's throttle was still running 60 s after its command ended, the lock naming the throttle itself:\n${build.out()}`);
   assert.equal(build.status, 0, build.out());
