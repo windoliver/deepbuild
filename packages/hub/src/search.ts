@@ -218,15 +218,8 @@ async function pastHits(past: NonNullable<SearchIn['past']>, wanted: readonly st
     .map(({ m }) => ({ session: m.session, source: `session:${m.session.replace(/[^0-9A-Za-z]/g, '')}#${m.id}`, quote: around(m.text, wanted), history: true, from: whose(m) }));
 }
 
-/** How many of a query's words an empty reply's note reads, one search a word. */
 const NOTE_WORDS = 16;
-/** The most characters of one word a note names, so 16 words keep the reply well under the cap. */
 const NOTE_WORD = 64;
-/**
- * Why a query with words found nothing (#3460): each word read, of its first 16, that no source the call may read
- * holds, by the search's own word rule and scope, one search a word that stops at the first source holding it; or,
- * when each is held somewhere, that no one source holds them all.
- */
 async function whyNothing(input: SearchIn, wanted: readonly string[]): Promise<string> {
   const unheld: string[] = [];
   for (const word of new Set(wanted.slice(0, NOTE_WORDS))) if (!(await everyHit(input, [word], word, true)).length) unheld.push(word);
@@ -235,17 +228,14 @@ async function whyNothing(input: SearchIn, wanted: readonly string[]): Promise<s
   return `${named.length ? `No source this call may read holds these words: ${named.join(', ')}.` : 'Each word is held by a source this call may read, but no one source holds them all.'}${left ? ` The search read the query's first ${NOTE_WORDS} words and left ${left} unread.` : ''}`;
 }
 
-/** Every hit for the query, each citing its source: your decisions, newest first, then the wiki's and the spec's, then the session's own, then readings, then past sessions. */
 export async function search(input: SearchIn): Promise<{ hits: Hit[]; more: number; next?: string; note?: string }> {
   const wanted = words(input.query);
   if (!wanted.length) return { hits: [], more: 0, note: NO_WORDS };
   const all = await everyHit(input, wanted, input.query);
   const from = input.cursor === undefined ? 0 : Number(/^h(\d+)$/.exec(input.cursor)?.[1] ?? NaN);
   if (!Number.isSafeInteger(from) || from > all.length) return { hits: [], more: 0, note: `No reply continues at ${input.cursor}.` };
-  // An empty reply says why, so it never reads as nothing known.
   if (!all.length) return { hits: [], more: 0, note: await whyNothing(input, wanted) };
   const page = all.slice(from, from + MAX_HITS);
-  // A past session's hit says what the record and its branch head tell of that session, read for this reply's hits only.
   const told = input.past ? await input.past.about([...new Set(page.flatMap((h) => ('session' in h ? [h.session as string] : [])))]) : new Map<string, PastSession>();
   const shown = page.map((h) => {
     if (!('session' in h)) return h;
@@ -253,7 +243,6 @@ export async function search(input: SearchIn): Promise<{ hits: Hit[]; more: numb
     const about = told.get(session);
     return { ...hit, agent: about?.agent ?? null, date: about?.date ? new Date(about.date).toISOString() : null, ...(about?.task ? { task: about.task } : {}), ...(about?.changed.length ? { changed: about.changed } : {}) };
   });
-  // The reply reaches the agent as JSON, under #63's cap: what doesn't fit goes by cursor.
   let used = JSON.stringify({ hits: [], more: 0, next: `h${'9'.repeat(10)}` }).length;
   let n = 0;
   for (; n < shown.length; n++) {
@@ -264,10 +253,6 @@ export async function search(input: SearchIn): Promise<{ hits: Hit[]; more: numb
   return { hits: shown.slice(0, n), more: Math.max(0, all.length - end), ...(end < all.length ? { next: `h${end}` } : {}) };
 }
 
-/**
- * Every hit for the words a query asks for, in a reply's order, read only where the call may read. `first` stops at
- * the first source that holds them, for a note that only asks whether any does.
- */
 async function everyHit(input: SearchIn, wanted: readonly string[], query: string, first = false): Promise<Hit[]> {
   const hits: Hit[] = await wikiHits(input.index ? await input.index.search(query) : await ledgerSearch(input, wanted), input);
   if (first && hits.length) return hits;

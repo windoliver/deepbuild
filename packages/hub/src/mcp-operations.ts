@@ -147,7 +147,6 @@ export class McpOperations {
       const sent = isObj(params.arguments) ? params.arguments : {};
       // A listing asked while plug-ins load answers not_ready with what loaded, never part of the list (#1415); the
       // planted hub answers the list as it stands once its record, the start's first step, is open.
-      // A fetch reads the libraries the plug-ins add, as a lookup reads the kinds they add: both wait for them to load.
       const loading = tool === 'deep_kinds' || (tool === 'deep_job' && args.op === 'fetch') ? this.loading() : undefined;
       if (loading && tool === 'deep_kinds' && this.options.settings.plant === 'kinds-partial-while-loading') {
         while (!this.options.services.record && !this.options.kernel.stopping) await new Promise((done) => setTimeout(done, 10));
@@ -171,9 +170,7 @@ export class McpOperations {
           return asAnswered(await this.fit(limit, false, (room) => canvas.show(session ? { session } : { session: null }, room === undefined ? call : { ...call, room })));
         }
         case 'deep_query': return asAnswered(await this.fit(limit, true, (room) => canvas.query(session ?? null, room === undefined ? args : { ...args, room })));
-        // Asset search reads the hub's libraries, which no room reaches.
         case 'deep_kinds': return asAnswered(args.op === 'assets' ? await canvas.kinds(args) : await this.fit(limit, true, (room) => canvas.kinds(room === undefined ? args : { ...args, room })));
-        // A fetch brings an asset in from those libraries, and is not asked twice (#3525).
         case 'deep_job': return asAnswered(args.op === 'fetch' ? await canvas.assets(args) : await this.options.control().job(args, context.call));
         case 'deep_root_plan': return await this.options.services.hosts.proposeRoot(args);
         case 'deep_status': return await this.status(session);
