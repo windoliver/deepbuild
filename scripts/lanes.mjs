@@ -161,6 +161,7 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/1881-redraft-2047/', 'tests/acceptance/96-redraft-1412/',
   ],
   timing: [
+    'tests/acceptance/3405/',
     'tests/acceptance/2513-redraft-2047/',
     'tests/acceptance/896/', 'tests/acceptance/16/', 'tests/acceptance/1098/budgets.test.ts', 'tests/acceptance/1015/budgets.test.ts', 'tests/acceptance/1417-redraft-ac3/',
     'tests/acceptance/1022/', 'tests/acceptance/823/', 'tests/acceptance/14/budgets.test.ts', 'tests/acceptance/42/budgets.test.ts', 'tests/acceptance/62/budgets.test.ts',
@@ -236,6 +237,7 @@ for (const [reason, entries] of Object.entries({
   ],
   "shared: the checkout's built packages": ['tests/acceptance/2696/'],
   'shared: the sandbox log stream': [
+    'tests/acceptance/3570/',
     'tests/acceptance/67/', 'tests/acceptance/66/', 'tests/acceptance/103/', 'tests/acceptance/363/', 'tests/acceptance/365/', 'tests/acceptance/262/', 'tests/acceptance/366/',
     'tests/acceptance/881/', 'tests/acceptance/411/', 'tests/acceptance/236/', 'tests/acceptance/30/', 'tests/acceptance/104/', 'tests/acceptance/989/', 'tests/acceptance/37/',
     'tests/acceptance/348/', 'tests/acceptance/349/', 'tests/acceptance/351/', 'tests/acceptance/355/', 'tests/acceptance/139/', 'tests/acceptance/996/', 'tests/acceptance/832/',
