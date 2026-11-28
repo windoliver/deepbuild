@@ -244,6 +244,8 @@ features = [
     "MTLRenderPass",
     "MTLRenderPipeline",
     "MTLResource",
+    "MTLSampler", # DeepBuild patch (windoliver/deepbuild#1434): chrome_layers.rs samples a backdrop
+    "objc2-core-foundation", # DeepBuild patch (windoliver/deepbuild#1434): a command buffer's GPU times and a drawable's presentedTime
     "MTLTexture",
     "MTLTypes",
 ]

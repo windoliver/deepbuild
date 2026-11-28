@@ -28,6 +28,8 @@ use gpui::{
 };
 use objc2_core_foundation::CFRetained;
 use objc2_core_video::CVMetalTexture;
+use objc2::Message as _;
+use objc2_metal::MTLCommandQueue as _;
 use objc2_foundation::NSString;
 use objc2_metal::{
     MTLBlendFactor, MTLBlitCommandEncoder, MTLClearColor, MTLCommandBuffer, MTLCommandEncoder,

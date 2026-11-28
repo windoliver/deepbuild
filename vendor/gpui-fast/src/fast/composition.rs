@@ -491,6 +491,7 @@ impl Scene {
             && self.polychrome_sprites.is_empty()
             && self.surfaces.is_empty()
             && self.native_views.is_empty()
+            && self.chrome.is_empty() // DeepBuild patch (windoliver/deepbuild#1434), by hand: a scene holding only chrome isn't empty
     }
 
     /// Replays a range as a self-contained scene, restoring any layers that

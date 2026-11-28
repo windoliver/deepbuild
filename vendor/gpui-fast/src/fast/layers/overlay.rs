@@ -42,7 +42,7 @@ pub(crate) fn reach(primitive: &Primitive) -> Bounds<ScaledPixels> {
                 visible.bottom_right() + point(edge, edge),
             )
         }
-        _ => visible,
+        Primitive::Shadow(_) | Primitive::Quad(_) | Primitive::Underline(_) | Primitive::MonochromeSprite(_) | Primitive::SubpixelSprite(_) | Primitive::PolychromeSprite(_) | Primitive::Surface(_) | Primitive::NativeView(_) | Primitive::Chrome(_) => visible, // DeepBuild patch (windoliver/deepbuild#1434), by hand: gpui-fast's own match, every variant named so a new one fails to compile
     }
 }
 
@@ -93,7 +93,7 @@ pub(crate) fn split(
             PaintOperation::Primitive(primitive) => {
                 Some(((draw_order(primitive), rank(primitive), ix), primitive))
             }
-            _ => None,
+            PaintOperation::StartLayer(_) | PaintOperation::EndLayer | PaintOperation::FastRoundedClip(_) | PaintOperation::StartChrome(_) | PaintOperation::EndChrome => None, // DeepBuild patch (windoliver/deepbuild#1434), by hand: gpui-fast's own match, every variant named so a new one fails to compile
         })
         .collect();
     sequence.sort_unstable_by_key(|(key, _)| *key);
