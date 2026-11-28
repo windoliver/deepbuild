@@ -142,3 +142,32 @@ test('a lock that a take-over of a dead holder puts back after its live owner ga
   assert.deepEqual([holder.status, taker.status], [0, 0], holder.out() + taker.out());
   assert.deepEqual(grants(sandbox), [], 'a grant or turn was left in the table');
 });
+
+test('a lock put back on a holder that never asks again does not stop the next request', async (t) => {
+  const sandbox = box(t);
+  const at = (name) => join(sandbox.dir, name);
+  const preload = ['--import', at('pauses.mjs')];
+  writeFileSync(at('pauses.mjs'), PAUSES);
+  const dead = spawnSync('/usr/bin/true');
+  await plantLock(sandbox, { pid: dead.pid, start: 'Thu Jan  1 00:00:00 1970' });
+  const taker = run(sandbox, ['build', '--wait', '5', '--', '/usr/bin/true'], { preload, env: { T_ROLE: 'taker', T_DIR: sandbox.dir } });
+  assert.ok(await until(() => existsSync(at('taker-judged')), 60_000), `the taker never judged the planted lock's holder gone:\n${taker.out()}`);
+  rmSync(join(sandbox.table, 'table.lock'));
+  const go = at('go');
+  const holder = run(sandbox, ['test', '--wait', '5', '--', process.execPath, '-e', `const fs = require('node:fs'); const end = Date.now() + 120000; const wait = () => fs.existsSync(${JSON.stringify(go)}) || Date.now() > end ? process.exit(0) : setTimeout(wait, 50); wait();`], { preload, env: { T_ROLE: 'holder', T_DIR: sandbox.dir, DEEP_THROTTLE_RUN: '0' } });
+  assert.ok(await until(() => existsSync(at('holder-inside')), 60_000), `the holder never took the lock:\n${holder.out()}`);
+  writeFileSync(at('taker-rename'), '');
+  assert.ok(await until(() => existsSync(at('taker-renamed')), 60_000), `the taker never moved the lock aside:\n${taker.out()}`);
+  writeFileSync(at('holder-asks-again'), '');
+  writeFileSync(at('holder-leave'), '');
+  assert.ok(await until(() => logged(sandbox).some((line) => line.event === 'granted' && line.pid === holder.pid), 60_000), `the holder was never granted:\n${holder.out()}`);
+  assert.ok(await until(() => !existsSync(join(sandbox.table, 'table.lock')), 60_000), `the holder never left the table:\n${holder.out()}`);
+  writeFileSync(at('taker-return'), '');
+  assert.ok(await until(() => existsSync(at('taker-put-back')), 60_000), `the taker never put the lock back:\n${taker.out()}`);
+  assert.ok(await until(() => taker.status !== null, 60_000), `60 s after the lock was put back the next request still waits, the holder ${holder.pid} running and asking for nothing: lock ${JSON.stringify(existsSync(join(sandbox.table, 'table.lock')) ? readFileSync(join(sandbox.table, 'table.lock'), 'utf8') : null)}:\n${taker.out()}`);
+  assert.equal(taker.status, 0, taker.out());
+  assert.equal(holder.status, null, `the holder ended before the request was served:\n${holder.out()}`);
+  writeFileSync(go, '');
+  assert.ok(await until(() => holder.status !== null, 60_000), `the holder never ended:\n${holder.out()}`);
+  assert.equal(holder.status, 0, holder.out());
+});
