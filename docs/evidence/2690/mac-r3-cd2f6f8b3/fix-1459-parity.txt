@@ -1,0 +1,57 @@
+
+ RUN  v5.0.5 ~/mac-runs/d2880r3
+
+ ❯ tests/acceptance/1459/parity.test.ts (3 tests | 1 failed) 240683ms
+   ❯ AC6 #1459.cd8e77fe `replica_equals_live_tree` passes for the shipped pages, and it leaves `scripts/known-failures.json` (3)
+     × AC6 each shipped page drawn by the replica equals the live capture node for node, ids and values included, and Needs you's rows carry their asks' handles 24649ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1459/parity.test.ts > AC6 #1459.cd8e77fe `replica_equals_live_tree` passes for the shipped pages, and it leaves `scripts/known-failures.json` > AC6 each shipped page drawn by the replica equals the live capture node for node, ids and values included, and Needs you's rows carry their asks' handles
+AssertionError: expected [ …(22) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "needs-you: the replica's row for \"Definition ask 24 in docs: go ahead?\" has id undefined, not its ask's handle ask:01MCBK1VV0C16MFYY0FV9VS2MC",
++   "needs-you: the live capture's row for \"Definition ask 24 in docs: go ahead?\" has id undefined, not its ask's handle ask:01MCBK1VV0C16MFYY0FV9VS2MC",
++   "needs-you: the replica's row for \"Taste ask 33 in migrate: go ahead?\" has id undefined, not its ask's handle ask:01MCBKM5S08BX0Q7W6PAAZ9V33",
++   "needs-you: the live capture's row for \"Taste ask 33 in migrate: go ahead?\" has id undefined, not its ask's handle ask:01MCBKM5S08BX0Q7W6PAAZ9V33",
++   "needs-you: the replica's row for \"Exception ask 34 in migrate: go ahead?\" has id undefined, not its ask's handle ask:01MCBKP0C0326Y1A9RPQYVNGPG",
++   "needs-you: the live capture's row for \"Exception ask 34 in migrate: go ahead?\" has id undefined, not its ask's handle ask:01MCBKP0C0326Y1A9RPQYVNGPG",
++   "needs-you: the replica's row for \"Choice ask 35 in migrate: go ahead?\" has id undefined, not its ask's handle ask:01MCBKQTZ0EDAQT02919ZW2SFR",
++   "needs-you: the live capture's row for \"Choice ask 35 in migrate: go ahead?\" has id undefined, not its ask's handle ask:01MCBKQTZ0EDAQT02919ZW2SFR",
++   "needs-you: the replica's row for \"Definition ask 36 in migrate: go ahead?\" has id undefined, not its ask's handle ask:01MCBKSNJ0FM55WQBQPTSVJAPV",
++   "needs-you: the live capture's row for \"Definition ask 36 in migrate: go ahead?\" has id undefined, not its ask's handle ask:01MCBKSNJ0FM55WQBQPTSVJAPV",
++   "needs-you: the replica's row for \"Authority ask 37 in migrate: go ahead?\" has id undefined, not its ask's handle ask:01MCBKVG50GQC93ENP7EY121TD",
++   "needs-you: the live capture's row for \"Authority ask 37 in migrate: go ahead?\" has id undefined, not its ask's handle ask:01MCBKVG50GQC93ENP7EY121TD",
++   "needs-you: the replica's row for \"Unblock ask 38 in design: go ahead?\" has id undefined, not its ask's handle ask:01MCBKXAR0Z44974EVGRASG9RG",
++   "needs-you: the live capture's row for \"Unblock ask 38 in design: go ahead?\" has id undefined, not its ask's handle ask:01MCBKXAR0Z44974EVGRASG9RG",
++   "needs-you: the replica's row for \"Taste ask 39 in design: go ahead?\" has id undefined, not its ask's handle ask:01MCBKZ5B04TEWTB5FFGVYNJJ9",
++   "needs-you: the live capture's row for \"Taste ask 39 in design: go ahead?\" has id undefined, not its ask's handle ask:01MCBKZ5B04TEWTB5FFGVYNJJ9",
++   "needs-you: the replica's row for \"Exception ask 40 in design: go ahead?\" has id undefined, not its ask's handle ask:01MCBM0ZY0Q8HQF8XBV866MV02",
++   "needs-you: the live capture's row for \"Exception ask 40 in design: go ahead?\" has id undefined, not its ask's handle ask:01MCBM0ZY0Q8HQF8XBV866MV02",
++   "needs-you: the replica's row for \"Choice ask 41 in design: go ahead?\" has id undefined, not its ask's handle ask:01MCBM2TH0NW7SS2F1197R3CFM",
++   "needs-you: the live capture's row for \"Choice ask 41 in design: go ahead?\" has id undefined, not its ask's handle ask:01MCBM2TH0NW7SS2F1197R3CFM",
++   "needs-you: the replica's row for \"Definition ask 42 in design: go ahead?\" has id undefined, not its ask's handle ask:01MCBM4N40Z3CSTTRFF8PNDT8E",
++   "needs-you: the live capture's row for \"Definition ask 42 in design: go ahead?\" has id undefined, not its ask's handle ask:01MCBM4N40Z3CSTTRFF8PNDT8E",
++ ]
+
+ ❯ tests/acceptance/1459/parity.test.ts:51:22
+     49|       }
+     50|     }
+     51|     expect(failures).toEqual([]);
+       |                      ^
+     52|   }, 40 * MIN);
+     53| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed (3)
+   Start at  01:40:52
+   Duration  240.98s (tests 100%)
+

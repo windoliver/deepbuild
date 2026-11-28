@@ -1,0 +1,11 @@
+start; cc --version exit 0; screen-lock flag 0; 'AC Power'; front app [Terminal] 23:15:23 load { 53.24 75.23 74.33 } thermal 0 free KB 15730716
+BASE clone at 703ea8e49fcb84502acab9f3cef01851db8b0834 exit=0; origin/main 7a256fd4b9651f5ed1f5255d3520603320803eb4; porcelain lines 0 23:15:57 load { 55.76 73.63 73.79 } thermal 0 free KB 12510192
+setup base (npm ci, workspace build, deep-hook) exit=0 23:18:00 load { 38.26 61.95 69.19 } thermal 0 free KB 17295628
+base-1172-rows.txt: Tests 2 failed (2) exit=1; front app [loginwindow] 23:30:00 load { 169.54 167.24 129.04 } thermal 0 free KB 15635296
+base-1546-ac1.txt: Tests 5 failed | 1 passed (6) exit=1; front app [loginwindow] 23:38:03 load { 165.04 147.57 132.34 } thermal 0 free KB 63736648
+base-1427-ac7.txt: Tests 4 failed (4) exit=1; front app [loginwindow] 23:38:40 load { 161.68 148.94 133.55 } thermal 0 free KB 59479388
+git status --porcelain lines after: 0 23:38:41 load { 161.68 148.94 133.55 } thermal 0 free KB 59455256
+clone ~/mac-runs/d2690m removed 23:38:50 load { 158.10 148.41 133.45 } thermal 0 free KB 77910584
+ALL DONE 23:38:50 load { 158.10 148.41 133.45 } thermal 0 free KB 77910564
+note: screen locked during the run (lock flag 1 and front app loginwindow from the 1172 result at 23:30 on; flag was 0 at start 23:15). Exact lock time unknown; 1546 and 1427 ran fully under the lock
+secret scan hits=0 23:38:58

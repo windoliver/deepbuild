@@ -1,0 +1,18 @@
+ M docs/spikes/338/out/live/needs-you.json
+ M docs/spikes/338/out/live/session.json
+ M docs/spikes/338/out/live/sidebar.json
+A  tests/acceptance/1810/BASE-FAILURE.txt
+A  tests/acceptance/1810/README.md
+A  tests/acceptance/1810/count.test.ts
+A  tests/acceptance/1810/criteria.json
+A  tests/acceptance/1810/defaulted.test.ts
+A  tests/acceptance/1810/helpers.ts
+A  tests/acceptance/1810/judges.test.ts
+A  tests/acceptance/1810/redraft-replica/BASE-FAILURE.txt
+A  tests/acceptance/1810/redraft-replica/README.md
+A  tests/acceptance/1810/redraft-replica/helpers.ts
+A  tests/acceptance/1810/redraft-replica/judges.test.ts
+A  tests/acceptance/1810/redraft-replica/list.test.ts
+A  tests/acceptance/1810/redraft-replica/tsconfig.json
+A  tests/acceptance/1810/tsconfig.json
+A  tests/acceptance/1810/width.test.ts

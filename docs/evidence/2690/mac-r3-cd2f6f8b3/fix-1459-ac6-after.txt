@@ -1,0 +1,55 @@
+warning: unused variable: `diagnostic_key`
+    --> vendor/quickjs-jit-runtime/src/compiler/optimized.rs:8795:5
+     |
+8795 |     diagnostic_key: Option<crate::runtime::FunctionKey>,
+     |     ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_diagnostic_key`
+     |
+     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `apply_stress_gc_after_validation` is never used
+    --> vendor/quickjs-jit-runtime/src/lib.rs:1387:4
+     |
+1387 | fn apply_stress_gc_after_validation(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `machine_disassembly` is never read
+    --> vendor/quickjs-jit-runtime/src/compiler/baseline.rs:1985:5
+     |
+1974 | pub struct RelocatableCode {
+     |            --------------- field in this struct
+...
+1985 |     machine_disassembly: Option<String>,
+     |     ^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `RelocatableCode` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+
+warning: `quickjs-jit-runtime` (lib) generated 3 warnings (run `cargo fix --lib -p quickjs-jit-runtime` to apply 1 suggestion)
+   Compiling deep-app v0.0.0 (~/mac-runs/d2880r3/crates/deep-app)
+   Compiling deep-replica v0.0.0 (~/mac-runs/d2880r3/crates/deep-replica)
+warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
+  |
+  = note: `#[warn(linker_messages)]` on by default
+
+warning: `deep-replica` (bin "deep-drive") generated 1 warning
+warning: `deep-replica` (test "headless") generated 1 warning (1 duplicate)
+warning: `deep-replica` (bin "deep-replica") generated 1 warning (1 duplicate)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 32.50s
+warning: the following packages contain code that will be rejected by a future version of Rust: block v0.1.6
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running headless.rs (target/debug/deps/headless-0c62d1b2364b550e)
+
+running 1 tests
+deep-replica: first frame drawn
+deep-replica phases: context and init 83ms, window 139ms, first frame 142ms, frames 146ms, screenshot 165ms, written 207ms
+replica needs-you: 190 nodes, 0 canvas items, 3024x1964 screenshot
+deep-replica: first frame drawn
+deep-replica phases: context and init 59ms, window 107ms, first frame 109ms, frames 113ms, screenshot 130ms, written 172ms
+replica sidebar: 190 nodes, 0 canvas items, 3024x1964 screenshot
+deep-replica: first frame drawn
+deep-replica phases: context and init 70ms, window 170ms, first frame 173ms, frames 177ms, screenshot 200ms, written 239ms
+replica session: 188 nodes, 3 canvas items, 3024x1964 screenshot
+test replica_equals_live_tree ... ok
+
+test result: ok. 1 passed; 0 failed

@@ -1,0 +1,350 @@
+   Compiling serde_core v1.0.229
+   Compiling bitflags v2.13.2
+   Compiling jobserver v0.1.35
+   Compiling arrayvec v0.7.8
+   Compiling yoke v0.8.3
+   Compiling litemap v0.8.3
+   Compiling objc2-core-foundation v0.3.2
+   Compiling rustix v1.1.6
+   Compiling flate2 v1.1.10
+   Compiling bumpalo v3.20.3
+   Compiling regex-automata v0.4.18
+   Compiling num-complex v0.4.6
+   Compiling zune-inflate v0.2.54
+   Compiling polycool v0.4.0
+   Compiling zerovec v0.11.8
+   Compiling cc v1.9.0
+   Compiling zerotrie v0.2.5
+   Compiling ttf-parser v0.25.1
+   Compiling lyon_geom v1.0.19
+   Compiling core-graphics-types v0.2.0
+   Compiling tiff v0.11.3
+   Compiling png v0.18.1
+   Compiling pulp v0.22.3
+   Compiling lyon_path v1.0.19
+   Compiling png v0.17.16
+   Compiling lyon_tessellation v1.0.22
+   Compiling tinystr v0.8.4
+   Compiling potential_utf v0.1.6
+   Compiling icu_locale_core v2.3.0
+   Compiling icu_collections v2.3.0
+   Compiling objc2-foundation v0.3.2
+   Compiling quickjs-jit-sys v0.12.11 (https://github.com/longbridge/quickjs-jit?rev=96593cd7a54440ac060a391b8baea7e9a3cf1393#96593cd7)
+   Compiling blake3 v1.5.5
+   Compiling objc2-io-surface v0.3.2
+   Compiling serde v1.0.229
+   Compiling hashbrown v0.17.1
+   Compiling log v0.4.34
+   Compiling icu_provider v2.3.1
+   Compiling objc2-core-graphics v0.3.2
+   Compiling smallvec v1.16.3
+   Compiling icu_properties v2.3.0
+   Compiling indexmap v2.14.2
+   Compiling icu_normalizer v2.3.0
+   Compiling kurbo v0.13.1
+   Compiling parking_lot_core v0.9.12
+   Compiling parking_lot v0.12.5
+   Compiling icu_locale_fallback v2.3.0
+   Compiling fontique v0.12.0
+   Compiling harfrust v0.12.0
+   Compiling icu_segmenter v2.3.0
+   Compiling semver v1.0.28
+   Compiling globset v0.4.20
+   Compiling uuid v1.28.0
+   Compiling serde_json v1.0.154
+   Compiling idna_adapter v1.2.2
+   Compiling idna v1.1.0
+   Compiling peniko v0.6.1
+   Compiling vello_common v0.3.0
+   Compiling parley_data v0.12.0
+   Compiling accesskit v0.24.1
+   Compiling svgtypes v0.16.1
+   Compiling rustybuzz v0.20.1
+   Compiling url v2.5.8
+   Compiling serde_urlencoded v0.7.1
+   Compiling tempfile v3.27.0
+   Compiling fontdb v0.23.0
+   Compiling simplecss v0.2.2
+   Compiling embed-resource v3.0.12
+   Compiling gpui-pre v0.3.9 (~/mac-runs/d2690fd0/vendor/gpui-pre)
+   Compiling exr v1.74.2
+   Compiling rusty-fork v0.3.1
+   Compiling wasmtime-internal-core v49.0.5
+   Compiling taffy v0.14.0
+   Compiling chrono v0.4.45
+   Compiling tiny-skia v0.11.4
+   Compiling deep-canvas v0.0.0 (~/mac-runs/d2690fd0/crates/deep-canvas)
+   Compiling glifo v0.4.0
+   Compiling vello_cpu v0.3.0
+   Compiling usvg v0.46.0
+   Compiling parley_engine v0.12.0
+   Compiling schemars v1.2.3
+   Compiling gpui-pre-util v0.3.9
+   Compiling smol_str v0.3.6
+   Compiling derive_more-impl v2.1.1
+   Compiling parley v0.12.0
+   Compiling lyon_algorithms v1.0.21
+   Compiling image v0.25.10
+   Compiling proptest v1.12.0
+   Compiling derive_more v2.1.1
+   Compiling futures-concurrency v7.7.1
+   Compiling postage v0.5.0
+   Compiling resvg v0.46.0
+   Compiling lyon v1.0.19
+   Compiling gpui-pre-scheduler v0.3.9
+   Compiling gpui-pre-shared-string v0.3.9
+   Compiling gpui-pre-collections v0.3.9
+   Compiling gpui-pre-http-client v0.3.9
+   Compiling taffy v0.13.0
+   Compiling core-graphics v0.24.0
+   Compiling errno v0.3.14
+   Compiling rustc-hash v1.1.0
+   Compiling naga-types v30.0.1
+   Compiling postcard v1.1.3
+   Compiling ignore v0.4.33
+   Compiling getrandom v0.4.3
+   Compiling cranelift-bitset v0.136.5
+   Compiling polling v3.11.0
+   Compiling num-traits v0.2.19
+   Compiling string_cache v0.8.9
+   Compiling globwalk v0.8.1
+   Compiling async-io v2.6.0
+   Compiling ring v0.17.14
+   Compiling objc2-core-text v0.3.2
+   Compiling dirs-sys v0.5.0
+   Compiling cbindgen v0.28.0
+   Compiling zstd-sys v2.1.2+zstd.1.5.7
+   Compiling naga v30.0.1
+   Compiling markup5ever v0.12.1
+   Compiling dirs v6.0.0
+   Compiling sha2 v0.11.1
+   Compiling cranelift-entity v0.136.5
+   Compiling core-text v21.0.0
+   Compiling wgpu-types v30.0.1
+   Compiling gimli v0.33.0
+   Compiling cranelift-bitset v0.116.1
+   Compiling base64 v0.23.1
+   Compiling either v1.19.0
+   Compiling serde-saphyr v1.3.0
+   Compiling itertools v0.11.0
+   Compiling gpui-pre-apple v0.3.9 (~/mac-runs/d2690fd0/vendor/gpui-pre-apple)
+   Compiling async-signal v0.2.14
+   Compiling cranelift-entity v0.116.1
+   Compiling cranelift-bforest v0.136.5
+   Compiling objc2-metal v0.3.2
+   Compiling objc2-core-image v0.3.2
+   Compiling objc2-cloud-kit v0.3.2
+   Compiling objc2-core-data v0.3.2
+   Compiling rust-embed-utils v8.13.0
+   Compiling pathfinder_geometry v0.5.1
+   Compiling objc2-foundation v0.2.2
+   Compiling shellexpand v3.1.2
+   Compiling wasmparser v0.258.3
+   Compiling regex v1.13.1
+   Compiling dispatch2 v0.3.1
+   Compiling rust-i18n-support v4.2.4
+   Compiling zed-font-kit v0.14.1-zed
+   Compiling wgpu-naga-bridge v30.0.1
+   Compiling objc2-app-kit v0.2.2
+   Compiling objc2-quartz-core v0.3.2
+   Compiling objc2-core-video v0.3.2
+   Compiling deep-canvas-seams v0.0.0 (~/mac-runs/d2690fd0/crates/deep-canvas-seams)
+   Compiling deep-canvas-drawn v0.0.0 (~/mac-runs/d2690fd0/crates/deep-canvas-drawn)
+   Compiling deep-text v0.0.0 (~/mac-runs/d2690fd0/crates/deep-text)
+   Compiling objc2-app-kit v0.3.2
+   Compiling raw-window-metal v1.1.0
+   Compiling wgpu-hal v30.0.1
+   Compiling rust-i18n v4.2.4
+   Compiling deep-canvas-marks v0.0.0 (~/mac-runs/d2690fd0/crates/deep-canvas-marks)
+   Compiling rust-embed-impl v8.13.0
+   Compiling cranelift-bforest v0.116.1
+   Compiling async-process v2.5.0
+   Compiling html5ever v0.27.0
+   Compiling xml5ever v0.18.1
+   Compiling async-net v2.0.0
+   Compiling regalloc2 v0.11.2
+   Compiling cocoa-foundation v0.2.1
+   Compiling metal v0.33.0
+   Compiling triomphe v0.1.17
+   Compiling pulley-interpreter v49.0.5
+   Compiling accesskit_consumer v0.38.0
+   Compiling gimli v0.31.1
+   Compiling regalloc2 v0.15.2
+   Compiling bincode v1.3.3
+   Compiling objc2-security v0.3.2
+   Compiling hashbrown v0.14.5
+   Compiling zstd-safe v7.4.0
+   Compiling rustls v0.23.46
+   Compiling rust-i18n-macro v4.2.4
+   Compiling cranelift-codegen v0.116.1
+   Compiling syntect v5.3.0
+   Compiling quickjs-jit-core v0.12.11 (https://github.com/longbridge/quickjs-jit?rev=96593cd7a54440ac060a391b8baea7e9a3cf1393#96593cd7)
+   Compiling cranelift-codegen v0.136.5
+   Compiling deep-canvas-motion v0.0.0 (~/mac-runs/d2690fd0/crates/deep-canvas-motion)
+   Compiling markdown v1.0.0
+   Compiling quickjs-jit-macro v0.12.11 (https://github.com/longbridge/quickjs-jit?rev=96593cd7a54440ac060a391b8baea7e9a3cf1393#96593cd7)
+   Compiling lsp-types v0.97.0
+   Compiling quickjs-jit v0.12.11 (https://github.com/longbridge/quickjs-jit?rev=96593cd7a54440ac060a391b8baea7e9a3cf1393#96593cd7)
+   Compiling rquickjs v0.12.9 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling llrt_utils v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling llrt_hooking v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling llrt_context v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling llrt_timers v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling llrt_async_hooks v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling llrt_events v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling llrt_exceptions v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling llrt_abort v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling smol v2.0.2
+   Compiling accesskit_macos v0.26.3 (~/mac-runs/d2690fd0/vendor/accesskit_macos)
+   Compiling cocoa v0.26.0
+   Compiling wasm-encoder v0.258.3
+   Compiling markup5ever_rcdom v0.3.0
+   Compiling wgpu-core-deps-apple v30.0.1
+   Compiling rust-embed v8.13.0
+   Compiling rustls-webpki v0.103.16
+   Compiling objc2-user-notifications v0.3.2
+   Compiling notify-types v2.1.0
+   Compiling wasmprinter v0.258.3
+   Compiling gpui-pre-macos v0.3.9 (~/mac-runs/d2690fd0/vendor/gpui-pre-macos)
+   Compiling gpui-base v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling notify v8.2.0
+   Compiling h2 v0.4.20
+   Compiling gpui-kit-assets v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling wgpu-core v30.0.1
+   Compiling deep-canvas-scene3d v0.0.0 (~/mac-runs/d2690fd0/crates/deep-canvas-scene3d)
+   Compiling llrt_stream_web v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling two-face v0.4.5
+   Compiling object v0.40.0
+   Compiling gpui-component v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling security-framework v3.7.0
+   Compiling wgpu v30.0.1
+   Compiling wasmtime-environ v49.0.5
+   Compiling llrt_buffer v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling zstd v0.13.4
+   Compiling hyper v1.12.0
+   Compiling gpui-pre-platform v0.3.9
+   Compiling meshopt v0.7.0
+   Compiling fs-set-times v0.20.3
+   Compiling llrt_json v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling hyper-util v0.1.21
+   Compiling wasmtime-internal-unwinder v49.0.5
+   Compiling llrt_compression v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling rustls-native-certs v0.8.5
+   Compiling object v0.36.7
+   Compiling gpui-kit v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling wasmtime v49.0.5
+   Compiling tokio-rustls v0.26.6
+   Compiling cranelift-frontend v0.136.5
+   Compiling cranelift-native v0.136.5
+   Compiling cranelift-module v0.116.1
+   Compiling quickjs-jit-runtime v0.12.11 (~/mac-runs/d2690fd0/vendor/quickjs-jit-runtime)
+   Compiling objc2-io-kit v0.3.2
+   Compiling serde_yaml v0.9.34+deprecated
+   Compiling cap-primitives v4.0.3
+   Compiling llrt_crypto v0.9.0-beta (~/mac-runs/d2690fd0/vendor/llrt_crypto)
+   Compiling system-configuration v0.6.1
+   Compiling sysinfo v0.37.2
+   Compiling wast v263.0.0
+   Compiling cranelift-object v0.116.1
+   Compiling wasmtime-internal-cranelift v49.0.5
+   Compiling hyper-rustls v0.27.10
+   Compiling llrt_zlib v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling deep-gpu v0.0.0 (~/mac-runs/d2690fd0/crates/deep-gpu)
+   Compiling wgpu-profiler v0.28.0
+   Compiling deep-canvas-effects v0.0.0 (~/mac-runs/d2690fd0/crates/deep-canvas-effects)
+   Compiling cranelift-frontend v0.116.1
+   Compiling cranelift-native v0.116.1
+   Compiling llrt_path v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling llrt_url v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling deep-marks-vello v0.0.0 (~/mac-runs/d2690fd0/crates/deep-marks-vello)
+   Compiling deep-images v0.0.0 (~/mac-runs/d2690fd0/crates/deep-images)
+   Compiling addr2line v0.26.1
+   Compiling wasmtime-internal-jit-icache-coherence v49.0.5
+   Compiling tungstenite v0.29.0
+   Compiling gpui-pre-reqwest v0.12.15
+   Compiling deep-marks-raster v0.0.0 (~/mac-runs/d2690fd0/crates/deep-marks-raster)
+   Compiling quickjs-jit-stdlib v0.12.7 (https://github.com/longbridge/quickjs-jit?rev=605da483611a3548edb8c33fdff602e3f5f42076#605da483)
+   Compiling deep-scene3d-render v0.0.0 (~/mac-runs/d2690fd0/crates/deep-scene3d-render)
+warning: unused variable: `diagnostic_key`
+    --> vendor/quickjs-jit-runtime/src/compiler/optimized.rs:8795:5
+     |
+8795 |     diagnostic_key: Option<crate::runtime::FunctionKey>,
+     |     ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_diagnostic_key`
+     |
+     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `apply_stress_gc_after_validation` is never used
+    --> vendor/quickjs-jit-runtime/src/lib.rs:1387:4
+     |
+1387 | fn apply_stress_gc_after_validation(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `machine_disassembly` is never read
+    --> vendor/quickjs-jit-runtime/src/compiler/baseline.rs:1985:5
+     |
+1974 | pub struct RelocatableCode {
+     |            --------------- field in this struct
+...
+1985 |     machine_disassembly: Option<String>,
+     |     ^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `RelocatableCode` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+
+   Compiling wat v1.263.0
+   Compiling gpui-fps v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling cap-std v4.0.3
+   Compiling deep-canvas-media v0.0.0 (~/mac-runs/d2690fd0/crates/deep-canvas-media)
+   Compiling deep-canvas-sandbox v0.0.0 (~/mac-runs/d2690fd0/crates/deep-canvas-sandbox)
+warning: `quickjs-jit-runtime` (lib) generated 3 warnings (run `cargo fix --lib -p quickjs-jit-runtime` to apply 1 suggestion)
+   Compiling objc2-core-media v0.3.2
+   Compiling gpui-shell v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling objc2-screen-capture-kit v0.3.2
+   Compiling deep-sandbox-wasmtime v0.0.0 (~/mac-runs/d2690fd0/crates/deep-sandbox-wasmtime)
+   Compiling deep-play v0.0.0 (~/mac-runs/d2690fd0/crates/deep-play)
+   Compiling deep-effects-render v0.0.0 (~/mac-runs/d2690fd0/crates/deep-effects-render)
+   Compiling deep-text-gpui v0.0.0 (~/mac-runs/d2690fd0/crates/deep-text-gpui)
+   Compiling deep-marks-gpui v0.0.0 (~/mac-runs/d2690fd0/crates/deep-marks-gpui)
+   Compiling deep-canvas-cells v0.0.0 (~/mac-runs/d2690fd0/crates/deep-canvas-cells)
+   Compiling deep-catalog v0.0.0 (~/mac-runs/d2690fd0/crates/deep-catalog)
+   Compiling deep-logic v0.0.0 (~/mac-runs/d2690fd0/crates/deep-logic)
+   Compiling deep-app v0.0.0 (~/mac-runs/d2690fd0/crates/deep-app)
+   Compiling deep-canvas-input v0.0.0 (~/mac-runs/d2690fd0/crates/deep-canvas-input)
+   Compiling deep-replica v0.0.0 (~/mac-runs/d2690fd0/crates/deep-replica)
+warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
+  |
+  = note: `#[warn(linker_messages)]` on by default
+
+warning: `deep-replica` (bin "deep-drive") generated 1 warning
+warning: `deep-replica` (test "headless") generated 1 warning (1 duplicate)
+warning: `deep-replica` (bin "deep-replica") generated 1 warning (1 duplicate)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 16m 39s
+warning: the following packages contain code that will be rejected by a future version of Rust: block v0.1.6
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running headless.rs (target/debug/deps/headless-0c62d1b2364b550e)
+
+running 1 tests
+deep-replica: first frame drawn
+deep-replica phases: context and init 135ms, window 385ms, first frame 391ms, frames 395ms, screenshot 469ms, written 661ms
+replica needs-you: 190 nodes, 0 canvas items, 3024x1964 screenshot
+deep-replica: first frame drawn
+deep-replica phases: context and init 82ms, window 245ms, first frame 268ms, frames 277ms, screenshot 339ms, written 609ms
+replica sidebar: 190 nodes, 0 canvas items, 3024x1964 screenshot
+deep-replica: first frame drawn
+deep-replica phases: context and init 88ms, window 439ms, first frame 445ms, frames 482ms, screenshot 508ms, written 684ms
+replica session: 188 nodes, 3 canvas items, 3024x1964 screenshot
+
+thread 'main' (184254528) panicked at crates/deep-replica/headless.rs:537:9:
+the replica differs from the live tree:
+needs-you: node 6 (label Some("needs you")) differs in name: Some("needs you") vs Some("!")
+sidebar: node 6 (label Some("needs you")) differs in name: Some("needs you") vs Some("!")
+session: node 6 (label Some("needs you")) differs in name: Some("needs you") vs Some("!")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test replica_equals_live_tree ... FAILED
+
+test result: FAILED. 0 passed; 1 failed
+error: test failed, to rerun pass `-p deep-replica --test headless`
+
+Caused by:
+  process didn't exit successfully: `~/mac-runs/d2690fd0/target/debug/deps/headless-0c62d1b2364b550e replica_equals_live_tree` (exit status: 1)

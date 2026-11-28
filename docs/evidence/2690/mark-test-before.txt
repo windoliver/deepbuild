@@ -1,0 +1,10 @@
+     Running unittests src/lib.rs (target/debug/deps/deep_app-e0faaa468c5b4478)
+failures:
+thread 'rows::tests::only_an_open_asks_mark_says_needs_you' (3897454) panicked at crates/deep-app/src/rows.rs:978:13:
+assertion `left == right` failed: an ask whose row reads answered
+  left: "needs you"
+ right: "!"
+failures:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 136 filtered out; finished in 0.10s
+error: test failed, to rerun pass `-p deep-app --lib`
+exit=101

@@ -1,0 +1,99 @@
+
+ RUN  v5.0.5 ~/mac-runs/d2690fd0
+
+ ❯ tests/acceptance/1459/parity.test.ts (3 tests | 2 failed) 355781ms
+   ❯ AC6 #1459.cd8e77fe `replica_equals_live_tree` passes for the shipped pages, and it leaves `scripts/known-failures.json` (3)
+     × AC6 cargo's replica_equals_live_tree runs and passes 272136ms
+     × AC6 each shipped page drawn by the replica equals the live capture node for node, ids and values included, and Needs you's rows carry their asks' handles 83546ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1459/parity.test.ts > AC6 #1459.cd8e77fe `replica_equals_live_tree` passes for the shipped pages, and it leaves `scripts/known-failures.json` > AC6 cargo's replica_equals_live_tree runs and passes
+AssertionError: the test passed: 
+running 1 tests
+deep-replica: first frame drawn
+replica needs-you: 190 nodes, 0 canvas items, 3024x1964 screenshot
+deep-replica: first frame drawn
+replica sidebar: 190 nodes, 0 canvas items, 3024x1964 screenshot
+deep-replica: first frame drawn
+replica session: 188 nodes, 3 canvas items, 3024x1964 screenshot
+test replica_equals_live_tree ... FAILED
+
+test result: FAILED. 0 passed; 1 failed
+: expected '\nrunning 1 tests\ndeep-replica: firs…' to contain 'test replica_equals_live_tree ... ok'
+
+- Expected
++ Received
+
+- test replica_equals_live_tree ... ok
++
++ running 1 tests
++ deep-replica: first frame drawn
++ replica needs-you: 190 nodes, 0 canvas items, 3024x1964 screenshot
++ deep-replica: first frame drawn
++ replica sidebar: 190 nodes, 0 canvas items, 3024x1964 screenshot
++ deep-replica: first frame drawn
++ replica session: 188 nodes, 3 canvas items, 3024x1964 screenshot
++ test replica_equals_live_tree ... FAILED
++
++ test result: FAILED. 0 passed; 1 failed
++
+
+ ❯ tests/acceptance/1459/parity.test.ts:19:67
+     17|     const r = await run('cargo', ['test', '--locked', '-p', 'deep-repl…
+     18|     expect(r.stdout, `the test ran: ${r.stdout.slice(-600)} ${r.stderr…
+     19|     expect(r.stdout, `the test passed: ${r.stdout.slice(-1200)}`).toCo…
+       |                                                                   ^
+     20|     expect(r.code).toBe(0);
+     21|   }, 40 * MIN);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/1459/parity.test.ts > AC6 #1459.cd8e77fe `replica_equals_live_tree` passes for the shipped pages, and it leaves `scripts/known-failures.json` > AC6 each shipped page drawn by the replica equals the live capture node for node, ids and values included, and Needs you's rows carry their asks' handles
+AssertionError: expected [ …(22) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "needs-you: the replica's row for \"Definition ask 24 in docs: go ahead?\" has id undefined, not its ask's handle ask:01MCBK1VV0C16MFYY0FV9VS2MC",
++   "needs-you: the live capture's row for \"Definition ask 24 in docs: go ahead?\" has id undefined, not its ask's handle ask:01MCBK1VV0C16MFYY0FV9VS2MC",
++   "needs-you: the replica's row for \"Taste ask 33 in migrate: go ahead?\" has id undefined, not its ask's handle ask:01MCBKM5S08BX0Q7W6PAAZ9V33",
++   "needs-you: the live capture's row for \"Taste ask 33 in migrate: go ahead?\" has id undefined, not its ask's handle ask:01MCBKM5S08BX0Q7W6PAAZ9V33",
++   "needs-you: the replica's row for \"Exception ask 34 in migrate: go ahead?\" has id undefined, not its ask's handle ask:01MCBKP0C0326Y1A9RPQYVNGPG",
++   "needs-you: the live capture's row for \"Exception ask 34 in migrate: go ahead?\" has id undefined, not its ask's handle ask:01MCBKP0C0326Y1A9RPQYVNGPG",
++   "needs-you: the replica's row for \"Choice ask 35 in migrate: go ahead?\" has id undefined, not its ask's handle ask:01MCBKQTZ0EDAQT02919ZW2SFR",
++   "needs-you: the live capture's row for \"Choice ask 35 in migrate: go ahead?\" has id undefined, not its ask's handle ask:01MCBKQTZ0EDAQT02919ZW2SFR",
++   "needs-you: the replica's row for \"Definition ask 36 in migrate: go ahead?\" has id undefined, not its ask's handle ask:01MCBKSNJ0FM55WQBQPTSVJAPV",
++   "needs-you: the live capture's row for \"Definition ask 36 in migrate: go ahead?\" has id undefined, not its ask's handle ask:01MCBKSNJ0FM55WQBQPTSVJAPV",
++   "needs-you: the replica's row for \"Authority ask 37 in migrate: go ahead?\" has id undefined, not its ask's handle ask:01MCBKVG50GQC93ENP7EY121TD",
++   "needs-you: the live capture's row for \"Authority ask 37 in migrate: go ahead?\" has id undefined, not its ask's handle ask:01MCBKVG50GQC93ENP7EY121TD",
++   "needs-you: the replica's row for \"Unblock ask 38 in design: go ahead?\" has id undefined, not its ask's handle ask:01MCBKXAR0Z44974EVGRASG9RG",
++   "needs-you: the live capture's row for \"Unblock ask 38 in design: go ahead?\" has id undefined, not its ask's handle ask:01MCBKXAR0Z44974EVGRASG9RG",
++   "needs-you: the replica's row for \"Taste ask 39 in design: go ahead?\" has id undefined, not its ask's handle ask:01MCBKZ5B04TEWTB5FFGVYNJJ9",
++   "needs-you: the live capture's row for \"Taste ask 39 in design: go ahead?\" has id undefined, not its ask's handle ask:01MCBKZ5B04TEWTB5FFGVYNJJ9",
++   "needs-you: the replica's row for \"Exception ask 40 in design: go ahead?\" has id undefined, not its ask's handle ask:01MCBM0ZY0Q8HQF8XBV866MV02",
++   "needs-you: the live capture's row for \"Exception ask 40 in design: go ahead?\" has id undefined, not its ask's handle ask:01MCBM0ZY0Q8HQF8XBV866MV02",
++   "needs-you: the replica's row for \"Choice ask 41 in design: go ahead?\" has id undefined, not its ask's handle ask:01MCBM2TH0NW7SS2F1197R3CFM",
++   "needs-you: the live capture's row for \"Choice ask 41 in design: go ahead?\" has id undefined, not its ask's handle ask:01MCBM2TH0NW7SS2F1197R3CFM",
++   "needs-you: the replica's row for \"Definition ask 42 in design: go ahead?\" has id undefined, not its ask's handle ask:01MCBM4N40Z3CSTTRFF8PNDT8E",
++   "needs-you: the live capture's row for \"Definition ask 42 in design: go ahead?\" has id undefined, not its ask's handle ask:01MCBM4N40Z3CSTTRFF8PNDT8E",
++ ]
+
+ ❯ tests/acceptance/1459/parity.test.ts:51:22
+     49|       }
+     50|     }
+     51|     expect(failures).toEqual([]);
+       |                      ^
+     52|   }, 40 * MIN);
+     53| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
+   Start at  00:31:04
+   Duration  357.34s (tests 100%)
+

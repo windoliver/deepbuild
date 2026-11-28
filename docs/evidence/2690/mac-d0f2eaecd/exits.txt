@@ -1,0 +1,17 @@
+start; cc --version exit 0; screen-lock flag 0; 'AC Power'; front app [Claude] 22:52:21 load { 31.46 46.80 64.04 } thermal 0 free KB 113069308
+FIX clone at d0f2eaecd05a2a556f52c58eeb5bffe667ea0447 exit=0; origin/claude/fix-2690-ask-row-word d0f2eaecd05a2a556f52c58eeb5bffe667ea0447; origin/main 1b4929ae7977aa4bfe62b03e0ef39674be9e8a27 22:53:31 load { 45.43 48.52 63.37 } thermal 0 free KB 107557200
+setup fix (npm ci, workspace build, deep-hook, deep-show) exit=0 23:36:51 load { 99.58 126.15 135.56 } thermal 0 free KB 95394332
+fix-2690.txt: Tests 3 passed (3) exit=0 23:48:32 load { 131.38 148.14 141.46 } thermal 0 free KB 83363276
+fix-1461-ac27.txt: Tests 2 passed | 6 skipped (8) exit=0 23:48:45 load { 154.67 152.71 143.22 } thermal 0 free KB 82710300
+fix-1810-redraft.txt: Tests 6 passed (6) exit=0 23:49:51 load { 164.36 152.83 143.76 } thermal 0 free KB 78665268
+fix-1459-ac6-before.txt: test result: FAILED. 0 passed; 1 failed exit=1; snapshots from $TMPDIR/deep-338-31041 00:06:40 load { 111.95 236.60 229.90 } thermal 0 free KB 50920412
+retake: view:exit needs-you:0 sidebar:0 session:0; files copied: needs-you.json session.json sidebar.json 00:30:41 load { 104.56 91.00 113.07 } thermal 0 free KB 153916084
+live-diff:  3 files changed, 68 insertions(+), 68 deletions(-) 00:30:41 load { 104.56 91.00 113.07 } thermal 0 free KB 153919972
+fix-1459-ac6-after.txt: test result: FAILED. 0 passed; 1 failed exit=1 00:30:59 load { 106.81 92.17 113.10 } thermal 0 free KB 154332284
+side watcher: round bash 80711 stopped after B8 (children done); adding B6-again and B3 here, before parity 00:37:01 load { 151.19 131.23 123.36 } thermal 0 free KB 148224836
+fix-1459-ac6-again.txt: test result: FAILED. 0 passed; 1 failed exit=1; snapshots from $TMPDIR/deep-338-46098 00:37:12 load { 145.19 130.57 123.22 } thermal 0 free KB 148130176
+B3 (1172 rows) not run in this clone: Mac disk under 40 GB (coordinator asked to free the clone); B3 moves to a later fresh clone at low load 00:37:12 load { 145.19 130.57 123.22 } thermal 0 free KB 148130112
+fix-1459-parity.txt: Tests 2 failed | 1 passed (3) exit=1 00:37:12 load { 145.19 130.57 123.22 } thermal 0 free KB 148130028
+fix git status --porcelain lines after (retaken captures included): 3 00:37:13 load { 145.19 130.57 123.22 } thermal 0 free KB 148129672
+clone ~/mac-runs/d2690fd0 removed 00:37:31 load { 127.95 127.62 122.33 } thermal 0 free KB 190870636
+ALL DONE front app [Windows App] 00:37:32 load { 127.95 127.62 122.33 } thermal 0 free KB 190870684

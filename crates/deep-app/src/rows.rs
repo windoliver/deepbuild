@@ -590,7 +590,7 @@ pub(crate) fn row_element(
         // The mark: its state's drawn glyph tinted in its core, in a slot of 16 with 8 after it (#1592). A working
         // session's turns a quarter for each event its hooks send (#2021).
         .child(
-            row_slot(id, "mark", states::glyph(drawn.entry).to_owned())
+            row_slot(id, "mark", mark_name(ask, &drawn.value, drawn.entry))
                 .aria_value(drawn.entry.to_owned())
                 .flex_none()
                 .w(s.mark)
@@ -971,4 +971,34 @@ pub(crate) fn in_lane(
                 .pb(s.space(2))
                 .child(words)
         }))
+}
+
+fn mark_name(ask: bool, value: &str, entry: &str) -> String {
+    if ask && value == "needs_you" {
+        states::shown(states::State::NeedsYou.word()).to_owned()
+    } else {
+        states::glyph(entry).to_owned()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{mark_name, states};
+
+    #[test]
+    fn only_an_open_asks_mark_says_needs_you() {
+        let needs_you = states::shown(states::State::NeedsYou.word());
+        assert_eq!(mark_name(true, "needs_you", "needs_you"), needs_you);
+        for value in ["answered", "folded", "later", "held"] {
+            assert_eq!(
+                mark_name(true, value, "needs_you"),
+                states::glyph("needs_you"),
+                "an ask whose row reads {value}"
+            );
+        }
+        assert_eq!(
+            mark_name(false, "running", "running"),
+            states::glyph("running")
+        );
+    }
 }

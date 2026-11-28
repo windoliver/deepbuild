@@ -1,0 +1,4 @@
+     Running unittests src/lib.rs (target/debug/deps/deep_app-e0faaa468c5b4478)
+test rows::tests::only_an_open_asks_mark_says_needs_you ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 136 filtered out; finished in 0.02s
+exit=0

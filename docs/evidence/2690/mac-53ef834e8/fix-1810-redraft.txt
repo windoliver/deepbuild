@@ -1,0 +1,52 @@
+== commit 53ef834e811a81574b17fafa079dadf4e4889d30
+== command: node node_modules/vitest/vitest.mjs run --root tests/acceptance/1810 redraft-replica --no-file-parallelism
+== start 2026-11-19 22:24:36 load { 12.60 31.52 59.47 } thermal 1
+
+ RUN  v5.0.5 ~/private/d2690b/tests/acceptance/1810
+
+stdout | redraft-replica/list.test.ts > #1810.eebcb4a2 > #1810.eebcb4a2: with two asks answered and one open, deep and the app's list say 1 at the same log position
+deep status --json at 35 and 35; the app's list at 35: [["session:795a9629-3709-427b-9a72-3d03b8de5838","Cart totals","needs you"],["ask:01M7VTMQ726WDKSP00SF62PZXH","Which header colour on the login page?","needs you"]]; its window's counts [1]
+deep:
+shop
+  Cart totals  claude-code  needs you · an ask open, 0s
+Needs you
+  Which header colour on the login page?  needs you  shop, 0s
+1 session
+1 ask needs you
+
+
+ ❯ redraft-replica/list.test.ts (1 test | 1 failed) 32659ms
+   ❯ #1810.eebcb4a2 (1)
+     × #1810.eebcb4a2: with two asks answered and one open, deep and the app's list say 1 at the same log position 32595ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  redraft-replica/list.test.ts > #1810.eebcb4a2 > #1810.eebcb4a2: with two asks answered and one open, deep and the app's list say 1 at the same log position
+AssertionError: deep and the app's list with ask:01M7VTMQ7284N9E8N53C8ZK86E and ask:01M7VTMQ72B5FSJX9SE3SC9RQJ answered and ask:01M7VTMQ726WDKSP00SF62PZXH open: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "row ask:01M7VTMQ726WDKSP00SF62PZXH's node reads \"Which header colour on the login page? · How it looks needs_you ! needs_you Which header colour on the login page?  Which header co…  How it looks\", which lacks its word \"needs you\"",
++ ]
+
+ ❯ redraft-replica/list.test.ts:56:92
+     54|       ...drawnFailures(app.snapshot, openRows),
+     55|       ...textRowFailures(d.stdout, openRows, 'deep'),
+     56|     ], `deep and the app's list with ${answered.join(' and ')} answere…
+       |                                                                                            ^
+     57|   }, 1_800_000);
+     58| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 5 passed (6)
+   Start at  22:24:36
+   Duration  33.27s (tests 99%, transform 1%)
+
+== end 2026-11-19 22:25:09 load { 13.48 29.96 57.94 } thermal 1
+exit=1

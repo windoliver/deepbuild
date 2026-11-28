@@ -1,0 +1,28 @@
+
+ RUN  v5.0.5 ~/mac-runs/d2690b35
+
+ ❯ tests/acceptance/1172/rows.test.ts (2 tests | 1 failed) 796553ms
+   ❯ #1172 Needs you shows questions and presents their cards (2)
+     × AC3 each row shows its ask's question, and a click on it presents that ask's question card in the window 720008ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1172/rows.test.ts > #1172 Needs you shows questions and presents their cards > AC3 each row shows its ask's question, and a click on it presents that ask's question card in the window
+Error: Test timed out in 720000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/acceptance/1172/rows.test.ts:47:3
+     45|
+     46| describe('#1172 Needs you shows questions and presents their cards', (…
+     47|   it('AC3 each row shows its ask\'s question, and a click on it presen…
+       |   ^
+     48|     const world = await makeWorld();
+     49|     const failures: string[] = [];
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  21:51:18
+   Duration  799.18s (tests 100%)
+

@@ -1,0 +1,14 @@
+#2690 blind suite reissue: comments removed from tests/acceptance/2690/row-word.test.ts, code tokens unchanged
+
+Tokens: scripts/comment-source.mjs tokens(path, text).map(t => t.text), JSON, for tests/acceptance/2690/row-word.test.ts
+  before: 1368 tokens, sha256 4cd7f6806d6efd352aa532b10dca2e2a840f7864e6f7847a507e7e6ae28c0a3e
+  after:  1368 tokens, sha256 4cd7f6806d6efd352aa532b10dca2e2a840f7864e6f7847a507e7e6ae28c0a3e
+  comparison: same length, every element equal
+
+Removed: 21 whole comment lines (10 header line comments, 8 JSDoc lines, 3 in-test line comments); no `// deadline:` marker was present.
+
+node scripts/comment-ratchet.mjs
+  before: FAIL comments: tests/acceptance/2690/row-word.test.ts: 21 comment lines, over its ceiling of 0
+  after:  PASS comments: 3385 hand-written source files, 3181 of them listed with 94965 comment lines in all, each at its ceiling (exit 0; no line for any tests/acceptance/2690 file)
+
+npx tsc -p tests/acceptance/2690/tsconfig.json --noEmit: exit 0, no output
