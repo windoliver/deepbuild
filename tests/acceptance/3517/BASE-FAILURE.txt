@@ -1,6 +1,7 @@
 #3517's suite at the base, a7ae0e804 ("Merge pull request #3696 …", origin/main), on this job's Mac (Mac17,10, Apple
-M5 Max, 18 cores, macOS), November 27, 2026, 19:34 to 21:10 EST. One-minute load 15 to 36. Every build and every run
-below went through scripts/lease, under a build grant of the machine's throttle.
+M5 Max, 18 cores, macOS), November 27, 2026, 19:34 to 21:10 EST. One-minute load 15 to 36. Every cargo build and
+every test run below went through scripts/lease, under a build grant of the machine's throttle; the type-check ran
+bare.
 
 ## In short
 
@@ -12,10 +13,12 @@ below went through scripts/lease, under a build grant of the machine's throttle.
   ac6-drag-turns.test.ts        BLOCKED 1 test skipped: the same
   ac7-refusal-recorded.test.ts  BLOCKED 2 tests skipped: the same
 
-This Mac's screen was locked and its display asleep for the whole evening (ioreg: CGSSessionScreenIsLocked true;
-system_profiler: Display Asleep: Yes). A hidden window gets no frame, so `deep-app --canvas` with nothing to show
-printed no report in the 90 s each file gives it, and every test that opens the app's window skipped BLOCKED before
-it showed anything. No frame of the real app was judged at the base, by any file. Nothing below says otherwise.
+This Mac's screen was locked and its display asleep at each of this job's three readings, 20:35, 20:54 and 21:05 EST
+(ioreg: CGSSessionScreenIsLocked true; system_profiler: Display Asleep: Yes). `deep-app --canvas` with nothing to
+show printed no report, and nothing on stderr, in the 90 s each file gives it, so every test that opens the app's
+window skipped BLOCKED before it showed anything. The locked screen is the likely cause, since a hidden window gets
+no frame; no other cause was ruled out. No frame of the real app was judged at the base, by any file. Nothing below
+says otherwise.
 
 The six files want one run each on this Mac with the screen unlocked. That run is not made here.
 
@@ -60,7 +63,7 @@ holds by that accident and it fails at the next, which asks for the planted docu
   $ scripts/lease node node_modules/vitest/vitest.mjs run --root tests/acceptance/3517 --no-file-parallelism \
       --silent=false --reporter=verbose <file>          # one grant, the six files in turn; screen locked: true
 
-   ↓ ac7-refusal-recorded.test.ts > … a document that requires physics, followed from the hub by the app's panel … 90014ms
+   ↓ ac7-refusal-recorded.test.ts > … a document that requires physics, followed from the hub … 90014ms
        [BLOCKED: the app's window drew no frame with nothing to show (no display, a locked screen, a hidden window or
         no Metal device): it printed no report within 90 s: ]
    ↓ ac7-refusal-recorded.test.ts > … planted paints_reason_records_nothing … 0ms [BLOCKED: the same]
@@ -70,7 +73,7 @@ holds by that accident and it fails at the next, which asks for the planted docu
    ↓ ac5-session-time.test.ts > … a sliding box paused at 3 s … 90159ms [BLOCKED: the same]
    ↓ ac5-session-time.test.ts > … planted keeps_own_clock … 0ms [BLOCKED: the same]
         Tests  2 skipped (2)                                                          exit 0 in 91 s
-   ↓ ac4-text-over-box.test.ts > … the document's layer is painted from a GPU-layer slot … 90158ms [BLOCKED: the same]
+   ↓ ac4-text-over-box.test.ts > … the document's layer is painted from a slot … 90158ms [BLOCKED: the same]
         Tests  1 skipped (1)                                                          exit 0 in 91 s
    ↓ ac3-look-shots.test.ts > … a document with look is painted … 90184ms [BLOCKED: the same]
    ↓ ac3-look-shots.test.ts > … planted draws_in_default_look … 1ms [BLOCKED: the same]
@@ -133,7 +136,8 @@ real binary was put back after and is the one the runs above used. The script is
          it; the planted test: the planted app paints the reason in the layer's place (frames[].reasons): expected
          'the report gives no reasons' to be '"module_missing: physics"'
 
-  ac1's two tests passed against a stand-in check and count in a scratch tree, and its planted example printed
+  ac1's two tests passed (21:07 EST) against a stand-in check and count in a scratch tree, and its planted example
+  printed
   ["FAIL view count: packs/examples/planted-3517.json: the view refuses it (module_missing: physics) and the count
   leaves it out", "FAIL view count: counted 8, the file says 7"].
 

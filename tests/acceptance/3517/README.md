@@ -322,8 +322,8 @@ is a pass.
 ## Base
 
 `BASE-FAILURE.txt` says what each file read at the base, `a7ae0e804`. In short: `ac1` ran and fails at its
-assertions; the six files that open the app's window read `BLOCKED`, every test of them, because this Mac's screen
-was locked and its display asleep, so no frame of the real app was judged at the base. What each is written to read
+assertions; the six files that open the app's window read `BLOCKED`, every test of them: the window drew no frame
+while this Mac's screen was locked and its display asleep, so no frame of the real app was judged at the base. What each is written to read
 there is given from the base's code, not from a run. The suite's own logic was run once against a throwaway
 stand-in for the app, with a real hub and a real canvas core; that shows the tests pass and fail where they are
 written to, and says nothing of the base's app.
