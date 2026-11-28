@@ -1,0 +1,173 @@
+# #3660 acceptance tests on the base
+
+Base 3359cc775 (PR #3591's head; its merge base with main, c0a16dda6, has the same unbounded turn wait), on the Linux
+machine (arm64, 20 cores, node v24.22.0), in a systemd user unit capped at MemoryMax=24G, CARGO_BUILD_JOBS=2:
+
+$ node --test tests/acceptance/3660/*.test.mjs
+
+The checkout reads /var/tmp/blind3660-a, each test's temporary folder <sandbox>, home folders ~; nothing else is
+changed. The first and last lines are `uptime` before and after the run.
+
+Five tests fail, each at its own assertion, for the issue's reason:
+- #3660.5e80dd70 and #3660.85d33ca3: the build asked with --wait 0.5 / --stall 0.5 is still waiting 90 s after asking.
+- #3660.e8808b70: the run's rebuild, admitted (the log's `granted` build of pid 937643 right after that pid released the
+  test grant), waits for its turn behind the stub build; affected.mjs is still running at 260 s and was stopped.
+- #3660.388d9ec0: the grant-wait table's row still reads `no limit`.
+- #3660.a7f3d0fa: there is no redraft folder for lanes-lists to run in the three files' place.
+#3660.79e21baf passes, as it must on the base: the base's turn wait has no bound at all, so the line's build waits its
+24 s. It is regression protection against a stall that doesn't start again when a turn changes hands (README).
+
+----
+
+ 21:14:03 up 8 days, 50 min, 14 users,  load average: 30.17, 27.27, 32.92
+✖ #3660.388d9ec0 docs/parallel-proof.md says an admitted build waits for its turn on its caller's bound: the grant-wait table's row, the "Builds on the pool" bullet, and section 7a's "The hour" (3.634988ms)
+✖ #3660.e8808b70 in #3588's fixture on a pool of one token, a stub build holding it from before the timed phase while build slots stay free, the run's rebuild before the timed job is admitted and waits for its turn at most the time left: the run exits 1 within 4 minutes, its untimed file FAIL, its timed file INCONCLUSIVE not started at its bound of 3 min, the binary still absent (260810.373345ms)
+✖ #3660.a7f3d0fa scripts/lanes-lists.mjs runs tests/acceptance/3549-redraft-3660/ in place of 3549's turn, window and compiles files, which it keeps by hand only, and every other file of tests/acceptance/3549/ runs as before (46.645179ms)
+✔ #3660.79e21baf on a pool of one token passed down a line of three stub builds each holding its turn 8 s, a build with --stall 0.2 asked behind them gets its turn after them, runs its command, which exits 0, and exits 0 (24573.510742ms)
+ℹ first: asked +0.0 s, its command started +0.2 s and ended +8.2 s; its throttle ended +8.2 s with 0
+second: asked +0.2 s, its command started +8.2 s and ended +16.3 s; its throttle ended +16.3 s with 0
+third: asked +0.3 s, its command started +16.5 s and ended +24.5 s; its throttle ended +24.5 s with 0
+last: asked +0.4 s, its command started +24.6 s and ended +24.6 s; its throttle ended +24.6 s with 0
+✖ #3660.85d33ca3 on a pool of one token held 300 s by a stub build, a build asked 10 s later with --stall 0.5 is admitted, then exits 3 within 90 s of asking with INCONCLUSIVE no grant: no build grant changed hands within 0.5 min, its command never started, its timeout entry carrying stall 0.5, and the table holding nothing of its process (100225.430176ms)
+ℹ holder: asked +0.0 s, its command started +0.1 s; its throttle still waiting
+asker: asked +10.0 s, its command never started; its throttle still waiting
+✖ #3660.5e80dd70 on a pool of one token held 300 s by a stub build, a build asked 10 s later with --wait 0.5 is admitted, then exits 3 within 90 s of asking with INCONCLUSIVE no grant, its command never started, the log reading its granted then its timeout with wait 0.5, and the table holding nothing of its process (100279.24205ms)
+ℹ holder: asked +0.0 s, its command started +0.1 s; its throttle still waiting
+asker: asked +10.0 s, its command never started; its throttle still waiting
+ℹ tests 6
+ℹ suites 0
+ℹ pass 1
+ℹ fail 5
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 261849.482309
+
+✖ failing tests:
+
+test at tests/acceptance/3660/design.test.mjs:30:1
+✖ #3660.388d9ec0 docs/parallel-proof.md says an admitted build waits for its turn on its caller's bound: the grant-wait table's row, the "Builds on the pool" bullet, and section 7a's "The hour" (3.634988ms)
+  AssertionError [ERR_ASSERTION]: section 6's grant-wait table still gives an admitted build's turn no bound: | An admitted build, for its turn (#3549) | no limit |
+      at TestContext.<anonymous> (file:///var/tmp/blind3660-a/tests/acceptance/3660/design.test.mjs:35:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'no limit',
+    expected: /\bno (?:wait )?limit\b|\bunbounded\b|\bwithout (?:a |any )?(?:limit|bound)\b|\bnot bounded\b|\bwith no (?:limit|bound|deadline)\b/i,
+    operator: 'doesNotMatch',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3660/hour.test.mjs:27:1
+✖ #3660.e8808b70 in #3588's fixture on a pool of one token, a stub build holding it from before the timed phase while build slots stay free, the run's rebuild before the timed job is admitted and waits for its turn at most the time left: the run exits 1 within 4 minutes, its untimed file FAIL, its timed file INCONCLUSIVE not started at its bound of 3 min, the binary still absent (260810.373345ms)
+  AssertionError [ERR_ASSERTION]: affected.mjs was still running 260 s after its start, past the 4 minutes it must exit within at a bound of 3 min: its rebuild, admitted, was still waiting for its turn of the pool behind the stub build
+  affected.mjs: still running 260 s after its start, so the test stopped its process group
+  stdout:
+  parallel node: tests/fixture-3588/cleanup.test.mjs
+  timed node: tests/acceptance/1113/load.test.mjs
+  SETTLED no list: <sandbox>/user/.deepbuild/main-watch/settled.json is missing, so every suite the change reaches runs
+  BINARIES <sandbox>/tree/: tool3588 (DEEP_BIN_DIR); built in 0 s, before the test grant
+  
+  stderr:
+  
+  noted processes:
+  {"role":"holder","pid":938899,"at":1795842850193}
+  throttle table:
+  {"grants":[{"id":"2bbd80c0dcdb929e","class":"build","pid":938822,"start":"Sat Nov 28 05:14:09 2026","nested":false,"window":false,"index":1,"at":1795842849742,"run":true,"used":0},{"id":"44d69d754b40c7e2","class":"build","pid":937643,"start":"Sat Nov 28 05:14:05 2026","nested":false,"window":false,"index":2,"at":1795842850101,"run":true,"used":0},{"id":"b3fb002f95f9cefe","class":"turn","run":"2bbd80c0dcdb929e","pid":938822,"start":"Sat Nov 28 05:14:09 2026","nested":true,"at":1795842850165,"lent":0}],"requests":[{"id":"1261caa876629a70","class":"turn","run":"44d69d754b40c7e2","pid":937643,"start":"Sat Nov 28 05:14:05 2026","nested":true,"seq":31}],"seq":31}
+  throttle log, turns apart:
+  {"at":"2026-11-28T05:14:05.367Z","event":"granted","class":"build","grant":"top-level","id":"283b2294e241082b","pid":937115,"index":1,"load":0,"cores":20,"wait":2.99,"waited":1,"run":true}
+  {"at":"2026-11-28T05:14:05.826Z","event":"released","class":"build","id":"283b2294e241082b","pid":937115,"run":true}
+  {"at":"2026-11-28T05:14:05.943Z","event":"granted","class":"test","grant":"top-level","id":"1665fe97d1ecbd77","pid":937610,"index":1,"load":0,"cores":20,"wait":2.98285,"waited":2,"run":true,"readings":{"memory":1099511627776,"load":0,"cores":64}}
+  {"at":"2026-11-28T05:14:09.743Z","event":"granted","class":"build","grant":"top-level","id":"2bbd80c0dcdb929e","pid":938822,"index":1,"load":0,"cores":20,"wait":30,"waited":1,"run":true}
+  {"at":"2026-11-28T05:14:10.092Z","event":"released","class":"test","id":"1665fe97d1ecbd77","pid":937643,"run":true}
+  {"at":"2026-11-28T05:14:10.102Z","event":"granted","class":"build","grant":"top-level","id":"44d69d754b40c7e2","pid":937643,"index":2,"load":0,"cores":20,"wait":2.9116666666666666,"waited":2,"run":true}
+  holders (their throttles' PIDs): 938822; holding: 1; noted: 1
+  DEEP_BIN_DIR watched: <sandbox>/tmp/deep-affected-TQgY4M/binaries/0/bin; tool3588 appeared there after the cleanup: 0 times
+  fixture files' notes:
+  {"file":"tests/fixture-3588/cleanup.test.mjs","pid":938204,"at":1795842849945,"event":"read","dir":"<sandbox>/tmp/deep-affected-TQgY4M/binaries/0/bin","there":true,"stdout":"tool3588 runs"}
+  {"file":"tests/fixture-3588/cleanup.test.mjs","pid":938204,"at":1795842849945,"event":"deleted","dir":"<sandbox>/tmp/deep-affected-TQgY4M/binaries/0/bin","gone":true}
+  the readings gave a pool of one token from the moment the untimed file's job ran alone: true; the holder admitted before the go: true
+      at TestContext.<anonymous> (file:///var/tmp/blind3660-a/tests/acceptance/3660/hour.test.mjs:67:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3660/lanes.test.mjs:11:1
+✖ #3660.a7f3d0fa scripts/lanes-lists.mjs runs tests/acceptance/3549-redraft-3660/ in place of 3549's turn, window and compiles files, which it keeps by hand only, and every other file of tests/acceptance/3549/ runs as before (46.645179ms)
+  AssertionError [ERR_ASSERTION]: tests/acceptance/3549-redraft-3660/ holds no test file to run in their place
+      at TestContext.<anonymous> (file:///var/tmp/blind3660-a/tests/acceptance/3660/lanes.test.mjs:14:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3660/stall.test.mjs:5:1
+✖ #3660.85d33ca3 on a pool of one token held 300 s by a stub build, a build asked 10 s later with --stall 0.5 is admitted, then exits 3 within 90 s of asking with INCONCLUSIVE no grant: no build grant changed hands within 0.5 min, its command never started, its timeout entry carrying stall 0.5, and the table holding nothing of its process (100225.430176ms)
+  AssertionError [ERR_ASSERTION]: the build asked with --stall 0.5, `node throttle.mjs build --stall 0.5 -- node stub.mjs asker exit` (throttle pid 939313), was still waiting 90 s after it asked: admitted, it waits for its turn of the pool past its own --stall 0.5
+  holder: asked +0.0 s, its command started +0.1 s; its throttle still waiting
+  asker: asked +10.0 s, its command never started; its throttle still waiting
+  notes:
+  {"name":"holder","event":"start","at":1795842844188,"pid":936965,"throttle":"build:dcd81b14a91ad678","makeflags":"-j --jobserver-auth=fifo:<sandbox>/tmp/deep-turn-fa5Vgg/tokens","fifo":true,"window":null}
+  log:
+  {"at":"2026-11-28T05:14:04.154Z","event":"granted","class":"build","grant":"top-level","id":"dcd81b14a91ad678","pid":936902,"index":1,"load":30.17,"cores":20,"wait":10,"waited":3,"run":true}
+  {"at":"2026-11-28T05:14:04.155Z","event":"turn","id":"20e772f4ef70b1c9","run":"dcd81b14a91ad678","pid":936902}
+  {"at":"2026-11-28T05:14:14.158Z","event":"granted","class":"build","grant":"top-level","id":"cfc9f507f441af6a","pid":939313,"index":2,"load":28.97,"cores":20,"stall":0.5,"waited":2,"run":true}
+  node throttle.mjs build --wait 10 -- node stub.mjs holder sleep 300: still running
+  
+  node throttle.mjs build --stall 0.5 -- node stub.mjs asker exit: still running
+  
+      at judgeTimeout (file:///var/tmp/blind3660-a/tests/acceptance/3660/helpers.mjs:61:10)
+      at TestContext.<anonymous> (file:///var/tmp/blind3660-a/tests/acceptance/3660/stall.test.mjs:7:29)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3660/wait.test.mjs:5:1
+✖ #3660.5e80dd70 on a pool of one token held 300 s by a stub build, a build asked 10 s later with --wait 0.5 is admitted, then exits 3 within 90 s of asking with INCONCLUSIVE no grant, its command never started, the log reading its granted then its timeout with wait 0.5, and the table holding nothing of its process (100279.24205ms)
+  AssertionError [ERR_ASSERTION]: the build asked with --wait 0.5, `node throttle.mjs build --wait 0.5 -- node stub.mjs asker exit` (throttle pid 939320), was still waiting 90 s after it asked: admitted, it waits for its turn of the pool past its own --wait 0.5
+  holder: asked +0.0 s, its command started +0.1 s; its throttle still waiting
+  asker: asked +10.0 s, its command never started; its throttle still waiting
+  notes:
+  {"name":"holder","event":"start","at":1795842844188,"pid":936975,"throttle":"build:1b0eb2348e7bc510","makeflags":"-j --jobserver-auth=fifo:<sandbox>/tmp/deep-turn-TJRccg/tokens","fifo":true,"window":null}
+  log:
+  {"at":"2026-11-28T05:14:04.160Z","event":"granted","class":"build","grant":"top-level","id":"1b0eb2348e7bc510","pid":936923,"index":1,"load":30.17,"cores":20,"wait":10,"waited":2,"run":true}
+  {"at":"2026-11-28T05:14:04.162Z","event":"turn","id":"557ec687e3dab86f","run":"1b0eb2348e7bc510","pid":936923}
+  {"at":"2026-11-28T05:14:14.197Z","event":"granted","class":"build","grant":"top-level","id":"549206db8eb9f1cc","pid":939320,"index":2,"load":28.97,"cores":20,"wait":0.5,"waited":3,"run":true}
+  node throttle.mjs build --wait 10 -- node stub.mjs holder sleep 300: still running
+  
+  node throttle.mjs build --wait 0.5 -- node stub.mjs asker exit: still running
+  
+      at judgeTimeout (file:///var/tmp/blind3660-a/tests/acceptance/3660/helpers.mjs:61:10)
+      at TestContext.<anonymous> (file:///var/tmp/blind3660-a/tests/acceptance/3660/wait.test.mjs:7:38)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+EXIT 1
+ 21:18:26 up 8 days, 54 min, 15 users,  load average: 100.30, 53.56, 41.07
+
