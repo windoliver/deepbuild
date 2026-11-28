@@ -1,0 +1,66 @@
+# The suite on the base, d303e2b649c275e6ae96e71ad28648bc5681536f, with nothing but these files added:
+# NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/3405 --testTimeout=600000
+# --hookTimeout=180000 --no-file-parallelism --reporter=verbose. macOS 27.2, node v24.22.2, 18 cores, load average 237
+# as it began. The packages and target/debug/deep-hook are the base's own builds (README, How to run). <repo> is the
+# checkout, <tmp> a temp folder of a test.
+#
+# The run of record. The three recordings AC1 names don't exist at the base, so:
+#   AC1  both tests FAIL, each at a named assertion: the corpus holds no peer-message-terminal, peer-message-desktop
+#        or channel-event for 2.1.308; and a peer turn whose origin's kind is channel reads "session", not channel.
+#   AC2 to AC8, and every planted test: BLOCKED (skipped with the reason), never PASS.
+# vitest counts a file whose tests all skipped as passed; each of its tests is skipped, none passed.
+#
+# Test Files  1 failed | 7 passed (8); Tests  2 failed | 12 skipped (14); Duration 2.99 s
+
+ × AC1 #3405.3974b666 adapters/corpus/claude-code/<newest>/ holds a terminal message, a desktop-app message and a channel's event between sessions, each replaying clean with its reviewed events 6ms
+   → AC1 #3405.3974b666 the corpus holds no adapters/corpus/claude-code/2.1.308/peer-message-terminal, adapters/corpus/claude-code/2.1.308/peer-message-desktop, adapters/corpus/claude-code/2.1.308/channel-event for Claude Code 2.1.308, the newest version the facts cover (README, Surfaces: the three recordings)
+     at ac1-recordings.test.ts:35:5
+ × AC1 #3405.3974b666 the facts place a peer turn by its origin's kind: peer is session, channel is channel, and a kind no recording holds is unknown, never session 1ms
+   → AC1 #3405.3974b666 a peer turn whose origin's kind is channel must read from: channel, as the channel's recording shows; it reads "session"
+     at ac1-recordings.test.ts:76:5
+ ↓ AC2 #3405.b702681c the terminal recording: each message's turn names the session that reported its address, and the loop ask names both [BLOCKED: AC1's recordings are missing (adapters/corpus/claude-code/2.1.308/peer-message-terminal, adapters/corpus/claude-code/2.1.308/peer-message-desktop, adapters/corpus/claude-code/2.1.308/channel-event), so this criterion can't be judged (issue: without them every other criterion reads BLOCKED)]
+ ↓ AC2 #3405.b702681c the desktop-app recording: each message's turn names the session that reported its address (none where no recorded session did) [BLOCKED: the same]
+ ↓ AC3 #3405.6a385342 A's 21st turn from B's messages and B's next turn from A's are both held, with one ask naming both; your "go on" lets both go [BLOCKED: the same]
+ ↓ AC3 #3405.6a385342 the planted hub that holds the receiver alone (loop-holds-receiver-alone) fails this test, naming the sender's next turn [BLOCKED: the same]
+ ↓ AC4 #3405.d215a9a6 21 messages from an unreported address: each recorded from: session naming no sender, the 21st held, one ask naming no other session and saying the sender is none DeepBuild knows [BLOCKED: the same]
+ ↓ AC4 #3405.d215a9a6 the planted hub that names another session for an unreported address (names-other-session-for-unreported-address) fails this test, naming that session [BLOCKED: the same]
+ ↓ AC5 #3405.ef7df801 the channel recording's event is from: channel naming its server, opens no ask, and a sibling's 20 messages after it all go through [BLOCKED: the same]
+ ↓ AC6 #3405.ff99b700 21 channel events with no prompt from you raise one ask naming the server, and the 22nd is held at its submit [BLOCKED: the same]
+ ↓ AC6 #3405.ff99b700 the planted hub with no count for a channel (channel-without-count) starts that turn and fails this test, naming it [BLOCKED: the same]
+ ↓ AC7 #3405.329d0b1a the report deep-hook sends at SessionStart holds CLAUDE_CODE_MESSAGING_SOCKET's address, and the token is nowhere in it, the record or DeepBuild's files [BLOCKED: the same]
+ ↓ AC7 #3405.329d0b1a the planted deep-hook whose report carries the token's value (session-start-reports-token) fails this test, naming the field [BLOCKED: the same]
+ ↓ AC8 #3405.5893703f user.ask@2's newest minor lists channel in an extensible from; a reader at the earlier minor reads it as unknown [BLOCKED: the same]
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# A probe, not the run of record: where each test fails on the base once its gate opens. Three stand-in recordings,
+# made by a scratch script in the shape README's Surfaces asks for (two sessions each reporting an address, a tagged
+# message whose origin.from is uds:<the sender's path>; a channel's event whose origin is {kind: channel, server:
+# probe-relay}), were written into adapters/corpus/claude-code/2.1.308/ for these runs only and removed after; they
+# are not committed and prove nothing about real recordings. AC7's planted test (which builds deep-hook with
+# env-plants) was left out of the probe. Every test failed at a named assertion, none at its setup:
+#
+#   AC1  structure and addresses pass; channel-event/events.jsonl:4 doesn't replay clean: /0/data/from expected
+#        channel, actual session; and the facts read a channel's peer turn as session.
+#   AC2  terminal: "the turn …/peer-message-terminal/events.jsonl:5 must be recorded with its sender, session
+#        cf1b7882-…, which reported the address uds:/tmp/cc-socks/41001.sock at its SessionStart; the record names no
+#        sender, so the address uds:/tmp/cc-socks/41001.sock wasn't read". Desktop: the same, events.jsonl:5.
+#   AC3  "the sender c7e99698-…'s next turn (its 20th from 276ea31a-…'s messages, within its own count) must be held
+#        too, since the pair keeps each other going; it went through: exit 0 after 84 ms". A's 21st was held.
+#        Plant: BLOCKED, the hub did not start: "DEEP_HUB_PLANT=loop-holds-receiver-alone names no planted program".
+#   AC4  each of the 21 turns from: session naming no sender, and the 21st held, pass; then "the ask must say its
+#        sender is no session DeepBuild knows: … 'Session e3285d17-… (claude-code) had 21 turns started by another
+#        session's messages in the last 10 minutes, with no prompt from you. Let it go on?'".
+#        Plant: BLOCKED, "DEEP_HUB_PLANT=names-other-session-for-unreported-address names no planted program".
+#   AC5  "the channel's event …/channel-event/events.jsonl:4 (prompt 02e102d2-…) must be recorded from: channel; it is
+#        from: session".
+#   AC6  the 22nd event was held (counted as another session's messages), then "21 channel events must raise exactly
+#        one ask naming the server "probe-relay": 0 were raised" (the one ask raised says "turns started by another
+#        session's messages"). Plant: BLOCKED, "DEEP_HUB_PLANT=channel-without-count names no planted program".
+#   AC7  the spooled SessionStart request holds no form of the token; then "deep-hook's SessionStart report must hold
+#        the session's inbox address <tmp>/cc-socks/43283.sock, from CLAUDE_CODE_MESSAGING_SOCKET, beside the agent's
+#        payload: {"v":1,"agent":"claude-code","event":"SessionStart",…,"matched":[],"billing":{…}}".
+#   AC8  "user.ask@2's newest minor must list channel among from's members:
+#        ["person","scheduled","subagent","session","continuation","app","unknown"]". With a planted copy of the schema
+#        that lists channel, a scratch script read the rest of the path: the event validates at the newer schema,
+#        servedAt at the base's reads from "unknown", and that validates at the earlier minor.

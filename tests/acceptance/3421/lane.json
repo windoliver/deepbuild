@@ -1,0 +1,1 @@
+{ "alone": true, "why": "binary: its files build deep-hook with cargo three ways (this checkout's in the checkout's own target, the merge base's and a scratch checkout's in target/acceptance-3421), answer it from a stand-in hub inside its 20 ms acknowledgement window, and recorded.test.ts starts four real hubs (deep hub run)" }

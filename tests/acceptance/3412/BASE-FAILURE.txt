@@ -1,0 +1,827 @@
+Base b134dd38f, Node v24.22.0, load averages: 61.11 55.32 54.17
+$ node --test --test-concurrency=1 'tests/acceptance/3412/*.test.mjs'
+✖ #3412.5946d19d AC1: GLOSSARY.md is at the repo root and the lint lane's check passes on it (2.028416ms)
+✖ #3412.5946d19d AC1: a planted entry of three sentences fails, naming the term (422190.669875ms)
+✖ #3412.5946d19d AC1: a planted term listed twice fails, naming it (378612.136375ms)
+✖ #3412.5946d19d AC1: a planted term with no sentence fails, naming it (369266.7415ms)
+✖ #3412.032a43e1 AC2: no word a person sees is listed under Avoid in GLOSSARY.md (1.506209ms)
+✖ #3412.032a43e1 AC2: a planted entry that lists "result" as a word to avoid fails, naming the term and the list that holds the word (439322.40875ms)
+✖ #3412.032a43e1 AC2: the check reads the words of States people see: a planted entry that lists "queued" fails, naming the term and that list (455421.434125ms)
+✖ #3412.f32b0eaa AC3: each link in GLOSSARY.md lands (2.5185ms)
+✖ #3412.f32b0eaa AC3: a planted link to a heading neither design doc has (docs/technical-design.md) fails, naming the link (301788.066958ms)
+✖ #3412.f32b0eaa AC3: a planted link to a heading neither design doc has (docs/canvas-primitives.md) fails, naming the link (393174.453125ms)
+✖ #3412.4a7a02a4 AC4: AGENTS.md names GLOSSARY.md in one line (7.535959ms)
+✖ #3412.4a7a02a4 AC4: a planted AGENTS.md without the line fails, naming the file (522851.6875ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 0
+ℹ fail 12
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3283433.371583
+
+✖ failing tests:
+
+test at tests/acceptance/3412/ac1-form.test.mjs:14:1
+✖ #3412.5946d19d AC1: GLOSSARY.md is at the repo root and the lint lane's check passes on it (2.028416ms)
+  AssertionError [ERR_ASSERTION]: GLOSSARY.md is not at the repo root of the checkout
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-3412-glossary-58ec69/tests/acceptance/3412/ac1-form.test.mjs:15:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3412/ac1-form.test.mjs:37:1
+✖ #3412.5946d19d AC1: a planted entry of three sentences fails, naming the term (422190.669875ms)
+  AssertionError [ERR_ASSERTION]: no failing lint lane command names "Zorvanthic ledger" for its three-sentence entry
+  exit 1 scripts/repo-rules.mjs
+        NOTE deps: vendor/mitex-spec/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+        NOTE deps: vendor/quickjs-jit-runtime/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+        NOTE deps: vendor/symphonia-codec-vorbis/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+        NOTE size: +229 -0 handwritten lines against merge base bc7b802, lockfiles and binary files excluded (guideline: about 400)
+  exit 1 scripts/vendor-rebase.mjs check
+        FAIL row #499 A frame that only a video changes allocates nothing: `HeadlessAppContext::present_again` presents a window's last frame without drawing it, an arena nothing was allocated in since its last clear keeps its validity cell, and one completed handler, made once, releases each frame's instance buffer in commit order: the test tests/acceptance/499/video/players.test.ts › ${AC[12]} five 1080p players at 640 × 360 on the real clock › ${AC[12]} after a 1 s warm-up, no frame of the five players' window allocates, in each of five runs can't be checked: its suite gave no list
+        ROW #499 A frame that only a video changes allocates nothing: `HeadlessAppContext::present_again` presents a window's last frame without drawing it, an arena nothing was allocated in since its last clear keeps its validity cell, and one completed handler, made once, releases each frame's instance buffer in commit order: 11 marked, 0 over budget
+        FAIL row #499 The tagged NV12 surface: a video frame's NV12 surface converted by its own range (`420v` limited, `420f` full) and matrix (its `kCVImageBufferYCbCrMatrixKey`, BT.709 when it has none), with the planted twin `Planted::StockFragment`, GPUI's stock full-range BT.601 fragment: the test tests/acceptance/499/video/shader.test.ts › ${AC[14]} the live shader converts Y and CbCr by the probe's matrix and range › ${AC[14]} untagged 1080p 75% bars drawn live are within ±2 code values of BT.709; the stock full-range BT.601 fragment misses and fails, naming color.matrix can't be checked: its suite gave no list
+        ROW #499 The tagged NV12 surface: a video frame's NV12 surface converted by its own range (`420v` limited, `420f` full) and matrix (its `kCVImageBufferYCbCrMatrixKey`, BT.709 when it has none), with the planted twin `Planted::StockFragment`, GPUI's stock full-range BT.601 fragment: 12 marked, 0 over budget
+  exit 1 scripts/canvas-lint.mjs
+        STOPPED after 300 s or by SIGKILL
+  exit 1 scripts/size-ratchet.mjs
+        FAIL size: packages/hub/src/core.ts: 2631 lines, over its ceiling of 2627
+          Fix: Bring the file to 2627 lines or fewer: move one named concept to a file of its own, which imports what it needs by name. No `use super::*` in the new file, and no name moved to a shared file that only one file reads. A ceiling never rises.
+        FAIL size: scripts/lanes-lists.mjs: 1656 lines, over 1500 with no ceiling
+          Fix: Bring the file to 1500 lines or fewer: move one named concept to a file of its own, which imports what it needs by name. No `use super::*` in the new file, and no name moved to a shared file that only one file reads. A file new over 1500 lines gets no ceiling.
+  exit 1 scripts/wait-ratchet.mjs
+        FAIL waits: packages/hub/test/start-budget.test.ts:34:44: an assertion on a clock difference judges how busy the machine is, unless it only bounds a wait, marked // deadline: <why>
+          Fix: Wait for the event the test needs (a promise, `once(emitter, …)`, a channel), inject the clock where code reads time, or mark a timer or clock check that only bounds a wait with // deadline: <why>.
+        FAIL waits: packages/hub/test/start-budget.test.ts:40:33: a timer is a fixed wait unless it only bounds one, marked // deadline: <why>
+          Fix: Wait for the event the test needs (a promise, `once(emitter, …)`, a channel), inject the clock where code reads time, or mark a timer or clock check that only bounds a wait with // deadline: <why>.
+  ok   scripts/doc-ceilings.mjs
+  ok   scripts/reading-rule.mjs
+  exit 3 scripts/conformance-lint.mjs
+        BLOCKED conformance lint: packages/conformance/dist is not built; run npm run build --workspaces
+  exit 3 scripts/slots-check.mjs
+        BLOCKED slots: packages/conformance/dist or packages/contracts/dist is not built; run npm run build --workspaces
+  ok   scripts/canvas-closures.mjs closures
+  ok   scripts/canvas-closures.mjs drift
+  ok   scripts/canvas-closures.mjs paths
+  ok   scripts/record-reader-guard.mjs
+  ok   scripts/render-lint.mjs
+  ok   scripts/plant-lint.mjs
+  exit 1 scripts/loads-lint.mjs
+            '/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-3412-vXCDdV/repo/scripts/loads-lint.mjs'
+          ]
+        }
+        Node.js v24.22.0
+  ok   scripts/budget-table.mjs check
+  ok   scripts/cache-lint.mjs
+  ok   scripts/blocking-call-guard.mjs
+  exit 1 scripts/ask-sources-guard.mjs
+            '/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-3412-vXCDdV/repo/package.json'
+          ]
+        }
+        Node.js v24.22.0
+  ok   scripts/keymap-guard.mjs
+  exit 1 scripts/color-literal-guard.mjs
+        FAIL size literal: crates/deep-app/src/card.rs:1411: `px(0.5)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>
+        FAIL size literal: crates/deep-app/src/card.rs:1412: `px(0.5)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>
+        FAIL size literal: crates/deep-app/src/card.rs:1413: `px(0.5)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>
+        FAIL size literal: crates/deep-app/src/card.rs:1414: `px(0.5)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>
+  ok   scripts/guide.mjs --check
+  exit 1 scripts/panel-catalog.mjs
+            "error: could not rename 'component' file from '/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-3412-vXCDdV/home/.rustup/tmp/nuduprg952drodj__dir/bk' to '/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-3412-vXCDdV/home/.rustup/toolchains/1.99.1-x86_64-apple-darwin/share/doc': Directory not empty (os error 66)\n" +
+            "error: failed to install component: 'rust-std-wasm32-unknown-unknown', detected conflict: 'lib/rustlib/wasm32-unknown-unknown/lib/libaddr2line-31b5894fc0b82494.rlib'\n"
+        }
+        Node.js v24.22.0
+  exit 1 scripts/known-failures-check.mjs
+        INCONCLUSIVE known-failures.json: lint canvas-lint: crates/deep-canvas-scene3d/src/water.rs use of a disallowed method `f64::sqrt` (clippy::disallowed_methods): could not read issue #2382: To get started with GitHub CLI, please run:  gh auth login
+        INCONCLUSIVE known-failures.json: lint canvas-lint: crates/deep-text/src/cache.rs use of a disallowed method `std::collections::HashMap::iter` (clippy::disallowed_methods): could not read issue #2382: To get started with GitHub CLI, please run:  gh auth login
+        INCONCLUSIVE known-failures.json: lint canvas-lint: crates/deep-text/src/cache.rs use of a disallowed type `std::collections::HashMap` (clippy::disallowed_types): could not read issue #2382: To get started with GitHub CLI, please run:  gh auth login
+        125 problems in 180 entries of known-failures.json
+  ok   scripts/fetch-lock.mjs lint
+  exit 1 scripts/exit-lint.mjs
+            at ModuleJob.syncLink (node:internal/modules/esm/module_job:276:33) {
+          code: 'ERR_MODULE_NOT_FOUND'
+        }
+        Node.js v24.22.0
+  ok   scripts/app-copy-lint.mjs
+  exit 1 scripts/alone-lint.mjs
+        FAIL alone: tests/acceptance/1881-redraft-2047/ names no reason
+          Fix: name its reason in scripts/lanes.mjs's aloneReasons: binary, timing or shared: <resource>; a folder alone by its own lane.json names it as the first words of its why.
+        FAIL alone: tests/acceptance/96-redraft-1412/ names no reason
+          Fix: name its reason in scripts/lanes.mjs's aloneReasons: binary, timing or shared: <resource>; a folder alone by its own lane.json names it as the first words of its why.
+  exit 3 scripts/built-escapes.mjs
+        BLOCKED built-escapes: no package has a built file under packages/*/dist; run npm run build --workspaces
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-3412-glossary-58ec69/tests/acceptance/3412/ac1-form.test.mjs:40:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3412/ac1-plants.test.mjs:8:1
+✖ #3412.5946d19d AC1: a planted term listed twice fails, naming it (378612.136375ms)
+  AssertionError [ERR_ASSERTION]: no failing lint lane command names "Zorvanthic ledger", listed twice
+  exit 1 scripts/repo-rules.mjs
+        NOTE deps: vendor/mitex-spec/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+        NOTE deps: vendor/quickjs-jit-runtime/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+        NOTE deps: vendor/symphonia-codec-vorbis/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+        NOTE size: +232 -0 handwritten lines against merge base 4efeca0, lockfiles and binary files excluded (guideline: about 400)
+  exit 1 scripts/vendor-rebase.mjs check
+        FAIL row #499 A frame that only a video changes allocates nothing: `HeadlessAppContext::present_again` presents a window's last frame without drawing it, an arena nothing was allocated in since its last clear keeps its validity cell, and one completed handler, made once, releases each frame's instance buffer in commit order: the test tests/acceptance/499/video/players.test.ts › ${AC[12]} five 1080p players at 640 × 360 on the real clock › ${AC[12]} after a 1 s warm-up, no frame of the five players' window allocates, in each of five runs can't be checked: its suite gave no list
+        ROW #499 A frame that only a video changes allocates nothing: `HeadlessAppContext::present_again` presents a window's last frame without drawing it, an arena nothing was allocated in since its last clear keeps its validity cell, and one completed handler, made once, releases each frame's instance buffer in commit order: 11 marked, 0 over budget
+        FAIL row #499 The tagged NV12 surface: a video frame's NV12 surface converted by its own range (`420v` limited, `420f` full) and matrix (its `kCVImageBufferYCbCrMatrixKey`, BT.709 when it has none), with the planted twin `Planted::StockFragment`, GPUI's stock full-range BT.601 fragment: the test tests/acceptance/499/video/shader.test.ts › ${AC[14]} the live shader converts Y and CbCr by the probe's matrix and range › ${AC[14]} untagged 1080p 75% bars drawn live are within ±2 code values of BT.709; the stock full-range BT.601 fragment misses and fails, naming color.matrix can't be checked: its suite gave no list
+        ROW #499 The tagged NV12 surface: a video frame's NV12 surface converted by its own range (`420v` limited, `420f` full) and matrix (its `kCVImageBufferYCbCrMatrixKey`, BT.709 when it has none), with the planted twin `Planted::StockFragment`, GPUI's stock full-range BT.601 fragment: 12 marked, 0 over budget
+  exit 2 scripts/canvas-lint.mjs
+        BLOCKED canvas-lint: cargo metadata exited 1: error: the 'cargo' binary, normally provided by the 'cargo' component, is not applicable to the '1.99.1-x86_64-apple-darwin' toolchain
+          Fix: Install Rust with Cargo and clippy, which preflight already needs, and make the workspace build.
+  exit 1 scripts/size-ratchet.mjs
+        FAIL size: packages/hub/src/core.ts: 2631 lines, over its ceiling of 2627
+          Fix: Bring the file to 2627 lines or fewer: move one named concept to a file of its own, which imports what it needs by name. No `use super::*` in the new file, and no name moved to a shared file that only one file reads. A ceiling never rises.
+        FAIL size: scripts/lanes-lists.mjs: 1656 lines, over 1500 with no ceiling
+          Fix: Bring the file to 1500 lines or fewer: move one named concept to a file of its own, which imports what it needs by name. No `use super::*` in the new file, and no name moved to a shared file that only one file reads. A file new over 1500 lines gets no ceiling.
+  exit 1 scripts/wait-ratchet.mjs
+        FAIL waits: packages/hub/test/start-budget.test.ts:34:44: an assertion on a clock difference judges how busy the machine is, unless it only bounds a wait, marked // deadline: <why>
+          Fix: Wait for the event the test needs (a promise, `once(emitter, …)`, a channel), inject the clock where code reads time, or mark a timer or clock check that only bounds a wait with // deadline: <why>.
+        FAIL waits: packages/hub/test/start-budget.test.ts:40:33: a timer is a fixed wait unless it only bounds one, marked // deadline: <why>
+          Fix: Wait for the event the test needs (a promise, `once(emitter, …)`, a channel), inject the clock where code reads time, or mark a timer or clock check that only bounds a wait with // deadline: <why>.
+  ok   scripts/doc-ceilings.mjs
+  ok   scripts/reading-rule.mjs
+  exit 3 scripts/conformance-lint.mjs
+        BLOCKED conformance lint: packages/conformance/dist is not built; run npm run build --workspaces
+  exit 3 scripts/slots-check.mjs
+        BLOCKED slots: packages/conformance/dist or packages/contracts/dist is not built; run npm run build --workspaces
+  ok   scripts/canvas-closures.mjs closures
+  ok   scripts/canvas-closures.mjs drift
+  ok   scripts/canvas-closures.mjs paths
+  ok   scripts/record-reader-guard.mjs
+  ok   scripts/render-lint.mjs
+  ok   scripts/plant-lint.mjs
+  exit 1 scripts/loads-lint.mjs
+            '/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-3412-YfRYhU/repo/scripts/loads-lint.mjs'
+          ]
+        }
+        Node.js v24.22.0
+  ok   scripts/budget-table.mjs check
+  ok   scripts/cache-lint.mjs
+  ok   scripts/blocking-call-guard.mjs
+  exit 1 scripts/ask-sources-guard.mjs
+            '/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-3412-YfRYhU/repo/package.json'
+          ]
+        }
+        Node.js v24.22.0
+  ok   scripts/keymap-guard.mjs
+  exit 1 scripts/color-literal-guard.mjs
+        FAIL size literal: crates/deep-app/src/card.rs:1411: `px(0.5)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>
+        FAIL size literal: crates/deep-app/src/card.rs:1412: `px(0.5)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>
+        FAIL size literal: crates/deep-app/src/card.rs:1413: `px(0.5)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>
+        FAIL size literal: crates/deep-app/src/card.rs:1414: `px(0.5)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>
+  ok   scripts/guide.mjs --check
+  exit 1 scripts/panel-catalog.mjs
+            "error: could not rename 'component' file from '/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-3412-YfRYhU/home/.rustup/tmp/pzug7j3ikg0ptuiu_dir/bk' to '/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-3412-YfRYhU/home/.rustup/toolchains/1.99.1-x86_64-apple-darwin/share/doc': Directory not empty (os error 66)\n" +
+            "error: failed to install component: 'rust-std-wasm32-unknown-unknown', detected conflict: 'lib/rustlib/wasm32-unknown-unknown/lib/libaddr2line-31b5894fc0b82494.rlib'\n"
+        }
+        Node.js v24.22.0
+  exit 1 scripts/known-failures-check.mjs
+        INCONCLUSIVE known-failures.json: lint canvas-lint: crates/deep-canvas-scene3d/src/water.rs use of a disallowed method `f64::sqrt` (clippy::disallowed_methods): could not read issue #2382: To get started with GitHub CLI, please run:  gh auth login
+        INCONCLUSIVE known-failures.json: lint canvas-lint: crates/deep-text/src/cache.rs use of a disallowed method `std::collections::HashMap::iter` (clippy::disallowed_methods): could not read issue #2382: To get started with GitHub CLI, please run:  gh auth login
+        INCONCLUSIVE known-failures.json: lint canvas-lint: crates/deep-text/src/cache.rs use of a disallowed type `std::collections::HashMap` (clippy::disallowed_types): could not read issue #2382: To get started with GitHub CLI, please run:  gh auth login
+        125 problems in 180 entries of known-failures.json
+  ok   scripts/fetch-lock.mjs lint
+  exit 1 scripts/exit-lint.mjs
+            at ModuleJob.syncLink (node:internal/modules/esm/module_job:276:33) {
+          code: 'ERR_MODULE_NOT_FOUND'
+        }
+        Node.js v24.22.0
+  ok   scripts/app-copy-lint.mjs
+  exit 1 scripts/alone-lint.mjs
+        FAIL alone: tests/acceptance/1881-redraft-2047/ names no reason
+          Fix: name its reason in scripts/lanes.mjs's aloneReasons: binary, timing or shared: <resource>; a folder alone by its own lane.json names it as the first words of its why.
+        FAIL alone: tests/acceptance/96-redraft-1412/ names no reason
+          Fix: name its reason in scripts/lanes.mjs's aloneReasons: binary, timing or shared: <resource>; a folder alone by its own lane.json names it as the first words of its why.
+  exit 3 scripts/built-escapes.mjs
+        BLOCKED built-escapes: no package has a built file under packages/*/dist; run npm run build --workspaces
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-3412-glossary-58ec69/tests/acceptance/3412/ac1-plants.test.mjs:12:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3412/ac1-plants.test.mjs:15:1
+✖ #3412.5946d19d AC1: a planted term with no sentence fails, naming it (369266.7415ms)
+  AssertionError [ERR_ASSERTION]: no failing lint lane command names "Zorvanthic ledger", which has no sentence
+  exit 1 scripts/repo-rules.mjs
+        NOTE deps: vendor/mitex-spec/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+        NOTE deps: vendor/quickjs-jit-runtime/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+        NOTE deps: vendor/symphonia-codec-vorbis/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+        NOTE size: +229 -0 handwritten lines against merge base 9f2bec91, lockfiles and binary files excluded (guideline: about 400)
+  exit 1 scripts/vendor-rebase.mjs check
+        FAIL row #499 A frame that only a video changes allocates nothing: `HeadlessAppContext::present_again` presents a window's last frame without drawing it, an arena nothing was allocated in since its last clear keeps its validity cell, and one completed handler, made once, releases each frame's instance buffer in commit order: the test tests/acceptance/499/video/players.test.ts › ${AC[12]} five 1080p players at 640 × 360 on the real clock › ${AC[12]} after a 1 s warm-up, no frame of the five players' window allocates, in each of five runs can't be checked: its suite gave no list
+        ROW #499 A frame that only a video changes allocates nothing: `HeadlessAppContext::present_again` presents a window's last frame without drawing it, an arena nothing was allocated in since its last clear keeps its validity cell, and one completed handler, made once, releases each frame's instance buffer in commit order: 11 marked, 0 over budget
+        FAIL row #499 The tagged NV12 surface: a video frame's NV12 surface converted by its own range (`420v` limited, `420f` full) and matrix (its `kCVImageBufferYCbCrMatrixKey`, BT.709 when it has none), with the planted twin `Planted::StockFragment`, GPUI's stock full-range BT.601 fragment: the test tests/acceptance/499/video/shader.test.ts › ${AC[14]} the live shader converts Y and CbCr by the probe's matrix and range › ${AC[14]} untagged 1080p 75% bars drawn live are within ±2 code values of BT.709; the stock full-range BT.601 fragment misses and fails, naming color.matrix can't be checked: its suite gave no list
+        ROW #499 The tagged NV12 surface: a video frame's NV12 surface converted by its own range (`420v` limited, `420f` full) and matrix (its `kCVImageBufferYCbCrMatrixKey`, BT.709 when it has none), with the planted twin `Planted::StockFragment`, GPUI's stock full-range BT.601 fragment: 12 marked, 0 over budget
+  exit 2 scripts/canvas-lint.mjs
+        BLOCKED canvas-lint: cargo metadata exited 1: error: failed to install component: 'rust-std-wasm32-unknown-unknown', detected conflict: 'lib/rustlib/wasm32-unknown-unknown/lib/libaddr2line-31b5894fc0b82494.rlib'
+          Fix: Install Rust with Cargo and clippy, which preflight already needs, and make the workspace build.
+  exit 1 scripts/size-ratchet.mjs
+        FAIL size: packages/hub/src/core.ts: 2631 lines, over its ceiling of 2627
+          Fix: Bring the file to 2627 lines or fewer: move one named concept to a file of its own, which imports what it needs by name. No `use super::*` in the new file, and no name moved to a shared file that only one file reads. A ceiling never rises.
+        FAIL size: scripts/lanes-lists.mjs: 1656 lines, over 1500 with no ceiling
+          Fix: Bring the file to 1500 lines or fewer: move one named concept to a file of its own, which imports what it needs by name. No `use super::*` in the new file, and no name moved to a shared file that only one file reads. A file new over 1500 lines gets no ceiling.
+  exit 1 scripts/wait-ratchet.mjs
+        FAIL waits: packages/hub/test/start-budget.test.ts:34:44: an assertion on a clock difference judges how busy the machine is, unless it only bounds a wait, marked // deadline: <why>
+          Fix: Wait for the event the test needs (a promise, `once(emitter, …)`, a channel), inject the clock where code reads time, or mark a timer or clock check that only bounds a wait with // deadline: <why>.
+        FAIL waits: packages/hub/test/start-budget.test.ts:40:33: a timer is a fixed wait unless it only bounds one, marked // deadline: <why>
+          Fix: Wait for the event the test needs (a promise, `once(emitter, …)`, a channel), inject the clock where code reads time, or mark a timer or clock check that only bounds a wait with // deadline: <why>.
+  ok   scripts/doc-ceilings.mjs
+  ok   scripts/reading-rule.mjs
+  exit 3 scripts/conformance-lint.mjs
+        BLOCKED conformance lint: packages/conformance/dist is not built; run npm run build --workspaces
+  exit 3 scripts/slots-check.mjs
+        BLOCKED slots: packages/conformance/dist or packages/contracts/dist is not built; run npm run build --workspaces
+  ok   scripts/canvas-closures.mjs closures
+  ok   scripts/canvas-closures.mjs drift
+  ok   scripts/canvas-closures.mjs paths
+  ok   scripts/record-reader-guard.mjs
+  ok   scripts/render-lint.mjs
+  ok   scripts/plant-lint.mjs
+  exit 1 scripts/loads-lint.mjs
+            '/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-3412-rHK3Fi/repo/scripts/loads-lint.mjs'
+          ]
+        }
+        Node.js v24.22.0
+  ok   scripts/budget-table.mjs check
+  ok   scripts/cache-lint.mjs
+  ok   scripts/blocking-call-guard.mjs
+  exit 1 scripts/ask-sources-guard.mjs
+            '/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-3412-rHK3Fi/repo/package.json'
+          ]
+        }
+        Node.js v24.22.0
+  ok   scripts/keymap-guard.mjs
+  exit 1 scripts/color-literal-guard.mjs
+        FAIL size literal: crates/deep-app/src/card.rs:1411: `px(0.5)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>
+        FAIL size literal: crates/deep-app/src/card.rs:1412: `px(0.5)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>
+        FAIL size literal: crates/deep-app/src/card.rs:1413: `px(0.5)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>
+        FAIL size literal: crates/deep-app/src/card.rs:1414: `px(0.5)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>
+  ok   scripts/guide.mjs --check
+  exit 1 scripts/panel-catalog.mjs
+            'info: you may opt out with `RUSTUP_AUTO_INSTALL=0` or `rustup set auto-install disable`\n' +
+            "error: the 'cargo' binary, normally provided by the 'cargo' component, is not applicable to the '1.99.1-x86_64-apple-darwin' toolchain\n"
+        }
+        Node.js v24.22.0
+  exit 1 scripts/known-failures-check.mjs
+        INCONCLUSIVE known-failures.json: lint canvas-lint: crates/deep-canvas-scene3d/src/water.rs use of a disallowed method `f64::sqrt` (clippy::disallowed_methods): could not read issue #2382: To get started with GitHub CLI, please run:  gh auth login
+        INCONCLUSIVE known-failures.json: lint canvas-lint: crates/deep-text/src/cache.rs use of a disallowed method `std::collections::HashMap::iter` (clippy::disallowed_methods): could not read issue #2382: To get started with GitHub CLI, please run:  gh auth login
+        INCONCLUSIVE known-failures.json: lint canvas-lint: crates/deep-text/src/cache.rs use of a disallowed type `std::collections::HashMap` (clippy::disallowed_types): could not read issue #2382: To get started with GitHub CLI, please run:  gh auth login
+        125 problems in 180 entries of known-failures.json
+  ok   scripts/fetch-lock.mjs lint
+  exit 1 scripts/exit-lint.mjs
+            at ModuleJob.syncLink (node:internal/modules/esm/module_job:276:33) {
+          code: 'ERR_MODULE_NOT_FOUND'
+        }
+        Node.js v24.22.0
+  ok   scripts/app-copy-lint.mjs
+  exit 1 scripts/alone-lint.mjs
+        FAIL alone: tests/acceptance/1881-redraft-2047/ names no reason
+          Fix: name its reason in scripts/lanes.mjs's aloneReasons: binary, timing or shared: <resource>; a folder alone by its own lane.json names it as the first words of its why.
+        FAIL alone: tests/acceptance/96-redraft-1412/ names no reason
+          Fix: name its reason in scripts/lanes.mjs's aloneReasons: binary, timing or shared: <resource>; a folder alone by its own lane.json names it as the first words of its why.
+  exit 3 scripts/built-escapes.mjs
+        BLOCKED built-escapes: no package has a built file under packages/*/dist; run npm run build --workspaces
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-3412-glossary-58ec69/tests/acceptance/3412/ac1-plants.test.mjs:18:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3412/ac2-seen-words.test.mjs:28:1
+✖ #3412.032a43e1 AC2: no word a person sees is listed under Avoid in GLOSSARY.md (1.506209ms)
+  AssertionError [ERR_ASSERTION]: GLOSSARY.md is not at the repo root of the checkout
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-3412-glossary-58ec69/tests/acceptance/3412/ac2-seen-words.test.mjs:30:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3412/ac2-seen-words.test.mjs:39:1
+✖ #3412.032a43e1 AC2: a planted entry that lists "result" as a word to avoid fails, naming the term and the list that holds the word (439322.40875ms)
+  AssertionError [ERR_ASSERTION]: no failing lint lane command names "Zorvanthic ledger" and plain-words.json, the list holding "result", which the plant lists under Avoid
+  
+  exit 1 scripts/repo-rules.mjs
+        STOPPED after 300 s or by SIGKILL
+  exit 1 scripts/vendor-rebase.mjs check
+        FAIL row #499 A frame that only a video changes allocates nothing: `HeadlessAppContext::present_again` presents a window's last frame without drawing it, an arena nothing was allocated in since its last clear keeps its validity cell, and one completed handler, made once, releases each frame's instance buffer in commit order: the test tests/acceptance/499/video/players.test.ts › ${AC[12]} five 1080p players at 640 × 360 on the real clock › ${AC[12]} after a 1 s warm-up, no frame of the five players' window allocates, in each of five runs can't be checked: its suite gave no list
+        ROW #499 A frame that only a video changes allocates nothing: `HeadlessAppContext::present_again` presents a window's last frame without drawing it, an arena nothing was allocated in since its last clear keeps its validity cell, and one completed handler, made once, releases each frame's instance buffer in commit order: 11 marked, 0 over budget
+        FAIL row #499 The tagged NV12 surface: a video frame's NV12 surface converted by its own range (`420v` limited, `420f` full) and matrix (its `kCVImageBufferYCbCrMatrixKey`, BT.709 when it has none), with the planted twin `Planted::StockFragment`, GPUI's stock full-range BT.601 fragment: the test tests/acceptance/499/video/shader.test.ts › ${AC[14]} the live shader converts Y and CbCr by the probe's matrix and range › ${AC[14]} untagged 1080p 75% bars drawn live are within ±2 code values of BT.709; the stock full-range BT.601 fragment misses and fails, naming color.matrix can't be checked: its suite gave no list
+        ROW #499 The tagged NV12 surface: a video frame's NV12 surface converted by its own range (`420v` limited, `420f` full) and matrix (its `kCVImageBufferYCbCrMatrixKey`, BT.709 when it has none), with the planted twin `Planted::StockFragment`, GPUI's stock full-range BT.601 fragment: 12 marked, 0 over budget
+  exit 2 scripts/canvas-lint.mjs
+        BLOCKED canvas-lint: cargo metadata exited 1: error: failed to install component: 'rust-std-wasm32-unknown-unknown', detected conflict: 'lib/rustlib/wasm32-unknown-unknown/lib/libaddr2line-31b5894fc0b82494.rlib'
+          Fix: Install Rust with Cargo and clippy, which preflight already needs, and make the workspace build.
+  exit 1 scripts/size-ratchet.mjs
+        FAIL size: packages/hub/src/core.ts: 2631 lines, over its ceiling of 2627
+          Fix: Bring the file to 2627 lines or fewer: move one named concept to a file of its own, which imports what it needs by name. No `use super::*` in the new file, and no name moved to a shared file that only one file reads. A ceiling never rises.
+        FAIL size: scripts/lanes-lists.mjs: 1656 lines, over 1500 with no ceiling
+          Fix: Bring the file to 1500 lines or fewer: move one named concept to a file of its own, which imports what it needs by name. No `use super::*` in the new file, and no name moved to a shared file that only one file reads. A file new over 1500 lines gets no ceiling.
+  exit 1 scripts/wait-ratchet.mjs
+        FAIL waits: packages/hub/test/start-budget.test.ts:34:44: an assertion on a clock difference judges how busy the machine is, unless it only bounds a wait, marked // deadline: <why>
+          Fix: Wait for the event the test needs (a promise, `once(emitter, …)`, a channel), inject the clock where code reads time, or mark a timer or clock check that only bounds a wait with // deadline: <why>.
+        FAIL waits: packages/hub/test/start-budget.test.ts:40:33: a timer is a fixed wait unless it only bounds one, marked // deadline: <why>
+          Fix: Wait for the event the test needs (a promise, `once(emitter, …)`, a channel), inject the clock where code reads time, or mark a timer or clock check that only bounds a wait with // deadline: <why>.
+  ok   scripts/doc-ceilings.mjs
+  ok   scripts/reading-rule.mjs
+  exit 3 scripts/conformance-lint.mjs
+        BLOCKED conformance lint: packages/conformance/dist is not built; run npm run build --workspaces
+  exit 3 scripts/slots-check.mjs
+        BLOCKED slots: packages/conformance/dist or packages/contracts/dist is not built; run npm run build --workspaces
+  ok   scripts/canvas-closures.mjs closures
+  ok   scripts/canvas-closures.mjs drift
+  ok   scripts/canvas-closures.mjs paths
+  ok   scripts/record-reader-guard.mjs
+  ok   scripts/render-lint.mjs
+  ok   scripts/plant-lint.mjs
+  exit 1 scripts/loads-lint.mjs
+            '/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-3412-hmKLQH/repo/scripts/loads-lint.mjs'
+          ]
+        }
+        Node.js v24.22.0
+  ok   scripts/budget-table.mjs check
+  ok   scripts/cache-lint.mjs
+  ok   scripts/blocking-call-guard.mjs
+  exit 1 scripts/ask-sources-guard.mjs
+            '/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-3412-hmKLQH/repo/package.json'
+          ]
+        }
+        Node.js v24.22.0
+  ok   scripts/keymap-guard.mjs
+  exit 1 scripts/color-literal-guard.mjs
+        FAIL size literal: crates/deep-app/src/card.rs:1411: `px(0.5)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>
+        FAIL size literal: crates/deep-app/src/card.rs:1412: `px(0.5)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>
+        FAIL size literal: crates/deep-app/src/card.rs:1413: `px(0.5)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>
+        FAIL size literal: crates/deep-app/src/card.rs:1414: `px(0.5)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>
+  ok   scripts/guide.mjs --check
+  exit 1 scripts/panel-catalog.mjs
+            'info: you may opt out with `RUSTUP_AUTO_INSTALL=0` or `rustup set auto-install disable`\n' +
+            "error: the 'cargo' binary, normally provided by the 'cargo' component, is not applicable to the '1.99.1-x86_64-apple-darwin' toolchain\n"
+        }
+        Node.js v24.22.0
+  exit 1 scripts/known-failures-check.mjs
+        INCONCLUSIVE known-failures.json: lint canvas-lint: crates/deep-canvas-scene3d/src/water.rs use of a disallowed method `f64::sqrt` (clippy::disallowed_methods): could not read issue #2382: To get started with GitHub CLI, please run:  gh auth login
+        INCONCLUSIVE known-failures.json: lint canvas-lint: crates/deep-text/src/cache.rs use of a disallowed method `std::collections::HashMap::iter` (clippy::disallowed_methods): could not read issue #2382: To get started with GitHub CLI, please run:  gh auth login
+        INCONCLUSIVE known-failures.json: lint canvas-lint: crates/deep-text/src/cache.rs use of a disallowed type `std::collections::HashMap` (clippy::disallowed_types): could not read issue #2382: To get started with GitHub CLI, please run:  gh auth login
+        125 problems in 180 entries of known-failures.json
+  ok   scripts/fetch-lock.mjs lint
+  exit 1 scripts/exit-lint.mjs
+            at ModuleJob.syncLink (node:internal/modules/esm/module_job:276:33) {
+          code: 'ERR_MODULE_NOT_FOUND'
+        }
+        Node.js v24.22.0
+  ok   scripts/app-copy-lint.mjs
+  exit 1 scripts/alone-lint.mjs
+        FAIL alone: tests/acceptance/1881-redraft-2047/ names no reason
+          Fix: name its reason in scripts/lanes.mjs's aloneReasons: binary, timing or shared: <resource>; a folder alone by its own lane.json names it as the first words of its why.
+        FAIL alone: tests/acceptance/96-redraft-1412/ names no reason
+          Fix: name its reason in scripts/lanes.mjs's aloneReasons: binary, timing or shared: <resource>; a folder alone by its own lane.json names it as the first words of its why.
+  exit 3 scripts/built-escapes.mjs
+        BLOCKED built-escapes: no package has a built file under packages/*/dist; run npm run build --workspaces
+      at plantAvoid (file://~/private/deepbuild-core/.claude/worktrees/issue-3412-glossary-58ec69/tests/acceptance/3412/ac2-seen-words.test.mjs:25:10)
+      at async TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-3412-glossary-58ec69/tests/acceptance/3412/ac2-seen-words.test.mjs:40:3)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3412/ac2-seen-words.test.mjs:43:1
+✖ #3412.032a43e1 AC2: the check reads the words of States people see: a planted entry that lists "queued" fails, naming the term and that list (455421.434125ms)
+  AssertionError [ERR_ASSERTION]: no failing lint lane command names "Zorvanthic ledger" and States people see, the list holding "queued", which the plant lists under Avoid
+  
+  exit 1 scripts/repo-rules.mjs
+        STOPPED after 300 s or by SIGKILL
+  exit 1 scripts/vendor-rebase.mjs check
+        FAIL row #499 A frame that only a video changes allocates nothing: `HeadlessAppContext::present_again` presents a window's last frame without drawing it, an arena nothing was allocated in since its last clear keeps its validity cell, and one completed handler, made once, releases each frame's instance buffer in commit order: the test tests/acceptance/499/video/players.test.ts › ${AC[12]} five 1080p players at 640 × 360 on the real clock › ${AC[12]} after a 1 s warm-up, no frame of the five players' window allocates, in each of five runs can't be checked: its suite gave no list
+        ROW #499 A frame that only a video changes allocates nothing: `HeadlessAppContext::present_again` presents a window's last frame without drawing it, an arena nothing was allocated in since its last clear keeps its validity cell, and one completed handler, made once, releases each frame's instance buffer in commit order: 11 marked, 0 over budget
+        FAIL row #499 The tagged NV12 surface: a video frame's NV12 surface converted by its own range (`420v` limited, `420f` full) and matrix (its `kCVImageBufferYCbCrMatrixKey`, BT.709 when it has none), with the planted twin `Planted::StockFragment`, GPUI's stock full-range BT.601 fragment: the test tests/acceptance/499/video/shader.test.ts › ${AC[14]} the live shader converts Y and CbCr by the probe's matrix and range › ${AC[14]} untagged 1080p 75% bars drawn live are within ±2 code values of BT.709; the stock full-range BT.601 fragment misses and fails, naming color.matrix can't be checked: its suite gave no list
+        ROW #499 The tagged NV12 surface: a video frame's NV12 surface converted by its own range (`420v` limited, `420f` full) and matrix (its `kCVImageBufferYCbCrMatrixKey`, BT.709 when it has none), with the planted twin `Planted::StockFragment`, GPUI's stock full-range BT.601 fragment: 12 marked, 0 over budget
+  exit 2 scripts/canvas-lint.mjs
+        BLOCKED canvas-lint: cargo metadata exited 1: error: failed to install component: 'rust-std-wasm32-unknown-unknown', detected conflict: 'lib/rustlib/wasm32-unknown-unknown/lib/libaddr2line-31b5894fc0b82494.rlib'
+          Fix: Install Rust with Cargo and clippy, which preflight already needs, and make the workspace build.
+  exit 1 scripts/size-ratchet.mjs
+        FAIL size: packages/hub/src/core.ts: 2631 lines, over its ceiling of 2627
+          Fix: Bring the file to 2627 lines or fewer: move one named concept to a file of its own, which imports what it needs by name. No `use super::*` in the new file, and no name moved to a shared file that only one file reads. A ceiling never rises.
+        FAIL size: scripts/lanes-lists.mjs: 1656 lines, over 1500 with no ceiling
+          Fix: Bring the file to 1500 lines or fewer: move one named concept to a file of its own, which imports what it needs by name. No `use super::*` in the new file, and no name moved to a shared file that only one file reads. A file new over 1500 lines gets no ceiling.
+  exit 1 scripts/wait-ratchet.mjs
+        FAIL waits: packages/hub/test/start-budget.test.ts:34:44: an assertion on a clock difference judges how busy the machine is, unless it only bounds a wait, marked // deadline: <why>
+          Fix: Wait for the event the test needs (a promise, `once(emitter, …)`, a channel), inject the clock where code reads time, or mark a timer or clock check that only bounds a wait with // deadline: <why>.
+        FAIL waits: packages/hub/test/start-budget.test.ts:40:33: a timer is a fixed wait unless it only bounds one, marked // deadline: <why>
+          Fix: Wait for the event the test needs (a promise, `once(emitter, …)`, a channel), inject the clock where code reads time, or mark a timer or clock check that only bounds a wait with // deadline: <why>.
+  ok   scripts/doc-ceilings.mjs
+  ok   scripts/reading-rule.mjs
+  exit 3 scripts/conformance-lint.mjs
+        BLOCKED conformance lint: packages/conformance/dist is not built; run npm run build --workspaces
+  exit 3 scripts/slots-check.mjs
+        BLOCKED slots: packages/conformance/dist or packages/contracts/dist is not built; run npm run build --workspaces
+  ok   scripts/canvas-closures.mjs closures
+  ok   scripts/canvas-closures.mjs drift
+  ok   scripts/canvas-closures.mjs paths
+  ok   scripts/record-reader-guard.mjs
+  ok   scripts/render-lint.mjs
+  ok   scripts/plant-lint.mjs
+  exit 1 scripts/loads-lint.mjs
+            '/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-3412-P9vThR/repo/scripts/loads-lint.mjs'
+          ]
+        }
+        Node.js v24.22.0
+  ok   scripts/budget-table.mjs check
+  ok   scripts/cache-lint.mjs
+  ok   scripts/blocking-call-guard.mjs
+  exit 1 scripts/ask-sources-guard.mjs
+            '/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-3412-P9vThR/repo/package.json'
+          ]
+        }
+        Node.js v24.22.0
+  ok   scripts/keymap-guard.mjs
+  exit 1 scripts/color-literal-guard.mjs
+        FAIL size literal: crates/deep-app/src/card.rs:1411: `px(0.5)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>
+        FAIL size literal: crates/deep-app/src/card.rs:1412: `px(0.5)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>
+        FAIL size literal: crates/deep-app/src/card.rs:1413: `px(0.5)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>
+        FAIL size literal: crates/deep-app/src/card.rs:1414: `px(0.5)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>
+  ok   scripts/guide.mjs --check
+  exit 1 scripts/panel-catalog.mjs
+            "error: could not rename 'component' file from '/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-3412-P9vThR/home/.rustup/tmp/c7hj9r9wovfgeu63_dir/bk' to '/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-3412-P9vThR/home/.rustup/toolchains/1.99.1-x86_64-apple-darwin/share/doc': Directory not empty (os error 66)\n" +
+            "error: component download failed for rustfmt-x86_64-apple-darwin: could not rename 'downloaded' file from '/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-3412-P9vThR/home/.rustup/downloads/06491b425e02612479c30ad9a49f72f88bc8e033310ec8cc238a15eafecf91b7.partial' to '/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-3412-P9vThR/home/.rustup/downloads/06491b425e02612479c30ad9a49f72f88bc8e033310ec8cc238a15eafecf91b7': No such file or directory (os error 2): No such file or directory (os error 2)\n"
+        }
+        Node.js v24.22.0
+  exit 1 scripts/known-failures-check.mjs
+        INCONCLUSIVE known-failures.json: lint canvas-lint: crates/deep-canvas-scene3d/src/water.rs use of a disallowed method `f64::sqrt` (clippy::disallowed_methods): could not read issue #2382: To get started with GitHub CLI, please run:  gh auth login
+        INCONCLUSIVE known-failures.json: lint canvas-lint: crates/deep-text/src/cache.rs use of a disallowed method `std::collections::HashMap::iter` (clippy::disallowed_methods): could not read issue #2382: To get started with GitHub CLI, please run:  gh auth login
+        INCONCLUSIVE known-failures.json: lint canvas-lint: crates/deep-text/src/cache.rs use of a disallowed type `std::collections::HashMap` (clippy::disallowed_types): could not read issue #2382: To get started with GitHub CLI, please run:  gh auth login
+        125 problems in 180 entries of known-failures.json
+  ok   scripts/fetch-lock.mjs lint
+  exit 1 scripts/exit-lint.mjs
+            at ModuleJob.syncLink (node:internal/modules/esm/module_job:276:33) {
+          code: 'ERR_MODULE_NOT_FOUND'
+        }
+        Node.js v24.22.0
+  ok   scripts/app-copy-lint.mjs
+  exit 1 scripts/alone-lint.mjs
+        FAIL alone: tests/acceptance/1881-redraft-2047/ names no reason
+          Fix: name its reason in scripts/lanes.mjs's aloneReasons: binary, timing or shared: <resource>; a folder alone by its own lane.json names it as the first words of its why.
+        FAIL alone: tests/acceptance/96-redraft-1412/ names no reason
+          Fix: name its reason in scripts/lanes.mjs's aloneReasons: binary, timing or shared: <resource>; a folder alone by its own lane.json names it as the first words of its why.
+  exit 3 scripts/built-escapes.mjs
+        BLOCKED built-escapes: no package has a built file under packages/*/dist; run npm run build --workspaces
+      at plantAvoid (file://~/private/deepbuild-core/.claude/worktrees/issue-3412-glossary-58ec69/tests/acceptance/3412/ac2-seen-words.test.mjs:25:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-3412-glossary-58ec69/tests/acceptance/3412/ac2-seen-words.test.mjs:44:3)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3412/ac3-links.test.mjs:12:1
+✖ #3412.f32b0eaa AC3: each link in GLOSSARY.md lands (2.5185ms)
+  AssertionError [ERR_ASSERTION]: GLOSSARY.md is not at the repo root of the checkout
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-3412-glossary-58ec69/tests/acceptance/3412/ac3-links.test.mjs:14:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3412/ac3-links.test.mjs:29:3
+✖ #3412.f32b0eaa AC3: a planted link to a heading neither design doc has (docs/technical-design.md) fails, naming the link (301788.066958ms)
+  AssertionError [ERR_ASSERTION]: no failing lint lane command names the link docs/technical-design.md#zorvanthic-heading-3412
+  exit 1 scripts/repo-rules.mjs
+        NOTE deps: vendor/mitex-spec/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+        NOTE deps: vendor/quickjs-jit-runtime/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+        NOTE deps: vendor/symphonia-codec-vorbis/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+        NOTE size: +229 -0 handwritten lines against merge base 7e7281e4, lockfiles and binary files excluded (guideline: about 400)
+  exit 1 scripts/vendor-rebase.mjs check
+        FAIL row #499 A frame that only a video changes allocates nothing: `HeadlessAppContext::present_again` presents a window's last frame without drawing it, an arena nothing was allocated in since its last clear keeps its validity cell, and one completed handler, made once, releases each frame's instance buffer in commit order: the test tests/acceptance/499/video/players.test.ts › ${AC[12]} five 1080p players at 640 × 360 on the real clock › ${AC[12]} after a 1 s warm-up, no frame of the five players' window allocates, in each of five runs can't be checked: its suite gave no list
+        ROW #499 A frame that only a video changes allocates nothing: `HeadlessAppContext::present_again` presents a window's last frame without drawing it, an arena nothing was allocated in since its last clear keeps its validity cell, and one completed handler, made once, releases each frame's instance buffer in commit order: 11 marked, 0 over budget
+        FAIL row #499 The tagged NV12 surface: a video frame's NV12 surface converted by its own range (`420v` limited, `420f` full) and matrix (its `kCVImageBufferYCbCrMatrixKey`, BT.709 when it has none), with the planted twin `Planted::StockFragment`, GPUI's stock full-range BT.601 fragment: the test tests/acceptance/499/video/shader.test.ts › ${AC[14]} the live shader converts Y and CbCr by the probe's matrix and range › ${AC[14]} untagged 1080p 75% bars drawn live are within ±2 code values of BT.709; the stock full-range BT.601 fragment misses and fails, naming color.matrix can't be checked: its suite gave no list
+        ROW #499 The tagged NV12 surface: a video frame's NV12 surface converted by its own range (`420v` limited, `420f` full) and matrix (its `kCVImageBufferYCbCrMatrixKey`, BT.709 when it has none), with the planted twin `Planted::StockFragment`, GPUI's stock full-range BT.601 fragment: 12 marked, 0 over budget
+  exit 2 scripts/canvas-lint.mjs
+        BLOCKED canvas-lint: cargo metadata exited 1: error: failed to install component: 'rust-std-wasm32-unknown-unknown', detected conflict: 'lib/rustlib/wasm32-unknown-unknown/lib/libaddr2line-31b5894fc0b82494.rlib'
+          Fix: Install Rust with Cargo and clippy, which preflight already needs, and make the workspace build.
+  exit 1 scripts/size-ratchet.mjs
+        FAIL size: packages/hub/src/core.ts: 2631 lines, over its ceiling of 2627
+          Fix: Bring the file to 2627 lines or fewer: move one named concept to a file of its own, which imports what it needs by name. No `use super::*` in the new file, and no name moved to a shared file that only one file reads. A ceiling never rises.
+        FAIL size: scripts/lanes-lists.mjs: 1656 lines, over 1500 with no ceiling
+          Fix: Bring the file to 1500 lines or fewer: move one named concept to a file of its own, which imports what it needs by name. No `use super::*` in the new file, and no name moved to a shared file that only one file reads. A file new over 1500 lines gets no ceiling.
+  exit 1 scripts/wait-ratchet.mjs
+        FAIL waits: packages/hub/test/start-budget.test.ts:34:44: an assertion on a clock difference judges how busy the machine is, unless it only bounds a wait, marked // deadline: <why>
+          Fix: Wait for the event the test needs (a promise, `once(emitter, …)`, a channel), inject the clock where code reads time, or mark a timer or clock check that only bounds a wait with // deadline: <why>.
+        FAIL waits: packages/hub/test/start-budget.test.ts:40:33: a timer is a fixed wait unless it only bounds one, marked // deadline: <why>
+          Fix: Wait for the event the test needs (a promise, `once(emitter, …)`, a channel), inject the clock where code reads time, or mark a timer or clock check that only bounds a wait with // deadline: <why>.
+  ok   scripts/doc-ceilings.mjs
+  ok   scripts/reading-rule.mjs
+  exit 3 scripts/conformance-lint.mjs
+        BLOCKED conformance lint: packages/conformance/dist is not built; run npm run build --workspaces
+  exit 3 scripts/slots-check.mjs
+        BLOCKED slots: packages/conformance/dist or packages/contracts/dist is not built; run npm run build --workspaces
+  ok   scripts/canvas-closures.mjs closures
+  ok   scripts/canvas-closures.mjs drift
+  ok   scripts/canvas-closures.mjs paths
+  ok   scripts/record-reader-guard.mjs
+  ok   scripts/render-lint.mjs
+  ok   scripts/plant-lint.mjs
+  exit 1 scripts/loads-lint.mjs
+            '/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-3412-iVcBCT/repo/scripts/loads-lint.mjs'
+          ]
+        }
+        Node.js v24.22.0
+  ok   scripts/budget-table.mjs check
+  ok   scripts/cache-lint.mjs
+  ok   scripts/blocking-call-guard.mjs
+  exit 1 scripts/ask-sources-guard.mjs
+            '/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-3412-iVcBCT/repo/package.json'
+          ]
+        }
+        Node.js v24.22.0
+  ok   scripts/keymap-guard.mjs
+  exit 1 scripts/color-literal-guard.mjs
+        FAIL size literal: crates/deep-app/src/card.rs:1411: `px(0.5)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>
+        FAIL size literal: crates/deep-app/src/card.rs:1412: `px(0.5)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>
+        FAIL size literal: crates/deep-app/src/card.rs:1413: `px(0.5)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>
+        FAIL size literal: crates/deep-app/src/card.rs:1414: `px(0.5)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>
+  ok   scripts/guide.mjs --check
+  exit 1 scripts/panel-catalog.mjs
+            'info: you may opt out with `RUSTUP_AUTO_INSTALL=0` or `rustup set auto-install disable`\n' +
+            "error: the 'cargo' binary, normally provided by the 'cargo' component, is not applicable to the '1.99.1-x86_64-apple-darwin' toolchain\n"
+        }
+        Node.js v24.22.0
+  exit 1 scripts/known-failures-check.mjs
+        INCONCLUSIVE known-failures.json: lint canvas-lint: crates/deep-canvas-scene3d/src/water.rs use of a disallowed method `f64::sqrt` (clippy::disallowed_methods): could not read issue #2382: To get started with GitHub CLI, please run:  gh auth login
+        INCONCLUSIVE known-failures.json: lint canvas-lint: crates/deep-text/src/cache.rs use of a disallowed method `std::collections::HashMap::iter` (clippy::disallowed_methods): could not read issue #2382: To get started with GitHub CLI, please run:  gh auth login
+        INCONCLUSIVE known-failures.json: lint canvas-lint: crates/deep-text/src/cache.rs use of a disallowed type `std::collections::HashMap` (clippy::disallowed_types): could not read issue #2382: To get started with GitHub CLI, please run:  gh auth login
+        125 problems in 180 entries of known-failures.json
+  ok   scripts/fetch-lock.mjs lint
+  exit 1 scripts/exit-lint.mjs
+            at ModuleJob.syncLink (node:internal/modules/esm/module_job:276:33) {
+          code: 'ERR_MODULE_NOT_FOUND'
+        }
+        Node.js v24.22.0
+  ok   scripts/app-copy-lint.mjs
+  exit 1 scripts/alone-lint.mjs
+        FAIL alone: tests/acceptance/1881-redraft-2047/ names no reason
+          Fix: name its reason in scripts/lanes.mjs's aloneReasons: binary, timing or shared: <resource>; a folder alone by its own lane.json names it as the first words of its why.
+        FAIL alone: tests/acceptance/96-redraft-1412/ names no reason
+          Fix: name its reason in scripts/lanes.mjs's aloneReasons: binary, timing or shared: <resource>; a folder alone by its own lane.json names it as the first words of its why.
+  exit 3 scripts/built-escapes.mjs
+        BLOCKED built-escapes: no package has a built file under packages/*/dist; run npm run build --workspaces
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-3412-glossary-58ec69/tests/acceptance/3412/ac3-links.test.mjs:36:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3412/ac3-links.test.mjs:29:3
+✖ #3412.f32b0eaa AC3: a planted link to a heading neither design doc has (docs/canvas-primitives.md) fails, naming the link (393174.453125ms)
+  AssertionError [ERR_ASSERTION]: no failing lint lane command names the link docs/canvas-primitives.md#zorvanthic-heading-3412
+  exit 1 scripts/repo-rules.mjs
+        STOPPED after 300 s or by SIGKILL
+  exit 1 scripts/vendor-rebase.mjs check
+        FAIL row #499 A frame that only a video changes allocates nothing: `HeadlessAppContext::present_again` presents a window's last frame without drawing it, an arena nothing was allocated in since its last clear keeps its validity cell, and one completed handler, made once, releases each frame's instance buffer in commit order: the test tests/acceptance/499/video/players.test.ts › ${AC[12]} five 1080p players at 640 × 360 on the real clock › ${AC[12]} after a 1 s warm-up, no frame of the five players' window allocates, in each of five runs can't be checked: its suite gave no list
+        ROW #499 A frame that only a video changes allocates nothing: `HeadlessAppContext::present_again` presents a window's last frame without drawing it, an arena nothing was allocated in since its last clear keeps its validity cell, and one completed handler, made once, releases each frame's instance buffer in commit order: 11 marked, 0 over budget
+        FAIL row #499 The tagged NV12 surface: a video frame's NV12 surface converted by its own range (`420v` limited, `420f` full) and matrix (its `kCVImageBufferYCbCrMatrixKey`, BT.709 when it has none), with the planted twin `Planted::StockFragment`, GPUI's stock full-range BT.601 fragment: the test tests/acceptance/499/video/shader.test.ts › ${AC[14]} the live shader converts Y and CbCr by the probe's matrix and range › ${AC[14]} untagged 1080p 75% bars drawn live are within ±2 code values of BT.709; the stock full-range BT.601 fragment misses and fails, naming color.matrix can't be checked: its suite gave no list
+        ROW #499 The tagged NV12 surface: a video frame's NV12 surface converted by its own range (`420v` limited, `420f` full) and matrix (its `kCVImageBufferYCbCrMatrixKey`, BT.709 when it has none), with the planted twin `Planted::StockFragment`, GPUI's stock full-range BT.601 fragment: 12 marked, 0 over budget
+  exit 2 scripts/canvas-lint.mjs
+        BLOCKED canvas-lint: cargo metadata exited 1: error: failed to install component: 'rust-std-wasm32-unknown-unknown', detected conflict: 'lib/rustlib/wasm32-unknown-unknown/lib/libaddr2line-31b5894fc0b82494.rlib'
+          Fix: Install Rust with Cargo and clippy, which preflight already needs, and make the workspace build.
+  exit 1 scripts/size-ratchet.mjs
+        FAIL size: packages/hub/src/core.ts: 2631 lines, over its ceiling of 2627
+          Fix: Bring the file to 2627 lines or fewer: move one named concept to a file of its own, which imports what it needs by name. No `use super::*` in the new file, and no name moved to a shared file that only one file reads. A ceiling never rises.
+        FAIL size: scripts/lanes-lists.mjs: 1656 lines, over 1500 with no ceiling
+          Fix: Bring the file to 1500 lines or fewer: move one named concept to a file of its own, which imports what it needs by name. No `use super::*` in the new file, and no name moved to a shared file that only one file reads. A file new over 1500 lines gets no ceiling.
+  exit 1 scripts/wait-ratchet.mjs
+        FAIL waits: packages/hub/test/start-budget.test.ts:34:44: an assertion on a clock difference judges how busy the machine is, unless it only bounds a wait, marked // deadline: <why>
+          Fix: Wait for the event the test needs (a promise, `once(emitter, …)`, a channel), inject the clock where code reads time, or mark a timer or clock check that only bounds a wait with // deadline: <why>.
+        FAIL waits: packages/hub/test/start-budget.test.ts:40:33: a timer is a fixed wait unless it only bounds one, marked // deadline: <why>
+          Fix: Wait for the event the test needs (a promise, `once(emitter, …)`, a channel), inject the clock where code reads time, or mark a timer or clock check that only bounds a wait with // deadline: <why>.
+  ok   scripts/doc-ceilings.mjs
+  ok   scripts/reading-rule.mjs
+  exit 3 scripts/conformance-lint.mjs
+        BLOCKED conformance lint: packages/conformance/dist is not built; run npm run build --workspaces
+  exit 3 scripts/slots-check.mjs
+        BLOCKED slots: packages/conformance/dist or packages/contracts/dist is not built; run npm run build --workspaces
+  ok   scripts/canvas-closures.mjs closures
+  ok   scripts/canvas-closures.mjs drift
+  ok   scripts/canvas-closures.mjs paths
+  ok   scripts/record-reader-guard.mjs
+  ok   scripts/render-lint.mjs
+  ok   scripts/plant-lint.mjs
+  exit 1 scripts/loads-lint.mjs
+            '/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-3412-j2TlRt/repo/scripts/loads-lint.mjs'
+          ]
+        }
+        Node.js v24.22.0
+  ok   scripts/budget-table.mjs check
+  ok   scripts/cache-lint.mjs
+  ok   scripts/blocking-call-guard.mjs
+  exit 1 scripts/ask-sources-guard.mjs
+            '/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-3412-j2TlRt/repo/package.json'
+          ]
+        }
+        Node.js v24.22.0
+  ok   scripts/keymap-guard.mjs
+  exit 1 scripts/color-literal-guard.mjs
+        FAIL size literal: crates/deep-app/src/card.rs:1411: `px(0.5)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>
+        FAIL size literal: crates/deep-app/src/card.rs:1412: `px(0.5)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>
+        FAIL size literal: crates/deep-app/src/card.rs:1413: `px(0.5)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>
+        FAIL size literal: crates/deep-app/src/card.rs:1414: `px(0.5)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>
+  ok   scripts/guide.mjs --check
+  exit 1 scripts/panel-catalog.mjs
+            'info: you may opt out with `RUSTUP_AUTO_INSTALL=0` or `rustup set auto-install disable`\n' +
+            "error: the 'cargo' binary, normally provided by the 'cargo' component, is not applicable to the '1.99.1-x86_64-apple-darwin' toolchain\n"
+        }
+        Node.js v24.22.0
+  exit 1 scripts/known-failures-check.mjs
+        INCONCLUSIVE known-failures.json: lint canvas-lint: crates/deep-canvas-scene3d/src/water.rs use of a disallowed method `f64::sqrt` (clippy::disallowed_methods): could not read issue #2382: To get started with GitHub CLI, please run:  gh auth login
+        INCONCLUSIVE known-failures.json: lint canvas-lint: crates/deep-text/src/cache.rs use of a disallowed method `std::collections::HashMap::iter` (clippy::disallowed_methods): could not read issue #2382: To get started with GitHub CLI, please run:  gh auth login
+        INCONCLUSIVE known-failures.json: lint canvas-lint: crates/deep-text/src/cache.rs use of a disallowed type `std::collections::HashMap` (clippy::disallowed_types): could not read issue #2382: To get started with GitHub CLI, please run:  gh auth login
+        125 problems in 180 entries of known-failures.json
+  ok   scripts/fetch-lock.mjs lint
+  exit 1 scripts/exit-lint.mjs
+            at ModuleJob.syncLink (node:internal/modules/esm/module_job:276:33) {
+          code: 'ERR_MODULE_NOT_FOUND'
+        }
+        Node.js v24.22.0
+  ok   scripts/app-copy-lint.mjs
+  exit 1 scripts/alone-lint.mjs
+        FAIL alone: tests/acceptance/1881-redraft-2047/ names no reason
+          Fix: name its reason in scripts/lanes.mjs's aloneReasons: binary, timing or shared: <resource>; a folder alone by its own lane.json names it as the first words of its why.
+        FAIL alone: tests/acceptance/96-redraft-1412/ names no reason
+          Fix: name its reason in scripts/lanes.mjs's aloneReasons: binary, timing or shared: <resource>; a folder alone by its own lane.json names it as the first words of its why.
+  exit 3 scripts/built-escapes.mjs
+        BLOCKED built-escapes: no package has a built file under packages/*/dist; run npm run build --workspaces
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-3412-glossary-58ec69/tests/acceptance/3412/ac3-links.test.mjs:36:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3412/ac4-agents.test.mjs:9:1
+✖ #3412.4a7a02a4 AC4: AGENTS.md names GLOSSARY.md in one line (7.535959ms)
+  AssertionError [ERR_ASSERTION]: AGENTS.md names GLOSSARY.md in 0 lines, not one
+  
+  0 !== 1
+  
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-3412-glossary-58ec69/tests/acceptance/3412/ac4-agents.test.mjs:11:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3412/ac4-agents.test.mjs:14:1
+✖ #3412.4a7a02a4 AC4: a planted AGENTS.md without the line fails, naming the file (522851.6875ms)
+  AssertionError [ERR_ASSERTION]: no failing lint lane command names AGENTS.md once its line naming GLOSSARY.md is gone
+  ok   scripts/repo-rules.mjs
+  exit 1 scripts/vendor-rebase.mjs check
+        FAIL row #499 A frame that only a video changes allocates nothing: `HeadlessAppContext::present_again` presents a window's last frame without drawing it, an arena nothing was allocated in since its last clear keeps its validity cell, and one completed handler, made once, releases each frame's instance buffer in commit order: the test tests/acceptance/499/video/players.test.ts › ${AC[12]} five 1080p players at 640 × 360 on the real clock › ${AC[12]} after a 1 s warm-up, no frame of the five players' window allocates, in each of five runs can't be checked: its suite gave no list
+        ROW #499 A frame that only a video changes allocates nothing: `HeadlessAppContext::present_again` presents a window's last frame without drawing it, an arena nothing was allocated in since its last clear keeps its validity cell, and one completed handler, made once, releases each frame's instance buffer in commit order: 11 marked, 0 over budget
+        FAIL row #499 The tagged NV12 surface: a video frame's NV12 surface converted by its own range (`420v` limited, `420f` full) and matrix (its `kCVImageBufferYCbCrMatrixKey`, BT.709 when it has none), with the planted twin `Planted::StockFragment`, GPUI's stock full-range BT.601 fragment: the test tests/acceptance/499/video/shader.test.ts › ${AC[14]} the live shader converts Y and CbCr by the probe's matrix and range › ${AC[14]} untagged 1080p 75% bars drawn live are within ±2 code values of BT.709; the stock full-range BT.601 fragment misses and fails, naming color.matrix can't be checked: its suite gave no list
+        ROW #499 The tagged NV12 surface: a video frame's NV12 surface converted by its own range (`420v` limited, `420f` full) and matrix (its `kCVImageBufferYCbCrMatrixKey`, BT.709 when it has none), with the planted twin `Planted::StockFragment`, GPUI's stock full-range BT.601 fragment: 12 marked, 0 over budget
+  exit 2 scripts/canvas-lint.mjs
+        FAIL canvas-lint: deep-canvas-test-modules compiles ../../tests/acceptance/3023/seal.rs as a target's root, which the scan never reads: outside the crate, or under its target/ directory
+        FAIL canvas-lint: embedded-io is resolved at 0.4.0 for postcard and 0.6.1 for postcard, but the listing audits one version
+        BLOCKED canvas-lint: cargo clippy exited 1: error: the 'cargo-clippy' binary, normally provided by the 'clippy' component, is not applicable to the '1.99.1-x86_64-apple-darwin' toolchain
+          Fix: Route the math through the ops module on pinned libm in f64, take time from the input track, draw from the document seed through hash@1, iterate a BTreeMap or a sorted Vec, and keep state out of statics. Include or #[path] only a literal path to a .rs file inside the crate (include_bytes! and include_str! a file inside it), keep no symlinks under it, or make the code a plain module of the crate. Pin every crate in scope to the one listed version of the dependency. Install Rust with Cargo and clippy, which preflight already needs, and make the workspace build.
+  exit 1 scripts/size-ratchet.mjs
+        FAIL size: packages/hub/src/core.ts: 2631 lines, over its ceiling of 2627
+          Fix: Bring the file to 2627 lines or fewer: move one named concept to a file of its own, which imports what it needs by name. No `use super::*` in the new file, and no name moved to a shared file that only one file reads. A ceiling never rises.
+        FAIL size: scripts/lanes-lists.mjs: 1656 lines, over 1500 with no ceiling
+          Fix: Bring the file to 1500 lines or fewer: move one named concept to a file of its own, which imports what it needs by name. No `use super::*` in the new file, and no name moved to a shared file that only one file reads. A file new over 1500 lines gets no ceiling.
+  exit 1 scripts/wait-ratchet.mjs
+        FAIL waits: packages/hub/test/start-budget.test.ts:34:44: an assertion on a clock difference judges how busy the machine is, unless it only bounds a wait, marked // deadline: <why>
+          Fix: Wait for the event the test needs (a promise, `once(emitter, …)`, a channel), inject the clock where code reads time, or mark a timer or clock check that only bounds a wait with // deadline: <why>.
+        FAIL waits: packages/hub/test/start-budget.test.ts:40:33: a timer is a fixed wait unless it only bounds one, marked // deadline: <why>
+          Fix: Wait for the event the test needs (a promise, `once(emitter, …)`, a channel), inject the clock where code reads time, or mark a timer or clock check that only bounds a wait with // deadline: <why>.
+  ok   scripts/doc-ceilings.mjs
+  ok   scripts/reading-rule.mjs
+  exit 3 scripts/conformance-lint.mjs
+        BLOCKED conformance lint: packages/conformance/dist is not built; run npm run build --workspaces
+  exit 3 scripts/slots-check.mjs
+        BLOCKED slots: packages/conformance/dist or packages/contracts/dist is not built; run npm run build --workspaces
+  ok   scripts/canvas-closures.mjs closures
+  ok   scripts/canvas-closures.mjs drift
+  ok   scripts/canvas-closures.mjs paths
+  ok   scripts/record-reader-guard.mjs
+  ok   scripts/render-lint.mjs
+  ok   scripts/plant-lint.mjs
+  exit 1 scripts/loads-lint.mjs
+            '/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-3412-XyOYvl/repo/scripts/loads-lint.mjs'
+          ]
+        }
+        Node.js v24.22.0
+  ok   scripts/budget-table.mjs check
+  ok   scripts/cache-lint.mjs
+  ok   scripts/blocking-call-guard.mjs
+  exit 1 scripts/ask-sources-guard.mjs
+            '/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-3412-XyOYvl/repo/package.json'
+          ]
+        }
+        Node.js v24.22.0
+  ok   scripts/keymap-guard.mjs
+  exit 1 scripts/color-literal-guard.mjs
+        FAIL size literal: crates/deep-app/src/card.rs:1411: `px(0.5)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>
+        FAIL size literal: crates/deep-app/src/card.rs:1412: `px(0.5)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>
+        FAIL size literal: crates/deep-app/src/card.rs:1413: `px(0.5)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>
+        FAIL size literal: crates/deep-app/src/card.rs:1414: `px(0.5)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>
+  ok   scripts/guide.mjs --check
+  ok   scripts/panel-catalog.mjs
+  exit 1 scripts/known-failures-check.mjs
+        INCONCLUSIVE known-failures.json: lint canvas-lint: crates/deep-canvas-scene3d/src/water.rs use of a disallowed method `f64::sqrt` (clippy::disallowed_methods): could not read issue #2382: To get started with GitHub CLI, please run:  gh auth login
+        INCONCLUSIVE known-failures.json: lint canvas-lint: crates/deep-text/src/cache.rs use of a disallowed method `std::collections::HashMap::iter` (clippy::disallowed_methods): could not read issue #2382: To get started with GitHub CLI, please run:  gh auth login
+        INCONCLUSIVE known-failures.json: lint canvas-lint: crates/deep-text/src/cache.rs use of a disallowed type `std::collections::HashMap` (clippy::disallowed_types): could not read issue #2382: To get started with GitHub CLI, please run:  gh auth login
+        125 problems in 180 entries of known-failures.json
+  ok   scripts/fetch-lock.mjs lint
+  exit 1 scripts/exit-lint.mjs
+            at ModuleJob.syncLink (node:internal/modules/esm/module_job:276:33) {
+          code: 'ERR_MODULE_NOT_FOUND'
+        }
+        Node.js v24.22.0
+  ok   scripts/app-copy-lint.mjs
+  exit 1 scripts/alone-lint.mjs
+        FAIL alone: tests/acceptance/1881-redraft-2047/ names no reason
+          Fix: name its reason in scripts/lanes.mjs's aloneReasons: binary, timing or shared: <resource>; a folder alone by its own lane.json names it as the first words of its why.
+        FAIL alone: tests/acceptance/96-redraft-1412/ names no reason
+          Fix: name its reason in scripts/lanes.mjs's aloneReasons: binary, timing or shared: <resource>; a folder alone by its own lane.json names it as the first words of its why.
+  exit 3 scripts/built-escapes.mjs
+        BLOCKED built-escapes: no package has a built file under packages/*/dist; run npm run build --workspaces
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-3412-glossary-58ec69/tests/acceptance/3412/ac4-agents.test.mjs:30:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+exit 1

@@ -11,6 +11,7 @@ use serde_json::{json, Map, Value};
 
 mod focus;
 pub mod journey;
+pub mod profile;
 mod rules;
 pub mod run;
 
@@ -108,7 +109,23 @@ pub struct Settings {
     pub volume: Vec<(String, f64)>,
     pub bindings: Vec<(String, Vec<String>)>,
     pub toggle: Vec<String>,
+    /// #3605: the piece's own settings, `settings.custom`, in the order declared.
+    pub custom: Vec<Custom>,
 }
+
+/// #3605: one of the piece's own settings: a choice of numbers, a slider over a range, or a toggle.
+#[derive(Clone, Debug)]
+pub struct Custom {
+    pub name: String,
+    pub kind: Kind,
+    pub options: Vec<f64>,
+    pub range: [f64; 2],
+    pub increment: f64,
+    pub default: f64,
+}
+
+/// #3605: at most this many of the piece's own settings.
+pub const CUSTOM_MAX: usize = 16;
 
 #[derive(Clone, Debug)]
 pub struct Pause {
@@ -159,14 +176,21 @@ impl Shell {
         self.screens.iter().position(|s| s.name == name)
     }
 
-    /// The settings' fields a `set` may name: text_size, reduced_motion, volume.<bus>, toggle.<action>.
+    /// The settings' fields a `set` may name: text_size, reduced_motion, volume.<bus>, toggle.<action>,
+    /// custom.<name>.
     fn settable(&self, field: &str) -> bool {
         match field.split_once('.') {
             None => matches!(field, "text_size" | "reduced_motion"),
             Some(("volume", bus)) => self.settings.volume.iter().any(|(b, _)| b == bus),
             Some(("toggle", a)) => self.settings.toggle.iter().any(|t| t == a),
+            Some(("custom", n)) => self.custom(n).is_some(),
             _ => false,
         }
+    }
+
+    /// #3605: the piece's own setting `name`'s place in `custom`.
+    pub fn custom(&self, name: &str) -> Option<usize> {
+        self.settings.custom.iter().position(|c| c.name == name)
     }
 
     /// The shell document read and checked (Recipe: shell@1 game shell): every screen and level resolved by hash
@@ -264,7 +288,7 @@ impl Shell {
                 lost: path("lost"),
             });
         }
-        let settings = settings_of(p.get("settings"));
+        let settings = settings_of(p.get("settings"))?;
         let pause = p.get("pause");
         let strs = |v: Option<&Value>, d: &str| -> Vec<String> {
             v.and_then(Value::as_array)
@@ -345,7 +369,23 @@ impl Shell {
                 .into_iter()
                 .flatten()
             {
-                controls.push(control_of(name, cid, c, &sdoc, &names, shell.levels.len())?);
+                let mut control = control_of(name, cid, c, &sdoc, &names, shell.levels.len())?;
+                // #3605: a control that sets one of the piece's own settings takes what it doesn't give from it.
+                if let Some(Does::Set(f)) = &control.does {
+                    let own = f.strip_prefix("custom.").and_then(|n| shell.custom(n));
+                    if let Some(k) = own.map(|i| &shell.settings.custom[i]) {
+                        if control.options.is_empty() {
+                            control.options = k.options.iter().map(|o| json!(o)).collect();
+                        }
+                        if c.get("range").is_none() {
+                            control.range = k.range;
+                        }
+                        if c.get("increment").is_none() {
+                            control.increment = k.increment;
+                        }
+                    }
+                }
+                controls.push(control);
             }
             if controls.len() > 32 {
                 return Err(refused(
@@ -359,8 +399,14 @@ impl Shell {
             }
             for c in &controls {
                 if let Some(Does::Set(f)) = &c.does {
+                    // #3605: a piece's own setting the shell doesn't declare is `shell.setting`.
+                    let code = if f.starts_with("custom.") {
+                        "shell.setting"
+                    } else {
+                        "shell.control"
+                    };
                     if !shell.settable(f) {
-                        return Err(refused("shell.control", format!("the {name} screen's control {} sets {f}, which the settings don't hold", c.id), json!({"screen": name, "control": c.id})));
+                        return Err(refused(code, format!("the {name} screen's control {} sets {f}, which the settings don't hold", c.id), json!({"screen": name, "control": c.id, "setting": f})));
                     }
                 }
             }
@@ -606,9 +652,102 @@ fn control_of(
     })
 }
 
-fn settings_of(v: Option<&Value>) -> Settings {
+/// #3605: `settings.custom`, each a choice of numbers, a slider over a range or a toggle with its default, checked:
+/// at most 16, a choice's options numbers, and each default among its options or inside its range (`shell.setting`).
+fn custom_of(v: Option<&Value>) -> Result<Vec<Custom>, Value> {
+    let Some(v) = v else { return Ok(Vec::new()) };
+    let bad = |name: &str, what: String| refused("shell.setting", what, json!({"setting": name}));
+    let o = v
+        .as_object()
+        .ok_or_else(|| bad("", "settings.custom is {name → setting}".into()))?;
+    if o.len() > CUSTOM_MAX {
+        return Err(bad(
+            "",
+            format!(
+                "settings.custom declares {} settings, past {CUSTOM_MAX}",
+                o.len()
+            ),
+        ));
+    }
+    let mut out = Vec::new();
+    for (name, c) in o {
+        let kind = match c.get("kind").and_then(Value::as_str) {
+            Some("choice") => Kind::Choice,
+            Some("slider") => Kind::Slider,
+            Some("toggle") => Kind::Toggle,
+            k => {
+                return Err(bad(
+                    name,
+                    format!(
+                        "the setting {name} is of kind {}, not choice, slider or toggle",
+                        k.unwrap_or("none")
+                    ),
+                ))
+            }
+        };
+        let given = c
+            .get("options")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        let options: Vec<f64> = given.iter().filter_map(Value::as_f64).collect();
+        if kind == Kind::Choice && (given.is_empty() || options.len() != given.len()) {
+            return Err(bad(
+                name,
+                format!("the setting {name} is a choice whose options aren't all numbers"),
+            ));
+        }
+        let range = match kind {
+            Kind::Toggle => [0.0, 1.0],
+            _ => c
+                .get("range")
+                .and_then(Value::as_array)
+                .filter(|a| a.len() == 2)
+                .and_then(|a| Some([a[0].as_f64()?, a[1].as_f64()?]))
+                .unwrap_or([0.0, 1.0]),
+        };
+        let default = match c.get("default") {
+            None => match kind {
+                Kind::Choice => options[0],
+                _ => range[0],
+            },
+            Some(d) => match (kind, d) {
+                (Kind::Toggle, Value::Bool(b)) => f64::from(u8::from(*b)),
+                _ => d.as_f64().ok_or_else(|| {
+                    bad(name, format!("the setting {name}'s default isn't a number"))
+                })?,
+            },
+        };
+        let fits = match kind {
+            Kind::Choice => options.contains(&default),
+            Kind::Toggle => default == 0.0 || default == 1.0,
+            _ => (range[0]..=range[1]).contains(&default),
+        };
+        if !fits {
+            return Err(bad(
+                name,
+                format!("the setting {name}'s default {default} lies outside its options or range"),
+            ));
+        }
+        out.push(Custom {
+            name: name.clone(),
+            kind,
+            increment: c
+                .get("increment")
+                .and_then(Value::as_f64)
+                .unwrap_or((range[1] - range[0]) / 10.0),
+            options,
+            range,
+            default,
+        });
+    }
+    Ok(out)
+}
+
+fn settings_of(v: Option<&Value>) -> Result<Settings, Value> {
     let s = v.cloned().unwrap_or(json!({}));
-    Settings {
+    Ok(Settings {
+        custom: custom_of(s.get("custom"))?,
         text_size: s
             .get("text_size")
             .and_then(Value::as_array)
@@ -658,7 +797,7 @@ fn settings_of(v: Option<&Value>) -> Settings {
                     .collect()
             })
             .unwrap_or_default(),
-    }
+    })
 }
 
 /// The documents a call gives by hash: `documents: {sha256 → document}`.

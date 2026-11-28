@@ -1,6 +1,3 @@
-// The one masked-exit rule the core holds (#29): the validity gate sends back a claim citing a run whose command
-// masked its exit status, the command check kind leaves such a run uncounted, and spec drafting uses it too. Moved
-// here from @deepbuild/checks-command (#30), which reads it from the core.
 /**
  * The ways a command masks its tool's exit, each with the text named as the mask: a failure branch (`|| true`,
  * `|| :`, `|| echo`, `|| exit 0`), a pipe, `|` or `|&` (the pipeline's exit is the last command's), an `exit N`, `set +e`, a

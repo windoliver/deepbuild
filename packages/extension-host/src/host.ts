@@ -28,12 +28,12 @@
 // batch file named by one reading.batch event, its windows' rollups as files named by reading.rollup events
 // (./series.ts), so a bound value resolves at a frame's pinned log position.
 import { createPublicKey, randomUUID, verify as verifySignature } from 'node:crypto';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createServer, type AddressInfo, type Socket } from 'node:net';
 import { homedir } from 'node:os';
 import { stripTypeScriptTypes } from 'node:module';
-import { basename, dirname, isAbsolute, join } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { AdapterCaps, HookRequestLine } from '@deepbuild/adapters';
 import type { Asks, Delivery, ResolverAnswer } from '@deepbuild/asks';
@@ -44,7 +44,7 @@ import { canonicalize, checkManifest, extensionApi, frozenDigests, hubSlots, reg
 import { contentFree, toJson, ulid, type Connection, type Event, type EventInput, type Receipt, type RecordStore } from '@deepbuild/record';
 import type { LeaseKind, LeaseResult, LeaseTable } from '@deepbuild/leases';
 import type { Runner } from '@deepbuild/runner';
-import { badDeadline, checkHost, type Host as RunHost, type Supervisor } from '@deepbuild/supervisor';
+import { badDeadline, checkHost, type Host as RunHost, type Supervisor, type Used } from '@deepbuild/supervisor';
 import { API, extensionSide, peer } from '../runtime/deep.mjs';
 import { cycleThrough, dependents, graph, refusal, resolve, servedAt, type Piece, type UseRow } from './compose.js';
 import { packageDigest } from './digest.js';
@@ -70,7 +70,7 @@ export type { NoticeRow } from './sends.js';
 import { WorkSources, type Added, type DeliveryRow, type WorkEvent, type WorkKitFixture, type WorkPage, type WorkResult, type WorkTask } from './work.js';
 import { AnswerTooLarge, declareSource, handleOf, nodeFetch, nodeHttp, osSecrets, Sources, HostSources, type HttpClient, type KeyTest, type Polled, type Reading, type Recording, type SecretStore, type SourceRead, type StreamRead } from './sources.js';
 import { TERMINAL_PLANTS, TERMINAL_PROTOCOL, Terminals, type OpenSpec, type TerminalPlant, type TerminalTab } from './terminals.js';
-import { shellRefusal, type ShellInput } from './shell-plays.js';
+import { levelTracks, shellRefusal, type ShellInput } from './shell-plays.js';
 import type { ProjectTrust } from './trust.js';
 import type { ActionCall, ActionListing, ActionResult, Conformance, ExtensionHost, HookReply, HookRequest, InstallFrom, Load, Loaded, PackageTests, Refused, RunningEnvironment, RuntimeEnvironment } from './host-api.js';
 export type { ActionCall, ActionListing, ActionResult, ActionTarget, Conformance, ExtensionHost, HookReply, HookRequest, InstallFrom, Load, Loaded, PackageTests, Refused, RunningEnvironment, RuntimeEnvironment } from './host-api.js';
@@ -83,7 +83,7 @@ export type Plant = 'hub-unless-agent-built' | 'grants-only-in-record-query' | '
   | 'both-adapters-deliver' | 'first-to-bind-owns' | 'refuses-only-the-ring' | 'trusts-envelope-digest'
   | 'skips-kind-declare' | 'drops-mode' | 'holder-from-arguments' | 'declares-kind-on-first-lease'
   | 'close-stops-every-host' | 'narrower-grant-implies-run-as-you' | 'revoke-keeps-running' | 'revoke-stops-programs-only'
-  | 'input-from-any-writer' | 'piece-writes-input' | BuildPlant
+  | 'input-from-any-writer' | 'piece-writes-input' | 'unwired-method' | BuildPlant
   // #139's: a host that lets a stable package call a preview method, and an installer that wires a use to the newest
   // interface its provider has.
   | 'stable-may-call-preview' | 'rewires-to-newest'
@@ -273,6 +273,10 @@ const nothing = (outcome: CheckResult['outcome'], failure?: string): CheckResult
 });
 /** The one permission a piece that hosts shells asks for: run any command you could (#104). */
 const RUN_AS_YOU = 'run_as_you';
+/** #1853's planted published method, which no case below answers. */
+const UNWIRED = 'deep.planted.unwired';
+/** The fields only you and the core write on an ask: no package's ask carries them (#1853). */
+const ANSWERED = ['answer', 'outcome'] as const;
 /** Whether the manifest asks for the grant: an access word, or `notices` for a declared notice kind. */
 const granted = (m: Manifest, needs: string): boolean => (needs === 'notices' ? (m.notices ?? []).length > 0 : (m.access?.words ?? []).includes(needs));
 /** The interpreters a `main` may name, each only as the program of that name on the hub's own PATH. */
@@ -444,8 +448,8 @@ class Host implements ExtensionHost {
   jobParams(kind: string, value: unknown): Record<string, JsonValue> {
     return this.jobTools.jobParams(kind, value);
   }
-  async runJobTool(tool: string, kind: string, params: Record<string, JsonValue>, inputs: JobBytes, call?: Omit<JobCall, 'provider'>, stop?: AbortSignal, watch?: (counter: JobCounter) => void): Promise<Record<string, Uint8Array>> {
-    return this.jobTools.runJobTool(tool, kind, params, inputs, call, stop, watch);
+  async runJobTool(tool: string, kind: string, params: Record<string, JsonValue>, inputs: JobBytes, call?: Omit<JobCall, 'provider'>, stop?: AbortSignal, watch?: (counter: JobCounter) => void, usage?: (used: Used) => void): Promise<Record<string, Uint8Array>> {
+    return this.jobTools.runJobTool(tool, kind, params, inputs, call, stop, watch, usage);
   }
   async jobHostReport(tool: string, kind: string): Promise<{ weights: Weight[]; capabilities: string[] }> {
     return this.jobTools.jobHostReport(tool, kind);
@@ -1501,7 +1505,7 @@ class Host implements ExtensionHost {
     const index = join(ext.folder, 'index.ts');
     const params = {
       ...(ext.place === 'sandbox' && existsSync(index) ? { source: stripTypeScriptTypes(readFileSync(index, 'utf8')) } : {}),
-      ...(this.options.plant === 'piece-writes-input' ? { planted: ['deep.terminal.write'] } : {}),
+      ...(this.options.plant === 'piece-writes-input' ? { planted: ['deep.terminal.write'] } : this.options.plant === 'unwired-method' ? { planted: [UNWIRED] } : {}),
     };
     if (ext.place === 'hub') {
       // A restart runs its code afresh, as a new process would: nothing it held in memory survives.
@@ -1733,7 +1737,9 @@ class Host implements ExtensionHost {
   private async dispatchNow(ext: Ext, method: string, params: unknown, scope?: string): Promise<unknown> {
     const args: unknown[] = Array.isArray(params) ? params : [];
     // AC3's wrong program offers a method that writes a terminal's input.
-    const planted = this.options.plant === 'piece-writes-input' && method === 'deep.terminal.write' ? { method, needs: RUN_AS_YOU } : undefined;
+    // #1853's wrong program publishes a method that needs no grant and has no case below.
+    const planted = this.options.plant === 'piece-writes-input' && method === 'deep.terminal.write' ? { method, needs: RUN_AS_YOU }
+      : this.options.plant === 'unwired-method' && method === UNWIRED ? { method, needs: null } : undefined;
     const schema = API.find((m) => m.method === method) ?? planted;
     if (!schema) throw Error(`${method} isn't in the extension API`);
     const id = ext.entry.id;
@@ -1818,7 +1824,7 @@ class Host implements ExtensionHost {
         // #556: an array recorded only at the steps it changed is read as surely as one read at every step.
         const values = [reply.values, reply.changes].some((r) => isPlain(r) && Object.values(r).some((v) => Array.isArray(v) && v.length > 0));
         running.played.push({ seed: seed as number, bot: r.bot === undefined ? undefined : canonical(botOf(r.bot)), track: String(reply.track), values, ...(off ? { off: off.row as number } : {}), ...startedAt(r, reply) });
-        if (Array.isArray(reply.entries)) running.tracks.add(canonical(reply.entries));
+        for (const t of [reply.entries, ...levelTracks(reply)]) if (Array.isArray(t)) running.tracks.add(canonical(t));
         // #1048: a probe's track for each copy that trapped or broke a range, the run's recorded entries and what it
         // put, which the check plays again in a fresh replica.
         if (Array.isArray(reply.tests)) for (const t of reply.tests as { track?: unknown }[]) if (Array.isArray(t?.track)) running.tracks.add(canonical(t.track));
@@ -1984,6 +1990,49 @@ class Host implements ExtensionHost {
         const writing = this.options.plant === 'first-party-appends-every-kind' && ext.place === 'hub' ? { ...connection, writer: 'core' } : connection;
         await this.options.record.append(writing, args[0] as EventInput);
         return null;
+      }
+      // #1853: an ask raised through the asks core as the package, held to the ask schema there; never one it answered.
+      case 'deep.asks.create': {
+        quiet();
+        const asks = this.options.asks;
+        if (!asks) throw Error(`${method}: this host has no asks core to raise ${id}'s ask`);
+        const [ask] = args;
+        if (!isPlain(ask)) throw Error(`${method} takes the ask, an object`);
+        const set = ANSWERED.find((field) => field in ask);
+        if (set) throw Error(`${method}: ${id}'s ask carries ${set}; only you answer an ask, and the core records its outcome`);
+        // Only DeepBuild writes an allow option, as the asks core holds an agent to.
+        const allow = Array.isArray(ask.options) ? (ask.options as unknown[]).find((o) => isPlain(o) && o.decision === 'allow') as { id?: unknown } | undefined : undefined;
+        if (allow) throw Error(`${method}: ${id}'s option ${String(allow.id)} declares allow, which only DeepBuild writes`);
+        // What may answer it is DeepBuild's to declare (#1581), not the plug-in's: the trusted path alone.
+        return asks.raise(connection, 'extension.choice', { ...ask, may_answer: 'trusted_path' });
+      }
+      // #1853: a file of the package's own folder, its files grant, into the evidence store, under the most cautious origin.
+      case 'deep.evidence.put': {
+        quiet();
+        const store = this.options.evidence;
+        if (!store) throw Error(`${method}: this host has no evidence store to keep ${id}'s file`);
+        const [file] = args;
+        if (typeof file !== 'string' || !file) throw Error(`${method} takes the path of a file in ${id}'s folder`);
+        const root = realpathSync(ext.folder);
+        // Resolved through every link, so neither .. nor a link leaves the folder.
+        let real: string | undefined;
+        try {
+          real = realpathSync(isAbsolute(file) ? file : join(root, file));
+        } catch {
+          real = undefined;
+        }
+        if (real === undefined || !real.startsWith(`${root}/`) || !statSync(real).isFile()) throw Error(`${method}: ${file} is no file inside ${id}'s files grant, its own folder`);
+        const put = await store.connect({ role: 'agent', session: connection.session ?? 'unknown' })
+          .put({ bytes: readFileSync(real), kind: 'file', source: `${connection.writer}:${relative(root, real)}`, redaction: 'unknown', license: { name: 'unknown', allows: [] } });
+        if (put.status !== 'stored') throw Error(`${method}: the evidence store refused ${file}: ${put.reason}`);
+        const ev = put.evidence;
+        // On the record as the hub's own puts are, so search and the record's evidence know of it.
+        const now = this.options.now();
+        await this.options.record.append(CORE, {
+          v: 1, id: ulid(now), kind: 'evidence.stored', ts: now,
+          data: { sha256: ev.sha256, kind: ev.kind, type: ev.type, size: ev.size, origin: ev.origin, redaction: ev.redaction, license: ev.license.name, derived_from: [...ev.derivedFrom], step_times: [] },
+        });
+        return ev.sha256;
       }
       case 'deep.registerAction': {
         const [name, declared] = args as [unknown, { declares?: unknown; input?: unknown; output?: unknown; changes?: unknown; reads?: unknown } | undefined];

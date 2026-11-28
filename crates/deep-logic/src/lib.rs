@@ -473,7 +473,10 @@ impl Logic {
                 }
                 Err(r) => r,
             },
-            Some("bake") => self.bake(line).unwrap_or_else(|e| e),
+            Some("bake") => self
+                .check(line)
+                .and_then(|p| self.bake(Rc::new(p), line))
+                .unwrap_or_else(|e| e),
             Some("playback") => self.playback(line).unwrap_or_else(|e| e),
             Some("seek") => self.seek(line).unwrap_or_else(|e| e),
             Some("web_plan") => self.web_plan(line).unwrap_or_else(|e| e),
@@ -482,7 +485,10 @@ impl Logic {
             Some("web_runner") => {
                 json!({"source": format!("{}\n{WEB_RUNNER}", deep_sandbox_wasmtime::service::WEB_RUNNER)})
             }
-            Some("determinism") => self.determinism(line).unwrap_or_else(|e| e),
+            Some("determinism") => self
+                .check(line)
+                .and_then(|p| self.determinism(Rc::new(p), line))
+                .unwrap_or_else(|e| e),
             Some("budget") => self.budget(line).unwrap_or_else(|e| e),
             Some("golden") => self
                 .golden(line)
@@ -496,6 +502,8 @@ impl Logic {
             Some("step") => self.step(line).unwrap_or_else(|e| e),
             Some("query") => self.query(line).unwrap_or_else(|e| e),
             Some("pack_check") => self.pack_check(line).unwrap_or_else(|e| e),
+            Some("piece_checks") => json!({"ok": true, "piece_checks": piece::piece_checks()}),
+            Some("compiles") => World::compiles_reply(),
             Some("first_party") => first_party::reply(),
             Some("claim") => self.claim(line).unwrap_or_else(|e| e),
             Some("judge") => self.judge(line).unwrap_or_else(|e| e),
@@ -516,8 +524,7 @@ impl Logic {
         Ok(checked)
     }
 
-    fn bake(&mut self, line: &Value) -> Result<Value, Value> {
-        let piece = Rc::new(self.check(line)?);
+    fn bake(&mut self, piece: Rc<Piece>, line: &Value) -> Result<Value, Value> {
         let steps = line
             .get("steps")
             .and_then(Value::as_i64)
@@ -651,26 +658,25 @@ impl Logic {
         Ok(json!({"ok": true, "stored": stored, "arrays": arrays}))
     }
 
-    /// The piece, its input track and the bake's step count, as `bake` reads them.
-    fn baked(&mut self, line: &Value) -> Result<(Rc<Piece>, Vec<Entry>, i64), Value> {
-        let piece = Rc::new(self.check(line)?);
+    /// A checked piece's input track and the bake's step count, as `bake` reads them.
+    fn baked(&mut self, piece: &Piece, line: &Value) -> Result<(Vec<Entry>, i64), Value> {
         let steps = line
             .get("steps")
             .and_then(Value::as_i64)
             .filter(|n| *n >= 0)
             .ok_or_else(|| bad("steps"))?;
-        let mut entries = track(&piece, line, steps, &self.planted).ok_or_else(|| bad("track"))?;
+        let mut entries = track(piece, line, steps, &self.planted).ok_or_else(|| bad("track"))?;
         // #276: a check's replica starts with zeros unless the call names a fixture record.
-        profile::fixture(&piece, line, &self.planted, &mut entries)?;
+        profile::fixture(piece, line, &self.planted, &mut entries)?;
         if !piece.items.windows(2).all(|w| w[0].step == w[1].step) {
             return Err(bad("checks need every item at one step rate"));
         }
-        Ok((piece, entries, steps))
+        Ok((entries, steps))
     }
 
     /// logic.determinism: sampled times in seconds, each at step ⌊t × step_rate⌋.
-    fn determinism(&mut self, line: &Value) -> Result<Value, Value> {
-        let (piece, entries, steps) = self.baked(line)?;
+    fn determinism(&mut self, piece: Rc<Piece>, line: &Value) -> Result<Value, Value> {
+        let (entries, steps) = self.baked(&piece, line)?;
         let compare = line
             .get("compare")
             .and_then(Value::as_str)
@@ -729,7 +735,8 @@ impl Logic {
 
     /// The golden of the piece's bake on this host, and the bake's record.
     fn recorded(&mut self, line: &Value) -> Result<(Value, Record, Rc<Piece>), Value> {
-        let (piece, entries, steps) = self.baked(line)?;
+        let piece = Rc::new(self.check(line)?);
+        let (entries, steps) = self.baked(&piece, line)?;
         let mut rec = Record::default();
         World::new(
             piece.clone(),
@@ -826,7 +833,8 @@ impl Logic {
 
     /// logic.budget over the piece's bake: `fuel_share` (0.5) and `on` (["app"]).
     fn budget(&mut self, line: &Value) -> Result<Value, Value> {
-        let (piece, entries, steps) = self.baked(line)?;
+        let piece = Rc::new(self.check(line)?);
+        let (entries, steps) = self.baked(&piece, line)?;
         let share = line
             .get("fuel_share")
             .map_or(Some(0.5), Value::as_f64)
@@ -1354,14 +1362,16 @@ impl Logic {
         track.insert(0, carry::entry(hash, &record).to_json());
         let mut baked = line.clone();
         baked["track"] = json!(track);
-        let mut out = self.bake(&baked)?;
+        let piece = Rc::new(self.check(&baked)?);
+        let mut out = self.bake(piece, &baked)?;
         out["record"] = json!(hash);
         Ok(out)
     }
 
     /// The viewer opens a slot's save from the app (Logic: saves), never the piece's logic.
     fn open_save(&mut self, line: &Value) -> Result<Value, Value> {
-        let (piece, entries, steps) = self.baked(line)?;
+        let piece = Rc::new(self.check(line)?);
+        let (entries, steps) = self.baked(&piece, line)?;
         let dir = saves_dir(line).ok_or_else(|| bad("saves_dir"))?;
         let slot = line
             .get("slot")

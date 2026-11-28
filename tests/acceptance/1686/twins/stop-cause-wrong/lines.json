@@ -1,0 +1,12 @@
+{
+  "adapters/index.mjs": [
+    {
+      "find": [
+        "    return resets.length ? { cause: 'plan_window_spent', plan_resets: Math.max(...resets), rule: at('rateLimits', 'spent') } : { cause: 'rate_limited', rule: at('rateLimits', 'withoutReset') };"
+      ],
+      "wrong": [
+        "    return { cause: 'rate_limited', rule: at('rateLimits', 'withoutReset') };"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "scripts/throttle.mjs": [
+    {
+      "find": [
+        "    return (!request.disk || freeDisk() >= request.disk) && roomForTest(slots, seen, Date.now(), true);"
+      ],
+      "wrong": [
+        "    return (!request.disk || freeDisk() >= request.disk) && roomForTest(slots, seen, Date.now(), request.run);"
+      ]
+    }
+  ]
+}
