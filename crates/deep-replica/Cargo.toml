@@ -30,6 +30,8 @@ deep-gpu = { path = "../deep-gpu" }
 deep-canvas-marks = { path = "../deep-canvas-marks" }
 deep-canvas-cells = { path = "../deep-canvas-cells" }
 deep-marks-raster = { path = "../deep-marks-raster" }
+# Issue #3605: a shell screen's driven data values written where its templates read them, as the scheduler writes them.
+deep-canvas-motion = { path = "../deep-canvas-motion" }
 deep-text = { path = "../deep-text" }
 vello_cpu = { version = "0.3", default-features = false, features = ["std", "text", "f32_pipeline", "u8_pipeline"] }
 
@@ -228,3 +230,12 @@ path = "../../tests/acceptance/1550/redraft/probe.rs"
 [[test]]
 name = "acceptance_2660_terminal"
 path = "../../tests/acceptance/2660/terminal.rs"
+
+# Issue #3233: the pack check, the load and a panel driven by key, read for tests/acceptance/3233, written blind.
+# A probe that judges nothing: panels.test.ts runs it by name and judges what it wrote, so a workspace run leaves
+# it. No harness: AppKit wants the main thread.
+[[test]]
+name = "acceptance_3233"
+path = "../../tests/acceptance/3233/app/probe.rs"
+harness = false
+test = false

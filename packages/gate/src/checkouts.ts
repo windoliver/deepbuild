@@ -1,9 +1,3 @@
-// Base-commit runs (#31; design: Fail before, pass after, Pinned to a commit, A base with nothing to start): the gate
-// runner's service for every check kind. It writes a claim's snapshot to DeepBuild's own object store, reading the
-// repo's objects as alternates, and makes temporary checkouts of the snapshot and of the merge base, so your index,
-// refs, objects, stash and other worktrees stay as they were and nothing is fetched. Any kind's run gets its checkout
-// here, so replacing the command check keeps base runs. The verdict is the verdict engine's; this module says only
-// what a base run proved. A checkout goes once no run on it is running or queued, and a crash's goes at the next open.
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { constants, existsSync, lstatSync, readFileSync } from 'node:fs';
@@ -22,7 +16,7 @@ export type CheckoutPlant =
   | 'base-in-command-check' | 'any-nonzero-base-exit' | 'any-failure-of-collected-test' | 'snapshot-through-index' | 'snapshot-into-repo' | 'keeps-skip-worktree'
   | 'links-dependencies' | 'stands-in-always' | 'stamps-time' | 'keeps-every-snapshot' | 'drops-decisions' | 'removes-at-session-end'
   | 'snapshot-unbounded' | 'snapshots-one-at-a-time' | 'git-inherits-env';
-export interface CheckoutsOptions { store: string; root: string; kinds: CheckRunnerFill[]; host: Supervisor; leases: LeaseTable; now(): number; plant?: CheckoutPlant }
+export interface CheckoutsOptions { store: string; root: string; kinds: CheckRunnerFill[]; host: Supervisor; leases: LeaseTable; now(): number; removed?(dir: string): void; plant?: CheckoutPlant }
 /** `tree` is the snapshot's tree: the same tree on another HEAD is another snapshot, but the same inputs for a check (#45). */
 export interface Snapshot { commit: string; wrote: boolean; tree: string }
 /**
@@ -75,12 +69,6 @@ const INSTALLS = ['node_modules', '.venv'];
 
 /** A budget's work: the git and copy processes it started, stopped by their PIDs when its clock runs out. */
 interface Work { since: number; children: Set<ChildProcess>; over: boolean; turn?: Promise<void>; release?: () => void }
-/**
- * Git in `cwd`, under a work budget where one is given: a process started after the budget ran out never starts,
- * and one stopped by it fails as over budget. The hub's own git variables (`GIT_DIR`, `GIT_WORK_TREE`, the config
- * ones and the rest) are cleared first, and only what this call means is set (#31, AC18); the planted wrong program
- * hands the hub's whole environment through.
- */
 function runGit(cwd: string, args: string[], env: NodeJS.ProcessEnv, input: string | undefined, w: Work | undefined, inherits: boolean): Promise<string> {
   if (w?.over) return Promise.reject(new OverBudget());
   const base = inherits ? process.env : gitEnv();
@@ -92,8 +80,6 @@ function runGit(cwd: string, args: string[], env: NodeJS.ProcessEnv, input: stri
       else resolve(stdout.trim());
     });
     w?.children.add(child);
-    // A git stopped before it reads its input (the budget's SIGKILL) fails the write with EPIPE; the callback above
-    // already settles the call, so the pipe's error must not end the hub (#2126).
     child.stdin!.on('error', () => undefined);
     if (input !== undefined) child.stdin!.end(input);
   });
@@ -101,7 +87,6 @@ function runGit(cwd: string, args: string[], env: NodeJS.ProcessEnv, input: stri
 const sha256 = (bytes: string): string => createHash('sha256').update(bytes).digest('hex');
 const inside = (path: string): boolean => !isAbsolute(path) && !normalize(path).startsWith('..');
 
-// ---- What a base run proved.
 /** The deadline a check names in `asserts`, as `deadline:5s`. */
 const namesDeadline = (asserts: string[] | undefined): boolean => asserts?.some((a) => a.startsWith('deadline:')) ?? false;
 /** A failure at an assertion its check names: one of `asserts`, or with no such list any assertion in its own files. */
@@ -126,7 +111,6 @@ export function baseProof(r: Pick<CheckResult, 'outcome' | 'testsRun' | 'failure
   return { on_assertion: false, why: `failed on the base only elsewhere: ${name} at ${f.file}:${f.line}` };
 }
 
-// ---- A base with nothing to start: one fixed form per kind.
 const SERVICE = (type: string, body: string): string => `import { createServer } from 'node:http';\ncreateServer((_, res) => { res.writeHead(200, { 'content-type': '${type}' }); res.end(${JSON.stringify(body)}); }).listen(Number(process.env.PORT), '127.0.0.1');\n`;
 const FORMS = {
   service: SERVICE('application/json', '{}'),
@@ -177,13 +161,9 @@ const clear = async (dir: string): Promise<void> => {
   });
 };
 
-/** Opens the service: makes the store, and removes whatever checkout a crash left in `root`. */
 export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
   /** The budget the git and copy processes of the current call count against, where there is one. */
   const under = new AsyncLocalStorage<Work>();
-  // The planted wrong program hands the hub's environment to every git it runs in a claim's repository.
-  // The store is made by the first git work, not at open: a machine without git runs the hub, and only a check run says
-  // git is missing (#41). A failed attempt is tried again by the next.
   let initing: Promise<unknown> | undefined;
   const store = (): Promise<unknown> => (initing ??= existsSync(join(o.store, 'HEAD')) ? Promise.resolve() : runGit(o.store, ['init', '-q', '--bare', '.'], {}, undefined, undefined, false).catch((error: unknown) => { initing = undefined; throw error; }));
   const git = async (cwd: string, args: string[], env: NodeJS.ProcessEnv = {}, input?: string): Promise<string> => {
@@ -194,7 +174,6 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
   await mkdir(o.root, { recursive: true });
   const root = await realpath(o.root);
   await Promise.all((await readdir(root)).map((name) => clear(join(root, name))));
-  // An index holder a crash left in the store goes too: only a call under way has one.
   await Promise.all((await readdir(o.store)).filter((name) => name.startsWith('index-')).map((name) => rm(join(o.store, name), { recursive: true, force: true })));
   const objects = join(o.store, 'objects');
   const live = new Map<string, Live>();
@@ -203,7 +182,6 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
     const b: Budget = { since: Date.now() };
     const w: Work = { since: b.since, children: new Set(), over: false };
     works.set(b, w);
-    // Past the git work's 8 s every process the budget started is stopped, by its PID; the planted wrong program waits on them unbounded.
     if (o.plant !== 'snapshot-unbounded') setTimeout(() => { w.over = true; for (const child of w.children) child.kill('SIGKILL'); }, GIT_WORK_MS).unref();
     return b;
   };
@@ -219,7 +197,6 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
   /** `body` under the budget `b`: an end past its clock, however it failed, is the claim's "snapshot over budget" with the count. */
   const budgeted = async <T>(worktree: string, b: Budget | undefined, body: () => Promise<T>): Promise<T> => {
     const w = b && works.get(b);
-    // The planted wrong program (AC17): every claim's whole stage, snapshot to checkout, through one queue, each behind the last.
     if (w && o.plant === 'snapshots-one-at-a-time') await hold(w);
     try {
       return await (w ? under.run(w, body) : body());
@@ -237,8 +214,6 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
     }
     return w.turn;
   };
-  // Each repo's snapshots one at a time, and never behind another repo's (#31, AC17); the prune waits for every snapshot in
-  // flight and holds the next, so it never takes what a snapshot is still writing.
   const turns = new Map<string, Promise<unknown>>();
   let pruning: Promise<unknown> = Promise.resolve();
   const serial = <T>(key: string, work: () => Promise<T>): Promise<T> => {
@@ -252,7 +227,6 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
   const repoEnv = async (repo: string): Promise<NodeJS.ProcessEnv> => {
     const common = await git(repo, ['rev-parse', '--path-format=absolute', '--git-common-dir']);
     const theirs = join(common, 'objects');
-    // The store's own reads (a snapshot's tree, its carry) reach the repo's objects as alternates too.
     const file = join(objects, 'info', 'alternates');
     const known = existsSync(file) ? await readFile(file, 'utf8') : '';
     if (!known.split('\n').includes(theirs)) { await mkdir(dirname(file), { recursive: true }); await appendFile(file, `${theirs}\n`); }
@@ -266,7 +240,6 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
 
   const snapshot: Checkouts['snapshot'] = async (folder, b) => {
     const worktree = await topOf(folder);
-    // Under the planted one queue the budgeted stage is already serial: a second turn here would wait on itself.
     const turn = <T>(work: () => Promise<T>): Promise<T> => (o.plant === 'snapshots-one-at-a-time' ? work() : serial(worktree, work));
     return budgeted(worktree, b, () => turn(() => snapshotOf(worktree)));
   };
@@ -277,20 +250,15 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
     try {
       const index = join(dir, 'index');
       const store = o.plant === 'snapshot-into-repo' ? {} : await repoEnv(worktree);
-      // Read the tree into temporary objects, with only the repo as an alternate: git add/write-tree freshen even
-      // existing objects, so writing straight into our store would change it on an unchanged claim (#2078).
       const pending = join(dir, 'objects');
       await mkdir(pending);
       const env = { ...store, ...(o.plant === 'snapshot-into-repo' ? {} : { GIT_OBJECT_DIRECTORY: pending }), ...(o.plant === 'snapshot-through-index' ? {} : { GIT_INDEX_FILE: index }) };
       if (existsSync(join(gitDir, 'index'))) {
         await writeFile(index, await readFile(join(gitDir, 'index')));
-        // The copy keeps the index's time: git reads a file edited in that second by its bytes only by comparing the two.
         const { atime, mtime } = await stat(join(gitDir, 'index'));
         await utimes(index, atime, mtime);
       } else await git(worktree, ['read-tree', 'HEAD'], env);
       if (o.plant !== 'keeps-skip-worktree') {
-        // Marks hide a change from `add`: cleared in the copy, each by its own option, since one call applies only its first.
-        // One missing from disk keeps its mark, or `add` would read a sparse checkout's absent files as deleted.
         const lines = (await git(worktree, ['ls-files', '-v', '-z'], env)).split('\0').filter(Boolean);
         const marked = (test: (tag: string) => boolean): string => lines.filter((l) => test(l[0]!) && existsSync(join(worktree, l.slice(2)))).map((l) => l.slice(2)).join('\0');
         const skip = marked((t) => t === 'S' || t === 's');
@@ -308,8 +276,6 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
       const commit = await git(worktree, ['commit-tree', tree, '-p', head, '-m', 'deep snapshot'], { ...env, ...FIXED, GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date });
       if (o.plant === 'snapshot-into-repo') return { commit, wrote: true, tree };
       if (await refOf(commit)) return { commit, wrote: false, tree };
-      // Publish complete objects only for a new snapshot. A link is atomic and never rewrites an existing object;
-      // the temporary objects are on the store's filesystem and lose their temporary names in finally.
       for (const prefix of await readdir(pending)) {
         await mkdir(join(objects, prefix), { recursive: true });
         for (const name of await readdir(join(pending, prefix))) {
@@ -335,13 +301,11 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
     }) : [];
     for (const folder of new Set([...folders, ...deeper, ...links])) {
       if (!inside(folder) || !existsSync(join(worktree, folder))) continue;
-      // Git doesn't call a folder ignored once it tracks a file in it, though the rest of it still is.
       const linked = lstatSync(join(worktree, folder)).isSymbolicLink();
       const ignored = linked || await git(worktree, ['check-ignore', '-q', folder]).then(() => true, () => false) || !!await git(worktree, ['ls-files', '-oi', '--exclude-standard', '--directory', '--', folder]);
       if (!ignored) continue;
       await mkdir(dirname(join(dir, folder)), { recursive: true });
       if (o.plant === 'links-dependencies') { await symlink(join(worktree, folder), join(dir, folder)); continue; }
-      // A folder that is itself a link is cloned from where it points, so nothing written here reaches it.
       const source = await realpath(join(worktree, folder));
       const copy = (args: string[]): Promise<number | null> => new Promise((resolve) => {
         const w = under.getStore();
@@ -356,10 +320,7 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
         await rm(join(dir, folder), { recursive: true, force: true });
         if (await copy(['-R']) !== 0) throw Error(`can't copy ${folder} into the checkout`);
       }
-      // A read-only folder keeps its mode in the clone, where the tree's files must still go.
       await chmodAll(join(dir, folder));
-      // What isn't ignored in it comes from the tree alone, so a file only the worktree has isn't left behind.
-      // A link the clone keeps on the way to one is removed itself: never what it points at.
       for (const path of (await git(worktree, ['ls-files', '-co', '--exclude-standard', '-z', '--', folder])).split('\0').filter((p) => p && p !== folder)) await rm(linkOn(dir, path) ?? join(dir, path), { recursive: true, force: true });
     }
   };
@@ -419,6 +380,7 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
   };
   const remove = async (l: Live): Promise<void> => {
     live.delete(l.dir);
+    o.removed?.(l.dir);
     for (const s of l.standIns) if (s.run) await o.host.cleanup(s.run).catch(() => undefined);
     await clear(l.dir);
   };
@@ -428,13 +390,11 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
     const c = await made(r.commit, r.runs);
     try {
       return await budgeted(r.worktree, r.budget, async () => {
-        // The clone first: a file the tree holds in a cloned folder is the tree's, never the worktree's.
         await cloneIn(r.worktree, c.dir, r.dependencies ?? []);
         await materialize(r.worktree, await repoEnv(r.worktree), `${r.commit}^{tree}`, c.dir);
         return { dir: c.dir, commit: r.commit };
       });
     } catch (error) { await remove(c); throw error; } finally {
-      // The checkout ends the budget's stage: the planted queue's turn ends with it.
       if (r.budget) works.get(r.budget)?.release?.();
     }
   };
@@ -462,7 +422,6 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
         await writeFile(bin, FORMS.command, { mode: 0o755 });
         built.push({ check: s.check, kind: s.kind, hash: sha256(FORMS.command), bin });
       } else if (s.kind === 'module' && 'path' in s && inside(s.path) && /\.[cm]?[jt]sx?$/.test(s.path) && s.exports.every((e) => /^[A-Za-z_$][\w$]*$/.test(e))) {
-        // Through a link it would land outside the checkout: no stand-in, so the check can't import it.
         if (linkOn(dir, s.path) || lstatSync(join(dir, s.path), { throwIfNoEntry: false })) continue;
         const form = moduleForm(s.exports);
         await mkdir(dirname(join(dir, s.path)), { recursive: true });
@@ -477,7 +436,6 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
     const env = await repoEnv(r.worktree);
     const claim = await git(r.worktree, ['rev-parse', r.claim], env);
     const base = await git(r.worktree, ['merge-base', claim, r.onto], env);
-    // The check's own files from the claim's commit, the rest from the merge base: a tree of its own, written to the store.
     const own = r.own.filter(inside);
     const c = await made(base, r.runs);
     const write = async (): Promise<void> => {
@@ -495,7 +453,6 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
     };
     try {
       await cloneIn(r.worktree, c.dir, r.dependencies ?? []);
-      // Its own tree has no ref, so a prune waits until it's written out.
       await (own.length ? serial(r.worktree, write) : write());
       await buildStandIns(c.dir, r.surfaces ?? [], c.standIns);
       return { dir: c.dir, commit: base, standIns: c.standIns };
@@ -519,10 +476,8 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
     for (const e of [...earlier].reverse()) {
       const was = e.checks.find((x) => x.check === c.check && x.digest === digest);
       if (!was || was.head.outcome !== 'passed') continue;
-      // A base run cut short proved nothing either way: it runs again rather than carry.
       if (was.base && !['passed', 'failed', 'overran'].includes(was.base.outcome)) continue;
       if (!await inStore(['cat-file', '-e', `${e.snapshot}^{commit}`]).then(() => true, () => false)) continue;
-      // Both names of a rename, each as it is: a rename or a quoted name must not hide an input that changed.
       const diff = await git(worktree, ['diff', '--name-only', '--no-renames', '-z', e.snapshot, commit], await repoEnv(worktree)).catch(() => null);
       if (diff === null) continue;
       const changed = diff.split('\0').filter(Boolean);
@@ -534,8 +489,6 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
   };
 
   const runClaim: Checkouts['runClaim'] = async (claim) => {
-    // The snapshot and the claim's checkout share one budget (#31, AC16): past it the claim is INCONCLUSIVE, naming the
-    // reason and the count of untracked files, its checks never run, and what the snapshot left is gone.
     const b = budget();
     let commit = '';
     try {
@@ -567,7 +520,6 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
       const head = await checkout({ worktree: claim.worktree, commit, dependencies: claim.dependencies ?? [], runs: toDo.map((c) => c.check), budget: b });
       try {
         for (const c of toDo) {
-          // A failed run starts up to two more, as any check's does (#28). An uncounted run ends it: nothing says another would count.
           const outcomes: CheckResult['outcome'][] = [];
           let r: CheckResult;
           do {
@@ -576,7 +528,6 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
             record(c, r, outcomes.length);
           } while (r.outcome !== 'uncounted' && moreRuns({}, outcomes) > 0);
           let base: BaseRun | null = null;
-          // A fix check always; a check of what must not change only when it failed, for what it inherits.
           const onBase = (c.on_base === 'fails' || r.outcome !== 'passed') && !(o.plant === 'base-in-command-check' && c.spec.kind !== 'command');
           if (onBase) {
             const b = await baseCheckout({ worktree: claim.worktree, onto: claim.onto, claim: commit, own: c.own, dependencies: claim.baseDependencies ?? claim.dependencies ?? [], runs: [c.check] });
@@ -592,7 +543,6 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
       }
     }
     for (const row of rows) if (row.carried) record(claim.checks.find((c) => c.check === row.check)!, row.head, 1);
-    // What a base run failed to prove, by name: the engine says only that it failed off its named assertions.
     const whys: string[] = [];
     const judged = verdict({
       claim: claim.claim, agent: 'session:gate', repo: claim.worktree, task: claim.claim, commit, changes: [], waivers: [], now: o.now(), runs: records,
@@ -626,8 +576,6 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
       await inStore(['update-ref', '-d', ref]);
       removed.push(commit);
     }
-    // The store holds loose objects only, as nothing here repacks it. What no kept snapshot's own tree holds goes; the
-    // walk stops at each snapshot, since its parent is the repo's, which may be gone.
     const hold = new Set(stay.length ? (await inStore(['rev-list', '--objects', '--no-walk', '--missing=allow-any', '--stdin'], `${stay.join('\n')}\n`)).split('\n').map((l) => l.split(' ')[0]!) : []);
     for (const fan of await readdir(objects)) {
       if (!/^[0-9a-f]{2}$/.test(fan)) continue;

@@ -44,7 +44,7 @@ impl World {
                 .collect::<Option<_>>()
                 .ok_or_else(bad)?;
             let memory = unhex(&s["memory"]).ok_or_else(bad)?;
-            let mut live = World::load(&item.bytes, item, &memory, &globals)?;
+            let mut live = World::load(&item.bytes, item, &memory, &globals, &planted)?;
             live.next = s["next"].as_i64().ok_or_else(bad)?;
             // Its place on this track: past every entry the steps it ran took.
             let ran = (live.next - 1) * item.step;
@@ -133,8 +133,9 @@ impl World {
         item: &Item,
         memory: &[u8],
         globals: &[Val],
+        planted: &Planted,
     ) -> Result<Live, Failed> {
-        let mut runner = World::runner(item, bytes)?;
+        let mut runner = World::runner(item, bytes, planted)?;
         let names = Rc::new(names(bytes));
         runner
             .memory_mut("memory")
@@ -180,6 +181,12 @@ impl World {
         })
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(super) fn on_instance_of(first: &Runner) -> Runner {
+        // SAFETY: a world reads a runner's memory within one call, and holds no slice of it.
+        unsafe { first.shared() }
+    }
+
     /// A fresh instance per item holding this world's state now, on another track: the entries at
     /// or after step `k` (those a step from k on reads) are replaced by `entries`.
     pub fn fork(&mut self, entries: &[Entry]) -> Result<World, Failed> {
@@ -191,13 +198,12 @@ impl World {
                 let l = &mut self.lives[i];
                 (l.memory().to_vec(), l.globals())
             };
-            let mut live = World::load(&item.bytes, item, &memory, &globals)?;
+            let mut live = World::load(&item.bytes, item, &memory, &globals, &self.planted)?;
             // #2662's planted runner: this world's forks run the item on its first fork's store.
             #[cfg(not(target_arch = "wasm32"))]
             if self.planted.forks_share_store {
                 let first = self.lives[i].forked.get_or_insert(live.runner);
-                // SAFETY: a world reads a runner's memory within one call, and holds no slice of it.
-                live.runner = unsafe { first.shared() };
+                live.runner = World::on_instance_of(first);
             }
             let l = &self.lives[i];
             live.failed = l.failed;

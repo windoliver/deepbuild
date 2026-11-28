@@ -172,6 +172,12 @@ export class SessionMemory {
       .catch((error: unknown) => process.stderr.write(`deep hub: the rules given to ${session} were not recorded: ${error instanceof Error ? error.message : String(error)}\n`));
   }
   /** The rules you typed on their way to the record, by target, and each one's save (#2539). */
+  /** The core forgot the session (#1866). */
+  forget(session: string): void {
+    this.tasted.delete(session);
+    this.ruleState.delete(session);
+    this.firstPrompted.delete(session);
+  }
   private readonly typing = new Map<string, string>();
   private readonly saving = new Map<string, Promise<void>>();
   /** Settles once every rule typed so far is saved or failed. */

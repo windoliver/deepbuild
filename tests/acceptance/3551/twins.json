@@ -1,0 +1,21 @@
+{
+  "#3551.8190b19e": [
+    "drains"
+  ],
+  "#3551.6d0f6876": [
+    "opens-when-empty",
+    "leaves-until-overdue"
+  ],
+  "#3551.aa2e13ce": [
+    "leaves-at-once"
+  ],
+  "#3551.9147d91b": [
+    "no-close-reads-as-now"
+  ],
+  "#3551.84e18eb8": [
+    "drain-in-seconds"
+  ],
+  "#3551.0d50f746": [
+    "four-fixed-hours"
+  ]
+}

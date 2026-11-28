@@ -1,0 +1,143 @@
+# #3429 acceptance suite on the merge base 8feb93630b60d18c55d551e8b07554d51049e497 (origin/main), macOS 27.2 darwin-arm64, Node 24.22.2, 2026-11-26
+# DEEP_PASEO_CLI=<paseo>/node_modules/.bin/paseo node node_modules/vitest/vitest.mjs run --root tests/acceptance/3429 --no-file-parallelism
+#   (under time; then tsc -p tests/acceptance/3429/tsconfig.json; the checkout written as <checkout>, home paths as ~)
+# The base as built: packages/*/dist, and target/debug/deep-hook from cargo build --locked -q -p deep-hook --features env-plants
+# load: { 11.55 18.36 31.65 } when the run began, { 16.34 14.94 26.85 } when it ended, on 18 cores
+#
+# All seven tests ran. Five fail at an assertion of this suite's, and two hold their own assertions and read BLOCKED:
+#   #3429.c0361f49  on the pinned paseo's real daemon ...            FAIL at "is recorded for the corpus": the corpus holds no
+#                   adapters/corpus/paseo/0.15.0/self-approved-call. In allow-all paseo 0.15.0 fired agent.create.after,
+#                   agent.turn.before and agent.turn.after, and no agent.permission.before (in the message)
+#   #3429.97f78b7f  a Copilot session whose snapshot reads allow-all ...   FAIL at its first assertion, naming the session:
+#                   the record holds no reading naming allow-all (session.activity, session.state, row.set)
+#   #3429.51266e12  a second turn in allow-all adds no second reading ...  FAIL at its first assertion, naming the session:
+#                   no reading after the first turn (session.activity, agent.stop, session.state, row.set)
+#   #3429.d3ca9d44  a Copilot session in a mode its facts entry doesn't list ...  FAIL, naming the mode: the row reads
+#                   "working: last seen 1m ago" and never "mode not known"
+#   #3429.97f78b7f #3429.d3ca9d44  Copilot's entry in paseo's facts lists allow-all  FAIL: the base's entry names no mode
+#   #3429.9ecaeb87  in allow-all, a Copilot false done still comes back ...  its four assertions hold, then BLOCKED by
+#                   needRun: the recorded run is missing
+#   #3429.0888aab7  a Claude Code session deep-hook gates ...        its two assertions hold, then BLOCKED by needRun:
+#                   the recorded run is missing
+# The three tests that fail at a reading that never comes each wait out their 60 s bound first.
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/3429
+
+ ❯ mode.test.ts (4 tests | 4 failed) 184101ms
+   × #3429.97f78b7f a Copilot session whose snapshot reads allow-all starts a turn: the record holds one reading naming the mode, and its row and its page say no call is checked before it runs 61829ms
+   × #3429.51266e12 a second turn in allow-all adds no second reading; switched to its asking mode the session loses the line at its next turn's start, and a turn back in allow-all is a change of mode again 61270ms
+   × #3429.d3ca9d44 a Copilot session in a mode its facts entry doesn't list reads "mode not known", never as one that asks 60999ms
+   × #3429.97f78b7f #3429.d3ca9d44 Copilot's entry in paseo's facts lists allow-all, the mode in which it approves its own calls 2ms
+ ❯ gate.test.ts (2 tests | 2 failed) 35388ms
+   × #3429.9ecaeb87 in allow-all, a Copilot false done still comes back to the session with its failing case, once, and its claim is judged once and doesn't pass 14369ms
+   × #3429.0888aab7 a Claude Code session deep-hook gates, run through paseo with its snapshot reading bypassPermissions, gets no mode reading from the plugin 21018ms
+ ❯ real.test.ts (1 test | 1 failed) 7685ms
+   × #3429.c0361f49 on the pinned paseo's real daemon, a scripted ACP agent in Copilot's allow-all runs a tool call, and the corpus holds whether paseo fired agent.permission.before for it 7684ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  gate.test.ts > #3429.9ecaeb87 in allow-all, a Copilot false done still comes back to the session with its failing case, once, and its claim is judged once and doesn't pass
+Error: BLOCKED: #3429.9ecaeb87 holds on this program, and reads BLOCKED, never PASS, until #3429.c0361f49's run exists: the corpus holds no adapters/corpus/paseo/0.15.0/self-approved-call/session.json; the corpus holds no adapters/corpus/paseo/0.15.0/self-approved-call/events.jsonl; the corpus holds no adapters/corpus/paseo/0.15.0/self-approved-call/transcript.jsonl. Record it on the pinned paseo's real daemon and add it to the corpus (tests/acceptance/3429/README.md, The recorded run)
+ ❯ needRun run.ts:82:11
+
+ ❯ gate.test.ts:45:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  gate.test.ts > #3429.0888aab7 a Claude Code session deep-hook gates, run through paseo with its snapshot reading bypassPermissions, gets no mode reading from the plugin
+Error: BLOCKED: #3429.0888aab7 holds on this program, and reads BLOCKED, never PASS, until #3429.c0361f49's run exists: the corpus holds no adapters/corpus/paseo/0.15.0/self-approved-call/session.json; the corpus holds no adapters/corpus/paseo/0.15.0/self-approved-call/events.jsonl; the corpus holds no adapters/corpus/paseo/0.15.0/self-approved-call/transcript.jsonl. Record it on the pinned paseo's real daemon and add it to the corpus (tests/acceptance/3429/README.md, The recorded run)
+ ❯ needRun run.ts:82:11
+
+ ❯ gate.test.ts:80:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  mode.test.ts > #3429.97f78b7f a Copilot session whose snapshot reads allow-all starts a turn: the record holds one reading naming the mode, and its row and its page say no call is checked before it runs
+AssertionError: #3429.97f78b7f Copilot session 4c4a9bd2-bd5a-44ac-8c75-e4ea557d2e3a (paseo agent 0fb1df5b-ab8b-4fa2-960d-b91009c3ee65) started a turn with its snapshot reading currentModeId allow-all, a mode in which Copilot approves its own calls, so the record must hold one reading of the session naming allow-all; the session's record: session.activity, session.state, row.set; its readings: none; plugin errors []: expected [] to have a length of 1 but got +0
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ mode.test.ts:55:281
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  mode.test.ts > #3429.51266e12 a second turn in allow-all adds no second reading; switched to its asking mode the session loses the line at its next turn's start, and a turn back in allow-all is a change of mode again
+AssertionError: #3429.51266e12 Copilot session e95a7f2f-378c-4f5b-85a9-90eeff75e01d's first turn in allow-all gives one reading naming the mode; the session's record: session.activity, agent.stop, session.state, row.set; its readings: none; plugin errors []: expected [] to have a length of 1 but got +0
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ mode.test.ts:77:157
+     75|   await turn(w, 't1', 1);
+     76|   const first = await readings(w, ALLOW_ALL, 1);
+     77|   expect(first.map(said), `${AC.switched} ${who}'s first turn in ${ALL…
+       |                                                                                                                                                             ^
+     78|
+     79|   // A second turn, the mode unchanged: its start and its end reach th…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  mode.test.ts > #3429.d3ca9d44 a Copilot session in a mode its facts entry doesn't list reads "mode not known", never as one that asks
+AssertionError: #3429.d3ca9d44 Copilot session 91d3d3c2-d62f-4bc2-9014-e0334f235452 started a turn in mode dh3429-mode-no-facts-list, which Copilot's entry in paseo's facts doesn't list: it reads "mode not known", never as a mode that asks; its row reads working: last seen 1m ago; the row holds {"list":{"id":"session:91d3d3c2-d62f-4bc2-9014-e0334f235452","address":"session/91d3d3c2-d62f-4bc2-9014-e0334f235452","title":"agent","project":null,"session":"91d3d3c2-d62f-4bc2-9014-e0334f235452","agent":null,"entry":"running","word":"working","why":"at work","waits_on":"agent","since":1795741760306,"actions":[],"unread":true},"detail":{"id":"91d3d3c2-d62f-4bc2-9014-e0334f235452","repo":"no repo","agent":"agent","state":"working","why":"last seen 1m ago"}}; the session's record: session.activity, session.state, row.set; its readings: none; plugin errors []: expected [] to not deeply equal []
+
+Compared values have no visual difference.
+
+ ❯ mode.test.ts:109:282
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  mode.test.ts > #3429.97f78b7f #3429.d3ca9d44 Copilot's entry in paseo's facts lists allow-all, the mode in which it approves its own calls
+AssertionError: #3429.d3ca9d44 providers.copilot in adapters/paseo.facts.json lists the modes in which Copilot approves its own calls, as an agent's own facts list the modes that skip its prompts: for Copilot that is allow-all: expected '{"readBy":"the plugin gates GitHub Co…' to contain '"allow-all"'
+
+Expected: ""allow-all""
+Received: "{"readBy":"the plugin gates GitHub Copilot's ACP sessions, which have no hooks of their own","conformance":"paseo/providers/acp","hooks":"plugin","bridge":"1.0.105","permissions":"Each tool call asks through ACP's session/request_permission with allow_once, allow_always and reject_once options; only allow_once is ever chosen, from your decision or your answer, never by default.","modelCheck":"The session's model, as paseo's snapshot reads it in runtimeInfo.model, is checked against the model you picked before the first prompt goes in; a different one holds the prompt and asks you.","timeouts":{"initialize":30000,"prompt":600000,"permission":86400000}}"
+
+ ❯ mode.test.ts:115:234
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  real.test.ts > #3429.c0361f49 on the pinned paseo's real daemon, a scripted ACP agent in Copilot's allow-all runs a tool call, and the corpus holds whether paseo fired agent.permission.before for it
+AssertionError: #3429.c0361f49 whether paseo fires agent.permission.before for the call is recorded for the corpus, as adapters/corpus/paseo/0.15.0/self-approved-call (README, The recorded run); on this daemon, for the call the agent approved itself in allow-all, paseo did not fire agent.permission.before (paseo 0.15.0 fired agent.create.after, agent.turn.before, agent.turn.after; the agent did [{"session":"0441c3e2-134e-4c66-840f-38fd20be1e58","cwd":"/private/tmp/dh3429-hAucp7/allow-all"},{"session":"bc18a2bd-26b4-467a-9f23-bdae1d20e0a7","cwd":"/private/tmp/dh3429-hAucp7/allow-all"},{"session":"781927a3-aee1-4383-83a2-dc47422c5ae7","cwd":"/private/tmp/dh3429-hAucp7/allow-all"},{"mode":"https://agentclientprotocol.com/protocol/session-modes#agent"},{"allow_all":"on"},{"prompt":1,"allow_all":"on","mode":"https://agentclientprotocol.com/protocol/session-modes#agent"},{"call":"call_1","command":"echo dh3429-probe > dh3429-ran.txt","asked":false,"answer":null,"ran":true},{"turn":"end"}]): expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the corpus holds no adapters/corpus/paseo/0.15.0/self-approved-call/session.json",
++   "the corpus holds no adapters/corpus/paseo/0.15.0/self-approved-call/events.jsonl",
++   "the corpus holds no adapters/corpus/paseo/0.15.0/self-approved-call/transcript.jsonl",
++ ]
+
+ ❯ real.test.ts:68:181
+     66|   const recorded = recordedRun();
+     67|   const here = `on this daemon, for the call the agent approved itself…
+     68|   expect(recorded.problems, `${AC.run} whether paseo fires agent.permi…
+       |                                                                                                                                                                                     ^
+     69|   expect({ fired: recorded.fired }, `${AC.run} the run recorded at ${r…
+     70| }, 900_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  7 failed (7)
+   Start at  20:07:16
+   Duration  227.70s (tests 100%)
+
+
+real	3m47.969s
+user	0m14.633s
+sys	0m5.669s
+vitest exit 1
+tsc exit 0

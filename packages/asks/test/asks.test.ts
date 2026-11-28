@@ -31,7 +31,7 @@ const id = (ms: number): string => {
 };
 
 const taste = (subject: string, over: Obj = {}): Obj => ({
-  kind: 'taste', question: `Which ${subject}?`,
+  kind: 'taste', may_answer: 'verified_channel', question: `Which ${subject}?`,
   options: [{ id: 'blue', label: 'Blue', decision: 'none' }, { id: 'green', label: 'Green', decision: 'none' }],
   recommended: 'blue', deadline: T0 + 72 * HOUR, fallback: 'you', default: 'blue', provisional: false, owner: 'you',
   key: sha(`taste:${subject}`), pinned_to: { kind: 'evidence', ref: sha(subject) }, ...over,
@@ -201,7 +201,7 @@ describe('an option ID no command line carries (#2563)', () => {
 
 describe('a block someone else owns (#320)', () => {
   const block = (subject: string, over: Obj = {}): Obj => ({
-    kind: 'unblock', question: `Renew ${subject}?`,
+    kind: 'unblock', may_answer: 'verified_channel', question: `Renew ${subject}?`,
     options: [{ id: 'done', label: 'I did it', decision: 'none' }, { id: 'wait', label: 'Leave it blocked', decision: 'none' }],
     recommended: 'done', deadline: T0 + 48 * HOUR, fallback: 'you', default: 'wait', provisional: false, owner: 'sam',
     key: sha(`unblock:${subject}`), pinned_to: { kind: 'evidence', ref: sha(subject) },
@@ -365,6 +365,26 @@ describe('the resolver gate reads every decision the record holds, however it wa
     expect(await outcome(open)).toBe('answered');
   });
 
+  it('forgets a session whose process went with no SessionEnd as an ended one, but not one that hooks again (#1866)', async () => {
+    const died = (session: string) => append({ ...core, session }, 'session.gone', { pid: 4242, start: 'Mon Nov  2 23:00:00 2026' }, `session:${letters(session)}`);
+    const asked = async (session: string): Promise<string> => {
+      await start(session, `T${session}`);
+      const ask = await asks.raise(agent(session), 'deep_ask.taste', taste(session.toLowerCase()));
+      await asks.answer(card, ask, { option: 'green' });
+      await died(session);
+      return ask;
+    };
+    const [gone, back] = [await asked('SGONE'), await asked('SBACK')];
+    await append(hook('SBACK'), 'tool.before', { kind: 'read', paths: ['src/a.ts'], command: null });
+    for (let i = 0; i < 64; i++) {
+      await start(`E${i}`, `E${i}`);
+      await died(`E${i}`);
+    }
+    expect((await asks.inbox()).map((row) => row.ask)).toEqual([back]);
+    await expect(asks.card(gone)).rejects.toThrow('is no ask');
+    expect(await outcome(gone), "the record's answer stands").toBe('answered');
+  });
+
   it('keeps a session\'s decision past 64 newer ended sessions: resumed, it is never asked the same question again (#824)', async () => {
     await start('SRES', 'TRES');
     const first = await asks.raise(agent('SRES'), 'deep_ask.taste', taste('header'));
@@ -413,7 +433,7 @@ describe('the resolver gate reads every decision the record holds, however it wa
 
   it('a decision saved from an ask that left memory still carries the size bound of that ask\'s change (#824)', async () => {
     const merge = (lines: number): Obj => ({
-      kind: 'authority', question: 'Merge the fix?', options: [{ id: 'merge', label: 'Merge', decision: 'allow' }, { id: 'hold', label: 'Hold', decision: 'deny' }],
+      kind: 'authority', may_answer: 'trusted_path', question: 'Merge the fix?', options: [{ id: 'merge', label: 'Merge', decision: 'allow' }, { id: 'hold', label: 'Hold', decision: 'deny' }],
       recommended: null, deadline: T0 + 24 * HOUR, fallback: 'you', default: 'hold', provisional: false, owner: 'you',
       subject: { effect: 'merge', target: { kind: 'pr', ref: 'pr:1', owner: 'thread:TOTHER' }, change: { kind: 'fix', lines, paths: ['src/a.ts'] } },
       pinned_to: { kind: 'commit', ref: sha(`pr 1 ${lines}`).slice(0, 40) },

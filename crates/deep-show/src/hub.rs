@@ -18,7 +18,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use deep_canvas::document::{
-    canonical_in, check_costed, check_sized, Expansion, Issue, Notice, PackPlanted, Packs,
+    canonical_in, check_costed, check_sized, Expansion, Issue, Notice, Packs,
 };
 use deep_canvas::grammar::{Time, TimeContext};
 use deep_canvas::registry::{core_name, Sealed};
@@ -484,6 +484,9 @@ pub enum Planted {
     DeviationOneWay,
     /// #427: normals draws each vertex's line along a face normal of a face using it.
     NormalsFromFaces,
+    /// #3507: the overdraw mode's count of what the geometry pass shades leaves the depth test
+    /// out.
+    ShadedCountSkipsDepthTest,
     /// #854, on #1551's shown window: the frame clock arms a frame each vsync once settled.
     ArmsEachVsync,
     /// #1551: the window's display link keeps running while it is still.
@@ -953,40 +956,7 @@ impl<'a> Hub<'a> {
         {
             sched.look_hook = Some(crate::planted::look_hook);
         }
-        let pack_planted = PackPlanted {
-            seed_by_order: scenario.planted == Some(Planted::SeedsByExpansionOrder),
-            drops_stroke: scenario.planted == Some(Planted::ExpansionDropsStroke),
-            overwrite_broken_out: scenario.planted == Some(Planted::ReexpansionOverwritesBrokenOut),
-            skip_requires_modules: scenario.planted == Some(Planted::PackCheckSkipsRequiresModules),
-            key_by_name: matches!(
-                scenario.planted,
-                Some(Planted::PacksKeyedByName | Planted::LoaderDrawsMissingWithInstalled)
-            ),
-            each_by_count: scenario.planted == Some(Planted::EachSeedsByElementCount),
-            each_per_triangle: scenario.planted == Some(Planted::EachFacePerTriangle),
-            orphan_drops: scenario.planted == Some(Planted::OrphanLoadDropsBrokenOut),
-            orphan_hands_id: scenario.planted == Some(Planted::OrphanLoadHandsIdToExpansion),
-            rules_twice: scenario.planted == Some(Planted::RulesEvaluatedTwice),
-            kit_defaults_only: scenario.planted == Some(Planted::KitDefaultsOnly),
-            migration_first_fault: scenario.planted == Some(Planted::MigrationFirstFault),
-            migrate_one_major: scenario.planted == Some(Planted::MigrationOneMajor),
-            migrate_zero_as_absent: scenario.planted == Some(Planted::MigrationZeroAsLeftOut),
-            migrate_params_only: matches!(
-                scenario.planted,
-                Some(Planted::MigrationRenamesParamsOnly | Planted::MoveRewritesKindOnly)
-            ),
-            migrate_channels_only: scenario.planted
-                == Some(Planted::MigrationRewritesChannelTargetsOnly),
-            drops_moved: scenario.planted == Some(Planted::LoaderDropsMovedInstances),
-            walk_inputs: (scenario.planted == Some(Planted::ExpandsInHashOrder))
-                .then_some(walk_in_hash_order as deep_canvas::document::packs::WalkInputs),
-            // #222: the planted cue-list expander.
-            expander: scenario
-                .module_planted
-                .as_deref()
-                .filter(|p| deep_canvas_motion::cues::planted(p))
-                .map(|p| &*Box::leak(p.to_string().into_boxed_str())),
-        };
+        let pack_planted = crate::packs::planted(scenario);
         let mut hub = Hub {
             scenario,
             startup,
@@ -1180,20 +1150,17 @@ impl<'a> Hub<'a> {
         dir: &std::path::Path,
         session: Option<&str>,
     ) -> Value {
-        let sealed = &self.startup.sealed;
-        let sandbox = &mut self.sandbox;
-        let evidence = &self.scenario.evidence;
         let reply = crate::packs::install(
             &mut self.packs,
             &mut self.pack_rows,
-            sealed,
-            id,
-            dir,
-            self.scenario.pack_planted.as_deref(),
-            &mut |manifest, pack| {
-                let (rows, mut issues) = sandbox.vet(manifest, pack, sealed);
-                issues.extend(crate::packs::kind_meshes(pack, sealed, evidence));
-                (rows, issues)
+            &self.startup.sealed,
+            &mut self.sandbox,
+            crate::packs::Offer {
+                id,
+                dir,
+                twin: self.scenario.pack_planted.as_deref(),
+                evidence: &self.scenario.evidence,
+                kept: self.scenario.pack_checks.as_ref(),
             },
         );
         // #200: a pack installed through a session is that agent's own: its entries are listed
@@ -1218,6 +1185,7 @@ impl<'a> Hub<'a> {
                 crate::scene3d::Gpu3::open(
                     &self.startup.sealed,
                     self.scenario.module_planted.clone(),
+                    self.scenario.planted == Some(Planted::ShadedCountSkipsDepthTest),
                 )
             })
             .as_mut()
@@ -1257,7 +1225,7 @@ impl<'a> Hub<'a> {
     }
 
     /// The record's readings as the scheduler reads them, from outside the document.
-    fn readings(&self) -> BTreeMap<String, Value> {
+    pub(crate) fn readings(&self) -> BTreeMap<String, Value> {
         self.scenario
             .record
             .iter()
@@ -1583,6 +1551,7 @@ impl<'a> Hub<'a> {
                 "checks": self.sandbox.checks, "links": self.sandbox.links,
                 "rewrites": self.sandbox.rewrites, "runs": self.sandbox.runs,
             }),
+            Call::Count(name) => json!({name.as_str(): count(name)}),
             Call::Validate { layout, path } => {
                 self.sandbox.validate(&self.startup.sealed, layout, path)
             }
@@ -2021,14 +1990,24 @@ impl<'a> Hub<'a> {
                     }
                 };
                 // #1801: an item the revision leaves out that rows still name: its refusal lists
-                // every one of them.
-                let removed: Vec<&str> = current_doc
-                    .as_ref()
-                    .and_then(|c| c.get("items")?.as_object())
-                    .into_iter()
-                    .flat_map(|items| items.keys())
-                    .filter(|id| doc["items"].get(id.as_str()).is_none())
-                    .map(String::as_str)
+                // every one of them. #3379: so does a control the revision leaves out.
+                let gone = |map: &str| -> Vec<String> {
+                    current_doc
+                        .as_ref()
+                        .and_then(|c| c.get(map)?.as_object())
+                        .into_iter()
+                        .flat_map(|entries| entries.keys())
+                        .filter(|id| doc[map].get(id.as_str()).is_none())
+                        .cloned()
+                        .collect()
+                };
+                let removed: Vec<deep_canvas::refs::Name> = (gone("items").into_iter())
+                    .map(deep_canvas::refs::Name::Item)
+                    .chain(
+                        gone("controls")
+                            .into_iter()
+                            .map(deep_canvas::refs::Name::Control),
+                    )
                     .collect();
                 let planted = self.scenario.planted;
                 crate::shared::name_referrers(
@@ -2519,25 +2498,6 @@ impl BandRow {
 
 /// A revision's check time and its `kind_rules` check's own time, when asked for (#202), in ms.
 type CheckTimes = (f64, Option<Map<String, Value>>);
-
-/// #202's planted expander: an instance's inputs walked through a std hash map, whose order a
-/// fresh random state picks, so two expansions of one example differ in their bytes. It redraws
-/// until the order differs from the previous walk's, which three inputs would match by chance.
-fn walk_in_hash_order(inputs: serde_json::Map<String, Value>) -> serde_json::Map<String, Value> {
-    thread_local! {
-        static LAST: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
-    }
-    let last = LAST.with(|l| l.borrow().clone());
-    for _ in 0..64 {
-        let walked: std::collections::HashMap<String, Value> = inputs.clone().into_iter().collect();
-        let order: Vec<String> = walked.keys().cloned().collect();
-        if order != last || inputs.len() < 2 {
-            LAST.with(|l| *l.borrow_mut() = order);
-            return walked.into_iter().collect();
-        }
-    }
-    inputs
-}
 
 /// The store's packs with each one a pack requires (`requires.packs`, by its name) before it, in
 /// the order offered otherwise (#142).

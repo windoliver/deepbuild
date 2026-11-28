@@ -68,6 +68,12 @@ pub enum Diag {
 pub struct DiagCounts {
     /// The most fragments any pixel took (overdraw).
     pub max_overdraw: u32,
+    /// The fragments the geometry pass shades (overdraw, #3507): its opaque solids' in the order
+    /// it draws them, less the faces it culls and what fails its depth test, at one sample a
+    /// pixel. A fragment its shader discards counts and hides what is behind it.
+    pub shaded: u64,
+    /// The pixels an opaque solid covers (overdraw).
+    pub covered: u64,
     /// The most shaded lights reaching any pixel (lights per cluster).
     pub max_lights_per_cluster: u32,
     /// The key sun's cascade split distances along the view axis, near plane first.
@@ -83,13 +89,16 @@ pub struct DiagCounts {
     pub levels: BTreeMap<String, u32>,
 }
 
+deep_gpu::paired! { light_u: "diag.wgsl", Light;
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct LightU {
     pos: [f32; 4],
     dir: [f32; 4],
 }
+}
 
+deep_gpu::paired! { uniform: "diag.wgsl", U;
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct Uniform {
@@ -105,6 +114,7 @@ struct Uniform {
     ink: [f32; 4],
     lights: [LightU; MAX_LIGHTS],
 }
+}
 
 /// The views' pipelines, made on first use and kept with the renderer.
 pub(crate) struct Pipes {
@@ -113,6 +123,8 @@ pub(crate) struct Pipes {
     atlas_layout: wgpu::BindGroupLayout,
     solid: wgpu::RenderPipeline,
     count: wgpu::RenderPipeline,
+    /// The count against depth, culling no face, back faces or front faces.
+    shaded: [wgpu::RenderPipeline; 3],
     overdraw: wgpu::RenderPipeline,
     atlas: wgpu::RenderPipeline,
     line: wgpu::RenderPipeline,
@@ -135,7 +147,8 @@ fn attrs(formats: &[(u32, wgpu::VertexFormat)]) -> Vec<wgpu::VertexAttribute> {
 }
 
 impl Pipes {
-    fn new(d: &deep_gpu::counted::Wgpu) -> Pipes {
+    /// `untested` is the planted `shaded_count_skips_depth_test`.
+    fn new(d: &deep_gpu::counted::Wgpu, untested: bool) -> Pipes {
         let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("scene3d diag"),
             source: wgpu::ShaderSource::Wgsl(SHADER.into()),
@@ -268,6 +281,26 @@ impl Pipes {
             &[target(VALUE, Some(add))],
             None,
         );
+        // What the geometry pass shades (#3507): the same count where the opaque solids'
+        // pipeline would shade, which tests depth as it does and writes it.
+        let compare = if untested {
+            wgpu::CompareFunction::Always
+        } else {
+            wgpu::CompareFunction::GreaterEqual
+        };
+        let shaded = [None, Some(wgpu::Face::Back), Some(wgpu::Face::Front)].map(|cull| {
+            crate::culled(
+                d,
+                1,
+                "scene3d diag shaded count",
+                Some(&solo),
+                &module,
+                ("solid_vs", &surface),
+                Some(("count_fs", &[target(VALUE, Some(add))])),
+                depth(!untested, compare),
+                cull,
+            )
+        });
         let overdraw = make(
             "scene3d diag overdraw",
             &counts,
@@ -301,6 +334,7 @@ impl Pipes {
             atlas_layout,
             solid,
             count,
+            shaded,
             overdraw,
             atlas,
             line,
@@ -391,6 +425,8 @@ fn cofactor(m: &[[f64; 4]; 3]) -> [[f64; 3]; 3] {
 /// Each surface's world triangles as the view colors them, with the scene's lines.
 struct Geometry {
     vertices: Vec<f32>,
+    /// Each solid's vertices in `vertices`, by ID (overdraw).
+    spans: BTreeMap<String, std::ops::Range<u32>>,
     lines: Vec<f32>,
 }
 
@@ -400,11 +436,13 @@ fn geometry(scene: &Scene, diag: &Diag, levels: &BTreeMap<String, u32>, look: &L
     let grey = mix(ground, ink, 0.35);
     let tint = |t: f64| ramp(t).map(|x| x as f32);
     let mut vertices = Vec::new();
+    let mut spans = BTreeMap::new();
     for layer in &scene.layers {
         for s in &layer.solids {
             if s.cast_only || s.mask.is_some_and(|m| m.lower) {
                 continue;
             }
+            let first = (vertices.len() / FLOATS) as u32;
             let color = match diag {
                 Diag::LodPerItem => levels
                     .get(&s.id)
@@ -462,6 +500,9 @@ fn geometry(scene: &Scene, diag: &Diag, levels: &BTreeMap<String, u32>, look: &L
                 vertices.extend_from_slice(&[p[6], p[7], value]);
                 vertices.extend_from_slice(&color);
             }
+            if matches!(diag, Diag::Overdraw) {
+                spans.insert(s.id.clone(), first..(vertices.len() / FLOATS) as u32);
+            }
         }
     }
     // The scene's lines, each segment clipped to the part in front of the near plane.
@@ -503,7 +544,11 @@ fn geometry(scene: &Scene, diag: &Diag, levels: &BTreeMap<String, u32>, look: &L
             }
         }
     }
-    Geometry { vertices, lines }
+    Geometry {
+        vertices,
+        spans,
+        lines,
+    }
 }
 
 /// The scene as the renderer would draw it at this view: leveled items resolved to their choice,
@@ -604,6 +649,17 @@ fn max_value(device: &Device, texture: &wgpu::Texture, size: [u32; 2]) -> u32 {
     })
 }
 
+/// The fragments an R16Float count texture holds, and the pixels that took any.
+fn fragments(device: &Device, texture: &wgpu::Texture, size: [u32; 2]) -> (u64, u64) {
+    read_texture(device, texture, size, 2).map_or((0, 0), |b| {
+        b.as_chunks::<2>()
+            .0
+            .iter()
+            .map(|c| half(u16::from_le_bytes(*c)).round() as u64)
+            .fold((0, 0), |(n, px), v| (n + v, px + u64::from(v > 0)))
+    })
+}
+
 /// `scene` drawn in `diag`'s view, as [`crate::draw_offscreen`] draws it: the slot's BGRA8 rows,
 /// top-down, with what the view counted. `None` where the device can't read back.
 pub fn draw_offscreen_diag(
@@ -656,6 +712,18 @@ fn draw(
     } else {
         renderer.prepare(device, scene, look);
     }
+    // Overdraw counts what the frame's geometry pass shades (#3507): its opaque solids in its
+    // order. A culled set draws the rows its cull kept, which only the frame's own cull writes,
+    // so a frame with one draws first.
+    let mut order = Vec::new();
+    if matches!(diag, Diag::Overdraw) {
+        if renderer.draws_culled() {
+            drop(crate::draw_offscreen_texture(
+                device, renderer, scene, look, None,
+            ));
+        }
+        order = renderer.opaque_order(device);
+    }
     counts
         .cascade_splits
         .clone_from(&renderer.counts().cascade_splits);
@@ -687,7 +755,10 @@ fn draw(
     counts.cascades = counts.cascade_splits.len().saturating_sub(1) as u32;
 
     let d = &device.device;
-    let pipes = renderer.diag.get_or_insert_with(|| Box::new(Pipes::new(d)));
+    let untested = renderer.planted.shaded_count_skips_depth_test;
+    let pipes = renderer
+        .diag
+        .get_or_insert_with(|| Box::new(Pipes::new(d, untested)));
     let size = scene.size;
     let cam = &chosen.camera;
     let rows = cam.clip(Depth::Reversed);
@@ -856,9 +927,17 @@ fn draw(
         crate::DEPTH,
         wgpu::TextureUsages::RENDER_ATTACHMENT,
     );
-    let (color_view, value_view, depth_view) = (
+    let shaded = texture2d(
+        d,
+        "scene3d diag shaded",
+        size,
+        VALUE,
+        wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+    );
+    let (color_view, value_view, shaded_view, depth_view) = (
         color.create_view(&Default::default()),
         value.create_view(&Default::default()),
+        shaded.create_view(&Default::default()),
         depth.create_view(&Default::default()),
     );
     let ground = rgb(look.ground);
@@ -895,6 +974,42 @@ fn draw(
                 pass.set_bind_group(0, &bind0, &[]);
                 pass.set_vertex_buffer(0, vertices.slice(..));
                 pass.draw(0..vertex_count, 0..1);
+            }
+            {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("scene3d diag shaded count"),
+                    color_attachments: &[attachment(
+                        &shaded_view,
+                        wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                    )],
+                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                        view: &depth_view,
+                        depth_ops: Some(wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(0.0),
+                            store: wgpu::StoreOp::Discard,
+                        }),
+                        stencil_ops: None,
+                    }),
+                    ..Default::default()
+                });
+                pass.set_bind_group(0, &bind0, &[]);
+                pass.set_vertex_buffer(0, vertices.slice(..));
+                // Each opaque solid's triangles in the pass's order, one draw for each stretch
+                // of them that lies end to end and culls the same faces.
+                let mut runs: Vec<(u32, std::ops::Range<u32>)> = Vec::new();
+                for (id, cull) in &order {
+                    let Some(span) = geo.spans.get(id) else {
+                        continue;
+                    };
+                    match runs.last_mut() {
+                        Some((c, r)) if *c == *cull && r.end == span.start => r.end = span.end,
+                        _ => runs.push((*cull, span.clone())),
+                    }
+                }
+                for (cull, run) in runs {
+                    pass.set_pipeline(&pipes.shaded[cull as usize]);
+                    pass.draw(run, 0..1);
+                }
             }
             let layout = &pipes.counts_layout;
             let bind1 = bind_group(
@@ -1003,7 +1118,10 @@ fn draw(
     }
     device.queue.submit([encoder.finish()]);
     match diag {
-        Diag::Overdraw => counts.max_overdraw = max_value(device, &value, size),
+        Diag::Overdraw => {
+            counts.max_overdraw = max_value(device, &value, size);
+            (counts.shaded, counts.covered) = fragments(device, &shaded, size);
+        }
         Diag::LightsPerCluster => counts.max_lights_per_cluster = max_value(device, &value, size),
         _ => {}
     }

@@ -1,0 +1,324 @@
+{
+  "name": "stair",
+  "item": {
+    "kind": "logic@1",
+    "params": {
+      "program": "4763ab79096e774db72f7fdd194d36e42acf30cbc7279e61865cfa0297724424",
+      "step_rate": 1000,
+      "reads": [
+        "s1",
+        "s2"
+      ],
+      "writes": {
+        "v": {
+          "type": "f64",
+          "count": 7
+        },
+        "i_rms": {
+          "type": "f64",
+          "count": 6
+        },
+        "i": {
+          "type": "f64",
+          "count": 6
+        },
+        "p": {
+          "type": "f64",
+          "count": 6
+        },
+        "r": {
+          "type": "f64",
+          "count": 6
+        },
+        "on": {
+          "type": "i32",
+          "count": 6
+        },
+        "energy": {
+          "type": "f64",
+          "count": 6
+        },
+        "kwh": {
+          "type": "f64",
+          "count": 6
+        },
+        "drift": {
+          "type": "f64",
+          "count": 6
+        },
+        "drift_x": {
+          "type": "f64",
+          "count": 6
+        },
+        "heat": {
+          "type": "f64",
+          "count": 6
+        },
+        "residual": {
+          "type": "f64",
+          "count": 6
+        },
+        "i2_rms": {
+          "type": "f64",
+          "count": 6
+        },
+        "i2": {
+          "type": "f64",
+          "count": 6
+        }
+      },
+      "circuit": {
+        "nodes": [
+          "neutral",
+          "live",
+          "a1",
+          "b1",
+          "a2",
+          "b2",
+          "lamp"
+        ],
+        "parts": [
+          {
+            "id": "bulb",
+            "kind": "load",
+            "from": "lamp",
+            "to": "neutral",
+            "p_rated": 60,
+            "v_rated": 230
+          },
+          {
+            "id": "mains",
+            "kind": "source_ac",
+            "from": "neutral",
+            "to": "live",
+            "v_rms": 230,
+            "f": 50
+          },
+          {
+            "id": "top",
+            "kind": "changeover",
+            "common": "live",
+            "a": "a1",
+            "b": "b1",
+            "at_b_by": "s1"
+          },
+          {
+            "id": "strap_a",
+            "kind": "resistor",
+            "from": "a1",
+            "to": "a2",
+            "r": 0
+          },
+          {
+            "id": "strap_b",
+            "kind": "resistor",
+            "from": "b1",
+            "to": "b2",
+            "r": 0
+          },
+          {
+            "id": "bottom",
+            "kind": "changeover",
+            "common": "lamp",
+            "a": "a2",
+            "b": "b2",
+            "at_b_by": "s2"
+          }
+        ]
+      },
+      "budget": {
+        "fuel": 10000000
+      }
+    }
+  },
+  "controls": {
+    "s1": {
+      "kind": "slider"
+    },
+    "s2": {
+      "kind": "slider"
+    }
+  },
+  "track": [
+    {
+      "t": 0,
+      "seq": 1,
+      "control": "s1",
+      "value": 1,
+      "writer": "you",
+      "player": 1
+    },
+    {
+      "t": 0,
+      "seq": 2,
+      "control": "s2",
+      "value": 1,
+      "writer": "you",
+      "player": 1
+    },
+    {
+      "t": 705600,
+      "seq": 3,
+      "control": "s1",
+      "value": 0,
+      "writer": "you",
+      "player": 1
+    },
+    {
+      "t": 705600,
+      "seq": 4,
+      "control": "s2",
+      "value": 1,
+      "writer": "you",
+      "player": 1
+    },
+    {
+      "t": 1411200,
+      "seq": 5,
+      "control": "s1",
+      "value": 0,
+      "writer": "you",
+      "player": 1
+    },
+    {
+      "t": 1411200,
+      "seq": 6,
+      "control": "s2",
+      "value": 0,
+      "writer": "you",
+      "player": 1
+    },
+    {
+      "t": 2116800,
+      "seq": 7,
+      "control": "s1",
+      "value": 1,
+      "writer": "you",
+      "player": 1
+    },
+    {
+      "t": 2116800,
+      "seq": 8,
+      "control": "s2",
+      "value": 0,
+      "writer": "you",
+      "player": 1
+    },
+    {
+      "t": 2822400,
+      "seq": 9,
+      "control": "s1",
+      "value": 1,
+      "writer": "you",
+      "player": 1
+    },
+    {
+      "t": 2822400,
+      "seq": 10,
+      "control": "s2",
+      "value": 1,
+      "writer": "you",
+      "player": 1
+    }
+  ],
+  "steps": 5,
+  "expect": {
+    "arrays": {
+      "0": {
+        "i_rms": [
+          0.2608695652173913,
+          0.2608695652173913,
+          0.2608695652173913,
+          0,
+          0.2608695652173913,
+          0.2608695652173913
+        ],
+        "on": [
+          1,
+          1,
+          2,
+          1,
+          1,
+          2
+        ]
+      },
+      "1": {
+        "i_rms": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "on": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          2
+        ]
+      },
+      "2": {
+        "i_rms": [
+          0.2608695652173913,
+          0.2608695652173913,
+          0.2608695652173913,
+          0.2608695652173913,
+          0,
+          0.2608695652173913
+        ],
+        "on": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "3": {
+        "i_rms": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "on": [
+          1,
+          1,
+          2,
+          1,
+          1,
+          1
+        ]
+      },
+      "4": {
+        "i_rms": [
+          0.2608695652173913,
+          0.2608695652173913,
+          0.2608695652173913,
+          0,
+          0.2608695652173913,
+          0.2608695652173913
+        ],
+        "on": [
+          1,
+          1,
+          2,
+          1,
+          1,
+          2
+        ]
+      }
+    },
+    "tolerance": {
+      "abs": 1e-12,
+      "rel": 1e-9
+    }
+  },
+  "answer": "Each changeover joins its common to a at 0 and b at 1. The lamp, 881.67 Ω, has a path from the live only when both are at a (live, a1, the a strap, a2, the lamp) or both at b (through the b strap): then the source, both changeovers, the strap in use and the lamp carry 230 ÷ 881.67 = 0.26087 A, and the other strap nothing. At (0, 1) and (1, 0) the second one's common reaches a dead strap and nothing carries current. A changeover that joined both ways while it moved would light the lamp at step 1, when the first one moves to a with the second still at b."
+}

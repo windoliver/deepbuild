@@ -70,13 +70,13 @@ struct Tracks {
 struct Fault {
     code: &'static str,
     path: String,
-    actual: Value,
+    actual: Box<Value>,
     what: String,
 }
 
 impl Fault {
     fn issue(self, id: &str) -> Issue {
-        let mut issue = Issue::error(self.code, id, self.path, self.actual, &self.what);
+        let mut issue = Issue::error(self.code, id, self.path, *self.actual, &self.what);
         if self.code == "over_budget" {
             issue.fix = FIX.into();
         }
@@ -119,7 +119,7 @@ fn read(doc: &Map<String, Value>, id: &str, params: &Value) -> Result<Option<Tra
         path: format!("items/{id}/params/tracks/{k}")
             .trim_end_matches('/')
             .to_string(),
-        actual: spec.get(k).unwrap_or(spec).clone(),
+        actual: Box::new(spec.get(k).unwrap_or(spec).clone()),
         what: what.into(),
     };
     let fields = spec
@@ -215,7 +215,7 @@ fn admitted(
         return Err(Fault {
             code: "over_budget",
             path: format!("items/{id}/params/tracks"),
-            actual: json!({"plate": id, "count": count}),
+            actual: Box::new(json!({"plate": id, "count": count})),
             what: format!(
                 "{count} samples are alive at one time on {id}: a plate reads {MAX_SAMPLES}"
             ),

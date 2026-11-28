@@ -1,13 +1,18 @@
-// Who may answer an ask, and what an answer may carry: the trusted path, the kinds a channel's link or typed text may
-// answer, an answer's fields, and the writers that speak for an agent.
+// Who may answer an ask, and what an answer may carry: the trusted path, the one check of what an ask declared may
+// answer it, the kinds typed text may answer, an answer's fields, and the writers that speak for an agent.
 
 import type { JsonValue } from '@deepbuild/contracts';
 import { AskRefused, isObj, type Ask } from './model.js';
 
 /** The trusted path: the question card and `deep inbox answer`. Every other writer is an agent's or the core's. */
 export const TRUSTED: Readonly<Record<string, 'card' | 'inbox'>> = { app: 'card', cli: 'inbox' };
-/** The kinds a channel's account link may answer (#65): "I did it", a taste call and a choice, each that ask alone. */
-export const ANSWER_ALONE = new Set(['unblock', 'taste', 'choice']);
+/** What may answer an ask, which the place that raises it declares (#1581): only the trusted path, or any channel you verified as well. */
+export type MayAnswer = 'trusted_path' | 'verified_channel';
+/**
+ * The one check of that declaration: whether a channel you verified may answer the ask, as its account link does
+ * (#65), that ask alone. An ask the record holds from before asks declared it takes the trusted path alone.
+ */
+export const channelMayAnswer = (ask: { may_answer?: unknown }): boolean => ask.may_answer === 'verified_channel';
 export const ANSWER_FIELDS = new Set(['option', 'words', 'image', 'plan_hash', 'token', 'steps', 'pictures']);
 export const SHA256 = /^[0-9a-f]{64}$/;
 export const PROVISIONAL_KINDS = new Set(['taste', 'choice']);

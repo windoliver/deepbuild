@@ -35,7 +35,9 @@ import { isRecord as isObj, canonicalize, sha256Hex, type JsonValue } from '@dee
 import type { SendBoundary, SendRequest, Receipt } from '@deepbuild/evidence';
 import type { ExtensionHost } from '@deepbuild/extension-host';
 import { ulid } from '@deepbuild/record';
+import type { Used } from '@deepbuild/supervisor';
 import type { RunningJob } from './rows.js';
+import { tableRecord } from './table-record.js';
 
 type Obj = Record<string, unknown>;
 type Host = Pick<ExtensionHost, 'jobs' | 'jobParams' | 'runJobTool' | 'jobHostReport' | 'runCheck'>;
@@ -79,6 +81,11 @@ export interface JobDeps {
   charge(run: string, usd: number): Promise<void>;
   /** Your yes to a paid run's ask, approving a budget of that run's price for its tool (#509). */
   approve(ask: string, budget: BudgetInput): Promise<unknown>;
+  /** A file the hub fetched through the Source block, by its hash: the URL and the time it fetched it (#1820), else undefined. */
+  fetched?(sha: string): { url: string; fetched: number } | undefined;
+  readTable?(sha: string): Obj | undefined;
+  /** Writes a table output's record beside its bytes in the evidence store, `tables/<sha256>.json` (#3570). */
+  table?(sha: string, record: Record<string, unknown>): Promise<void>;
   plant?: string | undefined;
 }
 interface Cached { outputs: Record<string, string>; build: string | null }
@@ -228,6 +235,24 @@ export class Jobs {
     }
     const missing = declared.filter((n) => !bytes[n]);
     if (missing.length) return refused(`${kind} takes the inputs ${declared.join(', ')}; give ${missing.join(', ')}`);
+    const tables = held.descriptor.schema.tables;
+    if (tables !== undefined) {
+      const named = params[tables];
+      if (given.length) return refused(`${kind} reads its tables by hash from its params' ${tables}, never as inputs; nothing was read`);
+      if (!isObj(named) || !Object.keys(named).length) return refused(`${kind}'s params name its tables in ${tables}, {name: SHA-256}`);
+      const meta: Record<string, { key: unknown; units: Record<string, unknown> }> = {};
+      for (const name of Object.keys(named).sort()) {
+        const sha = named[name];
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) || typeof sha !== 'string' || !HASH.test(sha)) return refused(`${kind}'s ${tables} names each table by a name of letters, digits and _, and its SHA-256`);
+        const probed = this.d.readTable?.(sha)?.probe;
+        const probe = isObj(probed) && isObj(probed.table) ? probed.table : undefined;
+        if (!probe) return refused(`the input ${name} names ${sha}, which is no table asset the evidence store holds a record of`);
+        try { bytes[name] = await this.d.read(sha); } catch (e) { return refused(`the input ${name}: ${message(e)}`); }
+        const columns = Array.isArray(probe.columns) ? probe.columns.filter(isObj) : [];
+        meta[name] = { key: probe.key, units: Object.fromEntries(columns.filter((c) => typeof c.unit === 'string').map((c) => [String(c.name), c.unit])) };
+      }
+      bytes['#tables'] = new TextEncoder().encode(JSON.stringify(meta));
+    }
     const weights = pinned.descriptor.weights;
     const key = this.keyOf(kind, tool, String(text ?? ''), params, bytes, weights);
     let sent: { sha256: string; host: string }[] = [];
@@ -386,6 +411,7 @@ export class Jobs {
     const job: RunningJob = { key, kind, tool, started: this.d.now() };
     this.d.row(job, true);
     let wrote: Record<string, Uint8Array>;
+    let used: Used | undefined;
     try {
       // A paid call is charged its price as it starts: from here it may be spent, whatever it answers.
       if (spend) await this.d.charge(spend.run, spend.usd);
@@ -393,7 +419,7 @@ export class Jobs {
         job.counter = counter;
         job.at = this.d.now();
         this.d.row(job, true);
-      });
+      }, (u) => { used = u; });
     } catch (e) {
       // The host holds the run on its inputs (#509), such as a word its engine can't say: BLOCKED with its cause, no ask.
       const blocked = e instanceof Error && e.name === 'JobBlocked' ? (e as { blocked?: unknown }).blocked : undefined;
@@ -404,24 +430,44 @@ export class Jobs {
     } finally {
       this.d.row(job, false);
     }
-    const outputs = Object.keys(held.descriptor.outputs);
+    // A tool writes the kind's outputs its format names (#3570), or all of them.
+    const outputs = pinned.descriptor.outputs ?? Object.keys(held.descriptor.outputs);
     const absent = outputs.filter((n) => !wrote[n]);
     if (absent.length) return { status: 'failed', reason: `${tool} wrote no ${absent.join(', ')}, which ${kind} declares; nothing was kept`, receipt: receipt(pinned.build, 'miss') };
     // Its outputs are held here until every output check passes: before that, no store, no cache, nothing an item can name.
     const encoded = Object.fromEntries(outputs.map((n) => [n, Buffer.from(wrote[n]!).toString('base64')]));
+    const read = Object.fromEntries(Object.entries(bytes).map(([n, b]) => [n, Array.isArray(b) ? b.map((x) => Buffer.from(x).toString('base64')) : Buffer.from(b).toString('base64')]));
     for (const check of held.descriptor.output_checks) {
-      const spec = { kind: check, runner: tool, inputs: [], depth: 'job', oracle: 'code', contract: null, outputs: encoded } as CheckSpec;
+      const spec = { kind: check, runner: tool, inputs: [], depth: 'job', oracle: 'code', contract: null, outputs: encoded, job: { params, inputs: read } } as CheckSpec;
       const ran = await host.runCheck(check, spec, { checkout: this.dir(), deadline: CHECK_MS });
       if (ran.outcome !== 'passed') {
         const why = ran.failures.map((f) => f.message).join('; ');
         return { status: 'failed', check, outcome: ran.outcome, reason: `${tool}'s output fails ${kind}'s output check ${check} (${ran.outcome}${why ? `: ${why}` : ''}); nothing was kept, so no item can name it`, receipt: receipt(pinned.build, 'miss') };
       }
     }
+    const tables = held.descriptor.schema.tables;
+    let record: unknown;
+    if (tables !== undefined) {
+      try { record = JSON.parse(Buffer.from(wrote.record!).toString('utf8')); } catch { record = undefined; }
+      if (!isObj(record)) return { status: 'failed', reason: `${tool}'s record of its table isn't a JSON object; nothing was kept`, receipt: receipt(pinned.build, 'miss') };
+    }
     const kept: Record<string, string> = {};
     for (const n of outputs) kept[n] = await this.d.keep(wrote[n]!, `job:${kind}/${tool}#${n}`);
+    // A table output is a table asset (#3570): its record names the job and its inputs, each with the URL and fetch time
+    // the hub recorded, so a number read from it traces through the job to the file the hub fetched.
+    if (tables !== undefined && isObj(record)) {
+      await this.d.table?.(kept.table!, { ...record, sha256: kept.table!, kind: 'table', source: { job: { kind, tool, input: params[tables] ?? null } }, lineage: kept.lineage! });
+    } else if (kept['table']) {
+      const input = Object.fromEntries(Object.entries(hashes(bytes)).map(([n, h]) => [n, (Array.isArray(h) ? h : [h]).map((sha) => ({ sha256: sha, ...(this.d.fetched?.(sha) ?? { origin: 'agent' }) }))]));
+      const tableRec = tableRecord(kept['table'], wrote['table']!, params['key'], { job: { kind, tool, input } });
+      if (tableRec) await this.d.table?.(kept['table'], tableRec);
+    }
     this.saved.cache[key] = { outputs: kept, build: pinned.build };
     this.save();
-    return done(kept, pinned.build, 'miss');
+    const answer = done(kept, pinned.build, 'miss');
+    // What the tool's run used, as the supervisor read it (#3220), never the tool's word.
+    if (used && isObj(answer.receipt)) answer.receipt.used = used;
+    return answer;
   }
   /**
    * The key: the tool's name@version, the canonical params and each input's hash, and an open model's weight files by
@@ -466,7 +512,7 @@ export class Jobs {
   private async askSend(sha: string, where: string, tool: string, kind: string, pair: string): Promise<string> {
     const ref = sha256Hex(new TextEncoder().encode(pair));
     const ask = await this.d.raise('job.send', {
-      kind: 'authority', question: `Send the file ${sha}, which an agent put in the evidence store, to ${where} for ${tool} (${kind})?`,
+      kind: 'authority', may_answer: 'trusted_path', question: `Send the file ${sha}, which an agent put in the evidence store, to ${where} for ${tool} (${kind})?`,
       options: [{ id: 'send', label: 'Send it', decision: 'allow' }, { id: 'decline', label: "Don't send it", decision: 'deny' }],
       recommended: null, deadline: this.d.now() + DAY, fallback: 'you', default: 'decline', provisional: false, owner: 'you', key: ref, pinned_to: { kind: 'evidence', ref: sha },
     }, { steps: [{ does: `Send the file ${sha}, which an agent put in the evidence store, to ${where}, where ${tool} runs, for this and every later job there`, changes: [], undo: null, public: false, cost: 0 }], diff: ref });
@@ -480,7 +526,7 @@ export class Jobs {
     if (!ask) {
       const ref = sha256Hex(new TextEncoder().encode(id));
       ask = await this.d.raise('job.unblock', {
-        kind: 'unblock', question: a.question, options: [{ id: 'done', label: 'I did it', decision: 'none' }], recommended: 'done', default: 'done', deadline: this.d.now() + DAY,
+        kind: 'unblock', may_answer: 'verified_channel', question: a.question, options: [{ id: 'done', label: 'I did it', decision: 'none' }], recommended: 'done', default: 'done', deadline: this.d.now() + DAY,
         steps: a.steps, where: a.where, why: a.why, unblocks: [`req:${ref.slice(0, 16)}`], proves: a.proves,
         fallback: 'you', provisional: false, owner: 'you', key: ref, pinned_to: { kind: 'evidence', ref },
       });
@@ -490,7 +536,7 @@ export class Jobs {
   }
   private async ask(kind: string, tool: string, usd: number, key: string): Promise<string> {
     const ask = await this.d.raise('job.paid', {
-      kind: 'authority', question: `Run ${tool} for ${kind} once, at $${usd} a run?`,
+      kind: 'authority', may_answer: 'trusted_path', question: `Run ${tool} for ${kind} once, at $${usd} a run?`,
       options: [{ id: 'run', label: 'Run it once', decision: 'allow' }, { id: 'decline', label: "Don't run it", decision: 'deny' }],
       recommended: null, deadline: this.d.now() + DAY, fallback: 'you', default: 'decline', provisional: false, owner: 'you', key, pinned_to: { kind: 'evidence', ref: key },
     }, { steps: [{ does: `Run the paid tool ${tool} once for ${kind}, at $${usd}`, changes: [], undo: null, public: false, cost: usd }], diff: key });

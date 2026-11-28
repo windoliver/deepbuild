@@ -1,0 +1,12 @@
+{
+  "packages/hub/src/approved-spec.ts": [
+    {
+      "find": [
+        "  const rows = (await record.raw(`SELECT evidence, json_extract(data, '$.answer') AS answer FROM events WHERE kind = 'decision.created' AND writer = 'core' AND json_extract(data, '$.key') = ? ORDER BY log_pos DESC`, [await keyOf(folder)])) as { evidence: string | null; answer: string }[];"
+      ],
+      "wrong": [
+        "  const rows = (await record.raw(`SELECT evidence, json_extract(data, '$.answer') AS answer FROM events WHERE kind = 'decision.created' AND writer = 'core' AND json_extract(data, '$.key') = ? AND ts >= ? ORDER BY log_pos DESC`, [await keyOf(folder), Math.floor(Date.now() - process.uptime() * 1000)])) as { evidence: string | null; answer: string }[];"
+      ]
+    }
+  ]
+}

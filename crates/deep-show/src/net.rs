@@ -52,6 +52,9 @@ pub struct Given {
     relay_ca: Option<PathBuf>,
     /// #280: Google Chrome, where net.budget's web part plays the piece in the web player.
     pub chrome: Option<PathBuf>,
+    /// #1042: the PEM authority a web export trusts, beside the platform's own, when it asks a
+    /// public source the export declares (`source_ca`).
+    pub source_ca: Option<PathBuf>,
 }
 
 pub fn given(input: &Map<String, Value>) -> Option<Given> {
@@ -70,10 +73,15 @@ pub fn given(input: &Map<String, Value>) -> Option<Given> {
         None => None,
         Some(c) => Some(PathBuf::from(c.as_str()?)),
     };
+    let source_ca = match input.get("source_ca") {
+        None => None,
+        Some(c) => Some(PathBuf::from(c.as_str()?)),
+    };
     Some(Given {
         links,
         relay_ca,
         chrome,
+        source_ca,
     })
 }
 

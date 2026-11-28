@@ -303,6 +303,8 @@ fn text_extent(text: &str, frame: Size<Pixels>, window: &Window) -> Option<Size<
 fn behavior(op: &crate::panel_tree::Op) -> bool {
     match op.name.as_str() {
         "track_focus" => number(&op.args).is_some(),
+        // What DeepBuild's module adds to an element that tracks focus (#3233): which stop it is stays in the host.
+        "tab_stop" => true,
         "on_action" => false,
         name => name.starts_with("on_") && op.args == "fn" || op.args == "registered",
     }
@@ -353,6 +355,15 @@ fn inside([x, y, w, h]: Rect, [ax, ay, aw, ah]: Rect) -> bool {
 
 fn intersects([x, y, w, h]: Rect, [ax, ay, aw, ah]: Rect) -> bool {
     x < ax + aw - EPSILON && ax < x + w - EPSILON && y < ay + ah - EPSILON && ay < y + h - EPSILON
+}
+
+/// What `panel@1`'s rules on reading and reach find in a tree (#3233), each naming its node and, in its words, the
+/// colors and the ratio of text under the ink floor.
+fn unreadable(update: usize, tree: &Node) -> Vec<Value> {
+    crate::panel_rules::findings(tree)
+        .into_iter()
+        .map(|found| json!({ "kind": found.code, "update": update, "node": found.node, "why": found.text }))
+        .collect()
 }
 
 /// Each drawn node beyond the panel, or on the card.
@@ -587,6 +598,7 @@ fn run_check(args: &[String]) -> Result<i32, String> {
             let bounds = check.lay_out(tree.clone())?;
             held.found
                 .extend(violations(update, &bounds, check.area, check.card)?);
+            held.found.extend(unreadable(update, &tree));
             held.trees.push(tree.to_json(&bounds));
         }
         if let Some(png) = &png {
@@ -794,8 +806,9 @@ fn serve(
                                 }
                                 None => {
                                     let bounds = check.lay_out(tree.clone())?;
-                                    let found =
+                                    let mut found =
                                         violations(update, &bounds, check.area, check.card)?;
+                                    found.extend(unreadable(update, &tree));
                                     held.trees.push(tree.to_json(&bounds));
                                     if !found.is_empty() {
                                         held.found.extend(found.iter().cloned());
@@ -876,6 +889,8 @@ fn run_bench(args: &[String]) -> Result<(), String> {
             host.update()?;
         }
         let (mut script, mut ipc, mut total) = (Vec::new(), Vec::new(), Vec::new());
+        // What the three rules of #3233 take on each update's tree, here in the app.
+        let mut rules = Vec::new();
         let mut tree = None;
         for _ in 0..updates {
             let started = Instant::now();
@@ -884,10 +899,13 @@ fn run_bench(args: &[String]) -> Result<(), String> {
             script.push(nanos);
             ipc.push(elapsed.saturating_sub(nanos));
             total.push(elapsed);
+            let reading = Instant::now();
+            std::hint::black_box(crate::panel_rules::findings(&held));
+            rules.push(reading.elapsed().as_nanos() as u64);
             tree = Some(held);
         }
         reports
-            .push(json!({ "warmup": WARMUP, "scriptNs": script, "ipcNs": ipc, "totalNs": total }));
+            .push(json!({ "warmup": WARMUP, "scriptNs": script, "ipcNs": ipc, "totalNs": total, "rulesNs": rules }));
         host.send(json!({ "cmd": "jit" }))?;
         let jit = host.reply()?;
         last = Some((jit, host.pid, tree));

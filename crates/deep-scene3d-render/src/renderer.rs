@@ -9,6 +9,9 @@ pub struct Renderer {
     /// Motion blur by velocity (#419): its pipelines, and this frame's pass when it blurs.
     pub(super) motion: motion::MotionPass,
     pub(super) motion_frame: Option<motion::Frame>,
+    /// The image motion blur and the depth of field each resolve into before copying it back
+    /// into the linear target (#3506): one for both, at the targets' size while either is on.
+    pub(super) resolved: Option<(wgpu::Texture, wgpu::TextureView)>,
     /// The core's velocity and emission targets (#431), built only while read, and this frame's
     /// draws of them.
     pub core: targets::Core,

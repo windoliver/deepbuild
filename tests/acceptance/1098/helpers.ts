@@ -14,6 +14,7 @@ import { openEvidenceStore, type EvidenceStore } from '../../../packages/evidenc
 import { openRecord, type Connection, type Event, type RecordStore } from '../../../packages/record/src/index.ts';
 import { openAsks, type Asks, type AsksPlant, type Card, type CardTarget, type Delivery, type InboxRow, type PlanStep, type Target } from '../../../packages/asks/src/index.ts';
 import { resolverDecisions } from '../../../packages/resolver-decisions/src/index.ts';
+import { withDeclared } from '../declared.ts';
 
 export type Obj = Record<string, unknown>;
 export const HOUR = 3_600_000;
@@ -129,7 +130,7 @@ export async function openWorld(plant?: AsksPlant): Promise<World> {
   const evidence = await openEvidenceStore({ root: join(dir, 'evidence'), now: clock.now });
   const record = await openRecord({ path: join(dir, 'record.db'), now: clock.now, evidence });
   const deliveries: Delivery[] = [];
-  const asks = await openAsks({ record, now: clock.now, deliver: (d) => { deliveries.push(structuredClone(d)); }, ...(plant ? { plant } : {}) });
+  const asks = withDeclared(await openAsks({ record, now: clock.now, deliver: (d) => { deliveries.push(structuredClone(d)); }, ...(plant ? { plant } : {}) }));
   asks.registerResolver('resolver-decisions', resolverDecisions({ record }));
   const projects = new Map<string, string>();
   const msgs = new Map<string, number>();

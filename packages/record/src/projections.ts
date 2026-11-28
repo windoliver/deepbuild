@@ -19,6 +19,7 @@ export interface Projected {
   session: string | null;
   project: string | null;
   agent: string | null;
+  host: string | null;
   writer: string;
   actor: string;
   scope: string;
@@ -34,7 +35,7 @@ type Obj = { [key: string]: JsonValue };
 const T = (name: string, pk: string[], columns: string, indexes?: string[]): TableDef => ({ name, pk, columns, ...(indexes ? { indexes } : {}) });
 /** Every projection, with the columns the design's data model names (and the ones the record adds). */
 const TABLES: readonly TableDef[] = [
-  T('sessions', ['id'], 'id TEXT, thread_id TEXT, parent_id TEXT, agent TEXT, project_id TEXT, worktree TEXT, branch TEXT, pid INTEGER, status TEXT NOT NULL DEFAULT \'running\', last_seen INTEGER, ended_log_pos INTEGER, transcript TEXT, cause TEXT, status_at INTEGER, seen_at INTEGER'),
+  T('sessions', ['id'], 'id TEXT, thread_id TEXT, parent_id TEXT, agent TEXT, project_id TEXT, worktree TEXT, branch TEXT, pid INTEGER, status TEXT NOT NULL DEFAULT \'running\', last_seen INTEGER, ended_log_pos INTEGER, transcript TEXT, cause TEXT, status_at INTEGER, seen_at INTEGER, host TEXT'),
   // Indexed by task: deep_claim reads the sessions that claimed its task (#1868).
   T('claims', ['id'], 'id TEXT, session_id TEXT, kind TEXT, subject_ref TEXT, text TEXT, created INTEGER, verdict_id TEXT, attempt INTEGER, commit_sha TEXT, round INTEGER, stalled_rule TEXT, state TEXT', ['subject_ref']),
   T('definitions', ['task_ref'], 'task_ref TEXT, id TEXT, thread_id TEXT, issue_rev TEXT, base_commit TEXT, requirements TEXT, deliverables TEXT, budget TEXT, hash TEXT, locked_at INTEGER, state TEXT, dispute_ask TEXT'),
@@ -73,7 +74,7 @@ const TABLES: readonly TableDef[] = [
   T('turn_events', ['event_id'], 'event_id TEXT, session_id TEXT, turn_idx INTEGER, eff_seq INTEGER, eff_id TEXT, log_pos INTEGER'),
   T('session_readings', ['session_id', 'reading'], 'session_id TEXT, reading TEXT, since INTEGER'),
   // The list every reader shows (#1463): each row the core built, as its newest row.set gives it, in the list's order.
-  T('rows', ['id'], 'id TEXT, ord TEXT, row TEXT, log_pos INTEGER'),
+  T('rows', ['id'], 'id TEXT, ord TEXT, row TEXT, log_pos INTEGER', ["json_extract(row, '$.title')"]),
   // The wiki's claims in force (#355), each from its newest change in force, with its sources and its links, and
   // their text in SQLite FTS5: the default index deep_search reads, rebuilt like every table here.
   T('wiki_claims', ['handle'], 'handle TEXT, page TEXT, claim TEXT, text TEXT, known TEXT, proof INTEGER, scope TEXT, change TEXT, state TEXT, log_pos INTEGER'),
@@ -120,15 +121,15 @@ export class Projector {
 
   /**
    * Creates each table that is missing. A table an older version made with other columns is left as it is, and
-   * it returns true: the record then rebuilds, which drops and remakes every table and replays the log in one
-   * commit, so a stop before that commit finds the old table again.
+   * the first such is returned by name: the record then rebuilds, which drops and remakes every table and replays
+   * the log in one commit, so a stop before that commit finds the old table again.
    */
-  ensure(): boolean {
-    let stale = false;
+  ensure(): string | undefined {
+    let stale: string | undefined;
     for (const t of TABLES) {
       const have = (this.db.prepare('SELECT name FROM pragma_table_info(?)').all(t.name) as { name: string }[]).map((c) => c.name).join(',');
       if (have && have !== t.columns.split(',').map((c) => c.trim().split(' ')[0]).join(',')) {
-        stale = true;
+        stale ??= t.name;
         continue;
       }
       if (t.fts) this.db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS ${t.name} USING fts5(${t.columns}, tokenize = 'unicode61')`);
@@ -239,6 +240,8 @@ export class Projector {
       // The newest stamp seen: a late or spooled event never moves a session back. `seen_at` is that event's place in
       // the log, and `status_at` below the place of the event that set its status: the facts its state is read from (#2018).
       this.stmt('INSERT INTO sessions (id, last_seen, seen_at) VALUES (?, ?, ?) ON CONFLICT (id) DO UPDATE SET seen_at = CASE WHEN excluded.last_seen >= COALESCE(sessions.last_seen, excluded.last_seen) THEN excluded.seen_at ELSE sessions.seen_at END, last_seen = MAX(COALESCE(sessions.last_seen, excluded.last_seen), excluded.last_seen)').run(e.session, e.ts, e.log_pos);
+      // A session is on the host its first event named (#999).
+      if (e.host) this.fill('sessions', { id: e.session, host: e.host });
       // What its own hooks say of a session's attention (#18): a prompt starts work, a permission prompt waits on you,
       // a call is work again unless its turn already stopped, and a stop ends the turn finished, failed, or stuck on a
       // block only you or a service can clear. The core and the app say the rest with session.attention.

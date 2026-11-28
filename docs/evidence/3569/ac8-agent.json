@@ -1,0 +1,127 @@
+{
+  "inputs": {
+    "counties.csv": "8b1181cb1ba1e7d6614d576739335e0c675688334464a043cc73c8c7b202e3f8",
+    "metros.csv": "65e3d5d869f7c1f7c69673793c66a4fcc12849465d99b440052dbee932e5551d"
+  },
+  "table": "3708e196e44986f5366fbbff264a1cdac29e8ce5edcb4deccaa6b15dc4fe160b",
+  "numbers": [
+    {
+      "item": "labels",
+      "row": "A",
+      "text": "250",
+      "source": {
+        "table": "derived",
+        "column": "workers",
+        "row": 0,
+        "bytes": [
+          25,
+          28
+        ],
+        "raw": "MjUw",
+        "origin": {
+          "job": {
+            "kind": "table.derive",
+            "tool": "table-derive@1.0.0",
+            "input": {
+              "county": "8b1181cb1ba1e7d6614d576739335e0c675688334464a043cc73c8c7b202e3f8",
+              "metro": "65e3d5d869f7c1f7c69673793c66a4fcc12849465d99b440052dbee932e5551d"
+            }
+          }
+        },
+        "weakest": "agent",
+        "from": [
+          {
+            "input": "county",
+            "table": "8b1181cb1ba1e7d6614d576739335e0c675688334464a043cc73c8c7b202e3f8",
+            "keys": [
+              "1",
+              "2",
+              "3",
+              "4"
+            ]
+          },
+          {
+            "input": "metro",
+            "table": "65e3d5d869f7c1f7c69673793c66a4fcc12849465d99b440052dbee932e5551d",
+            "keys": [
+              "1",
+              "2",
+              "3",
+              "4"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "item": "labels",
+      "row": "B",
+      "text": "307",
+      "source": {
+        "table": "derived",
+        "column": "workers",
+        "row": 1,
+        "bytes": [
+          33,
+          36
+        ],
+        "raw": "MzA3",
+        "origin": {
+          "job": {
+            "kind": "table.derive",
+            "tool": "table-derive@1.0.0",
+            "input": {
+              "county": "8b1181cb1ba1e7d6614d576739335e0c675688334464a043cc73c8c7b202e3f8",
+              "metro": "65e3d5d869f7c1f7c69673793c66a4fcc12849465d99b440052dbee932e5551d"
+            }
+          }
+        },
+        "weakest": "agent",
+        "from": [
+          {
+            "input": "county",
+            "table": "8b1181cb1ba1e7d6614d576739335e0c675688334464a043cc73c8c7b202e3f8",
+            "keys": [
+              "5",
+              "6"
+            ]
+          },
+          {
+            "input": "metro",
+            "table": "65e3d5d869f7c1f7c69673793c66a4fcc12849465d99b440052dbee932e5551d",
+            "keys": [
+              "5",
+              "6"
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "issues": [
+    {
+      "check": "document.validate",
+      "code": "number_unsourced",
+      "severity": "error",
+      "ids": [
+        "labels#A"
+      ],
+      "path": "items/labels/params",
+      "actual": "250",
+      "what": "shows a number from a table an agent wrote, a story number, where a status or a reading is bound; read it from a fetched table or bind it to a reading",
+      "fix": "Bind the number to a reading with a bound value, or compute it in the document."
+    },
+    {
+      "check": "document.validate",
+      "code": "number_unsourced",
+      "severity": "error",
+      "ids": [
+        "labels#B"
+      ],
+      "path": "items/labels/params",
+      "actual": "307",
+      "what": "shows a number from a table an agent wrote, a story number, where a status or a reading is bound; read it from a fetched table or bind it to a reading",
+      "fix": "Bind the number to a reading with a bound value, or compute it in the document."
+    }
+  ]
+}

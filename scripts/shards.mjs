@@ -5,7 +5,10 @@
 // the worktree's package builds copy-on-write, and its node_modules when the lock's bytes changed. A
 // shard stays at its path, so a warm target/ keeps CARGO_MANIFEST_DIR true and its first builds are its only cold ones.
 // Each shard is held by a lock naming its holder's pid and start, so two runs on the machine never share one, and a
-// dead holder's is taken. `node shards.mjs <root> <k>` prepares shard k, as claimShards runs it, one child per shard.
+// dead holder's is taken. A shard leaves when a run that claims shards finds that no live process holds it and that it
+// was last made a tree more than three days before: the run takes the shard's lock, removes the shard and then the
+// lock, highest number first, and prints one line, the shards removed and the bytes du gave for them.
+// `node shards.mjs <root> <k>` prepares shard k, as claimShards runs it, one child per shard.
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statfsSync, statSync, writeFileSync } from 'node:fs';
@@ -30,6 +33,8 @@ const freeBytes = () => {
 export const roomy = () => freeBytes() - SHARD_BYTES >= FLOOR;
 /** The free disk a run holding `count` shards is admitted on (#3221): each one's growth above the floor, or none. */
 export const shardsRoom = (count) => (count ? FLOOR + count * SHARD_BYTES : 0);
+// How long a shard stays with no run making it a tree: hygiene's three days for an idle target/ (section 9).
+const IDLE_MS = 3 * 24 * 60 * 60 * 1000;
 const startOf = (pid) => spawnSync('ps', ['-o', 'lstart=', '-p', String(pid)], { encoding: 'utf8', env: { ...process.env, TZ: 'UTC', LC_ALL: 'C' } }).stdout.trim();
 const MAC = process.platform === 'darwin';
 // Copy-on-write: macOS's cp -c clones on APFS, one clone per file; GNU cp's --reflink=auto clones where the file system
@@ -81,6 +86,32 @@ function lock(k) {
 }
 
 /**
+ * Removes each of `shards` that no live process holds and that was last made a tree more than three days before,
+ * highest number first. It takes a shard's lock before it removes it, the lock claimShards takes, so none leaves while
+ * a run prepares or uses it and no two runs remove one, and the lock leaves with its shard. `say` gets one line, the
+ * shards removed and the bytes du gave for them, and none when no shard left.
+ */
+function leave(shards, say) {
+  const gone = [];
+  let kb = 0;
+  for (const k of shards.toSorted((a, b) => b - a)) {
+    const dir = join(folder(), String(k));
+    // prepare writes a shard's packed-refs each time it makes it a tree; a folder with none was never made one, and stays.
+    if (!(Date.now() - statSync(join(dir, '.git/packed-refs'), { throwIfNoEntry: false })?.mtimeMs > IDLE_MS)) continue;
+    const taken = lock(k);
+    if (!taken) continue;
+    try {
+      kb += Number(spawnSync('du', ['-sk', dir], { encoding: 'utf8' }).stdout.split('\t')[0]);
+      rmSync(dir, { recursive: true, force: true });
+      gone.push(k);
+    } finally {
+      rmSync(taken, { recursive: true, force: true });
+    }
+  }
+  if (gone.length) say(`SHARD ${gone.join(', ')} removed: ${gone.length} ${gone.length === 1 ? 'shard' : 'shards'}, ${(kb * 1024 / 1e9).toFixed(1)} GB by du, last made a tree more than three days before and held by no live process`);
+}
+
+/**
  * Shard k made the worktree's exact tree, its lock already held: returns the line its run prints. The tree is what
  * lanes.mjs's exactTree hashes, HEAD with the uncommitted and untracked files, and git writes it into the shard, by a
  * commit of it in the shard's own .git, whose objects it reads from the repository's and never writes there: a hard
@@ -108,8 +139,11 @@ function prepare(root, k) {
     rmSync(join(dir, 'target/debug/incremental'), { recursive: true, force: true });
     git(dir, ['init', '-q', '--template=', dir]);
     mkdirSync(join(dir, '.git/objects/info'), { recursive: true });
-    writeFileSync(join(dir, '.git/objects/info/alternates'), `${join(resolve(root, git(root, ['rev-parse', '--git-common-dir']).trim()), 'objects')}\n`);
   }
+  const alternates = join(dir, '.git/objects/info/alternates');
+  const objects = join(resolve(root, git(root, ['rev-parse', '--git-common-dir']).trim()), 'objects');
+  const named = existsSync(alternates) ? readFileSync(alternates, 'utf8').split('\n').filter(Boolean) : [];
+  if (!named.includes(objects)) writeFileSync(alternates, `${[...named, objects].join('\n')}\n`);
   // The refs and HEAD are the worktree's, as one packed-refs file, sorted by name as git keeps it.
   const refs = git(root, ['for-each-ref', '--format=%(objectname) %(refname)']).split('\n').filter(Boolean).sort((a, b) => (a.split(' ')[1] < b.split(' ')[1] ? -1 : 1));
   writeFileSync(join(dir, '.git/packed-refs'), `# pack-refs with: peeled fully-peeled sorted \n${refs.join('\n')}\n`);
@@ -135,7 +169,7 @@ function prepare(root, k) {
 /**
  * Up to `want` shards made `root`'s tree, each as { dir, lock, release }: free ones that exist first, then new ones, each
  * only while the disk holds one more above its floor, all made ready at once, each in a child of its own. `say` gets
- * one line per shard.
+ * one line per shard, and one for the shards the run removed (leave).
  */
 export async function claimShards(root, want, say) {
   mkdirSync(folder(), { recursive: true });
@@ -152,6 +186,8 @@ export async function claimShards(root, want, say) {
     room -= 1;
     held.push({ k, dir: join(folder(), String(k)), lock: taken });
   }
+  // The shards it took are locked, so the ones it removes are never those.
+  leave(existing, say);
   const ready = await Promise.all(held.map(({ k, dir, lock: taken }) => new Promise((done) => {
     const child = spawn(process.execPath, [fileURLToPath(import.meta.url), root, String(k)], { stdio: ['ignore', 'pipe', 'pipe'] });
     let out = '';
@@ -164,7 +200,9 @@ export async function claimShards(root, want, say) {
       done(null);
     });
   })));
-  return ready.filter(Boolean);
+  const claimed = ready.filter(Boolean);
+  if (want > 0 && !claimed.length) process.stderr.write(`SHARD none claimed of ${want} asked for: the alone block runs unsharded in the worktree, one group at a time\n`);
+  return claimed;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

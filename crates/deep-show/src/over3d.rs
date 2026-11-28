@@ -144,6 +144,52 @@ impl Hub<'_> {
         Ok((rgba, frame.staged.scene))
     }
 
+    /// #231: `doc`'s frame at `t` as the GPU texture its 3D frame is drawn into (BGRA8), for an
+    /// export that hands its frames on as GPU surfaces: `None` unless the frame is that texture
+    /// and nothing more, with no 2D item, status mark, caption, overlay, view overlay or readout
+    /// over it, and its rows are a whole number of wgpu's copy alignment, so [`Hub::frame3d`]
+    /// would lay nothing over what it read back.
+    pub(crate) fn frame3d_bare(
+        &mut self,
+        doc: &Value,
+        t: i64,
+        size: Option<[u16; 2]>,
+        drawing: &crate::frames::Painted,
+    ) -> Result<Option<(wgpu::Texture, [u16; 2])>, Unfit> {
+        let size = size.unwrap_or_else(|| snapshot::px(drawing.size));
+        let no_marks = |d: &Arc<deep_canvas_marks::modules::Drawing>| {
+            (d.frame.layers.iter()).all(|l| l.marks.iter().next().is_none())
+        };
+        let bare = size[0].is_multiple_of(64)
+            && drawing.drawing.as_ref().is_none_or(no_marks)
+            && drawing.boxes.is_empty()
+            && (drawing.status.as_ref()).is_none_or(|s| s.marks.is_empty() && s.legend.is_empty())
+            && self.renderer.caption.is_none();
+        if !bare
+            || deep_canvas_scene3d::inset::refusals(doc)
+                .into_iter()
+                .next()
+                .is_some()
+        {
+            return Ok(None);
+        }
+        let edged = edged(doc, t, size)?;
+        let doc = edged.as_ref().unwrap_or(doc);
+        let look = deep_canvas_scene3d::look::Look3::from_roles(self.look.light.clone());
+        let px = size.map(u32::from);
+        // A view overlay, or one that can't be placed, is [`Hub::frame3d`]'s to draw or refuse.
+        let views = deep_canvas_scene3d::views::placed(doc, px, Some(&look));
+        if !deep_canvas_scene3d::views::framed(doc).is_empty() || !views.is_ok_and(|v| v.is_empty())
+        {
+            return Ok(None);
+        }
+        let posed = crate::film::posed(doc, t);
+        let doc = posed.as_ref().unwrap_or(doc);
+        let frame = self.evaluate3d(doc, t, size)?;
+        let texture = self.gpu3().and_then(|g| g.draw_texture(&frame));
+        Ok(texture.map(|texture| (texture, size)))
+    }
+
     /// #3017: `doc`'s 3D frame at `t` and `size` ([`Hub::painted3d`]) with its visible table,
     /// read from the object-ID pass that frame drew. Under the planted `visible_table_as_boxes`
     /// nothing is read; under `visible_picks_before_cutaway` the frame is drawn again without its
@@ -261,7 +307,14 @@ impl Hub<'_> {
             }
             None => prepare(self, &only(&shown, |id| !inside.contains(id)))?,
         };
-        layer(self, base, None);
+        // #231: a layer with nothing to draw is neither rastered nor laid over: it is clear.
+        let clear = base.frame.layers.iter().all(|l| l.marks.is_empty())
+            && base.boxes.is_empty()
+            && base.status.marks.is_empty()
+            && base.status.legend.is_empty();
+        if !clear {
+            layer(self, base, None);
+        }
         for f in &overlays {
             let Some(origin) = scene
                 .overlays

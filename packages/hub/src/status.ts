@@ -6,16 +6,16 @@ import { readFileSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { codeWords } from '@deepbuild/contracts';
 import { billingMode } from '@deepbuild/readings';
+import { MODE_CODES, NOTED, readingCode, type ReadingCode } from './reading-codes.js';
 import { shadowedBy, topLevel } from './claude-settings.js';
 import { call, notAnswered } from './client.js';
-import { CAN_RUN, CANT_RUN } from './hook-programs.js';
-import { MODS_GONE, MODS_WATCH } from './mods.js';
 import { rowReadings } from './codex-loops.js';
 import { numbersLines } from './numbers.js';
 import { hubControl } from './paths.js';
 import { activePlant } from './plant.js';
 import { clockTime, elapsed } from './promises.js';
-import { startOf } from './wire.js';
+import { say } from './row-sentences.js';
+import { majorsApart, outsideContract, startOf } from './wire.js';
 import { claimState } from './verdict-chat.js';
 import { visible } from './visible.js';
 import { watched, watchWords, type Watch } from './watch.js';
@@ -33,11 +33,10 @@ const QUIET_MS = 24 * 3_600_000;
  * each 30 s while it watches the session. A hub started since reads the same from the record.
  */
 export const WAITING_QUIET_MS = 300_000;
-/** What a session's row says of the MCP servers and skills it loaded (#148): the older set after a sync, until its own evidence shows the current one. */
-export const OLDER_SET = 'Runs the older set:';
 /** A Claude Code session's five-hour window where the repo's own status line shadows the forwarder (#1296). */
 export const UNREAD_WINDOW = '5 h · unknown:';
-export const NEWER_SET = 'Runs the current set:';
+/** What a session's row says of the MCP servers and skills it loaded (#148): the older set after a sync, until its own evidence shows the current one. */
+export { NEWER_SET, OLDER_SET } from './reading-codes.js';
 /** A stop's cause in words, from the one list every view reads (#2029); a cause the list doesn't know reads as unknown's. */
 const causeWords = (cause: string): string => codeWords('stop.cause', cause) ?? codeWords('stop.cause', 'unknown')!;
 /** The most tool calls a finished turn lists; the rest are counted on one line. */
@@ -63,7 +62,7 @@ export interface Lacked { rule: string; state: State; fact: string }
  * one, and no other session's state changes with no event of its own, so the minute pass reads a session again once
  * its `until` has passed and reads no other.
  */
-export interface Reading { id: string; project_id: string | null; agent: string | null; worktree: string | null; state: State; cause: Cause; rule: string; why: string; plain: string; since: number | null; waits_on: string | null; facts: Fact[]; lacked: Lacked[]; note?: string; flag?: Flag; until?: number }
+export interface Reading { id: string; project_id: string | null; agent: string | null; worktree: string | null; /** The host a session on another machine runs on (#999). */ host?: string; state: State; cause: Cause; rule: string; why: string; plain: string; since: number | null; waits_on: string | null; facts: Fact[]; lacked: Lacked[]; note?: string; flag?: Flag; until?: number }
 
 /** The one flag a row shows beside its word (#2019), never a state: the first of FLAGS that applies. */
 export type FlagCode = 'interrupted' | 'retrying' | 'repeating' | 'watch-only' | 'unpushed';
@@ -115,6 +114,8 @@ export interface SessionFacts {
   watch?: Watch;
   /** Its commits no remote branch holds (#2019). */
   unpushed?: { commits: number; branch: string | null; at: Fact };
+  /** The host it runs on, that host's link going down with no return since, and its deep-hook a contract major apart from the hub, in words that name both (#999). */
+  host?: string; linkDown?: Fact; skew?: string;
 }
 
 /** What a row of the table gives a session it matches. */
@@ -126,7 +127,6 @@ const ago = (ms: number | null, now: number): string => (ms === null ? 'a while'
 const recent = (f: SessionFacts, now: number): boolean => now - (f.last_seen ?? 0) <= QUIET_MS;
 /** Until when a row that tests `recent` holds. */
 const recentUntil = (f: SessionFacts): number => (f.last_seen ?? 0) + QUIET_MS;
-const causeOf = (f: SessionFacts): string => (f.stopCause ? ` (${causeWords(f.stopCause)})` : '');
 /** Its agent's process gone while a turn was under way: one that stopped, failed or got stuck first had ended its turn. */
 const goneMidTurn = (f: SessionFacts): boolean => f.gone !== undefined && !['finished', 'failed', 'stuck'].includes(f.status);
 /** A row for a claim's verdict: the session's newest claim, judged `outcome` by a verdict still in force. */
@@ -135,7 +135,7 @@ const judged = (rule: string, state: State, cause: Cause, outcome: string, hit: 
   match: (f) => (f.claim && !f.claim.stale && f.claim.outcome === outcome ? { ...hit(f.claim), since: f.claim.made.ts, facts: [f.claim.made, f.claim.judged] } : undefined),
 });
 /** A verdict that isn't PASS or FAIL names who can clear it and the evidence it leaves open, never the bare word. */
-const waitsFor = (c: Claim): Pick<Hit, 'why' | 'waits_on'> => ({ why: `waits for ${c.owner ?? 'you'}: ${c.evidence ?? 'its verdict names no evidence'}`, waits_on: c.owner ?? 'you' });
+const waitsFor = (c: Claim): Pick<Hit, 'why' | 'waits_on'> => ({ why: c.owner === null ? (c.evidence === null ? say('waits_for_you_no_evidence') : say('waits_for_you', c.evidence)) : c.evidence === null ? say('waits_for_no_evidence', c.owner) : say('waits_for', c.owner, c.evidence), waits_on: c.owner ?? 'you' });
 
 /**
  * The one ordered state table (#2018; design: States people see): a session's state on every surface is the first row
@@ -145,54 +145,56 @@ const waitsFor = (c: Claim): Pick<Hit, 'why' | 'waits_on'> => ({ why: `waits for
  */
 const TABLE: readonly Rule[] = [
   { rule: 'ask', state: 'needs you', cause: 'ask', lacks: 'no open ask',
-    match: (f, now) => { const n = f.asks?.n ? (f.asks.n === 1 ? 'an ask' : `${f.asks.n} asks`) : undefined; return n ? { why: `${n} open for ${ago(f.asks!.since, now)}`, plain: `${n} open`, since: f.asks!.since, waits_on: 'you', facts: f.asks!.facts } : undefined; } },
+    match: (f, now) => { const open = f.asks?.n ? (f.asks.n === 1 ? say('an_ask_open') : say('asks_open', f.asks.n)) : undefined; return open ? { why: `${open} for ${ago(f.asks!.since, now)}`, plain: open, since: f.asks!.since, waits_on: 'you', facts: f.asks!.facts } : undefined; } },
   // A prompt its agent shows, unless the agent's process is gone mid-turn: no one is left to answer it then (#992).
   // The planted wrong reading checks a permission prompt before a process gone.
   { rule: 'waiting', state: 'needs you', cause: 'waiting', lacks: 'no permission prompt showing',
-    match: (f, now) => (f.status === 'waiting' && now - (f.last_seen ?? 0) <= WAITING_QUIET_MS && (!goneMidTurn(f) || activePlant() === 'waiting-first') ? { why: 'a permission prompt waits on you', since: f.last_seen, waits_on: 'you', facts: [f.statusBy], until: (f.last_seen ?? 0) + WAITING_QUIET_MS } : undefined) },
+    match: (f, now) => (f.status === 'waiting' && now - (f.last_seen ?? 0) <= WAITING_QUIET_MS && (!goneMidTurn(f) || activePlant() === 'waiting-first') ? { why: say('permission_prompt'), since: f.last_seen, waits_on: 'you', facts: [f.statusBy], until: (f.last_seen ?? 0) + WAITING_QUIET_MS } : undefined) },
   { rule: 'words', state: 'needs you', cause: 'words', lacks: 'no words of yours whose delivery stalled or timed out',
-    match: (f) => (f.words ? { why: `your words didn't reach it: their delivery ${f.words.outcome === 'timed_out' ? 'timed out' : 'stalled'}`, since: f.words.at?.ts ?? f.last_seen, waits_on: 'you', facts: [f.words.at] } : undefined) },
+    match: (f) => (f.words ? { why: f.words.outcome === 'timed_out' ? say('words_timed_out') : say('words_stalled'), since: f.words.at?.ts ?? f.last_seen, waits_on: 'you', facts: [f.words.at] } : undefined) },
   // A session whose hooks can't run sends no hook to say so (#993): stuck, never folded away as quiet.
   { rule: 'hooks', state: 'stuck', cause: 'stuck', lacks: 'its hooks can run',
-    match: (f) => (f.note?.startsWith(CANT_RUN) ? { why: 'BLOCKED: its hooks can\'t run, so its gates are watch-only; run `deep setup`', since: f.last_seen, waits_on: 'you', facts: [f.cantRun] } : undefined) },
+    match: (f) => (f.cantRun ? { why: say('hooks_cant_run'), since: f.last_seen, waits_on: 'you', facts: [f.cantRun] } : undefined) },
   { rule: 'stuck', state: 'stuck', cause: 'stuck', lacks: 'no stop blocked on you or a service',
-    match: (f) => (f.status === 'stuck' ? { why: `blocked on something only you or a service can clear${causeOf(f)}`, since: f.last_seen, waits_on: 'you', facts: [f.statusBy] } : undefined) },
+    match: (f) => (f.status === 'stuck' ? { why: f.stopCause ? say('blocked_on_cause', causeWords(f.stopCause)) : say('blocked_on'), since: f.last_seen, waits_on: 'you', facts: [f.statusBy] } : undefined) },
   { rule: 'gone', state: 'flagged', cause: 'gone', lacks: 'no process gone mid-turn',
-    match: (f) => (goneMidTurn(f) ? { why: 'its process is gone mid-turn', since: f.last_seen, waits_on: 'you', facts: [f.gone, f.statusBy] } : undefined) },
+    match: (f) => (goneMidTurn(f) ? { why: say('process_gone'), since: f.last_seen, waits_on: 'you', facts: [f.gone, f.statusBy] } : undefined) },
   { rule: 'promised', state: 'flagged', cause: 'promised', lacks: 'no promised check due',
-    match: (f) => (f.promised ? { why: `a promised check is due since ${clockTime(f.promised.due)}, waiting for its next prompt or stop: "${f.promised.quote}"`, plain: `a promised check is due, waiting for its next prompt or stop: "${f.promised.quote}"`, since: f.promised.due, waits_on: 'agent', facts: [f.promised.at] } : undefined) },
+    match: (f) => (f.promised ? { why: `a promised check is due since ${clockTime(f.promised.due)}, waiting for its next prompt or stop: "${f.promised.quote}"`, plain: say('promised_due', f.promised.quote), since: f.promised.due, waits_on: 'agent', facts: [f.promised.at] } : undefined) },
   { rule: 'failed', state: 'flagged', cause: 'failed', lacks: 'no turn ended failed',
-    match: (f) => (f.status === 'failed' ? { why: `its turn ended failed, with no claim${causeOf(f)}`, since: f.last_seen, waits_on: 'you', facts: [f.statusBy] } : undefined) },
+    match: (f) => (f.status === 'failed' ? { why: f.stopCause ? say('turn_failed_cause', causeWords(f.stopCause)) : say('turn_failed'), since: f.last_seen, waits_on: 'you', facts: [f.statusBy] } : undefined) },
   // A watch-only session's stop wasn't held, so a FAIL sent nothing back: it reads sent back only once a send-back
   // reached it (#2019). The planted wrong program reads sent back from the verdict alone.
   ((r: Rule): Rule => ({ ...r, lacks: `${r.lacks}, sent back to it`, match: (f, now) => (f.watch && !f.claim?.sent && activePlant() !== 'sent-back-without-hold' ? undefined : r.match(f, now)) }))(
-    judged('sent_back', 'sent back', 'sent_back', 'FAIL', (c) => ({ why: `its checks sent its claim back, round ${Math.max(1, c.round ?? 1)} of ${ROUNDS}`, waits_on: 'agent' }))),
+    judged('sent_back', 'sent back', 'sent_back', 'FAIL', (c) => ({ why: say('sent_back_round', Math.max(1, c.round ?? 1), ROUNDS), waits_on: 'agent' }))),
   judged('blocked', 'BLOCKED', 'blocked', 'BLOCKED', waitsFor),
   judged('invalid', 'INVALID', 'invalid', 'INVALID', waitsFor),
   judged('inconclusive', 'INCONCLUSIVE', 'inconclusive', 'INCONCLUSIVE', waitsFor),
   { rule: 'stale', state: 'stale', cause: 'stale', lacks: 'no verdict on a commit that has moved',
-    match: (f) => (f.claim?.stale ? { why: 'its verdict is on a commit that has moved since', since: f.claim.made.ts, waits_on: 'agent', facts: [f.claim.made, f.claim.judged, f.claim.stale] } : undefined) },
+    match: (f) => (f.claim?.stale ? { why: say('moved_commit'), since: f.claim.made.ts, waits_on: 'agent', facts: [f.claim.made, f.claim.judged, f.claim.stale] } : undefined) },
   { rule: 'says_done', state: 'says done', cause: 'says_done', lacks: 'no claim still waiting for its verdict',
-    match: (f) => (f.claim && f.claim.outcome === null ? { why: 'it says done, and its checks have given no verdict yet', since: f.claim.made.ts, waits_on: 'its checks', facts: [f.claim.made] } : undefined) },
+    match: (f) => (f.claim && f.claim.outcome === null ? { why: say('says_done'), since: f.claim.made.ts, waits_on: 'its checks', facts: [f.claim.made] } : undefined) },
   // A session waiting on its monitor (#997) is still at work.
   { rule: 'monitor', state: 'working', cause: 'working', lacks: 'no monitor it waits on',
     match: (f, now) => (f.status === 'finished' && f.watching && recent(f, now) ? { why: f.watching.text, since: f.last_seen, waits_on: 'agent', facts: [f.watching.at, f.statusBy], until: recentUntil(f) } : undefined) },
   { rule: 'working', state: 'working', cause: 'working', lacks: 'no turn in progress',
-    match: (f, now) => (f.status === 'working' && recent(f, now) ? { why: `last seen ${ago(f.last_seen, now)} ago`, plain: 'at work', since: f.last_seen, waits_on: 'agent', facts: [f.statusBy, f.seenBy], until: recentUntil(f) } : undefined) },
+    match: (f, now) => (f.status === 'working' && recent(f, now) ? { why: `last seen ${ago(f.last_seen, now)} ago`, plain: say('at_work'), since: f.last_seen, waits_on: 'agent', facts: [f.statusBy, f.seenBy], until: recentUntil(f) } : undefined) },
   // A session no hook has moved yet, with no task waiting for it: it started, and reads at work as it always has.
   { rule: 'started', state: 'working', cause: 'working', lacks: 'no start in the last day',
-    match: (f, now) => (f.status === 'running' && !f.queued && recent(f, now) ? { why: `last seen ${ago(f.last_seen, now)} ago`, plain: 'at work', since: f.last_seen, waits_on: 'agent', facts: [f.seenBy], until: recentUntil(f) } : undefined) },
+    match: (f, now) => (f.status === 'running' && !f.queued && recent(f, now) ? { why: `last seen ${ago(f.last_seen, now)} ago`, plain: say('at_work'), since: f.last_seen, waits_on: 'agent', facts: [f.seenBy], until: recentUntil(f) } : undefined) },
   { rule: 'queued', state: 'queued', cause: 'queued', lacks: 'no task it hasn\'t started',
-    match: (f, now) => (f.queued && f.status === 'running' && recent(f, now) ? { why: 'its task is queued, and its agent hasn\'t started it', since: f.queued.ts, waits_on: 'agent', facts: [f.queued], until: recentUntil(f) } : undefined) },
+    match: (f, now) => (f.queued && f.status === 'running' && recent(f, now) ? { why: say('task_queued'), since: f.queued.ts, waits_on: 'agent', facts: [f.queued], until: recentUntil(f) } : undefined) },
   { rule: 'pass', state: 'PASS', cause: 'pass', lacks: 'its newest claim has no PASS in force',
-    match: (f) => (f.claim && !f.claim.stale && f.claim.outcome === 'PASS' ? { why: 'its claim passed its checks', since: f.claim.made.ts, waits_on: null, facts: [f.claim.made, f.claim.judged] } : undefined) },
+    match: (f) => (f.claim && !f.claim.stale && f.claim.outcome === 'PASS' ? { why: say('claim_passed'), since: f.claim.made.ts, waits_on: null, facts: [f.claim.made, f.claim.judged] } : undefined) },
   { rule: 'interrupted', state: 'finished', cause: 'interrupted', lacks: 'no turn you interrupted',
-    match: (f, now) => (f.status === 'finished' && f.interrupted && recent(f, now) ? { why: `its turn was interrupted ${ago(f.last_seen, now)} ago`, plain: 'its turn was interrupted', since: f.last_seen, waits_on: 'you', facts: [f.interrupted, f.statusBy], until: recentUntil(f) } : undefined) },
+    match: (f, now) => (f.status === 'finished' && f.interrupted && recent(f, now) ? { why: `${say('turn_interrupted')} ${ago(f.last_seen, now)} ago`, plain: say('turn_interrupted'), since: f.last_seen, waits_on: 'you', facts: [f.interrupted, f.statusBy], until: recentUntil(f) } : undefined) },
   { rule: 'finished', state: 'finished', cause: 'finished', lacks: 'no turn stopped in the last day with nothing to judge',
-    match: (f, now) => { const at = f.stopped?.ts ?? f.last_seen; return f.status === 'finished' && recent(f, now) ? { why: `its turn stopped ${ago(at, now)} ago`, plain: 'its turn stopped', since: at, waits_on: 'you', facts: [f.stopped ?? f.statusBy, f.seenBy], until: recentUntil(f) } : undefined; } },
+    match: (f, now) => { const at = f.stopped?.ts ?? f.last_seen; return f.status === 'finished' && recent(f, now) ? { why: `${say('turn_stopped')} ${ago(at, now)} ago`, plain: say('turn_stopped'), since: at, waits_on: 'you', facts: [f.stopped ?? f.statusBy, f.seenBy], until: recentUntil(f) } : undefined; } },
   // Whatever is left: its hooks said unknown, a prompt it showed went unanswered, or no hook came in a day.
+  // A session on a host whose link is down (#999): its hooks spool there, so nothing says what it does now.
   { rule: 'quiet', state: 'quiet', cause: 'quiet', lacks: '',
-    match: (f, now) => ({ why: `last seen ${ago(f.last_seen, now)} ago`, plain: 'no hook since', since: f.last_seen, waits_on: 'agent', facts: [f.seenBy, f.statusBy] }) },
+    match: (f, now) => (f.linkDown ? { why: `the link to ${f.host ?? 'its host'} is down since ${clockTime(f.linkDown.ts)}, so its hooks spool there`, plain: f.host ? say('link_down', f.host) : say('link_down_host'), since: f.linkDown.ts, waits_on: 'agent', facts: [f.linkDown, f.statusBy] }
+      : { why: `last seen ${ago(f.last_seen, now)} ago`, plain: say('no_hook_since'), since: f.last_seen, waits_on: 'agent', facts: [f.seenBy, f.statusBy] }) },
 ];
 /** The words in the table's order (#2018): every surface and `--why` name the rows above a state by these. */
 export const WORDS: readonly State[] = [...new Set(TABLE.map((r) => r.state))];
@@ -236,25 +238,25 @@ export function repeatOf(calls: readonly Call[]): { what: string; key: string; c
 const FLAGS: readonly { code: FlagCode; match(f: SessionFacts, state: State): Omit<Flag, 'code' | 'facts'> & { facts: (Fact | undefined)[] } | undefined }[] = [
   { code: 'interrupted', match: (f) => {
     const doing = f.doing ? { doing: what(f.doing.call) } : {};
-    const during = f.doing ? ` while it ran ${ran(f.doing.call)}` : '';
+    const during = f.doing && ran(f.doing.call);
     // A usage limit is its newest stop's cause, whatever the stop's outcome, until it works again.
     if (f.stopped && LIMITS.has(f.stopCause ?? '') && !AT_WORK.has(f.status)) {
       return f.resets
-        ? { text: `a usage limit stopped it${during}; it can pick up at ${clockTime(f.resets)}`, since: f.stopped.ts, fix: `Prompt it again at ${clockTime(f.resets)}, when the limit resets.`, ...doing, until: f.resets, facts: [f.stopped, f.doing?.at] }
-        : { text: `a usage limit stopped it${during}; the limit names no time it resets`, since: f.stopped.ts, fix: 'Prompt it again once the limit resets.', ...doing, facts: [f.stopped, f.doing?.at] };
+        ? { text: during ? say('limit_resets_during', during, clockTime(f.resets)) : say('limit_resets', clockTime(f.resets)), since: f.stopped.ts, fix: say('limit_resets_fix', clockTime(f.resets)), ...doing, until: f.resets, facts: [f.stopped, f.doing?.at] }
+        : { text: during ? say('limit_stopped_during', during) : say('limit_stopped'), since: f.stopped.ts, fix: say('limit_stopped_fix'), ...doing, facts: [f.stopped, f.doing?.at] };
     }
-    return goneMidTurn(f) ? { text: `its process exited mid-turn${during}`, since: f.gone!.ts, fix: 'Resume it to pick up where it stopped.', ...doing, facts: [f.gone, f.doing?.at] } : undefined;
+    return goneMidTurn(f) ? { text: during ? say('process_exited_during', during) : say('process_exited'), since: f.gone!.ts, fix: say('process_exited_fix'), ...doing, facts: [f.gone, f.doing?.at] } : undefined;
   } },
   // The planted wrong program never reads a retry, so the row reads working through them.
   { code: 'retrying', match: (f) => {
     const cause = f.retries && (REFUSED[f.retries.cause] ?? 'with an error');
     return f.retries && cause && activePlant() !== 'retry-reads-working'
-      ? { text: `its model call was refused, ${cause}: retry ${f.retries.attempt}${f.retries.max ? ` of ${f.retries.max}` : ''}`, since: f.retries.first, cause, count: f.retries.attempt, facts: f.retries.at }
+      ? { text: f.retries.max ? say('model_retry_of', cause, f.retries.attempt, f.retries.max) : say('model_retry', cause, f.retries.attempt), since: f.retries.first, cause, count: f.retries.attempt, facts: f.retries.at }
       : undefined;
   } },
   { code: 'repeating', match: (f, state) => {
     const run = state === 'working' ? repeatOf(f.calls ?? []) : undefined;
-    return run && run.count >= REPEATS ? { text: `${ran(run.first)} failed ${run.count} times in a row with the same error${run.first.exit_code !== null ? ` (exit ${run.first.exit_code})` : ''}`, since: run.since, fix: 'Read the error before it runs it again.', command: run.what, count: run.count, facts: run.facts } : undefined;
+    return run && run.count >= REPEATS ? { text: run.first.exit_code !== null ? say('call_repeats_exit', ran(run.first), run.count, run.first.exit_code) : say('call_repeats', ran(run.first), run.count), since: run.since, fix: say('call_repeats_fix'), command: run.what, count: run.count, facts: run.facts } : undefined;
   } },
   { code: 'watch-only', match: (f, state) => {
     if (!f.watch || state === 'quiet') return undefined;
@@ -262,7 +264,7 @@ const FLAGS: readonly { code: FlagCode; match(f: SessionFacts, state: State): Om
     return { text: why, since: f.watch.at.ts, fix, facts: [f.watch.at] };
   } },
   { code: 'unpushed', match: (f) => (f.unpushed && f.unpushed.commits > 0 && !AT_WORK.has(f.status)
-    ? { text: `${f.unpushed.commits} commit${f.unpushed.commits === 1 ? '' : 's'}${f.unpushed.branch ? ` on ${f.unpushed.branch}` : ''} on no remote branch`, since: f.unpushed.at.ts, fix: 'Push the branch, or say why it stays here.', facts: [f.unpushed.at] }
+    ? { text: f.unpushed.commits === 1 ? (f.unpushed.branch ? say('unpushed_one_on', f.unpushed.branch) : say('unpushed_one')) : f.unpushed.branch ? say('unpushed_many_on', f.unpushed.commits, f.unpushed.branch) : say('unpushed_many', f.unpushed.commits), since: f.unpushed.at.ts, fix: say('unpushed_fix'), facts: [f.unpushed.at] }
     : undefined) },
 ];
 /** A session's one flag, the first that applies, from the same facts as its state. */
@@ -286,7 +288,9 @@ export function decide(f: SessionFacts, now: number): Reading {
     if (!hit) { lacked.push({ rule: row.rule, state: row.state, fact: row.lacks }); continue; }
     const facts = hit.facts.filter((x): x is Fact => x !== undefined).filter((x, i, all) => all.findIndex((y) => y.log_pos === x.log_pos) === i);
     const flag = flagOf(f, row.state);
-    return { id: f.id, project_id: f.project_id, agent: f.agent, worktree: f.worktree, state: row.state, cause: row.cause, rule: row.rule, why: hit.why, plain: hit.plain ?? hit.why, since: hit.since, waits_on: hit.waits_on, facts, lacked, ...(f.note ? { note: f.note } : {}), ...(flag ? { flag } : {}), ...(hit.until === undefined ? {} : { until: hit.until }) };
+    // A deep-hook outside the hub's contract says so on its sessions' rows, whatever their state (#999).
+    const said = f.skew ? ` · ${f.skew}` : '';
+    return { id: f.id, project_id: f.project_id, agent: f.agent, worktree: f.worktree, ...(f.host ? { host: f.host } : {}), state: row.state, cause: row.cause, rule: row.rule, why: `${hit.why}${said}`, plain: `${hit.plain ?? hit.why}${said}`, since: hit.since, waits_on: hit.waits_on, facts, lacked, ...(f.note ? { note: f.note } : {}), ...(flag ? { flag } : {}), ...(hit.until === undefined ? {} : { until: hit.until }) };
   }
   throw new Error(`no row of the state table matched session ${f.id}`);
 }
@@ -329,7 +333,17 @@ export async function sessionFacts(read: Query, only?: ReadonlySet<string>): Pro
   const placed = columns.has('status_at');
   // A row no event of its own made is no session: as the row a transcript.archived makes, which names the session by
   // its handle, its letters and digits, and so not by its ID.
-  const sessions = (await query(`SELECT s.id, s.project_id, s.agent, s.status, s.last_seen, s.worktree, ${columns.has('cause') ? 's.cause' : 'NULL AS cause'}, ${placed ? 'st.kind AS status_kind, st.ts AS status_ts, s.status_at, se.kind AS seen_kind, se.ts AS seen_ts, s.seen_at' : 'NULL AS status_kind, NULL AS status_ts, NULL AS status_at, NULL AS seen_kind, NULL AS seen_ts, NULL AS seen_at'} FROM sessions s${placed ? ' LEFT JOIN events st ON st.log_pos = s.status_at LEFT JOIN events se ON se.log_pos = s.seen_at' : ''} WHERE s.last_seen IS NOT NULL${of('s.id')}`)) as { id: string; project_id: string | null; agent: string | null; status: string; last_seen: number | null; worktree: string | null; cause: string | null; status_kind: string | null; status_ts: number | null; status_at: number | null; seen_kind: string | null; seen_ts: number | null; seen_at: number | null }[];
+  const sessions = (await query(`SELECT s.id, s.project_id, s.agent, s.status, s.last_seen, s.worktree, ${columns.has('host') ? 's.host' : 'NULL AS host'}, ${columns.has('cause') ? 's.cause' : 'NULL AS cause'}, ${placed ? 'st.kind AS status_kind, st.ts AS status_ts, s.status_at, se.kind AS seen_kind, se.ts AS seen_ts, s.seen_at' : 'NULL AS status_kind, NULL AS status_ts, NULL AS status_at, NULL AS seen_kind, NULL AS seen_ts, NULL AS seen_at'} FROM sessions s${placed ? ' LEFT JOIN events st ON st.log_pos = s.status_at LEFT JOIN events se ON se.log_pos = s.seen_at' : ''} WHERE s.last_seen IS NOT NULL${of('s.id')}`)) as { id: string; project_id: string | null; agent: string | null; status: string; last_seen: number | null; worktree: string | null; host: string | null; cause: string | null; status_kind: string | null; status_ts: number | null; status_at: number | null; seen_kind: string | null; seen_ts: number | null; seen_at: number | null }[];
+  // Each host's link as its newest host.link says (#999): down, from the first that said so with no return since.
+  const down = new Map<string, Fact>();
+  const skew = new Map<string, string>();
+  for (const l of (sessions.some((s) => s.host) ? await read(`SELECT json_extract(data, '$.host') AS host, json_extract(data, '$.up') AS up, json_extract(data, '$.hook_version') AS hook_version, json_extract(data, '$.hook_contract') AS hook_contract, json_extract(data, '$.hub_version') AS hub_version, json_extract(data, '$.hub_contract') AS hub_contract, ts, log_pos FROM events WHERE kind = 'host.link' ORDER BY log_pos`) : []) as { host: string; up: number; hook_version: string | null; hook_contract: string | null; hub_version: string | null; hub_contract: string | null; ts: number; log_pos: number }[]) {
+    if (!l.up) { if (!down.has(l.host)) down.set(l.host, { kind: 'host.link', ts: l.ts, log_pos: l.log_pos }); continue; }
+    down.delete(l.host);
+    // What each side speaks is read at each return of the link: the newest says whether they still agree.
+    if (majorsApart(l.hook_contract, l.hub_contract)) skew.set(l.host, outsideContract(l.host, l.hook_version, l.hook_contract!, l.hub_version, l.hub_contract!));
+    else skew.delete(l.host);
+  }
   const asks = new Map<string, { n: number; since: number | null; facts: Fact[] }>();
   for (const a of (await query(`SELECT a.session_id, a.created, e.ts, e.log_pos FROM asks a LEFT JOIN events e ON e.id = a.id WHERE a.status IN ('open', 'later') AND a.session_id IS NOT NULL${of('a.session_id')} ORDER BY a.created, a.id`)) as { session_id: string; created: number | null; ts: number | null; log_pos: number | null }[]) {
     const open = asks.get(a.session_id) ?? { n: 0, since: a.created, facts: [] };
@@ -345,27 +359,29 @@ export async function sessionFacts(read: Query, only?: ReadonlySet<string>): Pro
   // or a call DeepBuild denied that ran anyway (#1033).
   // Read with the two below in one statement (#2646), each reading with which of the three it is: one walk of the
   // sessions' events, where three statements walked them three times.
-  const said = (await query(`SELECT * FROM (SELECT r.session_id, json_extract(r.data, '$.reading') AS text, r.ts, r.log_pos,
-    (json_extract(r.data, '$.reading') LIKE '%watch-only%' OR json_extract(r.data, '$.reading') LIKE 'DeepBuild denied % and it ran anyway%' OR json_extract(r.data, '$.reading') LIKE 'Its Claude Code home loads no mod%' OR json_extract(r.data, '$.reading') LIKE 'Hooks can run again%' OR json_extract(r.data, '$.reading') LIKE '% ran unleased: %' OR (json_extract(r.data, '$.reading') LIKE 'This stop isn''t held%' AND NOT EXISTS (SELECT 1 FROM events later WHERE later.session_id = r.session_id AND later.log_pos > r.log_pos AND later.kind = 'user.ask' AND json_extract(later.data, '$.from') <> 'subagent'))) AS noted,
-    (json_extract(r.data, '$.reading') LIKE 'Waiting on its monitor%' AND NOT EXISTS (SELECT 1 FROM events later WHERE later.session_id = r.session_id AND later.log_pos > r.log_pos AND (later.kind = 'session.end' OR (later.kind = 'agent.stop' AND json_extract(later.data, '$.child') IS NULL) OR (later.kind = 'session.reading' AND json_extract(later.data, '$.reading') LIKE 'Its monitor%')))) AS watching,
-    (json_extract(r.data, '$.reading') LIKE 'Interrupt:%' AND NOT EXISTS (SELECT 1 FROM events a WHERE a.session_id = r.session_id AND a.kind = 'user.ask' AND a.log_pos > r.log_pos)) AS interrupted
-    FROM ${events('r')} WHERE r.kind = 'session.reading' AND r.session_id IS NOT NULL${of('r.session_id')}) WHERE noted OR watching OR interrupted ORDER BY log_pos`)) as { session_id: string; text: string; ts: number; log_pos: number; noted: number | null; watching: number | null; interrupted: number | null }[];
-  const noted = said.filter((r) => r.noted);
+  // Each reading is read by its code (#1456), and a reading recorded with none by the one table of earlier words.
+  // Each code is worked out once per reading (MATERIALIZED), not once for each place below that reads it.
+  const said = (await query(`WITH coded AS MATERIALIZED (SELECT r.session_id, json_extract(r.data, '$.reading') AS text, ${readingCode('r')} AS code, r.ts, r.log_pos FROM ${events('r')} WHERE r.kind = 'session.reading' AND r.session_id IS NOT NULL${of('r.session_id')}) SELECT * FROM coded r WHERE
+    (r.code IN (${NOTED.map((c) => `'${c}'`).join(', ')}) AND (r.code <> 'stop_not_held' OR NOT EXISTS (SELECT 1 FROM events later WHERE later.session_id = r.session_id AND later.log_pos > r.log_pos AND later.kind = 'user.ask' AND json_extract(later.data, '$.from') <> 'subagent')))
+    OR (r.code = 'monitor_waiting' AND NOT EXISTS (SELECT 1 FROM events later WHERE later.session_id = r.session_id AND later.log_pos > r.log_pos AND (later.kind = 'session.end' OR (later.kind = 'agent.stop' AND json_extract(later.data, '$.child') IS NULL) OR (later.kind = 'session.reading' AND ${readingCode('later')} = 'monitor_ended'))))
+    OR (r.code = 'interrupted' AND NOT EXISTS (SELECT 1 FROM events a WHERE a.session_id = r.session_id AND (a.kind = 'user.ask' OR (a.kind = 'session.activity' AND json_extract(a.data, '$.activity') = 'turn_start')) AND a.log_pos > r.log_pos))
+    ORDER BY r.log_pos`)) as { session_id: string; text: string; code: ReadingCode; ts: number; log_pos: number }[];
+  const noted = said.filter((r) => NOTED.includes(r.code));
   // Hooks that can run again (#993) take back each "hooks can't run" before them, and show nothing of their own.
-  const notes = new Map<string, { text: string; at: Fact }>();
-  const shown = new Map<string, { text: string; at: Fact }[]>();
+  const notes = new Map<string, { text: string; code: ReadingCode; at: Fact }>();
+  const shown = new Map<string, { text: string; code: ReadingCode; at: Fact }[]>();
   for (const r of noted) {
     const kept = shown.get(r.session_id) ?? [];
     // A home that no longer loads an overriding mod takes back its watch-only line the same way (#1033).
-    shown.set(r.session_id, r.text.startsWith(CAN_RUN) ? kept.filter((t) => !t.text.startsWith(CANT_RUN)) : r.text.startsWith(MODS_GONE) ? kept.filter((t) => !t.text.startsWith(MODS_WATCH)) : [...kept, { text: r.text, at: { kind: 'session.reading', ts: r.ts, log_pos: r.log_pos } }]);
+    shown.set(r.session_id, r.code === 'hooks_run_again' ? kept.filter((t) => t.code !== 'hooks_cant_run') : r.code === 'mods_gone' ? kept.filter((t) => t.code !== 'mods_watch') : [...kept, { text: r.text, code: r.code, at: { kind: 'session.reading', ts: r.ts, log_pos: r.log_pos } }]);
     const last = shown.get(r.session_id)!.at(-1);
     if (last) notes.set(r.session_id, last);
     else notes.delete(r.session_id);
   }
   // A session waiting on its monitor (#997): the newest of its monitor readings says so, with no stop of its own or end since.
-  const watching = new Map(said.filter((r) => r.watching).map((r) => [r.session_id, { text: r.text, at: { kind: 'session.reading', ts: r.ts, log_pos: r.log_pos } }]));
-  // A turn you interrupted, with no prompt since (#39).
-  const interrupted = new Map(said.filter((r) => r.interrupted).map((r) => [r.session_id, { kind: 'session.reading', ts: r.ts, log_pos: r.log_pos }]));
+  const watching = new Map(said.filter((r) => r.code === 'monitor_waiting').map((r) => [r.session_id, { text: r.text, at: { kind: 'session.reading', ts: r.ts, log_pos: r.log_pos } }]));
+  // A turn you interrupted, with no prompt or turn start since (#39, #3430).
+  const interrupted = new Map(said.filter((r) => r.code === 'interrupted').map((r) => [r.session_id, { kind: 'session.reading', ts: r.ts, log_pos: r.log_pos }]));
   // Each session's newest stop of its own: a hook after it, such as Claude Code's idle-prompt notification, is no later
   // stop, and nor is a subagent's.
   // With when the limit that stopped it resets, where the stop names that (#2019).
@@ -377,9 +393,13 @@ export async function sessionFacts(read: Query, only?: ReadonlySet<string>): Pro
   // An answer of yours whose delivery stalled or timed out (#2018), as the newest outcome its delivery recorded. A
   // database older than the deliveries table has none.
   const words = new Map<string, { outcome: string; at?: Fact }>();
-  for (const d of (await query(`SELECT a.session_id, a.id, d.outcome FROM deliveries d JOIN asks a ON a.id = d.delivery WHERE d.outcome IN ('stalled', 'timed_out') AND a.session_id IS NOT NULL${of('a.session_id')}`).catch(() => [])) as { session_id: string; id: string; outcome: string }[]) {
-    const [at] = (await query(`SELECT ts, log_pos FROM events WHERE kind = 'delivery.outcome' AND json_extract(data, '$.delivery') = ${quoted(`ask:${d.id}`)} ORDER BY log_pos DESC LIMIT 1`)) as { ts: number; log_pos: number }[];
-    words.set(d.session_id, { outcome: d.outcome, ...(at ? { at: { kind: 'delivery.outcome', ts: at.ts, log_pos: at.log_pos } } : {}) });
+  // Each with its delivery's newest outcome, read in one statement through the index on the delivery (#3389): a statement
+  // an answer, each stepping every outcome in the record, was half of a pass over a month's sessions.
+  for (const d of (await query(`SELECT a.session_id, d.outcome, e.ts, MAX(e.log_pos) AS log_pos FROM deliveries d JOIN asks a ON a.id = d.delivery
+    LEFT JOIN events e ON e.kind = 'delivery.outcome' AND json_extract(e.data, '$.delivery') = 'ask:' || d.delivery
+    WHERE d.outcome IN ('stalled', 'timed_out') AND a.session_id IS NOT NULL${of('a.session_id')} GROUP BY d.rowid`).catch(() => [])) as { session_id: string; outcome: string; ts: number | null; log_pos: number | null }[]) {
+    const at = fact('delivery.outcome', d.ts, d.log_pos);
+    words.set(d.session_id, { outcome: d.outcome, ...(at ? { at } : {}) });
   }
   // A task of the session's thread that no turn has started: read only for a session no hook has moved yet.
   const waiting = sessions.filter((s) => s.status === 'running').map((s) => s.id);
@@ -394,8 +414,9 @@ export async function sessionFacts(read: Query, only?: ReadonlySet<string>): Pro
     const note = notes.get(s.id);
     return {
       id: s.id, project_id: s.project_id, agent: s.agent, worktree: s.worktree, status: s.status, stopCause: s.cause, last_seen: s.last_seen,
+      ...(s.host ? { host: s.host, ...(down.has(s.host) && !['finished', 'failed', 'stuck'].includes(s.status) ? { linkDown: down.get(s.host)! } : {}), ...(skew.has(s.host) ? { skew: skew.get(s.host)! } : {}) } : {}),
       ...(statusBy ? { statusBy } : {}), ...(seenBy ? { seenBy } : {}), ...(asks.has(s.id) ? { asks: asks.get(s.id)! } : {}), ...(gone.has(s.id) ? { gone: gone.get(s.id)! } : {}),
-      ...(words.has(s.id) ? { words: words.get(s.id)! } : {}), ...(note ? { note: note.text, ...(note.text.startsWith(CANT_RUN) ? { cantRun: note.at } : {}) } : {}),
+      ...(words.has(s.id) ? { words: words.get(s.id)! } : {}), ...(note ? { note: note.text, ...(note.code === 'hooks_cant_run' ? { cantRun: note.at } : {}) } : {}),
       ...(due.has(s.id) ? { promised: due.get(s.id)! } : {}), ...(watching.has(s.id) ? { watching: watching.get(s.id)! } : {}), ...(interrupted.has(s.id) ? { interrupted: interrupted.get(s.id)! } : {}),
       ...(stops.has(s.id) ? { stopped: stops.get(s.id)! } : {}), ...(resets.has(s.id) ? { resets: resets.get(s.id)! } : {}), ...(claims.has(s.id) ? { claim: claims.get(s.id)! } : {}), ...(queued.has(s.id) ? { queued: queued.get(s.id)! } : {}),
       ...(flags.doing.has(s.id) ? { doing: flags.doing.get(s.id)! } : {}), ...(flags.retries.has(s.id) ? { retries: flags.retries.get(s.id)! } : {}), ...(flags.calls.has(s.id) ? { calls: flags.calls.get(s.id)! } : {}),
@@ -532,12 +553,16 @@ export async function statusRows(query: (sql: string) => Promise<unknown[]>, now
   const codex = rows.filter((r) => r.agent === 'codex');
   const readings = await rowReadings(query, codex.map((r) => r.id), now, elapsed);
   for (const row of codex) if (readings.has(row.id)) row.readings = readings.get(row.id)!;
-  // The newest older-or-current set reading of each session: an older one stays on its row (#148).
-  const sets = (await query(`SELECT session_id, json_extract(data, '$.reading') AS text FROM events WHERE kind = 'session.reading' AND (json_extract(data, '$.reading') LIKE '${OLDER_SET}%' OR json_extract(data, '$.reading') LIKE '${NEWER_SET}%') ORDER BY log_pos`)) as { session_id: string; text: string }[];
-  const newest = new Map(sets.map((r) => [r.session_id, r.text]));
+  // The newest older-or-current set reading of each session: an older one stays on its row (#148). So does the newest
+  // reading of the mode its turn started in (#3429), until a turn of its starts in a mode that asks.
+  const standing = (await query(`WITH coded AS MATERIALIZED (SELECT r.session_id, json_extract(r.data, '$.reading') AS text, ${readingCode('r')} AS code, r.log_pos FROM events r WHERE r.kind = 'session.reading') SELECT * FROM coded WHERE code IN ('older_set', 'newer_set', ${MODE_CODES.map((c) => `'${c}'`).join(', ')}) ORDER BY log_pos`)) as { session_id: string; text: string; code: ReadingCode }[];
+  const newest = new Map(standing.filter((r) => !MODE_CODES.includes(r.code)).map((r) => [r.session_id, r]));
+  const modes = new Map(standing.filter((r) => MODE_CODES.includes(r.code)).map((r) => [r.session_id, r]));
   for (const row of rows) {
-    const text = newest.get(row.id);
-    if (text?.startsWith(OLDER_SET)) row.readings = [...(row.readings ?? []), text];
+    const set = newest.get(row.id);
+    if (set?.code === 'older_set') row.readings = [...(row.readings ?? []), set.text];
+    const mode = modes.get(row.id);
+    if (mode && mode.code !== 'mode_asks') row.readings = [...(row.readings ?? []), mode.text];
   }
   return rows;
 }

@@ -10,9 +10,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use deep_canvas::document::packs::Resolved;
-use deep_canvas::document::{CheckResult, Expansion, Issue, Pack, Packs};
+use deep_canvas::document::{CheckResult, Expansion, Issue, Pack, PackPlanted, Packs};
 use deep_canvas::registry::Sealed;
 use serde_json::{json, Map, Value};
+
+pub mod checked;
 
 /// One pack version offered to the store.
 pub struct Row {
@@ -24,10 +26,13 @@ pub struct Row {
     pub layouts: Vec<Value>,
 }
 
-/// The half of the pack check that runs a pack's programs, after the core's half admitted it:
-/// its layouts' rows and the issues that refuse it (#238).
-pub type Vet<'v> =
-    &'v mut dyn FnMut(&Value, &deep_canvas::document::Pack) -> (Vec<Value>, Vec<Issue>);
+pub struct Offer<'o> {
+    pub id: &'o str,
+    pub dir: &'o Path,
+    pub twin: Option<&'o str>,
+    pub evidence: &'o Path,
+    pub kept: Option<&'o checked::Store>,
+}
 
 /// Reads a pack folder as one manifest: `pack.json`, its `id` set to `owner/name`, and each
 /// `recipes` entry's file inlined.
@@ -50,12 +55,20 @@ thread_local! {
 /// The logic module's check of the pack version whose manifest hashes to `version`: `check` runs
 /// once a process, as the rest of the version's check does (#3044).
 pub fn lib_check(version: &str, check: impl FnOnce() -> Value) -> Value {
-    if let Some(reply) = LIB_CHECKS.with(|c| c.borrow().get(version).cloned()) {
+    if let Some(reply) = lib_kept(version) {
         return reply;
     }
     let reply = check();
-    LIB_CHECKS.with(|c| c.borrow_mut().insert(version.to_string(), reply.clone()));
+    lib_take(version, reply.clone());
     reply
+}
+
+pub fn lib_kept(version: &str) -> Option<Value> {
+    LIB_CHECKS.with(|c| c.borrow().get(version).cloned())
+}
+
+pub fn lib_take(version: &str, reply: Value) {
+    LIB_CHECKS.with(|c| c.borrow_mut().insert(version.to_string(), reply));
 }
 
 /// #1958: the store's sweep deleted `owner/name@version`: this process holds it no more.
@@ -98,13 +111,19 @@ pub fn install(
     packs: &mut Packs,
     rows: &mut Vec<Row>,
     sealed: &Sealed,
-    id: &str,
-    dir: &Path,
-    twin: Option<&str>,
-    vet: Vet<'_>,
+    host: &mut crate::sandbox::Host,
+    offer: Offer<'_>,
 ) -> Value {
     // #161: the pack check's wall time, from reading the folder to its verdict.
     let started = std::time::Instant::now();
+    let before = checked::reading(packs, host);
+    let Offer {
+        id,
+        dir,
+        twin,
+        evidence,
+        kept,
+    } = offer;
     let mut layouts = Vec::new();
     let key = (id.to_string(), dir.to_path_buf());
     let known = twin
@@ -115,38 +134,100 @@ pub fn install(
         Some((manifest, pack)) => Ok((manifest, Some(pack))),
         None => load(id, dir).map(|manifest| (manifest, None)),
     };
+    let as_json = |issues: &[Issue]| issues.iter().map(Issue::to_json).collect::<Vec<Value>>();
     let (version, outcome, issues) = match loaded {
-        Err(issues) => (String::new(), "refused", issues),
+        Err(issues) => (String::new(), "refused", as_json(&issues)),
         Ok((mut manifest, known)) => {
             if let Some(planted) = twin {
                 crate::familiar::twin(planted, id, &mut manifest);
                 crate::math_twins::twin(planted, id, &mut manifest);
             }
             let version = manifest["version"].as_str().unwrap_or_default().to_string();
-            let admitted = match known {
-                Some(pack) => Ok(packs.readmit(pack).clone()),
-                None => packs.admit(&manifest, sealed).cloned(),
-            };
-            match admitted {
-                Ok(pack) => {
-                    let (rows, issues) = vet(&manifest, &pack);
-                    layouts = rows;
-                    if issues.is_empty() {
-                        if twin.is_none() {
-                            ADMITTED.with(|a| a.borrow_mut().insert(key, (manifest, pack)));
-                        }
-                        (version, "installed", Vec::new())
-                    } else {
-                        packs.withdraw(&pack.id.text());
-                        (version, "refused", issues)
-                    }
+            let held = packs.get(&format!("{id}@{version}")).is_some();
+            let row = kept
+                .filter(|_| twin.is_none() && known.is_none() && !held)
+                .filter(|_| manifest.get("providers").is_none())
+                .map(|store| store.bound(&manifest, packs));
+            let taken = row.as_ref().and_then(|row| row.read(evidence));
+            let taken = taken.and_then(|found| match found.refused {
+                true => {
+                    packs.refuse_kept(&format!("{id}@{version}"), &found.issues);
+                    host.refuse_kept(&format!("{id}@{version}"), &found.left["programs"]);
+                    Some((None, found))
                 }
-                Err(issues) => (version, "refused", issues),
-            }
+                false => {
+                    let core = (found.left.get("core"))
+                        .and_then(|left| packs.admit_kept(&manifest, sealed, left).cloned());
+                    let pack = core.and_then(|pack| {
+                        if host.take_kept(&manifest, &pack, sealed, &found.left["programs"]) {
+                            return Some(pack);
+                        }
+                        packs.withdraw(&pack.id.text());
+                        None
+                    });
+                    (pack.is_some() || found.forced).then_some((pack, found))
+                }
+            });
+            let (outcome, issues) = match taken {
+                Some((pack, found)) => {
+                    layouts = found.layouts;
+                    if let Some(pack) = pack {
+                        ADMITTED.with(|a| a.borrow_mut().insert(key, (manifest, pack)));
+                    }
+                    (
+                        if found.refused {
+                            "refused"
+                        } else {
+                            "installed"
+                        },
+                        found.issues,
+                    )
+                }
+                None => {
+                    let admitted = match known {
+                        Some(pack) => Ok(packs.readmit(pack).clone()),
+                        None => packs.admit(&manifest, sealed).cloned(),
+                    };
+                    let (left, issues) = match admitted {
+                        Ok(pack) => {
+                            let (rows, mut issues) = host.vet(&manifest, &pack, sealed);
+                            issues.extend(kind_meshes(&pack, sealed, evidence));
+                            layouts = rows;
+                            let ours = pack.id.text();
+                            if issues.is_empty() {
+                                let programs = host.left(&manifest, &pack);
+                                let left =
+                                    programs.map(|p| json!({"core": pack.left(), "programs": p}));
+                                if twin.is_none() {
+                                    ADMITTED.with(|a| a.borrow_mut().insert(key, (manifest, pack)));
+                                }
+                                (left, issues)
+                            } else {
+                                packs.withdraw(&ours);
+                                (Some(json!({"programs": host.refusal(&ours)})), issues)
+                            }
+                        }
+                        Err(issues) => (Some(json!({"programs": null})), issues),
+                    };
+                    let issues = as_json(&issues);
+                    if let (Some(row), Some(left)) = (&row, &left) {
+                        row.write(!issues.is_empty(), &issues, &layouts, left);
+                    }
+                    (
+                        if issues.is_empty() {
+                            "installed"
+                        } else {
+                            "refused"
+                        },
+                        issues,
+                    )
+                }
+            };
+            (version, outcome, issues)
         }
     };
+    checked::ran(before, checked::reading(packs, host));
     let check_ms = started.elapsed().as_secs_f64() * 1e3;
-    let issues: Vec<Value> = issues.iter().map(Issue::to_json).collect();
     // One row per version: a refused republish leaves the row of the version first published,
     // and a version offered again after a refusal takes its row once admitted.
     match rows
@@ -189,7 +270,7 @@ pub fn rows_reply(rows: &[Row], packs: &Packs) -> Value {
             })
         })
         .collect();
-    json!({"packs": list})
+    json!({"packs": list, "counts": checked::counts()})
 }
 
 /// `expansions` on a reply: one row per recipe instance, sorted by instance; `timing` when the
@@ -445,6 +526,72 @@ pub fn notes(list: Option<&Value>) -> Option<Vec<Value>> {
             Some(n.clone())
         })
         .collect()
+}
+
+/// #1857's wrong programs of the expansion, by the names its acceptance suite gives them: a
+/// count that refuses nothing until everything is expanded, and a nested recipe step that copies
+/// the document's items for each nested instance.
+pub const PLANTED: [&str; 2] = ["expansion_counts_after", "expansion_copies_items"];
+
+/// The expansion's and the pack check's wrong programs the scenario plants.
+pub(crate) fn planted(scenario: &crate::hub::Scenario) -> PackPlanted {
+    use crate::hub::Planted;
+    let module = scenario.module_planted.as_deref();
+    PackPlanted {
+        seed_by_order: scenario.planted == Some(Planted::SeedsByExpansionOrder),
+        drops_stroke: scenario.planted == Some(Planted::ExpansionDropsStroke),
+        overwrite_broken_out: scenario.planted == Some(Planted::ReexpansionOverwritesBrokenOut),
+        skip_requires_modules: scenario.planted == Some(Planted::PackCheckSkipsRequiresModules),
+        key_by_name: matches!(
+            scenario.planted,
+            Some(Planted::PacksKeyedByName | Planted::LoaderDrawsMissingWithInstalled)
+        ),
+        each_by_count: scenario.planted == Some(Planted::EachSeedsByElementCount),
+        each_per_triangle: scenario.planted == Some(Planted::EachFacePerTriangle),
+        orphan_drops: scenario.planted == Some(Planted::OrphanLoadDropsBrokenOut),
+        orphan_hands_id: scenario.planted == Some(Planted::OrphanLoadHandsIdToExpansion),
+        rules_twice: scenario.planted == Some(Planted::RulesEvaluatedTwice),
+        kit_defaults_only: scenario.planted == Some(Planted::KitDefaultsOnly),
+        migration_first_fault: scenario.planted == Some(Planted::MigrationFirstFault),
+        migrate_one_major: scenario.planted == Some(Planted::MigrationOneMajor),
+        migrate_zero_as_absent: scenario.planted == Some(Planted::MigrationZeroAsLeftOut),
+        migrate_params_only: matches!(
+            scenario.planted,
+            Some(Planted::MigrationRenamesParamsOnly | Planted::MoveRewritesKindOnly)
+        ),
+        migrate_channels_only: scenario.planted
+            == Some(Planted::MigrationRewritesChannelTargetsOnly),
+        drops_moved: scenario.planted == Some(Planted::LoaderDropsMovedInstances),
+        walk_inputs: (scenario.planted == Some(Planted::ExpandsInHashOrder))
+            .then_some(walk_in_hash_order as deep_canvas::document::packs::WalkInputs),
+        // #222: the planted cue-list expander.
+        expander: scenario
+            .module_planted
+            .as_deref()
+            .filter(|p| deep_canvas_motion::cues::planted(p))
+            .map(|p| &*Box::leak(p.to_string().into_boxed_str())),
+        counts_after_expanding: module == Some(PLANTED[0]),
+        copies_items_per_nested: module == Some(PLANTED[1]),
+    }
+}
+
+/// #202's planted expander: an instance's inputs walked through a std hash map, whose order a
+/// fresh random state picks, so two expansions of one example differ in their bytes. It redraws
+/// until the order differs from the previous walk's, which three inputs would match by chance.
+fn walk_in_hash_order(inputs: serde_json::Map<String, Value>) -> serde_json::Map<String, Value> {
+    thread_local! {
+        static LAST: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
+    }
+    let last = LAST.with(|l| l.borrow().clone());
+    for _ in 0..64 {
+        let walked: std::collections::HashMap<String, Value> = inputs.clone().into_iter().collect();
+        let order: Vec<String> = walked.keys().cloned().collect();
+        if order != last || inputs.len() < 2 {
+            LAST.with(|l| *l.borrow_mut() = order);
+            return walked.into_iter().collect();
+        }
+    }
+    inputs
 }
 
 /// The planted cache (#1961): each expansion of `doc`'s instances kept by the instance's kind

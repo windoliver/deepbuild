@@ -14,6 +14,7 @@ import type { Asks, Delivery } from '../../../packages/asks/src/index.ts';
 import { BudgetRefused, openLedger } from '../../../packages/budget/src/index.ts';
 import type { BudgetView, Ledger, Outcome, RunRequest, ScopeKind } from '../../../packages/budget/src/index.ts';
 import { ENDS, makeClock, ulid, type Clock } from './data.ts';
+import { withDeclared } from '../declared.ts';
 
 export * from './data.ts';
 
@@ -102,7 +103,7 @@ export async function openWorld(plant: Planting = {}, dir = mkdtempSync(join(tmp
     }
     return kind ? all.filter((e) => e.kind === kind) : all;
   };
-  const asks = await openAsks({ record, now: clock.now, deliver: (d) => { deliveries.push(d); } });
+  const asks = withDeclared(await openAsks({ record, now: clock.now, deliver: (d) => { deliveries.push(d); } }));
   w.asks = asks;
   const ledger = await openLedger({ record, asks, now: clock.now, price });
   w.ledger = plant.ledger ? plant.ledger(ledger, w) : ledger;

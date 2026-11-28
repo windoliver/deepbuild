@@ -19,7 +19,7 @@ use crate::grammar::{
 use crate::kinds::{
     lookup, parse_kind, parse_required, Entry, Lookup, ParamType, Registry, Version,
 };
-use crate::registry::{self, core_name, Cost, Range, Rule, Sealed, SealedModule};
+use crate::registry::{self, core_name, Cost, Range, Rule, Sealed, SealedModule, Semver};
 
 /// The closed list of item roles.
 const ROLES: &[&str] = &["part", "control", "label", "data", "decoration"];
@@ -141,7 +141,7 @@ fn check_by(
 ) -> CheckResult {
     let mut lowered = copy_of(doc);
     let mut head = lower(doc, lowered.get_mut("items"), sealed, kinds, packs);
-    settle(&mut lowered, &head, packs);
+    settle(&mut lowered, &mut head, packs);
     finish(&lowered, &mut head, sealed, kinds, coefficients, sizes);
     let Head {
         mut issues,
@@ -404,24 +404,12 @@ fn lower<'a>(
 }
 
 /// What lowering writes beyond the items: `lowered` is the document with its lowered items.
-fn settle(lowered: &mut Value, head: &Head<'_>, packs: &Packs) {
-    let expansions = &head.expansions;
+fn settle(lowered: &mut Value, head: &mut Head<'_>, packs: &Packs) {
     // A rename carries every path that names the param it renames (#1960).
     super::pack_kinds::migrate::carry_paths(lowered, &head.resolved, packs.planted);
     // A recipe's channels join the document's, targeting the items it derived (#420).
-    let recipe_channels: Map<String, Value> =
-        expansions.iter().flat_map(|e| e.channels.clone()).collect();
-    if !recipe_channels.is_empty() {
-        if let Some(doc) = lowered.as_object_mut() {
-            let channels = doc
-                .entry("channels")
-                .or_insert_with(|| Value::Object(Map::new()));
-            if let Some(map) = channels.as_object_mut() {
-                map.extend(recipe_channels);
-            }
-        }
-    }
-    super::expands::merge(lowered, expansions);
+    super::expands::join_channels(lowered, &head.expansions, &mut head.issues);
+    super::expands::merge(lowered, &head.expansions);
 }
 
 /// The last part of a check, added to `head`: the module checks, the budget estimate and the
@@ -451,6 +439,7 @@ fn finish(
                 Tail::Document => {
                     check_id_maps(lowered, &mut issues);
                     check_controls(lowered, sealed, &mut issues);
+                    check_control_reads(lowered, sealed, &mut issues);
                     check_constraints(lowered, sealed, &mut issues);
                     check_assemblies(lowered, &mut issues);
                     check_viewer_tools(lowered, &mut issues);
@@ -982,7 +971,7 @@ fn recheck_by(
                     .any(|(id, item)| o.op.applies.is_none_or(|a| a(doc, id, item)))
             })
         });
-    if !maps_empty || sealed.has_costs() || costly || packed {
+    if !maps_empty || sealed.has_costs() || costly || packed || member(doc, "budget").is_some() {
         return None;
     }
     let items = member(doc, "items")?.as_object()?;
@@ -1085,7 +1074,7 @@ fn recheck_by(
         // Lowering writes members besides the items: it writes them on a copy.
         let mut copy = lent.doc.clone();
         copy["items"] = lowered;
-        settle(&mut copy, &head, packs);
+        settle(&mut copy, &mut head, packs);
         finish(&copy, &mut head, sealed, kinds, None, &Sizes::new());
     } else {
         lent.swap(lowered);
@@ -1290,11 +1279,20 @@ fn required_minors(doc: &Value, sealed: &Sealed, issues: &mut Vec<Issue>) -> BTr
         let wrong = |what: &str| Issue::envelope("out_of_range", path.clone(), value.clone(), what);
         match field.as_str() {
             "kinds" => {}
-            "core" => {
-                if !value.is_string() {
-                    issues.push(wrong("not a version"));
+            // The core the document needs against the build's own (#2058): a newer one changed
+            // meanings this build would misread, so the document is refused as a module at
+            // another version is.
+            "core" => match value.as_str().and_then(Semver::parse) {
+                None => issues.push(wrong("not a version")),
+                Some(needs) => {
+                    let build = registry::core_semver();
+                    if needs > build {
+                        issues.push(wrong(&format!(
+                            "the document requires core {needs}; this build has core {build}"
+                        )));
+                    }
                 }
-            }
+            },
             "modules" => match value.as_object() {
                 Some(modules) => {
                     for (module, range) in modules {
@@ -2080,6 +2078,22 @@ fn check_key(section: &str, key: &str, issues: &mut Vec<Issue>) {
             format!("{section}/{key}"),
             json!(key),
             &r.what,
+        ));
+    }
+}
+
+/// A declared field that reads a control the document doesn't hold (#3379): `ref_unresolved`
+/// at the field, so a revision that removes or renames a control something still reads is
+/// refused, as one that removes an item something names is.
+fn check_control_reads(doc: &Value, sealed: &Sealed, issues: &mut Vec<Issue>) {
+    for (id, path, control) in crate::refs::unresolved_controls(doc, sealed) {
+        let what = format!("{id} reads the control {control}, which the document doesn't hold");
+        issues.push(Issue::error(
+            "ref_unresolved",
+            &id,
+            path,
+            json!(control),
+            &what,
         ));
     }
 }
