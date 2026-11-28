@@ -253,7 +253,8 @@ try {
   const base = run('git', ['ls-tree', '--name-only', baseCommit, manifest]).trim()
     ? JSON.parse(run('git', ['show', `${baseCommit}:${manifest}`])) : null;
   // A limit only moves down: a raise passes only by an approved proposal on the change's commits (#2665).
-  validateBudgets(current, base, approvedItems(root, baseCommit, 'HEAD'));
+  const approved = approvedItems(root, baseCommit, 'HEAD');
+  validateBudgets(current, base, approved);
   if (!current.preflight) throw Error('missing preflight budget');
   // Each copy's checks may run as long as the budget allows this checkout's, margin included.
   const allowance = current.preflight.limits.elapsedMs * (1 + current.preflight.margin);
@@ -331,14 +332,16 @@ try {
     const established = base?.tasks?.find(({ id }) => id === budget.id);
     let judged;
     try {
-      judged = judgeTask(budget, established, root, archive, fingerprint);
+      judged = judgeTask(budget, established, root, archive, fingerprint, approved);
     } catch (error) {
       verdicts.push(['BLOCKED', `${budget.id}: ${error.message}`, 'Build the measured command; the check lanes build it.']);
       continue;
     }
-    const { now, then, machine, limits, instructions, outcome, regression } = judged;
+    const { now, then, machine, limits, instructions, work, lowering, outcome, regression } = judged;
     if (regression) verdicts.push(['FAIL', regression, regressed]);
     console.log(JSON.stringify({ task: budget.id, baseCommit, ...outcome, current: now, base: then, counter, fingerprint: machine, limits, ...instructions && { instructions } }));
+    if (work?.status === 'INCONCLUSIVE') verdicts.push(['INCONCLUSIVE', `${budget.id}: work: ${work.reason}`, `Have ${budget.id}'s run do the merge base's work and report it, or have the maintainer approve the change that means to do other work.`]);
+    if (lowering) verdicts.push(['BLOCKED', lowering.reason, `Restore ${budget.id}'s ceiling; a later change lowers it once the merge base's runs report this work too.`]);
     // #854: a task with targets is held to them by its bench's judge, on one more run's report; the judge refuses a
     // reading of any build but release.
     if (budget.targets) {
