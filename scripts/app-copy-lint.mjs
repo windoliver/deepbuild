@@ -175,7 +175,7 @@ function rustFiles(dir) {
 }
 
 /** The lint's findings over the app's source under `root`. */
-export function lint(root, tablesRoot = root) {
+export function lint(root, tablesRoot) {
   const found = [];
   const gated = featureOnly(root);
   const { source } = readTables(tablesRoot);
@@ -291,7 +291,7 @@ const main = () => {
     console.log('PASS copy release');
     return;
   }
-  const sourceAlone = root !== resolve(checkout) && !existsSync(join(root, SOURCE, '..', 'Cargo.toml'));
+  const sourceAlone = readdirSync(join(root, SOURCE, '..')).join() === 'src';
   if (!existsSync(join(root, TABLES)) && !sourceAlone) {
     console.error(`FAIL copy: no copy tables at ${join(root, TABLES)}`);
     process.exit(1);
