@@ -536,6 +536,31 @@
      }
     }
    }
+  },
+  "two-rooms": {
+   "seed": 556,
+   "class": "figure",
+   "controls": {},
+   "items": {
+    "rooms": {
+     "kind": "logic@1",
+     "params": {
+      "program": "two-rooms.wasm",
+      "step_rate": 60,
+      "reads": [],
+      "writes": {
+       "cells": {
+        "type": "i32",
+        "count": 25
+       },
+       "cell": {
+        "type": "i32",
+        "count": 2
+       }
+      }
+     }
+    }
+   }
   }
  },
  "plays": {
@@ -731,6 +756,38 @@
    },
    "units": {
     "cell": "floors.cell",
+    "self": 0
+   }
+  },
+  "two-rooms": {
+   "grid": {
+    "cells": "rooms.cells",
+    "size": [
+     5,
+     5
+    ],
+    "shape": "square",
+    "moves": 4,
+    "classes": {
+     "open": [
+      0
+     ],
+     "blocked": [
+      1
+     ],
+     "door": [
+      2
+     ],
+     "key": [
+      4
+     ],
+     "exit": [
+      5
+     ]
+    }
+   },
+   "units": {
+    "cell": "rooms.cell",
     "self": 0
    }
   }

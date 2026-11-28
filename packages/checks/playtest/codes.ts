@@ -1,7 +1,7 @@
 // The playtest's codes in the check catalog, under the plug-in (Check input: playtest), each with its meaning and fix.
 // playtest.not_live's subject and planted twin are #1046's; it is catalogued here so the kind's codes are whole.
 // The bands, expectations and the play interface's codes are #555's; the soak's, rules.legal's and logic.edges' #1048's;
-// grid.reach's #556's, with grid.same #3265's.
+// grid.reach's #556's, with grid.same #3265's and grid.skipped #3263's.
 
 export const CODES = {
   'playtest.not_live': {
@@ -67,6 +67,10 @@ export const CODES = {
   'grid.unreached': {
     meaning: 'On a floor a run generated, a goal or a cell of a class the brief lists can\'t be reached from the start, through doors and through locks whose keys are reached first.',
     fix: 'Open the floor of the run, seed and depth named, and join the cell named to the reached cell nearest it, or move a lock\'s key in front of it.',
+  },
+  'grid.skipped': {
+    meaning: 'On a floor a run generated, a goal is still reached with every cell its need names closed: a route goes round the key, the bridge or the room the brief says the goal needs.',
+    fix: 'Open the floor of the run, seed and depth named, and close the route named where it leaves the way the need names, so the goal is reached only through it.',
   },
   'grid.same': {
     meaning: 'Fewer of the floors the runs generated at a depth were distinct by hash than the share the brief gives differ: the generator repeats its floors from run to run.',

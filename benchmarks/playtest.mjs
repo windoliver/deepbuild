@@ -10,8 +10,8 @@
 //     a release build with deep-replica's `test-renders-unkept-frames`, which renders a frame every step.
 //   playtest-crawler (#556): #555's crawler, the plug-in's grid.reach kit fixture. #555's playtest of it, 4 bots × 20
 //     runs of 4,000 steps, each with its replay, on two replicas: crawler_80_runs_s. rules.legal over those runs:
-//     legal_added_s. grid.reach over 200 descender runs of 2 steps, one floor a run: reach_200_floors_s, its own
-//     searches' time. idle_work: the crawler played with no play interface and no bot, against its bake.
+//     legal_added_s. grid.reach over 200 descender runs of 2 steps, one floor a run, with four needs (#3263):
+//     reach_200_floors_s, its own searches' time. idle_work: the crawler with no play interface and no bot, against its bake.
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -152,13 +152,14 @@ async function crawlerRuns(root, bin, c, out) {
   }
 }
 
-/** grid.reach over 200 descender runs of 2 steps, one floor a run: its own searches' seconds, its plays left out. */
+/** grid.reach over 200 descender runs of 2 steps, one floor a run, with four needs: its own searches' seconds, its plays left out. */
 async function reachFloors(root, bin, c, out) {
   const { runReach } = await import(join(root, 'packages', 'checks', 'playtest', 'reach.ts'));
   const pool = await replicas(bin, 2, out);
   try {
     const input = { piece: 'crawler@1', play: c.play, bots: [c.descender], runs: 200, seed: 556, span: { steps: 2 }, goals: [], piece_seed: 'run' };
-    const r = await runReach({ playtest: 'crawler', goals: ['exit'], every: ['open'], depths: [1] }, input, (_piece, run) => pool.play({ call: 'play', piece: c.piece, assets: c.assets, ...run }));
+    const needs = [{ goal: 'exit', through: ['door'] }, { goal: 'key', through: ['door'] }, { goal: 'locked', through: ['door'] }, { goal: 'locked', through: ['key'] }];
+    const r = await runReach({ playtest: 'crawler', goals: ['exit', 'key', 'locked'], every: ['open'], depths: [1], needs }, input, (_piece, run) => pool.play({ call: 'play', piece: c.piece, assets: c.assets, ...run }));
     if (r.outcome !== 'passed' || r.reach.floors.length !== 200) throw Error(`grid.reach over 200 floors reported ${r.outcome} with ${r.reach.floors.length} floors: ${JSON.stringify(r.failures.slice(0, 3))}`);
     return r.reach.search_ms / 1000;
   } finally {
