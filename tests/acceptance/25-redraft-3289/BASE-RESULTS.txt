@@ -1,0 +1,115 @@
+Blind redraft 25-redraft-3289, base 254bdc87c (origin/main). Home paths are redacted to ~.
+Every vitest ran from the clone root as:
+  node scripts/throttle.mjs test --wait 720 -- node node_modules/vitest/vitest.mjs run tests/acceptance/25-redraft-3289/<file> --no-file-parallelism --reporter=verbose --reporter=json --outputFile=<out>/<step>.json
+To lay a twin: its lines.json was applied by the twinOverlay rule (each find matched once), then npm run build -w packages/hub
+(exit 0 every time), then the file ran, then git checkout of plant.ts and setup.ts and a hub rebuild (exit 0 every time).
+Outcomes: PASS; FAIL@A = failed at Vitest's assertion (AssertionError, a test-path frame); BLOCKED = plain Error
+before any assertion.
+
+== Mac (macOS, fresh clone ~/mac-runs/3289-redraft, since deleted) ==
+Setup, each exit 0: npm ci; npm run build --workspaces; node scripts/throttle.mjs build -- cargo build --locked -p deep-hook --features env-plants.
+tsc --noEmit: exit 0.
+base session-end.test.ts (draft 1): exit 1. Load (sysctl vm.loadavg) { 37.29 45.70 55.72 } before, { 80.29 48.38 50.51 } after.
+  main AC3 test: PASS (6.8 s).
+  wrong program: FAIL@A, the test's own fault:
+    "the session-end check must fail on waiter-outlives-session: expected 'AC3 no waiter outlives its session: e…'
+    to match /AC3 .*waiter \(pid \d+\) outlived its session/". Vitest cut the received value short.
+    Fixed: the waiter text now goes in the expect's own message, on its first line.
+base flags.test.ts: never ran. Its throttle got SIGTERM (exit 143) while queued for the grant. No further Mac runs.
+
+== Spark (Linux 7.0.0-1025-nvidia, clone ~/runs-3289/clone) ==
+Setup (unit r3289-setup) exit 0: npm ci, npm run build --workspaces, then the throttled cargo build --features env-plants (25 min).
+tsc --noEmit: exit 0. Loads are uptime's 1/5/15-minute averages, read after each run.
+
+-- Pass 1 (unit r3289-runs, out/; draft 2: AC3 message fix) --
+base session-end    exit 1, 21:35, load 118.86 108.86 86.96
+  main: BLOCKED. deep_ask: "The DeepBuild hub is unreachable (no answer on its socket)", 60 s.
+  wrong program: BLOCKED, same cause.
+base flags          exit 1, 21:39, load 128.75 119.61 96.20
+  BLOCKED: "timed out after 60000 ms waiting for the hub to record the deep_ask 'Which way for blue …'" (B's ask).
+  Every session-A assertion had already passed, including the next_prompt delivered outcome.
+base wake           exit 1, 21:46, load 98.32 110.47 102.47
+  20 idle: BLOCKED (hub unreachable). wrong program (never-wakes): BLOCKED (hub unreachable).
+  20 StopFailure and wrong program (Stop only): plain Error "timed out after 30000 ms waiting for the waiter
+  Claude Code started at <session>'s StopFailure".
+twin waiter-outlives-session (session-end) exit 1, 21:48, load 125.57 117.77 106.45
+  main: BLOCKED (hub unreachable).
+  wrong program: FAIL@A in its unplanted control:
+    "AssertionError: AC3 91f5e54a-…'s waiter (pid 1799683) outlived its session: 1 process(es) still running 10 s
+    after it ended (SessionEnd, then Claude Code exited): […~/runs-3289/clone/target/debug/deep-hook claude-code
+    waiter…]; 338d6315-…'s waiter (pid 1799680) outlived its session: … 10 s after it Claude Code was killed: […]:
+    expected 2 to be +0"
+twin routes-from-settings (flags) exit 1, 21:51, load 119.55 119.10 108.63
+  BLOCKED: timed out waiting for the hub to record A's deep_ask ("green").
+twin routes-kept-across-sessions (flags) exit 1, ~21:53
+  BLOCKED: timed out waiting for the hub to record A's deep_ask ("green").
+twin waiter-never-wakes (wake) exit 1, 21:58, load 104.97 108.46 107.98
+  20 idle: BLOCKED (hub unreachable).
+  wrong program (never-wakes): FAIL@A in its unplanted control:
+    "AC2 idle session e230c62e-… (1 of 2 answered) never woke within 30 s of its answer to ask:01M8GBK35J…:
+    expected undefined to be defined"
+  20 StopFailure: BLOCKED (deep_ask "unbound").
+  wrong program (Stop only): FAIL@A in its control:
+    "AC2 idle session 6cace372-… (1 of 2 answered) never woke within 30 s of its answer to ask:01M8GBP5W8…; each
+    turn ended on an API error (StopFailure, error invalid_request, no Stop), and Claude Code started a waiter at
+    every StopFailure: expected undefined to be defined"
+
+-- Pass 2 (unit r3289-runs2, out2/; same files as pass 1) --
+base session-end    exit 0, 22:00, load 106.75 110.13 108.77. Both tests PASS.
+base flags          exit 0, 22:00, load 95.40 106.93 107.74. PASS: A gets next_prompt delivered once; B is woken.
+base wake           exit 1, 22:05, load 154.22 128.22 115.69
+  20 idle: plain Error "timed out after 30000 ms waiting for the waiter of 86f61040-…, waiting once its Stop went
+    through" (../25/routes/helpers.ts idleSessions).
+  wrong program (never-wakes): FAIL@A, the test's own fault. Its planted run ended BLOCKED, and the test compared
+    that text: "the wake check must fail on waiter-never-wakes: expected 'BLOCKED: deep inbox answer ask:01M8GB…' to
+    match /AC2 idle session \S+ \(1 of 2 answere…/".
+  20 StopFailure: BLOCKED (hub unreachable). wrong program (Stop only): BLOCKED (hub unreachable).
+twin waiter-outlives-session (session-end) exit 1, 22:06, load 139.98 130.84 117.70
+  main: FAIL@A "AC3 f807e809-…'s waiter (pid 2263450) outlived its session: 1 process(es) still running 10 s after
+    it ended (SessionEnd, then Claude Code exited): […]; 259094c3-…'s waiter …"
+  wrong program: FAIL@A in its control "AC3 8a6fe1f0-…'s waiter (pid 2274367) outlived its session: … 10 s after it ended …"
+twin routes-from-settings (flags) exit 1, 22:08, load 167.30 137.82 121.19
+  FAIL@A "AC5 session 17c60cc3-… showed no waiter, so the waiter route is absent for it and your answer to
+    ask:01M8GC8Y71WKQHNSR28W98H38K (Use green f18e7ccf) must arrive through the next route: its delivery outcome must
+    read next_prompt delivered, once, by A's next prompt, and that delivery is missing; delivery outcomes []; …"
+twin routes-kept-across-sessions (flags) exit 1, 22:10, load 158.31 143.18 124.94
+  FAIL@A "AC5 session 3a5360a4-… is a new session: it starts again from its declared flags, not from what session
+    7f35becb-… showed, so its waiter must wake it with your answer to ask:01M8GCCA11XGR23J875NQX791A (Use blue
+    a5e6a4e5) within 15 s; wakes seen: []: expected undefined to be defined"
+twin waiter-never-wakes (wake) exit 1, 22:15, load 160.40 152.94 133.63
+  20 idle: FAIL@A "AC2 idle session 58ec80fb-… (1 of 20 answered) never woke within 30 s of its answer to
+    ask:01M8GCF8CG…: expected undefined to be defined"
+  wrong program (never-wakes): FAIL@A in its control "AC2 idle session bc000910-… (1 of 2 answered) never woke within 30 s …"
+  20 StopFailure: BLOCKED (hub unreachable).
+  wrong program (Stop only): FAIL@A in its control "AC2 idle session e6c746f2-… (1 of 2 answered) never woke within
+    30 s of its answer to ask:01M8GCMRPR…; each turn ended on an API error (StopFailure, error invalid_request, no
+    Stop), and Claude Code started a waiter at every StopFailure: expected undefined to be defined"
+
+-- Fix after pass 2 (draft 3; wake.test.ts, session-end.test.ts, helpers.ts) --
+helpers.ts blockedUnlessAsserted / assertionFailureOf: a world that ends any way but at an assertion reads BLOCKED (or
+INCONCLUSIVE, as it said), first line starting with the word. This covers the main tests' setup (incl. "waiting for the
+waiter …, once its Stop went through"), their answer phase, and the wrong-program tests' planted runs and controls.
+Wrong-program tests compare only an assertion failure with their expected text. flags.test.ts is unchanged.
+tsc --noEmit -p tests/acceptance/25-redraft-3289: exit 0 (Spark).
+
+-- Pass 3 (unit r3289-runs3, out3/; draft 3; base only, the changed files) --
+base session-end    exit 0, 22:18, load 125.64 140.96 132.44 (before: 126.35 144.25 132.91). Both tests PASS.
+base wake           exit 1, 22:22, load 108.65 121.79 126.82 (before: 125.64 140.96 132.44)
+  20 idle: BLOCKED "BLOCKED: timed out after 60000 ms waiting for the deep_ask … deep_ask replied … hub is unreachable".
+  wrong program (never-wakes): PASS (control woke both; the plant failed at its assertion with the expected text).
+  20 StopFailure: PASS. Printed "p95 0 ms over 20 samples (0, …, 0 ms) against 2000 ms". Every sample was clamped to
+    0 by the original's measure: max(0, wake start - answer command's exit). Under this load the wakes started
+    before `deep inbox answer` exited.
+  wrong program (Stop only): BLOCKED "BLOCKED: timed out after 30000 ms waiting for the waiter Claude Code started at
+    66feb3a4-…'s StopFailure" (the unplanted control's setup).
+
+== Summary ==
+No twin (base): session-end PASS (passes 2, 3); flags PASS (pass 2).
+  wake: no test fails at an assertion. The Stop 20-session test and the Stop-only wrong-program test read BLOCKED
+  under the Spark's load. The others pass. No p95 reading over 2 s yet.
+waiter-outlives-session: AC3 main test FAIL@A (pass 2), naming the waiters' pids and the 10 s.
+routes-from-settings: AC5 FAIL@A (pass 2), naming the ask whose next_prompt delivery is missing.
+routes-kept-across-sessions: AC5 FAIL@A (pass 2).
+waiter-never-wakes: AC2 20-session test FAIL@A (pass 2), naming the session that never woke within 30 s.
+Not run with draft 3: the twins. Draft 3 changed only what a non-assertion ending reads as, so the twins' FAIL@A
+results above are unchanged by it.
