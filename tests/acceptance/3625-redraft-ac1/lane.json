@@ -1,0 +1,1 @@
+{ "alone": true, "why": "shared: the build grant; ac1.test.mjs runs a cold cargo check of the three vendored gpui-fast crates with all their targets through scripts/lease, for minutes each, and fetches the pristine releases and crates from the network", "slow": ["ac1.test.mjs"] }

@@ -1,0 +1,15 @@
+# Base 0beb4a141, offline: the judges against planted wrong programs (cargo message streams and check outputs)
+# node --test tests/acceptance/3625-redraft-ac1/twins.test.mjs
+
+✔ twins: the compile judge passes a clean check of the three crates and fails each planted wrong program, naming what failed (1.306167ms)
+✔ twins: the cargo run is the criterion's command with default features and every crate's test-support feature enabled (10.523583ms)
+✔ twins: the check judge passes a clean check and fails each planted fault on a touched src/fast/ file, naming the file (2.615583ms)
+✔ twins: the check judge fails a check that never compared a tree, never judged a touched row, judged nothing, or couldn't list a row's test (0.387916ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 90.502375
