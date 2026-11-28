@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { beforeAll, expect, it } from 'vitest';
 import { CLI, NODE, yes } from '../../../tests/acceptance/1731/helpers.ts';
 import { RED } from '../../../tests/acceptance/1820/export-redraft/png.ts';
-import { addAsset, asks, CC0, fetchAfterYes, installOrBlock, LICENSE_TEXT, pictureDoc, scopedWorld, writePack, type Scoped } from '../../../tests/acceptance/1820/export-redraft/world.ts';
+import { addAsset, asks, CC0, fetchAfterYes, installOrBlock, LICENSE_TEXT, pictureDoc, scopedWorld, writePack, type Scoped } from '../../../tests/acceptance/1820-redraft-3525/export-redraft/world.ts';
 import { sha } from '../../../tests/acceptance/1820/scope/world.ts';
 let w: Scoped;
 const body = RED(8);

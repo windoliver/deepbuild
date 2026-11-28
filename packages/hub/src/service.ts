@@ -30,11 +30,6 @@ const STEP_MS = 10;
 const ASK_MS = 1000;
 /** The file limit the login service raises the hub's to: a connection per hook in flight, the record, evidence and runs. */
 const FILES = 8192;
-/**
- * The launchd job's type (#3438). launchd holds a job that names none to light limits on its CPU and I/O, and a job's
- * limits are its children's too: the hub and each command it starts then run at priority 20, where a terminal's run at
- * 31. The hub answers every hook and starts the checks, so it runs with an app's limits, which are none.
- */
 export const PROCESS_TYPE = 'Interactive';
 type Obj = Record<string, unknown>;
 

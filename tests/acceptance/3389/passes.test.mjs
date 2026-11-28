@@ -158,7 +158,7 @@ describe('#3389 the state pass', { timeout: 1_800_000 }, () => {
       const since = db.prepare('SELECT ts FROM events WHERE id = ?').get(claim.slice('claim:'.length)).ts;
       assert.deepEqual(rows[`session:${session}`], {
         order: `0|2|work|3|${String(since).padStart(16, '0')}|session:${session}`, id: `session:${session}`, address: `session/${session}`, title: ASKED, project: 'work', session, agent: 'claude-code',
-        entry: 'pass', word: 'PASS', why: 'its claim passed its checks', waits_on: null, since, actions: [], unread: true,
+        entry: 'pass', word: 'PASS', why: 'it said done, and its checks agree', waits_on: null, since, actions: [], unread: true,
       }, 'and in the row the merge base gives it');
       assert.ok(!Object.keys(rows).some((id) => id.startsWith('ask:')), `its answered ask left the list: ${Object.keys(rows).filter((id) => id.startsWith('ask:')).join(', ')}`);
     });

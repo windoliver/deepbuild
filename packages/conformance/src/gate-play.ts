@@ -12,13 +12,13 @@ import { connect } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readFacts } from '@deepbuild/adapters';
 
 /** The checkout this package was built in: its hub, its deep-hook and their default rules. */
 export const REPO = fileURLToPath(new URL('../../../', import.meta.url));
 const CLI = join(REPO, 'packages/cli/dist/main.js');
 const DEEP_HOOK = join(REPO, 'target/debug/deep-hook');
 const RULES = join(REPO, 'crates/deep-hook/default-rules.json');
-const FACTS = join(REPO, 'adapters/claude-code.facts.json');
 const AGENT = join(REPO, 'packages/conformance/runtime/gate/agent.mjs');
 const NODE = process.execPath;
 /** The asks settings the hub needs before it takes a session, as a setup writes them. */
@@ -39,7 +39,7 @@ const sleep = (ms: number) => new Promise<void>((done) => setTimeout(done, ms));
 /** A wait that keeps no process alive on its own. */
 const idle = (ms: number) => new Promise<void>((done) => { (setTimeout(done, ms) as unknown as NodeJS.Timeout).unref(); });
 const parse = (raw: string): Obj | undefined => { try { const v: unknown = JSON.parse(raw); return v && typeof v === 'object' ? v as Obj : undefined; } catch { return undefined; } };
-const COVERED = (JSON.parse(readFileSync(FACTS, 'utf8')) as { versions: string[] }).versions.at(-1)!;
+const COVERED = readFacts<{ versions: string[] }>('claude-code.facts.json').versions.at(-1)!;
 
 /** What this play started, stopped by PID only when it ends. */
 export class Owned {

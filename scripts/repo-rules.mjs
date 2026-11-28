@@ -25,6 +25,7 @@ const fixes = {
   card: 'Give the folder a README.md with the headings What it is for, Where new code goes, What it may import and Deviations.',
   deviation: 'Correct the deviation to the file it is about, or remove it if the file is gone.',
   body: "Put <file>.statement.json beside it: drawn, with the script that drew it, or agreed, with a maintainer's signed agreement (scripts/body-fixtures.mjs).",
+  leftover: "Remove it: a merge or patch tool's leftover, which nothing reads. Only a vendored crate's own files under vendor/ keep one.",
   security: 'Keep SECURITY.md linking this repository\'s private report form, keep that link in .github/ISSUE_TEMPLATE/config.yml\'s contact_links with a name and an about, each key on one line, and keep the one line ending <!-- security rule --> the same in CONTRIBUTING.md and SECURITY.md, editing both together.',
 };
 const cardHeadings = 'What it is for|Where new code goes|What it may import|Deviations'.split('|');
@@ -410,6 +411,13 @@ function checkFlags(files) {
   if (results.length === before) report('PASS', 'v8-flags', 'no file under packages/ calls setFlagsFromString');
 }
 
+// #3528: a tracked file a merge or patch tool leaves behind, outside the vendored crates, which publish their own.
+function checkLeftovers() {
+  const leftovers = git('ls-files', '-z', '--cached').split('\0').filter((path) => /\.(?:orig|rej)$/.test(path) && !path.startsWith('vendor/'));
+  for (const path of leftovers) report('FAIL', 'leftovers', `${path} is a tracked .orig or .rej file`, fixes.leftover);
+  if (!leftovers.length) report('PASS', 'leftovers', 'no tracked .orig or .rej file outside vendor/');
+}
+
 // Report only: lines added and removed against the merge base perf uses, never the exit status.
 function noteSize() {
   let base;
@@ -502,6 +510,7 @@ if (files) {
   checkCards(files);
   checkSecurity(files);
   checkFlags(files);
+  checkLeftovers();
   noteSize();
 }
 checkPhysicsBuild();
