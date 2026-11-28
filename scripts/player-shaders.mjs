@@ -5,13 +5,14 @@ import { fileURLToPath } from 'node:url';
 const DIST = 'crates/deep-player/web/dist';
 export const SHADER_RECORD = 'shaders.json';
 
-const shaderFiles = (root) => globSync('{crates,vendor}/**/*.wgsl', { cwd: root, exclude: (entry) => entry.name === 'target' || entry.name === 'node_modules' }).map((path) => path.split(sep).join(posix.sep)).sort();
+const shaderFiles = (root) => globSync('{crates,vendor}/**/*.wgsl', { cwd: root, exclude: (name) => name === 'target' || name === 'node_modules' }).map((path) => path.split(sep).join(posix.sep)).sort();
 const holds = (wasm, root, path) => wasm.includes(readFileSync(join(root, path)));
+
+const builtSets = (dist) => readdirSync(dist, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
 
 export function shaderRecord(root, dist) {
   const shaders = shaderFiles(root);
-  const sets = readdirSync(dist, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
-  return Object.fromEntries(sets.map((set) => {
+  return Object.fromEntries(builtSets(dist).map((set) => {
     const wasm = readFileSync(join(dist, set, 'player_bg.wasm'));
     return [set, shaders.filter((path) => holds(wasm, root, path))];
   }));
@@ -19,6 +20,8 @@ export function shaderRecord(root, dist) {
 
 export function staleShaders(root) {
   const record = JSON.parse(readFileSync(join(root, DIST, SHADER_RECORD), 'utf8'));
+  const unrecorded = builtSets(join(root, DIST)).filter((set) => !Array.isArray(record[set]));
+  if (unrecorded.length) throw Error(`${DIST}/${SHADER_RECORD} records no shaders for the ${unrecorded.join(', ')} set`);
   const stale = [];
   for (const [set, shaders] of Object.entries(record)) {
     const wasm = readFileSync(join(root, DIST, set, 'player_bg.wasm'));

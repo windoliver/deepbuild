@@ -54,12 +54,22 @@ test('a shader a set holds that the checkout no longer has fails too, and one no
   assert.match(ran.stdout, /^FAIL player-shaders: .*full\/player_bg\.wasm was built with crates\/deep-scene3d-render\/src\/scene3d\.wgsl which the checkout no longer has$/m);
 });
 
-test('a player with no shader record is BLOCKED, never passed', (t) => {
-  const { root } = builtPlayer(t);
+test('a player with no shader record, or a record that leaves a built set out, is BLOCKED, never passed', (t) => {
+  const { root, write } = builtPlayer(t);
+  write(`${DIST}/${SHADER_RECORD}`, '{ "figure": [] }\n');
+  const partial = check(root);
+  assert.equal(partial.status, 2, partial.stdout + partial.stderr);
+  assert.match(partial.stdout, /^BLOCKED player-shaders: .*records no shaders for the full set$/m);
   rmSync(join(root, DIST, SHADER_RECORD));
-  const ran = check(root);
-  assert.equal(ran.status, 2, ran.stdout + ran.stderr);
-  assert.match(ran.stdout, /^BLOCKED player-shaders: /m);
+  const none = check(root);
+  assert.equal(none.status, 2, none.stdout + none.stderr);
+  assert.match(none.stdout, /^BLOCKED player-shaders: /m);
+});
+
+test('a shader under a build folder is no source of the player', (t) => {
+  const { root, write } = builtPlayer(t);
+  write('crates/deep-scene3d-render/target/copy/scene3d.wgsl', LIT);
+  assert.deepEqual(shaderRecord(root, join(root, DIST)).full, ['crates/deep-scene3d-render/src/scene3d.wgsl']);
 });
 
 test('the committed web player holds its shaders as this checkout has them, and its record is what its bytes hold', () => {
