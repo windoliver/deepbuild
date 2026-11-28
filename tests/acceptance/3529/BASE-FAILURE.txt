@@ -1,0 +1,224 @@
+The #3529 acceptance tests at the base, 11404f91002549703d3eed81d16f6a988923b7b7 (origin/main; its last merge is #3639).
+
+The suite was drafted at de00a9c64 and redrafted at this base by the same job (README: The redraft). This file is
+the redraft's: every run below is of the files as delivered, at 11404f910.
+
+The base was built in <checkout> by the caller, under the machine's throttle (cargo build --locked --bin deep-logic
+and --bin deep-show, debug, with CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0, November 27, 2026), and its binaries
+copied out, since the machine's hourly cleanup removes a cargo target/ nothing touched for an hour. This job started
+no cargo command and no file built anything: every file was run with its binaries supplied, as a proof run supplies
+them. DEEP_BIN_DIR named a folder outside <checkout> holding the base's debug binaries,
+
+  deep-logic   SHA-256 f1bd0b54ee7cf0664f1b8bc9d62b0e3a8eb50a60f85026235990186eef494596
+  deep-show    SHA-256 7f974b1b3e063b4bd3ed38e309bac106fa86365ec30dec4c1eb37870fe0aed15
+
+with CPATH and CARGO_TARGET_DIR unset. Node v24.22.0, a MacBook Pro Mac17,10 (18 cores), macOS 27.2, shared with
+other sessions: its one-minute load stood between 8 and 16 at these runs.
+
+Each file was run once through the throttle, alone, and each got its test grant at once:
+
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node scripts/throttle.mjs test --wait 2 -- node --test tests/acceptance/3529/<file>
+
+Results:
+
+  ac1-core.test.mjs      1 test,  1 fail   8.2 s   13:15, load 8    (and once more, 6.0 s, 13:19, load 16: section 3)
+  ac1-logic.test.mjs     2 tests, 2 fail   0.2 s   13:12, load 9
+  ac2-goldens.test.mjs   1 test,  1 pass   0.3 s   13:12, load 9
+  ac3-items.test.mjs     1 test,  1 fail   0.2 s   13:12, load 9
+  ac4-budget.test.mjs    1 test,  1 fail   0.1 s   13:12, load 9
+
+
+1. The five tests of new behaviour fail at their own assertion
+---------------------------------------------------------------
+
+Each is node:assert's AssertionError [ERR_ASSERTION], thrown from must (tests/acceptance/3529/common.mjs:17), called
+from the test's own file.
+
+Criterion 1 (#3529.1f362433). The merge base's canvas core and its deep-logic both answer the call that reads the
+compile count with {"ok": false, "code": "bad_input"}, so the test on the core and the first test on deep-logic
+fail at the assertion that reads the count, saying so. That is as near as the merge base comes to the reason the
+criterion names: it can't show 109, or the 108 it counts today by reading (57 on the packs the issue read, 51 on
+circuit-2.0.0), because nothing at the base lets a test read the sandbox's compile count from a binary (README: The
+count; Readings where the issue and the base disagree). The second test on deep-logic fails at the planted runner
+the base doesn't have.
+
+ac1-core.test.mjs
+✖ AC1 #3529.1f362433 a fresh canvas core with the shipped packs answers its first call having counted as many compiles as it compiled different programs: 48 for the 48 of the packs the issue read, beside what a newer pack's own check counts
+  AssertionError [ERR_ASSERTION]: AC1 #3529.1f362433: the canvas core answered its first call, with all 22 shipped
+  packs installed, and no test can read how many compiles it counted: its compiles call answered
+  {"ok":false,"code":"bad_input"}, not {"ok": true, "reply": {"compiles": <whole number>}} (README: The count).
+  Nothing shows it compiled each program once; the issue reads 109 compiles for 48 different programs on the merge
+  base it was written on
+      at must (tests/acceptance/3529/common.mjs:17:10)
+      at TestContext.<anonymous> (tests/acceptance/3529/ac1-core.test.mjs:29:5)
+
+  (The core took the world, answered packs with all 22 shipped packs installed, and then refused the compiles call.
+  The test stops there, so the newer pack's share and the naming of a program, both read from deep-logic once the
+  core gives a count, didn't run.)
+
+ac1-logic.test.mjs
+✖ AC1 #3529.1f362433 the logic module counts as many compiles as the shipped packs' checks compile different programs: 48 for the 48 of the packs the issue read, no more for a newer pack than its fixtures' different programs, and none for a second item of the same bytes
+  AssertionError [ERR_ASSERTION]: AC1 #3529.1f362433: no test can read how many compiles deep-logic counted: its
+  compiles call answered {"ok":false,"code":"bad_input"}, not {"ok": true, "compiles": <whole number>} (README: The
+  count). Nothing shows each program was compiled once; the issue reads 109 compiles for 48 different programs on
+  the merge base it was written on
+      at must (tests/acceptance/3529/common.mjs:17:10)
+      at readingsUnderPlantedRunners (tests/acceptance/3529/ac1-logic.test.mjs:17:5)
+
+✖ AC1 #3529.1f362433 the merge base's runner, planted, counts more compiles than different programs and fails, naming a program compiled twice, and with its fixture run that checks a piece twice it counts the issue's 109 for 48 on the packs the issue read
+  AssertionError [ERR_ASSERTION]: AC1 #3529.1f362433: deep-logic --planted item_compiles_own_program doesn't run:
+  {"ok":false,"code":"bad_input"}. The merge base can't be read with a count without the planted runner
+  item_compiles_own_program (README: The planted runners)
+      at must (tests/acceptance/3529/common.mjs:17:10)
+      at readingsUnderPlantedRunners (tests/acceptance/3529/ac1-logic.test.mjs:15:5)
+
+  (The base's deep-logic refuses a planted name it doesn't know: it prints that line and exits 2.)
+
+Criterion 3 (#3529.be72c1ed). Its first sentence holds on the merge base, where each item compiles and instantiates
+its own program: the first half of the test passes there, and says so. The test fails at the criterion's wrong
+program, the planted runner that shares one instance, which the base doesn't have.
+
+ac3-items.test.mjs
+✖ AC3 #3529.be72c1ed two items of the same bytes in one piece keep their own memory, globals, fuel and trap, and a planted runner that shares one instance fails, naming the item
+ℹ a and b, of rewritten program ec4d076aaae92fa8ceef4006c4f0f3a7f1ad0dc56c328ec4f8a434db947de8c3, are each what
+  they are alone: a's traps [[14,"fuel"]], b's [[20,"unreachable"]] (step, kind)
+  AssertionError [ERR_ASSERTION]: AC3 #3529.be72c1ed: deep-logic --planted items_share_instance doesn't run:
+  {"ok":false,"code":"bad_input"}. The criterion's wrong program, a runner that shares one instance between two items
+  of the same bytes, is the planted runner items_share_instance (README: The planted runners); without it nothing
+  shows this test fails when a write in one item shows in the other
+      at must (tests/acceptance/3529/common.mjs:17:10)
+      at TestContext.<anonymous> (tests/acceptance/3529/ac3-items.test.mjs:26:5)
+
+Criterion 4 (#3529.50c3d51b). No task of the base's benchmarks/budgets.json names the criterion.
+
+ac4-budget.test.mjs
+✖ AC4 #3529.50c3d51b a task of benchmarks/budgets.json, canvas-core-first-reply, names the criterion, so the budget window measures the canvas core's first reply with the shipped packs and its memory after it against the merge base, within a margin no wider than 50%
+  AssertionError [ERR_ASSERTION]: AC4 #3529.50c3d51b: no task of benchmarks/budgets.json names #3529.50c3d51b in its
+  criteria, so no budget window measures the canvas core's first reply with the shipped packs, or its memory after
+  that reply, against the merge base (README: The budget's task)
+      at must (tests/acceptance/3529/common.mjs:17:10)
+      at TestContext.<anonymous> (tests/acceptance/3529/ac4-budget.test.mjs:18:3)
+
+
+2. The test of what stays as it is passes, as it should (criterion 2)
+----------------------------------------------------------------------
+
+ac2-goldens.test.mjs
+✔ AC2 #3529.cc8f3bb2 every fixture of #531 and every kept logic golden reaches the step hashes it reached on the merge base, and a hash that moves fails, naming the golden and the step
+ℹ 14 fixtures of #531 and 2 kept goldens: 1680 steps, 1535 of them with a hash (a failed item's step has none), and
+  79 checkpoints read
+ℹ the control fails as it must, naming step 37 of each:
+  #531's fixture spin (tests/acceptance/2324/fixtures/base-bake.json): step 37's hash was dcd1430b981b4550 on the
+  merge base and is 01ae8bca3feddc44;
+  #2324's golden (tests/acceptance/2324/fixtures/base-golden.json), item table_copy: step 37's hash was
+  6195ce47bcf31fe8 on the merge base and is 87db304e30a5edaf;
+  #2662's golden (tests/acceptance/2662/fixtures/golden.json), item a: step 37's hash was ecbacb2a3d702492 on the
+  merge base and is b57238b985e7e6b4
+
+  It passes because base.json is the merge base's own recording, made from this build, and the base answers the same
+  lines the same way again; and because the control, the base's own planted replay_changes_step_37, fails the judge
+  on each of the three, naming step 37. Its wrong program for the before lane is the twin step_37_hash_moves (README:
+  The wrong programs), which this job did not build. Its find line is in this base's crates/deep-logic/src/world.rs
+  at exactly one place, as at de00a9c64: that file didn't move between the two.
+
+
+3. The recording, and what ran more than once
+----------------------------------------------
+
+- base.json was written at 13:09 by
+
+    node tests/acceptance/3529/record.mjs          (0.1 s)
+
+  from this base's deep-logic: 14 fixtures of #531 (695 step hashes, 47 checkpoints), #2324's golden (120, 5) and
+  #2662's (720, 27). Both goldens reach on the merge base what their own files hold. #2662's bake keys are its
+  file's; #2324's aren't, since a bake key names the engine's version. node tests/acceptance/3529/record.mjs --check
+  gave "same as base.json". The file's SHA-256 is bb1cfbbb0a5fa622d0ab2bbaea6c06e21ba0260cd779de78c21e1ca7cc38e880;
+  it differs from the recording made at de00a9c64 in its commit line alone: every reached hash is the same, and the
+  three kept files have the SHA-256 they had there.
+- ac1-core.test.mjs ran twice. After its first run (13:15, through the throttle, fail as in section 1) the path a
+  right core takes next was changed: the newer pack's share is read from one deep-logic process that checks every
+  pack, and a deep-logic that answers no count where the core does now fails at an assertion that names the call,
+  where it would have read BLOCKED. Neither is reached at the base. It was run once more as delivered (13:19,
+  directly, fail at the same assertion, 6.0 s).
+- No other file changed after its run.
+
+
+4. Readings at the base (the runs above and probes of the base's own binaries; none changes a source)
+------------------------------------------------------------------------------------------------------
+
+The canvas core (ac1-core.test.mjs's own runs, and one probe):
+
+  A fresh debug deep-show canvas takes the world of the 22 shipped packs and answers packs with every one of them
+  installed, circuit at 1.0.0 and at 2.0.0 both. Its piece_checks call answers 108. The whole test took 6 to 8 s:
+  the core's start, its first answer after checking all 22 packs, and the refused compiles call. That is a debug
+  build's time on a shared machine, printed by the test runner; it is no reading for criterion 4, and the test
+  itself reads no clock. The core's evidence folder was removed and no process was left.
+
+The shipped packs' checks, in one deep-logic process:
+
+  pack                 pieces by its reply   piece checks   different pairs of program and library
+  circuit-1.0.0        14                    14             12
+  circuit-2.0.0        51                    51             45      (the pack the issue didn't read)
+  interfaces-1.0.0      3                     3              3
+  lanes-1.0.0           6                     6              6
+  modslib-1.0.0         5                     5              5
+  process-1.0.0         9                     9              9
+  sense-1.0.0           6                     6              3
+  separation-1.0.0     14                    14             13
+  in all              108                   108             96 (51 on the packs the issue read, 45 on the newer)
+
+  No pair is in two packs. On the packs the issue read the pairs number 51 where #3445's table counts 48 programs:
+  in lanes, process and sense a library's own fixture links the library by another name than its interface's
+  fixtures do and comes out the same rewritten program. So the pairs are an upper bound on a check's different
+  programs, never their count, and the suite uses them only for a pack the issue gives no count for.
+
+  With the base's own --planted fixture_checks_piece_twice the checks of the 21 packs the issue read make 109 piece
+  checks: 25, 6, 12, 10, 18, 12 and 26, pack for pack the compiles of #3445's table, whose 109 is the issue's.
+  circuit-2.0.0's makes 96 under it, 205 in all. So on the merge base the issue read, a compile was made for each
+  piece checked; this base checks 57 pieces on those packs and 51 on the newer. That is the reading behind "57
+  compiles for 48 programs, and 51 more" (README), and it stays a reading: the base answers no compile count.
+
+Each library fixture's piece, baked twice as logic.mjs makes it (39 pieces, 28 of them in the packs the issue read):
+
+  Every bake is taken, and each makes one piece check and runs no fixture again. The 28 pieces of the issue's packs
+  run 22 different rewritten programs, and each of the 22 is, by the first 12 hex digits of its hash, a program of
+  #3445's table of the bytes compiled: the rewrite and the engine's crate didn't move between the two bases.
+  circuit-2.0.0's 11 library pieces run 11 different rewritten programs.
+
+The piece of criterion 3 (two items of this suite's own program):
+
+  As at de00a9c64: the base's check takes the program, both items run one rewritten program, ec4d076a…, a traps
+  fuel at step 14 and b unreachable at step 20, and beside each other and alone the two items read the same in
+  every field the judge compares.
+
+Criterion 1's readings and judge, run whole on a stand-in for the count:
+
+  The base answers no compiles call, so a probe answered it from the base's piece_checks, which also rises once for
+  each piece a check or a bake makes. That is a count of piece checks, never of compiles; it shows only that the
+  readings run end to end on a real binary, how long they take, and that the judge names what it should when a
+  count is too high. The eight checks, 78 bakes and the two bakes of two items took 6.3 s; the checks of the 21
+  packs under fixture_checks_piece_twice, 3.0 s. So ac1-logic.test.mjs should take about 15 s once both its tests
+  run whole. On the stand-in the judge reported 41 problems: the newer pack's,
+
+    the check of circuit-2.0.0, a pack the issue's counts don't cover, counted 51 compiles for its 51 pieces, more
+    than the 45 different pairs of a fixture's program and the library it runs on: a program was compiled more
+    than once there
+
+  then one for each of the 39 library fixtures' pieces, the first naming program 95480581c8bd… (packs/circuit-1.0.0/
+  objects/plug.wasm), and one for the two items of one program.
+
+
+5. Not run or checked
+----------------------
+
+- The twin step_37_hash_moves and the three names the implementer provides (the compiles call, the two planted
+  runners): this job built no change. Each judge was run again against inputs made by hand after its comments went
+  into names: it passes a good one and fails each wrong one, naming a program, a newer pack, the golden and step
+  37, or the item.
+- ac1-core.test.mjs past its first assertion: the base stops at the missing count, so taking the newer pack's share
+  off the core's count and naming a program were not run on a real core.
+- How many different programs circuit-2.0.0's check compiles: nothing outside the check can count them, and no
+  test asserts a number for it.
+- No time and no memory was read for criterion 4. No release deep-show of the base was supplied to this job, and it
+  takes no timing: the first reply's time on both sides is the Proof line's, for the implementer and the budget
+  window (README: The budget criterion).

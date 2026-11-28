@@ -1,0 +1,62 @@
+{
+  "scripts/throttle.mjs": [
+    {
+      "find": [
+        "    if (!procs.size) throw Error('ps listed no process');"
+      ],
+      "wrong": [
+        "    if (!procs.size) throw Error('ps listed no process');",
+        "    const argv = spawnSync('ps', ['-A', '-o', 'pid=,args='], { encoding: 'utf8', maxBuffer: 1 << 26, env: { ...process.env, LC_ALL: 'C' } });",
+        "    if (argv.status === 0) for (const line of argv.stdout.split('\\n')) {",
+        "      const [, pid, args] = line.match(/^\\s*(\\d+)\\s+(.*)$/) ?? [];",
+        "      if (pid && procs.has(Number(pid))) procs.get(Number(pid)).args = args;",
+        "    }"
+      ]
+    },
+    {
+      "find": [
+        "  const ownerOf = (pid) => grants.get(chain(procs, pid).findLast((at) => grants.has(at)));"
+      ],
+      "wrong": [
+        "  const byTree = (pid) => grants.get(chain(procs, pid).findLast((at) => grants.has(at)));",
+        "  const compileKey = (args = '') => {",
+        "    const metadata = args.match(/(?:^|\\s)-C\\s+metadata=(\\S+)/)?.[1], out = args.match(/(?:^|\\s)--out-dir[=\\s](\\S+)/)?.[1];",
+        "    return metadata && out ? `${metadata} ${out}` : null;",
+        "  };",
+        "  const askers = new Map();",
+        "  for (const [pid, proc] of procs) {",
+        "    const key = proc.command === 'sccache' && byTree(pid) && compileKey(proc.args);",
+        "    if (key) askers.set(key, byTree(pid));",
+        "  }",
+        "  const ownerOf = (pid) => {",
+        "    const owner = byTree(pid);",
+        "    if (owner || !procs.has(pid)) return owner;",
+        "    const server = chain(procs, pid).slice(1).find((at) => procs.get(at).command === 'sccache');",
+        "    if (server === undefined || byTree(server)) return undefined;",
+        "    return [...askers.values()][0];",
+        "  };"
+      ]
+    },
+    {
+      "find": [
+        "    mkdirSync(folder(), { recursive: true, mode: 0o700 });",
+        "    write();"
+      ],
+      "wrong": [
+        "    mkdirSync(folder(), { recursive: true, mode: 0o700 });",
+        "    const mark = join(folder(), 'load.pid');",
+        "    try {",
+        "      const [pid] = readFileSync(mark, 'utf8').split('\\n');",
+        "      if (pid && Number(pid) !== process.pid && !gone(Number(pid))) {",
+        "        console.log(`INCONCLUSIVE load: another sampler, pid ${pid}, writes this log`);",
+        "        process.exit(3);",
+        "      }",
+        "    } catch (error) {",
+        "      if (error.code !== 'ENOENT') throw error;",
+        "    }",
+        "    writeFileSync(mark, `${process.pid}\\n`);",
+        "    write();"
+      ]
+    }
+  ]
+}

@@ -26,8 +26,8 @@ use deep_canvas::schedule::{
     Options, Planted as SchedulePlanted, Scheduler, Session as DocSession,
 };
 use deep_canvas::show::{
-    inline_count, order_issues, stamp, truncated, unreadable_handles, whole_diff, Band, Diff,
-    Scope, Writer, WriterKind,
+    inline_count, order_issues, stamp, truncated, unreadable_handles, whole_diff, Diff, Scope,
+    Writer, WriterKind,
 };
 use deep_canvas_marks::look::{self, Look};
 use deep_canvas_marks::scene::Record;
@@ -716,6 +716,7 @@ pub enum Body {
     Undo { patch: String, of: String },
 }
 
+mod bands;
 mod call;
 mod planted;
 mod presented;
@@ -1150,20 +1151,17 @@ impl<'a> Hub<'a> {
         dir: &std::path::Path,
         session: Option<&str>,
     ) -> Value {
-        let sealed = &self.startup.sealed;
-        let sandbox = &mut self.sandbox;
-        let evidence = &self.scenario.evidence;
         let reply = crate::packs::install(
             &mut self.packs,
             &mut self.pack_rows,
-            sealed,
-            id,
-            dir,
-            self.scenario.pack_planted.as_deref(),
-            &mut |manifest, pack| {
-                let (rows, mut issues) = sandbox.vet(manifest, pack, sealed);
-                issues.extend(crate::packs::kind_meshes(pack, sealed, evidence));
-                (rows, issues)
+            &self.startup.sealed,
+            &mut self.sandbox,
+            crate::packs::Offer {
+                id,
+                dir,
+                twin: self.scenario.pack_planted.as_deref(),
+                evidence: &self.scenario.evidence,
+                kept: self.scenario.pack_checks.as_ref(),
             },
         );
         // #200: a pack installed through a session is that agent's own: its entries are listed
@@ -1554,7 +1552,7 @@ impl<'a> Hub<'a> {
                 "checks": self.sandbox.checks, "links": self.sandbox.links,
                 "rewrites": self.sandbox.rewrites, "runs": self.sandbox.runs,
             }),
-            Call::PieceChecks => json!({"piece_checks": deep_logic::piece::piece_checks()}),
+            Call::Count(name) => json!({name.as_str(): count(name)}),
             Call::Validate { layout, path } => {
                 self.sandbox.validate(&self.startup.sealed, layout, path)
             }
@@ -1786,51 +1784,6 @@ impl<'a> Hub<'a> {
                 map.insert("set_digest".into(), json!(self.startup.sealed.set_digest));
             }
         }
-    }
-
-    /// Every layer on screen, back to front, and the card last.
-    pub fn bands(&self) -> Vec<BandRow> {
-        let mut rows = Vec::new();
-        for (doc, panel) in &self.scenario.docs {
-            if !self.panel_visible(panel) {
-                continue;
-            }
-            // Each writer's layer in its band.
-            let shown = match self.shown(doc) {
-                Some(k) => Some(self.shared[doc].at(k).0),
-                None => self.current(doc).map(|r| Cow::Borrowed(&r.doc)),
-            };
-            let layers = shown.as_ref().and_then(|d| d["layers"].as_object());
-            for (layer, entry) in layers.into_iter().flatten() {
-                let Some(owner) = entry["writer"].as_str().and_then(shared::writer_of_text) else {
-                    continue;
-                };
-                rows.push(BandRow {
-                    doc: Some(doc.clone()),
-                    band: owner.band(),
-                    layer: layer.clone(),
-                    outline: owner.outlined(),
-                    name: self.agent_name(&owner),
-                    owner,
-                });
-            }
-        }
-        rows.sort_by(|a, b| a.band.cmp(&b.band).then_with(|| a.doc.cmp(&b.doc)));
-        // A card the shell places counts as shown only once presented (#400).
-        if self.card_slot().is_some() {
-            rows.push(BandRow {
-                doc: None,
-                band: Band::Card,
-                layer: "card".into(),
-                owner: Writer {
-                    kind: WriterKind::Shell,
-                    id: "shell".into(),
-                },
-                outline: false,
-                name: None,
-            });
-        }
-        rows
     }
 
     /// The name an agent's outline shows.
@@ -2470,32 +2423,6 @@ impl<'a> Hub<'a> {
                 Some(_) => "INCONCLUSIVE",
             },
         }
-    }
-}
-
-/// One layer on screen (Band), or the card.
-pub struct BandRow {
-    pub doc: Option<String>,
-    pub band: Band,
-    pub layer: String,
-    pub owner: Writer,
-    pub outline: bool,
-    pub name: Option<String>,
-}
-
-impl BandRow {
-    pub fn to_json(&self) -> Value {
-        let owner = match self.band {
-            Band::Card => json!({"kind": "shell"}),
-            _ => self.owner.to_json(),
-        };
-        json!({
-            "layer": self.layer,
-            "owner": owner,
-            "band": self.band.name(),
-            "outline": self.outline,
-            "name": self.name,
-        })
     }
 }
 

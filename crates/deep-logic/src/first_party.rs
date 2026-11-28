@@ -1,13 +1,13 @@
-//! The build's first-party packs (#416, #981, #953, #980, #1255, #959, #1181; canvas primitives: Logic: library
+//! The build's first-party packs (#416, #981, #953, #980, #1255, #959, #1181, #3604; canvas primitives: Logic: library
 //! interfaces): `packs/interfaces-1.0.0`, which declares physics2d.lib@1, fsm@1 and nn.mlp@1,
 //! `packs/lanes-1.0.0`, which declares lanes@1 with its reference library,
 //! `packs/modslib-1.0.0`, which declares mods.lib@1 with its reference library mods.tree,
 //! `packs/process-1.0.0`, which declares process@1 with its reference library (#980),
 //! `packs/separation-1.0.0`, which declares separation@1 with its reference library,
-//! `packs/circuit-1.0.0`, which declares circuit@1 with its reference library (#1181), and
+//! `packs/circuit-1.0.0`, which declares circuit@1 with its reference library (#1181),
+//! `packs/circuit-2.0.0`, which declares circuit@2 with its reference library (#3604), and
 //! `packs/sense-1.0.0`, which declares sense.lib@1 with its reference library sense.sight, held in
-//! the binary so every piece's links resolve against them, as the release's packs are installed for
-//! every document.
+//! the binary so every piece's links resolve against them.
 
 use std::sync::OnceLock;
 
@@ -135,6 +135,41 @@ const PACKS: &[(&str, Files)] = &[
             pack_file!("circuit-1.0.0", "fixtures/phase.json"),
             pack_file!("circuit-1.0.0", "objects/lamp_own.wasm"),
             pack_file!("circuit-1.0.0", "fixtures/lamp_own.json"),
+        ],
+    ),
+    (
+        include_str!("../../../packs/circuit-2.0.0/pack.json"),
+        &[
+            pack_file!("circuit-2.0.0", "objects/circuit_ref.wasm"),
+            pack_file!("circuit-2.0.0", "objects/no_magnetic.wasm"),
+            pack_file!("circuit-2.0.0", "objects/cold_reset.wasm"),
+            pack_file!("circuit-2.0.0", "objects/one_pole.wasm"),
+            pack_file!("circuit-2.0.0", "objects/both_ways.wasm"),
+            pack_file!("circuit-2.0.0", "objects/primary_current.wasm"),
+            pack_file!("circuit-2.0.0", "objects/late_set.wasm"),
+            pack_file!("circuit-2.0.0", "objects/late_fuse.wasm"),
+            pack_file!("circuit-2.0.0", "objects/overload.wasm"),
+            pack_file!("circuit-2.0.0", "fixtures/overload.json"),
+            pack_file!("circuit-2.0.0", "objects/short.wasm"),
+            pack_file!("circuit-2.0.0", "fixtures/short.json"),
+            pack_file!("circuit-2.0.0", "objects/leak.wasm"),
+            pack_file!("circuit-2.0.0", "fixtures/leak.json"),
+            pack_file!("circuit-2.0.0", "objects/test_button.wasm"),
+            pack_file!("circuit-2.0.0", "fixtures/test_button.json"),
+            pack_file!("circuit-2.0.0", "objects/stair.wasm"),
+            pack_file!("circuit-2.0.0", "fixtures/stair.json"),
+            pack_file!("circuit-2.0.0", "objects/doorbell.wasm"),
+            pack_file!("circuit-2.0.0", "fixtures/doorbell.json"),
+            pack_file!("circuit-2.0.0", "objects/dimmer.wasm"),
+            pack_file!("circuit-2.0.0", "fixtures/dimmer.json"),
+            pack_file!("circuit-2.0.0", "objects/timer.wasm"),
+            pack_file!("circuit-2.0.0", "fixtures/timer.json"),
+            pack_file!("circuit-2.0.0", "objects/supply.wasm"),
+            pack_file!("circuit-2.0.0", "fixtures/supply.json"),
+            pack_file!("circuit-2.0.0", "objects/fuse.wasm"),
+            pack_file!("circuit-2.0.0", "fixtures/fuse.json"),
+            pack_file!("circuit-2.0.0", "objects/lamp_own.wasm"),
+            pack_file!("circuit-2.0.0", "fixtures/lamp_own.json"),
         ],
     ),
     (

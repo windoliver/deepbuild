@@ -1,0 +1,12 @@
+{
+  "scripts/repo-rules.mjs": [
+    {
+      "find": [
+        "// #3528: a tracked file a merge or patch tool leaves behind, outside the vendored crates, which publish their own."
+      ],
+      "wrong": [
+        "// #3528: a tracked file a merge or patch tool leaves behind, such as crates/deep-gpu-layer/src/view3d.rs.orig, outside the vendored crates, which publish their own."
+      ]
+    }
+  ]
+}
