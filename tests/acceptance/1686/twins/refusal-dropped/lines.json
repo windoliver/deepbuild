@@ -1,0 +1,10 @@
+{
+  "packages/adapters/src/facts.ts": [
+    {
+      "find": [
+        "  if (!/^[a-z][a-z0-9-]*(?:\\.facts)?\\.json$/.test(file)) throw Error(`${JSON.stringify(file)} is not a facts file in adapters/`);"
+      ],
+      "wrong": []
+    }
+  ]
+}

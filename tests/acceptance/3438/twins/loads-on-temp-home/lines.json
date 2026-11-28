@@ -1,0 +1,13 @@
+{
+  "benchmarks/hub-launchd.mjs": [
+    {
+      "find": [
+        "  if (underTemp(homedir()) && !underTemp(onPath('launchctl') ?? '')) say({ hub: null, readings: {} });",
+        "  else {"
+      ],
+      "wrong": [
+        "  {"
+      ]
+    }
+  ]
+}

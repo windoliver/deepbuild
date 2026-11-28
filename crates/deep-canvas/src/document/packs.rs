@@ -307,6 +307,25 @@ pub struct Pack {
     pub removed: BTreeMap<String, String>,
 }
 
+impl Pack {
+    pub fn left(&self) -> Value {
+        let entries: Vec<Value> = self.entries.iter().map(|e| {
+            json!({"registry": e.registry, "name": e.name, "kit": e.kit.kept(), "twin": e.twin.as_ref().map(|t| t.kept())})
+        }).collect();
+        let kinds: Map<String, Value> = self
+            .kinds
+            .iter()
+            .map(|(name, k)| {
+                (
+                    name.clone(),
+                    json!({"kit": k.kit, "at_extremes": k.at_extremes, "meshes": k.meshes}),
+                )
+            })
+            .collect();
+        json!({"entries": entries, "kinds": kinds})
+    }
+}
+
 /// The step ops this slice expands: a mark or an item of a kind the build registers.
 /// `cue` writes a cue over the calling cue's targets; only a `cue.kind@1` verb runs it (#222).
 /// A film recipe's `shot`, `marker`, `strip` and `transition` each write an entry of the
@@ -348,6 +367,22 @@ pub fn section_of(op: &str) -> Option<&'static str> {
 /// The pack check (Pack: checked once per version). Refuses with the issues at the manifest's
 /// paths; a module the build lacks is `module_missing` naming it.
 pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result<Pack, Vec<Issue>> {
+    run_check(manifest, sealed, planted, None, &mut Ran::default())
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Ran {
+    pub kits: u64,
+    pub fields: u64,
+}
+
+fn run_check(
+    manifest: &Value,
+    sealed: &Sealed,
+    planted: Planted,
+    left: Option<&Value>,
+    ran: &mut Ran,
+) -> Result<Pack, Vec<Issue>> {
     let mut issues = Vec::new();
     let bad = |path: &str, actual: Value, what: &str| {
         Issue::envelope("out_of_range", path.to_string(), actual, what)
@@ -531,7 +566,14 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
         None => Vec::new(),
         Some(e) => {
             let recipes = fields.get("recipes");
-            check_entries(&id, e, &assets, recipes, sealed, &mut issues)
+            check_entries(
+                &id,
+                e,
+                (assets.as_slice(), recipes),
+                sealed,
+                (left, &mut *ran),
+                &mut issues,
+            )
         }
     };
     let kinds = check_kinds(
@@ -562,7 +604,10 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
     };
     let (moved, removed) = moved::read(fields, &id.name, &requires_packs, &mut issues);
     for key in fields.keys().filter(|k| !PACK_KEYS.contains(&k.as_str())) {
-        issues.extend(module_fields::check(sealed, manifest, key));
+        if left.is_none() {
+            ran.fields += 1;
+            issues.extend(module_fields::check(sealed, manifest, key));
+        }
     }
     if !issues.is_empty() {
         return Err(issues);
@@ -589,9 +634,9 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
 fn check_entries(
     id: &PackId,
     entries: &Value,
-    assets: &[Value],
-    recipes: Option<&Value>,
+    (assets, recipes): (&[Value], Option<&Value>),
     sealed: &Sealed,
+    (left, ran): (Option<&Value>, &mut Ran),
     issues: &mut Vec<Issue>,
 ) -> Vec<registry::lists::SealedEntry> {
     let mut out = Vec::new();
@@ -704,7 +749,26 @@ fn check_entries(
                     v
                 }
             };
-            let kit = reg.def.run_kit(entry, &judged);
+            let kept = left.and_then(|l| {
+                let mut held = l["entries"].as_array()?.iter();
+                let e = held.find(|e| e["registry"] == **name && e["name"] == *entry)?;
+                let kit = registry::lists::KitResult::from_kept(&reg.def.kit, &e["kit"])?;
+                let twin = match reg.def.twin {
+                    Some(_) => Some(registry::lists::KitResult::from_kept(
+                        &reg.def.kit,
+                        &e["twin"],
+                    )?),
+                    None => None,
+                };
+                Some((kit, twin))
+            });
+            let (kit, twin) = kept.unwrap_or_else(|| {
+                ran.kits += 1 + u64::from(reg.def.twin.is_some());
+                (
+                    reg.def.run_kit(entry, &judged),
+                    reg.def.twin.map(|t| t(entry, value)),
+                )
+            });
             if !kit.pass() {
                 let why: Vec<String> = kit
                     .rules
@@ -718,25 +782,27 @@ fn check_entries(
                 ));
                 continue;
             }
-            out.push(registry::lists::SealedEntry {
-                name: entry.to_string(),
-                registry: name.clone(),
-                origin: "pack",
-                module: String::new(),
-                pack: pack.clone(),
-                value: value.clone(),
-                since: id.version.to_string(),
-                digest: registry::lists::entry_digest(name, entry, value, &id.version.to_string()),
-                twin: reg.def.twin.map(|t| t(entry, value)),
-                kit,
-            });
+            match entries::admitted(
+                &pack,
+                reg,
+                entry,
+                value,
+                id.version.to_string(),
+                (kit, twin),
+            ) {
+                Ok(admitted) => out.push(admitted),
+                Err(why) => issues.push(refuse(
+                    json!({"registry": name, "entry": entry}),
+                    format!("`{entry}` of `{name}` has no canonical form to digest: {why}"),
+                )),
+            }
         }
     }
     out
 }
 
 /// `d1:` SHA-256 of a manifest's canonical form: a version's bytes, frozen.
-fn digest(manifest: &Value) -> String {
+pub fn digest(manifest: &Value) -> String {
     format!("d1:{}", crate::schedule::sha256_hex(&canonical(manifest)))
 }
 
@@ -1589,6 +1655,7 @@ pub struct Packs {
     refused: BTreeMap<String, Vec<Issue>>,
     /// How often the pack check ran per `owner/name@version`: once, as a version is checked once.
     checks: BTreeMap<String, u32>,
+    pub ran: Ran,
     /// The versions uninstalled while something names them: kept, and taking no new instance.
     retired: BTreeSet<String>,
     pub planted: Planted,
@@ -1642,29 +1709,33 @@ impl Packs {
         }
         // The pack check, its place in the pack graph (#1957), then each kind's kit (#202), which
         // checks documents of the pack beside the versions it requires.
-        let checked = check_pack(manifest, sealed, self.planted).and_then(|mut pack| {
-            deps::cycle(self, &pack)?;
-            // Each move followed to a kind that exists, and no kind dropped silently (#1962).
-            moved::check(self, &pack)?;
-            if !pack.kinds.is_empty() || !pack.census.is_empty() {
-                let mut alone = deps::store(self, &pack);
-                // A pack's kit checks its kinds as shipped: a planted cue-list expander (#142) or
-                // load migrator (#1959) is a document's wrong program, never the kit's.
-                alone.planted.expander = None;
-                alone.planted.migrate_one_major = false;
-                alone.planted.migrate_zero_as_absent = false;
-                alone.planted.migrate_params_only = false;
-                alone.planted.migrate_channels_only = false;
-                alone.planted.drops_moved = false;
-                // #1493: a parameter a pack's census maps must reach the frame, so each meets
-                // field.effect on its recipe as a kind's field does.
-                super::pack_kinds::alias_effect(&pack, sealed, &alone)?;
-                if !pack.kinds.is_empty() {
-                    super::pack_kinds::kit(&mut pack, sealed, alone)?;
+        let mut ran = self.ran;
+        let checked =
+            run_check(manifest, sealed, self.planted, None, &mut ran).and_then(|mut pack| {
+                deps::cycle(self, &pack)?;
+                // Each move followed to a kind that exists, and no kind dropped silently (#1962).
+                moved::check(self, &pack)?;
+                if !pack.kinds.is_empty() || !pack.census.is_empty() {
+                    ran.kits += u64::from(!pack.census.is_empty()) + pack.kinds.len() as u64;
+                    let mut alone = deps::store(self, &pack);
+                    // A pack's kit checks its kinds as shipped: a planted cue-list expander (#142) or
+                    // load migrator (#1959) is a document's wrong program, never the kit's.
+                    alone.planted.expander = None;
+                    alone.planted.migrate_one_major = false;
+                    alone.planted.migrate_zero_as_absent = false;
+                    alone.planted.migrate_params_only = false;
+                    alone.planted.migrate_channels_only = false;
+                    alone.planted.drops_moved = false;
+                    // #1493: a parameter a pack's census maps must reach the frame, so each meets
+                    // field.effect on its recipe as a kind's field does.
+                    super::pack_kinds::alias_effect(&pack, sealed, &alone)?;
+                    if !pack.kinds.is_empty() {
+                        super::pack_kinds::kit(&mut pack, sealed, alone)?;
+                    }
                 }
-            }
-            Ok(pack)
-        });
+                Ok(pack)
+            });
+        self.ran = ran;
         let pack = match checked {
             Ok(pack) => pack,
             Err(issues) => {
@@ -1690,6 +1761,45 @@ impl Packs {
     /// Admits a version this process's check admitted before, as it was, without checking again.
     pub fn readmit(&mut self, pack: Pack) -> &Pack {
         self.by_id.entry(pack.id.text()).or_insert(pack)
+    }
+
+    pub fn admit_kept(&mut self, manifest: &Value, sealed: &Sealed, left: &Value) -> Option<&Pack> {
+        let key = manifest_id(manifest).filter(|k| !self.by_id.contains_key(k))?;
+        let mut ran = Ran::default();
+        let pack = run_check(manifest, sealed, self.planted, Some(left), &mut ran);
+        self.ran.kits += ran.kits;
+        let mut pack = pack.ok().filter(|_| ran == Ran::default())?;
+        deps::cycle(self, &pack).ok()?;
+        moved::check(self, &pack).ok()?;
+        for (name, kind) in &mut pack.kinds {
+            let kept = left["kinds"].get(name)?;
+            kind.kit = kept.get("kit")?.clone();
+            kind.at_extremes = kept.get("at_extremes")?.clone();
+            let meshes = kept.get("meshes")?.as_array()?.iter();
+            kind.meshes = meshes
+                .map(|m| m.as_str().map(String::from))
+                .collect::<Option<_>>()?;
+        }
+        Some(&*self.by_id.entry(key).or_insert(pack))
+    }
+
+    pub fn refuse_kept(&mut self, key: &str, issues: &[Value]) {
+        let missing: Vec<Issue> = issues
+            .iter()
+            .filter(|i| i["code"] == "module_missing")
+            .map(|i| {
+                let text = |k: &str| i[k].as_str().unwrap_or_default();
+                Issue::envelope(
+                    "module_missing",
+                    text("path").into(),
+                    i["actual"].clone(),
+                    text("what"),
+                )
+            })
+            .collect();
+        if !missing.is_empty() {
+            self.refused.entry(key.to_string()).or_insert(missing);
+        }
     }
 
     /// How often the pack check has run for `owner/name@version`.
