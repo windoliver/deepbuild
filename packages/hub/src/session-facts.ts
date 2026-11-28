@@ -8,6 +8,7 @@ import { parseYaml } from './yaml.js';
 import { run } from './children.js';
 import { agentOf, loadedAtStart } from './rule-load.js';
 import { isRecord as isObj } from '@deepbuild/contracts';
+import type { SessionRoute } from '@deepbuild/adapters';
 
 type Obj = Record<string, unknown>;
 interface Load { kind: 'instructions' | 'skill' | 'hooks' | 'mcp'; name: string; source: string; digest: string }
@@ -151,4 +152,17 @@ export async function unpushedOf(cwd: string, shas: readonly string[]): Promise<
   if (r.error) return undefined;
   const out = new Set(r.stdout.split('\n'));
   return shas.filter((s) => out.has(s));
+}
+
+export async function routeOf(record: { raw(query: string, params?: readonly (string | number | null)[]): Promise<unknown[]> }, session: string | null): Promise<SessionRoute | null> {
+  if (!session) return null;
+  const rows = (await record.raw(`SELECT json_extract(data, '$.route') AS route FROM events WHERE session_id = ? AND kind = 'session.start' ORDER BY log_pos`, [session])) as { route: string | null }[];
+  if (!rows.length) return null;
+  const route: SessionRoute = {};
+  for (const row of rows) {
+    const read: unknown = row.route ? JSON.parse(row.route) : undefined;
+    if (typeof read !== 'object' || read === null) return null;
+    for (const [key, set] of Object.entries(read)) if (typeof set === 'boolean') route[key] = route[key] === true || set;
+  }
+  return route;
 }

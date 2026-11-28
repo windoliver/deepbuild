@@ -10,6 +10,17 @@ const BILLING_KEYS: &[&str] = &[
     "OPENAI_API_KEY",
 ];
 
+const ROUTE_KEYS: &[&str] = &[
+    "ANTHROPIC_BASE_URL",
+    "ANTHROPIC_BEDROCK_BASE_URL",
+    "ANTHROPIC_VERTEX_BASE_URL",
+    "ANTHROPIC_FOUNDRY_BASE_URL",
+    "ANTHROPIC_AWS_BASE_URL",
+    "ANTHROPIC_BEDROCK_MANTLE_BASE_URL",
+    "ANTHROPIC_GOOGLE_CLOUD_BASE_URL",
+    "OPENAI_BASE_URL",
+];
+
 pub(crate) fn session_start_fields(event: &str) -> String {
     if event != "SessionStart" {
         return String::new();
@@ -27,6 +38,16 @@ pub(crate) fn session_start_fields(event: &str) -> String {
         })
         .collect::<Vec<_>>()
         .join(",");
+    let route = ROUTE_KEYS
+        .iter()
+        .map(|key| {
+            format!(
+                "\"{key}\":{}",
+                env::var_os(key).is_some_and(|v| !v.is_empty())
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",");
     let inbox = env::var("CLAUDE_CODE_MESSAGING_SOCKET")
         .ok()
         .filter(|path| !path.is_empty())
@@ -38,5 +59,5 @@ pub(crate) fn session_start_fields(event: &str) -> String {
             .unwrap_or_default(),
         _ => String::new(),
     };
-    format!(",\"billing\":{{{keys}}}{inbox}{token}")
+    format!(",\"billing\":{{{keys}}},\"route\":{{{route}}}{inbox}{token}")
 }

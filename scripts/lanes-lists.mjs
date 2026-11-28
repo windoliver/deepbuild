@@ -873,6 +873,8 @@ byHand.push('tests/acceptance/96/commit.test.ts', 'tests/acceptance/96/proof.tes
 Object.assign(redrafted, { 'tests/acceptance/3295/late-close.test.mjs': 'tests/acceptance/3295-redraft-fae86cca/' });
 byHand.push('tests/acceptance/3295/late-close.test.mjs');
 
+Object.assign(redrafted, { 'tests/acceptance/1886/route.test.ts': 'tests/acceptance/1886/redraft/' });
+byHand.push('tests/acceptance/1886/route.test.ts');
 Object.assign(redrafted, { 'tests/acceptance/3066/same-failures.test.mjs': 'tests/acceptance/3066-redraft-3699/' });
 byHand.push('tests/acceptance/3066/same-failures.test.mjs');
 

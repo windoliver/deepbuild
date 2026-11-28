@@ -28,7 +28,7 @@ import { checksIn, docChecksIn, outsideOf } from './spec-entries.js';
 import { approveChange, approvedSpec, SPEC, specDrift } from './approved-spec.js';
 import { repoOf } from './shared-runs.js';
 import { GateRecord, type GateAsk } from './gate-record.js';
-import { headOf } from './session-facts.js';
+import { headOf, routeOf } from './session-facts.js';
 import { type ClaimCheck, type DefinitionState, type RunKey, type StatePin } from './gate-runner.js';
 import { partOfIssue, prUrlIn } from './forge.js';
 import { gatePrBodies } from './pr-commands.js';
@@ -1105,7 +1105,7 @@ export class StopJudging {
       // The checks of the other kinds the hub holds (#1537), each run through its kind: a drafted check whose bytes name
       // a work kind; the review on every claim that opens or updates a PR, its second model through the runner under
       // your reserve (#87); the numbers check on every claim whose words state a number or a speed with the check behind it (#1863).
-      const of: ReviewOf = { claim: r.claim, task: r.task, agent: this.options.state().live.get(r.session)?.agent ?? 'claude-code', transcript: this.options.state().sessions.get(r.session)?.transcript, pr: await this.prOf(r.session) };
+      const of: ReviewOf = { claim: r.claim, task: r.task, agent: this.options.state().live.get(r.session)?.agent ?? 'claude-code', transcript: this.options.state().sessions.get(r.session)?.transcript, pr: await this.prOf(r.session), route: await routeOf(this.options.services.record, r.session) };
       const kinded = new Map<string, { spec: CheckSpec; of: ReviewOf }>();
       const docs = docChecksIn(approved?.spec);
       for (const c of checks) {

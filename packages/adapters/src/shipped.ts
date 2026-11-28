@@ -112,7 +112,10 @@ export const claudeParts: AdapterParts = {
   doctor: () => notChecked('claude'),
   readUsage: readClaudeUsage,
   // Behind a base URL of its own the transcript's model is the proxy's word; Bedrock and Vertex name their own models.
-  routeAtStart: (env) => Object.fromEntries(['ANTHROPIC_BASE_URL', 'ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX'].map((k) => [k, !!env[k]])),
+  routeAtStart: (env) => ({
+    ...Object.fromEntries(['ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX'].map((k) => [k, !!env[k]])),
+    ANTHROPIC_BASE_URL: ['ANTHROPIC_BASE_URL', 'ANTHROPIC_BEDROCK_BASE_URL', 'ANTHROPIC_VERTEX_BASE_URL', 'ANTHROPIC_FOUNDRY_BASE_URL', 'ANTHROPIC_AWS_BASE_URL', 'ANTHROPIC_BEDROCK_MANTLE_BASE_URL', 'ANTHROPIC_GOOGLE_CLOUD_BASE_URL'].some((k) => !!env[k]),
+  }),
   // The PermissionRequest hook's output: allow only when the answer's decision is allow; deny or none denies, with
   // your words as the message; cancel gives no decision, so Claude Code's own dialog asks. An option's label and the
   // words never allow. An allow for the session takes the agent's own suggestions for the session alone; none ever
@@ -159,11 +162,19 @@ export const codexParts: AdapterParts = {
   readUsage: readCodexUsage,
   // Codex's model provider, from its config.toml, and OPENAI_BASE_URL: each other than the default moves its route.
   routeAtStart: (env) => {
-    let provider: string | undefined;
+    const home = env.CODEX_HOME;
+    if (!home) return { OPENAI_BASE_URL: !!env.OPENAI_BASE_URL, model_provider: true };
+    let moved = false;
     try {
-      provider = /^\s*model_provider\s*=\s*"([^"]*)"/m.exec(readFileSync(join(env.CODEX_HOME ?? join(env.HOME ?? '', '.codex'), 'config.toml'), 'utf8'))?.[1];
-    } catch { /* no config: the default provider */ }
-    return { OPENAI_BASE_URL: !!env.OPENAI_BASE_URL, model_provider: provider !== undefined && provider !== 'openai' };
+      const config = readFileSync(join(home, 'config.toml'), 'utf8');
+      const providers = [...config.matchAll(/^\s*(?:model_provider|"model_provider"|'model_provider')\s*=\s*(?:"([^"]*)"|'([^']*)')/gm)].map((m) => m[1] ?? m[2]);
+      moved = providers.some((p) => p !== 'openai')
+        || /^\s*["']?(?:profile|profiles|model_providers|openai_base_url|chatgpt_base_url|oss_provider)["']?\s*[.=]/m.test(config)
+        || /^\s*\[{1,2}\s*["']?(?:profiles|model_providers)["']?\s*[.\]]/m.test(config);
+    } catch (error) {
+      moved = (error as NodeJS.ErrnoException).code !== 'ENOENT';
+    }
+    return { OPENAI_BASE_URL: !!env.OPENAI_BASE_URL, model_provider: moved };
   },
   // The PermissionRequest hook's output, by Codex's rules: only allow or deny for this one call, a deny with its
   // message and an allow with nothing else. Allow comes from the answer's decision alone; deny or none denies, with

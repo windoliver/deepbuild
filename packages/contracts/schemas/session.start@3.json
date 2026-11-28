@@ -91,6 +91,16 @@
           },
           "description": "Whether each billing key is set in the environment the agent gave deep-hook, by name: true or false, never a value."
         },
+        "route": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+          },
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "description": "The route to its model, as the session's adapter read it once at its start from what its SessionStart reported set (#1886): by each variable or setting that moves it, whether it was, never its value. A review reads a transcript's model only on the agent's own route."
+        },
         "inbox": {
           "type": "string",
           "minLength": 1,

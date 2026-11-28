@@ -1,0 +1,1 @@
+{ "alone": true, "why": "binary: each test starts a real hub with #1537's review world, which runs deep-hook from target/, as tests/acceptance/1537/ does." }

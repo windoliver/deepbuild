@@ -42,7 +42,7 @@ it('a pass asks once for the claim and once for each PR it found bugs in, each j
   const kinds = await openKinds({ submit, wait: submit, cancel: submit, plant: undefined, store: dir, extensions: () => undefined } as unknown as KindsOptions);
   const pass = { id: 'audit', name: 'a code audit', prompt: 'Audit the change for unchecked input.', found: [{ pr: 12, base: first, head: merged, bugs: [{ file: 'src/old.ts', line: 1 }] }] };
   const spec = { kind: 'review', runner: 'second-model', inputs: [], depth: 'unit', oracle: 'model', contract: null, base, head, rubric: '', since: null, pass, out: ['research'] } as unknown as CheckSpec;
-  const of = { claim: 'claim:01', task: 'task:01', agent: 'claude-code', transcript: join(dir, 'session.jsonl') };
+  const of = { claim: 'claim:01', task: 'task:01', agent: 'claude-code', transcript: join(dir, 'session.jsonl'), route: {} };
   const ctx = { checkout: dir, deadline: 60_000, now: Date.now };
 
   const ran = await kinds.run(spec, ctx, { ...of, kept: async () => undefined });

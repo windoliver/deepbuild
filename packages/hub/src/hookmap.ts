@@ -316,6 +316,10 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
       data = { agent, worktree: meta.cwd || '-', branch: null, thread: meta.session || '-', loads: [] };
       // Which billing keys the agent had set, never their values.
       if (request.billing) data.billing = request.billing;
+      if (request.route) {
+        const route = routeAt(name, request.route, request.billing ?? {}, meta.transcript);
+        if (route) data.route = route;
+      }
       if (meta.inbox) data.inbox = meta.inbox;
       fill = 'loads';
       v = 3;
@@ -526,6 +530,16 @@ function errorLine(error: string): string {
   const lines = error.split('\n').map((l) => l.replace(/\s+/g, ' ').trim()).filter(Boolean);
   const own = /^Exit code \d+$/.test(lines[0] ?? '') ? lines.slice(1) : lines;
   return own.find((l) => /^(!|error\b|fatal\b|\w*(Error|Exception)\b)/i.test(l)) ?? own[0] ?? '';
+}
+
+function routeAt(name: string, route: Record<string, boolean>, billing: Record<string, boolean>, transcript: string): Record<string, boolean> | undefined {
+  const read = registry().get(name).routeAtStart;
+  if (!read) return undefined;
+  const env: Record<string, string | undefined> = {};
+  for (const [key, set] of Object.entries({ ...billing, ...route })) env[key] = set ? '1' : undefined;
+  const at = transcript.lastIndexOf('/sessions/');
+  env.CODEX_HOME = at > 0 ? transcript.slice(0, at) : undefined;
+  return read(env);
 }
 
 /** The loop fact a tool hook carries, by the agent's loop facts: wake-ups and crons once they ran, background subagents and commands, and monitors' watches. */

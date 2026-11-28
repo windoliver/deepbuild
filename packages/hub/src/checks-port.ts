@@ -1,4 +1,5 @@
 // Check execution contracts: the core consumes results, never selects a concrete check implementation.
+import type { SessionRoute } from '@deepbuild/adapters';
 import type { CheckContext, CheckResult, CheckSpec } from '@deepbuild/conformance';
 import type { Checkouts } from '@deepbuild/gate';
 import type { Host, Supervisor } from '@deepbuild/supervisor';
@@ -39,7 +40,7 @@ export interface CommandRun extends CheckResult {
   clock: number;
 }
 export interface ReviewOf {
-  claim: string; task: string; agent: string; transcript: string | undefined; pr?: string | undefined;
+  claim: string; task: string; agent: string; transcript: string | undefined; pr?: string | undefined; route: SessionRoute | null;
   /** How many of a PR's bugs a review pass found on a replay the record keeps under `key` for `model` (#2748); undefined when it keeps none. */
   kept?: (key: string, model: string) => Promise<number | undefined>;
 }
