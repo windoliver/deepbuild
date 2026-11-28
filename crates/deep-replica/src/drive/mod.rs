@@ -1639,10 +1639,7 @@ impl Replica {
                     .cx
                     .update(|cx| cx.read_from_clipboard())
                     .and_then(|item| item.text());
-                if let Some(text) = text.filter(|t| self.pasted.as_ref() != Some(t)) {
-                    plant::write_pasteboard(&text);
-                    self.pasted = Some(text);
-                }
+                plant::write_pasteboard_once(text, &mut self.pasted);
             }
             #[cfg(target_os = "macos")]
             Some(Plant::MovesFocus) => {
