@@ -75100,6 +75100,49 @@ impl Contract for McpHandshake {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum McpMetaProtocolVersion {
+    V20260728,
+}
+
+impl McpMetaProtocolVersion {
+    /// Every value, in the schema's order (#2854: the handshake list's newest is its last).
+    pub const ALL: &'static [Self] = &[Self::V20260728];
+}
+
+impl Contract for McpMetaProtocolVersion {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::string(value, at)? {
+            "2026-07-28" => Ok(Self::V20260728),
+            other => Err(format!("{at}: {other:?} is not one of the listed values")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        Value::String(match self {
+            Self::V20260728 => "2026-07-28",
+        }.to_string())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct McpMeta {
+    pub protocolVersion: McpMetaProtocolVersion,
+}
+
+impl Contract for McpMeta {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["protocolVersion"])?;
+        Ok(Self {
+            protocolVersion: deep_contracts::required(members, at, "protocolVersion")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("protocolVersion".to_string(), self.protocolVersion.to_json()));
+        Value::Object(members)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct McpToolsListedV;
 
@@ -75671,6 +75714,410 @@ pub struct McpToolsListedV2 {
 }
 
 impl Contract for McpToolsListedV2 {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["v", "id", "kind", "subject", "writer", "actor", "scope", "ts", "seq", "log_pos", "data", "evidence"])?;
+        deep_contracts::check_member(members, at, "id", &RULE_0)?;
+        deep_contracts::check_member(members, at, "subject", &RULE_2)?;
+        deep_contracts::check_member(members, at, "actor", &RULE_3)?;
+        deep_contracts::check_member(members, at, "scope", &RULE_3)?;
+        deep_contracts::check_member(members, at, "ts", &RULE_4)?;
+        deep_contracts::check_member(members, at, "log_pos", &RULE_5)?;
+        deep_contracts::check_member(members, at, "evidence", &RULE_9)?;
+        Ok(Self {
+            v: deep_contracts::required(members, at, "v")?,
+            id: deep_contracts::required(members, at, "id")?,
+            kind: deep_contracts::required(members, at, "kind")?,
+            subject: deep_contracts::optional(members, at, "subject")?,
+            writer: deep_contracts::required(members, at, "writer")?,
+            actor: deep_contracts::required(members, at, "actor")?,
+            scope: deep_contracts::required(members, at, "scope")?,
+            ts: deep_contracts::required(members, at, "ts")?,
+            seq: deep_contracts::optional(members, at, "seq")?,
+            log_pos: deep_contracts::optional(members, at, "log_pos")?,
+            data: deep_contracts::required(members, at, "data")?,
+            evidence: deep_contracts::optional(members, at, "evidence")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("v".to_string(), self.v.to_json()));
+        members.push(("id".to_string(), self.id.to_json()));
+        members.push(("kind".to_string(), self.kind.to_json()));
+        if let Some(value) = &self.subject {
+            members.push(("subject".to_string(), value.to_json()));
+        }
+        members.push(("writer".to_string(), self.writer.to_json()));
+        members.push(("actor".to_string(), self.actor.to_json()));
+        members.push(("scope".to_string(), self.scope.to_json()));
+        members.push(("ts".to_string(), self.ts.to_json()));
+        if let Some(value) = &self.seq {
+            members.push(("seq".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.log_pos {
+            members.push(("log_pos".to_string(), value.to_json()));
+        }
+        members.push(("data".to_string(), self.data.to_json()));
+        if let Some(value) = &self.evidence {
+            members.push(("evidence".to_string(), value.to_json()));
+        }
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct McpToolsListedV3V;
+
+impl Contract for McpToolsListedV3V {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "3").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("3").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct McpToolsListedV3Kind;
+
+impl Contract for McpToolsListedV3Kind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"mcp.tools_listed\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"mcp.tools_listed\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct McpToolsListedV3Writer;
+
+impl Contract for McpToolsListedV3Writer {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"core\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"core\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum McpToolsListedV3DataScope {
+    User,
+    Local,
+    Project,
+}
+
+impl McpToolsListedV3DataScope {
+    /// Every value, in the schema's order (#2854: the handshake list's newest is its last).
+    pub const ALL: &'static [Self] = &[Self::User, Self::Local, Self::Project];
+}
+
+impl Contract for McpToolsListedV3DataScope {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::string(value, at)? {
+            "user" => Ok(Self::User),
+            "local" => Ok(Self::Local),
+            "project" => Ok(Self::Project),
+            other => Err(format!("{at}: {other:?} is not one of the listed values")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        Value::String(match self {
+            Self::User => "user",
+            Self::Local => "local",
+            Self::Project => "project",
+        }.to_string())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct McpToolsListedV3DataToolsItem {
+    pub name: String,
+    pub digest: String,
+    pub hints: deep_contracts::Value,
+}
+
+impl Contract for McpToolsListedV3DataToolsItem {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["name", "digest", "hints"])?;
+        deep_contracts::check_member(members, at, "name", &RULE_6)?;
+        deep_contracts::check_member(members, at, "digest", &RULE_92)?;
+        Ok(Self {
+            name: deep_contracts::required(members, at, "name")?,
+            digest: deep_contracts::required(members, at, "digest")?,
+            hints: deep_contracts::required(members, at, "hints")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("name".to_string(), self.name.to_json()));
+        members.push(("digest".to_string(), self.digest.to_json()));
+        members.push(("hints".to_string(), self.hints.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct McpToolsListedV3DataHeld {
+    pub ask: String,
+    pub tools: Vec<String>,
+}
+
+impl Contract for McpToolsListedV3DataHeld {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["ask", "tools"])?;
+        deep_contracts::check_member(members, at, "ask", &RULE_108)?;
+        deep_contracts::check_member(members, at, "tools", &RULE_113)?;
+        Ok(Self {
+            ask: deep_contracts::required(members, at, "ask")?,
+            tools: deep_contracts::required(members, at, "tools")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("ask".to_string(), self.ask.to_json()));
+        members.push(("tools".to_string(), self.tools.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct McpToolsListedV3DataLimitResult {
+    pub chars: Option<i64>,
+    pub tokens: Option<i64>,
+    pub bytes: Option<i64>,
+}
+
+impl Contract for McpToolsListedV3DataLimitResult {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["chars", "tokens", "bytes"])?;
+        deep_contracts::check_member(members, at, "chars", &RULE_5)?;
+        deep_contracts::check_member(members, at, "tokens", &RULE_5)?;
+        deep_contracts::check_member(members, at, "bytes", &RULE_5)?;
+        Ok(Self {
+            chars: deep_contracts::optional(members, at, "chars")?,
+            tokens: deep_contracts::optional(members, at, "tokens")?,
+            bytes: deep_contracts::optional(members, at, "bytes")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        if let Some(value) = &self.chars {
+            members.push(("chars".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.tokens {
+            members.push(("tokens".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.bytes {
+            members.push(("bytes".to_string(), value.to_json()));
+        }
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct McpToolsListedV3DataLimitError {
+    pub chars: Option<i64>,
+    pub tokens: Option<i64>,
+    pub bytes: Option<i64>,
+}
+
+impl Contract for McpToolsListedV3DataLimitError {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["chars", "tokens", "bytes"])?;
+        deep_contracts::check_member(members, at, "chars", &RULE_5)?;
+        deep_contracts::check_member(members, at, "tokens", &RULE_5)?;
+        deep_contracts::check_member(members, at, "bytes", &RULE_5)?;
+        Ok(Self {
+            chars: deep_contracts::optional(members, at, "chars")?,
+            tokens: deep_contracts::optional(members, at, "tokens")?,
+            bytes: deep_contracts::optional(members, at, "bytes")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        if let Some(value) = &self.chars {
+            members.push(("chars".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.tokens {
+            members.push(("tokens".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.bytes {
+            members.push(("bytes".to_string(), value.to_json()));
+        }
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct McpToolsListedV3DataLimitCap {
+    pub chars: Option<i64>,
+    pub tokens: Option<i64>,
+    pub bytes: Option<i64>,
+}
+
+impl Contract for McpToolsListedV3DataLimitCap {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["chars", "tokens", "bytes"])?;
+        deep_contracts::check_member(members, at, "chars", &RULE_5)?;
+        deep_contracts::check_member(members, at, "tokens", &RULE_5)?;
+        deep_contracts::check_member(members, at, "bytes", &RULE_5)?;
+        Ok(Self {
+            chars: deep_contracts::optional(members, at, "chars")?,
+            tokens: deep_contracts::optional(members, at, "tokens")?,
+            bytes: deep_contracts::optional(members, at, "bytes")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        if let Some(value) = &self.chars {
+            members.push(("chars".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.tokens {
+            members.push(("tokens".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.bytes {
+            members.push(("bytes".to_string(), value.to_json()));
+        }
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct McpToolsListedV3DataLimitErrorCap {
+    pub chars: Option<i64>,
+    pub tokens: Option<i64>,
+    pub bytes: Option<i64>,
+}
+
+impl Contract for McpToolsListedV3DataLimitErrorCap {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["chars", "tokens", "bytes"])?;
+        deep_contracts::check_member(members, at, "chars", &RULE_5)?;
+        deep_contracts::check_member(members, at, "tokens", &RULE_5)?;
+        deep_contracts::check_member(members, at, "bytes", &RULE_5)?;
+        Ok(Self {
+            chars: deep_contracts::optional(members, at, "chars")?,
+            tokens: deep_contracts::optional(members, at, "tokens")?,
+            bytes: deep_contracts::optional(members, at, "bytes")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        if let Some(value) = &self.chars {
+            members.push(("chars".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.tokens {
+            members.push(("tokens".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.bytes {
+            members.push(("bytes".to_string(), value.to_json()));
+        }
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct McpToolsListedV3DataLimit {
+    pub client: Option<String>,
+    pub client_version: Option<String>,
+    pub from: String,
+    pub result: McpToolsListedV3DataLimitResult,
+    pub error: McpToolsListedV3DataLimitError,
+    pub cap: McpToolsListedV3DataLimitCap,
+    pub error_cap: McpToolsListedV3DataLimitErrorCap,
+}
+
+impl Contract for McpToolsListedV3DataLimit {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["client", "client_version", "from", "result", "error", "cap", "error_cap"])?;
+        deep_contracts::check_member(members, at, "client", &RULE_16)?;
+        deep_contracts::check_member(members, at, "client_version", &RULE_16)?;
+        deep_contracts::check_member(members, at, "from", &RULE_6)?;
+        Ok(Self {
+            client: deep_contracts::required(members, at, "client")?,
+            client_version: deep_contracts::required(members, at, "client_version")?,
+            from: deep_contracts::required(members, at, "from")?,
+            result: deep_contracts::required(members, at, "result")?,
+            error: deep_contracts::required(members, at, "error")?,
+            cap: deep_contracts::required(members, at, "cap")?,
+            error_cap: deep_contracts::required(members, at, "error_cap")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("client".to_string(), self.client.to_json()));
+        members.push(("client_version".to_string(), self.client_version.to_json()));
+        members.push(("from".to_string(), self.from.to_json()));
+        members.push(("result".to_string(), self.result.to_json()));
+        members.push(("error".to_string(), self.error.to_json()));
+        members.push(("cap".to_string(), self.cap.to_json()));
+        members.push(("error_cap".to_string(), self.error_cap.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct McpToolsListedV3Data {
+    pub server: String,
+    pub scope: McpToolsListedV3DataScope,
+    pub version: Option<String>,
+    pub tools: Vec<McpToolsListedV3DataToolsItem>,
+    pub held: Option<McpToolsListedV3DataHeld>,
+    pub limit: Option<McpToolsListedV3DataLimit>,
+    pub handshake: bool,
+}
+
+impl Contract for McpToolsListedV3Data {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["server", "scope", "version", "tools", "held", "limit", "handshake"])?;
+        deep_contracts::check_member(members, at, "server", &RULE_6)?;
+        deep_contracts::check_member(members, at, "version", &RULE_14)?;
+        deep_contracts::check_member(members, at, "tools", &RULE_94)?;
+        Ok(Self {
+            server: deep_contracts::required(members, at, "server")?,
+            scope: deep_contracts::required(members, at, "scope")?,
+            version: deep_contracts::required(members, at, "version")?,
+            tools: deep_contracts::required(members, at, "tools")?,
+            held: deep_contracts::optional(members, at, "held")?,
+            limit: deep_contracts::optional(members, at, "limit")?,
+            handshake: deep_contracts::required(members, at, "handshake")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("server".to_string(), self.server.to_json()));
+        members.push(("scope".to_string(), self.scope.to_json()));
+        members.push(("version".to_string(), self.version.to_json()));
+        members.push(("tools".to_string(), self.tools.to_json()));
+        if let Some(value) = &self.held {
+            members.push(("held".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.limit {
+            members.push(("limit".to_string(), value.to_json()));
+        }
+        members.push(("handshake".to_string(), self.handshake.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct McpToolsListedV3 {
+    pub v: McpToolsListedV3V,
+    pub id: String,
+    pub kind: McpToolsListedV3Kind,
+    pub subject: Option<String>,
+    pub writer: McpToolsListedV3Writer,
+    pub actor: String,
+    pub scope: String,
+    pub ts: i64,
+    pub seq: Option<deep_contracts::Seq>,
+    pub log_pos: Option<i64>,
+    pub data: McpToolsListedV3Data,
+    pub evidence: Option<Vec<String>>,
+}
+
+impl Contract for McpToolsListedV3 {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["v", "id", "kind", "subject", "writer", "actor", "scope", "ts", "seq", "log_pos", "data", "evidence"])?;
         deep_contracts::check_member(members, at, "id", &RULE_0)?;
@@ -118109,8 +118556,10 @@ pub fn roundtrip(schema: &str, json: &str) -> Result<String, String> {
         "lease.released@2" => <LeaseReleasedV2 as Contract>::from_json(&value, "")?.to_json(),
         "lease.stale@1" => <LeaseStale as Contract>::from_json(&value, "")?.to_json(),
         "mcp.handshake@1" => <McpHandshake as Contract>::from_json(&value, "")?.to_json(),
+        "mcp.meta@1" => <McpMeta as Contract>::from_json(&value, "")?.to_json(),
         "mcp.tools_listed@1" => <McpToolsListed as Contract>::from_json(&value, "")?.to_json(),
         "mcp.tools_listed@2" => <McpToolsListedV2 as Contract>::from_json(&value, "")?.to_json(),
+        "mcp.tools_listed@3" => <McpToolsListedV3 as Contract>::from_json(&value, "")?.to_json(),
         "merge.dry_run@1" => <MergeDryRun as Contract>::from_json(&value, "")?.to_json(),
         "model.call@1" => <ModelCall as Contract>::from_json(&value, "")?.to_json(),
         "move.refused@1" => <MoveRefused as Contract>::from_json(&value, "")?.to_json(),

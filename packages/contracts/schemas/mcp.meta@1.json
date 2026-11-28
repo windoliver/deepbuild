@@ -1,0 +1,25 @@
+{
+  "title": "mcp.meta@1",
+  "description": "The MCP revisions DeepBuild's own MCP servers serve with no handshake (#2855): deep mcp, deep mcp actions, deep-hook's mcp actions and the reading tools. A request whose _meta names one of these as io.modelcontextprotocol/protocolVersion is served on its own, its client named by its _meta; one naming any other revision is answered -32022 with these and mcp.handshake@1's, and reaches no hub. server/discover lists these first.",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "type": "object",
+  "properties": {
+    "protocolVersion": {
+      "type": "string",
+      "enum": [
+        "2026-07-28"
+      ],
+      "description": "A revision served with no handshake, oldest first; the last is the newest.",
+      "x-closure": {
+        "closed": "each value is a revision with no handshake that all four servers implement; any other is answered -32022",
+        "reopens": "a new major, adding a revision once the four servers are checked against what it changes",
+        "mark": "exhaustive"
+      }
+    }
+  },
+  "required": [
+    "protocolVersion"
+  ],
+  "additionalProperties": false
+}

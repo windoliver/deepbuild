@@ -1,0 +1,1 @@
+{ "alone": true, "why": "binary: ac1 to ac3 run deep-hook's mcp actions from this checkout's target/, and ac4 to ac6 start a hub, which runs deep-hook from target/, and run each session's hooks through it; ac6 times a listing against 10 s, and ac4 holds two deep_asks for the hub's 115 s", "timed": ["ac6-lists-handshake.test.ts"], "slow": ["ac4-codex-wait.test.ts"] }
