@@ -619,7 +619,7 @@ fn part(w: &World, id: &str, at: Frame) -> Option<Result<Solid, Sheet>> {
                 |k: usize| [0, 1, 2].map(|i| if k >> i & 1 == 0 { -half[i] } else { half[i] });
             let side = |k: usize| {
                 let mut n = [0.0; 3];
-                n[k / 2] = if k % 2 == 0 { -1.0 } else { 1.0 };
+                n[k / 2] = if k.is_multiple_of(2) { -1.0 } else { 1.0 };
                 (n, half[k / 2])
             };
             let faces = (0..6).map(side).collect();

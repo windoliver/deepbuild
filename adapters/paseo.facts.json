@@ -1,7 +1,8 @@
 {
   "schema": "adapter.facts@11",
   "versions": [
-    "0.15.0"
+    "0.15.0",
+    "0.17.6"
   ],
   "agent": "paseo",
   "hookTimeouts": {
@@ -84,6 +85,72 @@
     "conformance": "paseo/events/plugin",
     "versions": {
       "0.15.0": {
+        "agent.turn.before": {
+          "required": {
+            "hook_event_name": "string",
+            "session_id": "string",
+            "cwd": "string",
+            "provider": "string",
+            "paseo_agent": "string",
+            "bind": "string"
+          },
+          "optional": {
+            "turn_id": "string",
+            "mode": "string"
+          }
+        },
+        "agent.turn.after": {
+          "required": {
+            "hook_event_name": "string",
+            "session_id": "string",
+            "cwd": "string",
+            "provider": "string",
+            "paseo_agent": "string",
+            "bind": "string",
+            "outcome": "string"
+          },
+          "optional": {
+            "turn_id": "string",
+            "error": "string",
+            "reason": "string"
+          }
+        },
+        "agent.permission.before": {
+          "required": {
+            "hook_event_name": "string",
+            "session_id": "string",
+            "cwd": "string",
+            "provider": "string",
+            "paseo_agent": "string",
+            "bind": "string",
+            "request_id": "string",
+            "permission_kind": "string",
+            "tool_name": "string",
+            "tool_input": "object"
+          },
+          "optional": {
+            "turn_id": "string",
+            "title": "string"
+          }
+        },
+        "agent.permission.after": {
+          "required": {
+            "hook_event_name": "string",
+            "session_id": "string",
+            "cwd": "string",
+            "provider": "string",
+            "paseo_agent": "string",
+            "bind": "string",
+            "request_id": "string",
+            "behavior": "string",
+            "from": "string"
+          },
+          "optional": {
+            "turn_id": "string"
+          }
+        }
+      },
+      "0.17.6": {
         "agent.turn.before": {
           "required": {
             "hook_event_name": "string",

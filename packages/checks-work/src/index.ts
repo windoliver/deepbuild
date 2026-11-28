@@ -20,6 +20,9 @@ const BUDGETS: Record<WorkKind, KindBudget> = {
   message: { time_ms: 5_000, cost_usd: 0 },
 };
 
+/** The kinds this package holds, in order, read from BUDGETS: the hub offers each, with no edit of its own (#1896). */
+export const workKinds = (): WorkKind[] => Object.keys(BUDGETS) as WorkKind[];
+
 /** The kind's runner, as the check.kind@1 fill deep.registerCheck registers. */
 export function workFill(kind: WorkKind): WorkFill {
   return {
@@ -31,7 +34,6 @@ export function workFill(kind: WorkKind): WorkFill {
 /** The kind's own check.kind@1 kit, run by the conformance package's runKit. */
 export const workKit = (kind: WorkKind): ReturnType<typeof kitFor> => kitFor(kind, () => workFill(kind));
 
-/** The plug-in: registers the four kinds. */
 export default function register(deep: { registerCheck(type: string, runner: WorkFill['run']): void }): void {
-  for (const kind of Object.keys(BUDGETS) as WorkKind[]) deep.registerCheck(kind, workFill(kind).run);
+  for (const kind of workKinds()) deep.registerCheck(kind, workFill(kind).run);
 }

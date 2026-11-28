@@ -129,6 +129,21 @@ fn adjust_issue(
     None
 }
 
+/// Whether a table's source is an agent's word: a table an agent wrote, or one a job wrote from a
+/// file the hub fetched none of (#3570: `job {kind, tool, input}`, each input `origin: agent` where
+/// no fetch of the hub's brought it).
+fn agents_word(origin: &Value) -> bool {
+    if origin == "agent" {
+        return true;
+    }
+    let inputs = origin.pointer("/job/input").and_then(Value::as_object);
+    inputs.is_some_and(|i| {
+        i.values()
+            .flat_map(|files| files.as_array().into_iter().flatten())
+            .any(|f| f["origin"] == "agent")
+    })
+}
+
 /// Every number the document's mark sets and axes show, with what each traces to (Honest numbers,
 /// the check), and the issues tracing finds: a table's cell whose kept bytes differ from the
 /// file's (`table_cell_changed`, naming its row), and a table an agent wrote or a template's story
@@ -149,7 +164,10 @@ pub fn numbers(doc: &Map<String, Value>) -> (Vec<Value>, Vec<Issue>) {
                 Some(row) => format!("{id}#{row}"),
                 None => id.clone(),
             };
-            if binds && n["source"]["origin"] == "agent" && !named.contains(&name) {
+            if binds
+                && (agents_word(&n["source"]["origin"]) || n["source"]["weakest"] == "agent")
+                && !named.contains(&name)
+            {
                 issues.push(Issue::error(
                     "number_unsourced",
                     &name,
@@ -690,4 +708,23 @@ pub fn check(doc: &Map<String, Value>, look: &Look, min: Option<f64>) -> Vec<Iss
     // #538: keyed copy's every key, in every locale, at its arguments' widest.
     crate::copy::fit_issues(doc, &look.light_type, &mut issues);
     issues
+}
+
+#[cfg(test)]
+mod tests {
+    use super::agents_word;
+    use serde_json::json;
+
+    #[test]
+    fn a_job_table_is_the_agents_word_only_where_no_fetch_brought_its_input() {
+        let job = |file| json!({"job": {"kind": "import", "tool": "table-import@1.0.0", "input": {"file": [file], "look": []}}});
+        assert!(agents_word(&json!("agent")));
+        assert!(!agents_word(
+            &json!({"url": "https://example.test/t.csv", "fetched": 1})
+        ));
+        assert!(!agents_word(&job(
+            json!({"sha256": "a", "url": "https://example.test/t.csv", "fetched": 1})
+        )));
+        assert!(agents_word(&job(json!({"sha256": "a", "origin": "agent"}))));
+    }
 }

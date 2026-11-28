@@ -503,6 +503,7 @@ impl Logic {
             Some("query") => self.query(line).unwrap_or_else(|e| e),
             Some("pack_check") => self.pack_check(line).unwrap_or_else(|e| e),
             Some("piece_checks") => json!({"ok": true, "piece_checks": piece::piece_checks()}),
+            Some("compiles") => World::compiles_reply(),
             Some("first_party") => first_party::reply(),
             Some("claim") => self.claim(line).unwrap_or_else(|e| e),
             Some("judge") => self.judge(line).unwrap_or_else(|e| e),

@@ -1,0 +1,40 @@
+{
+  "inputs": {
+    "counties.csv": "8b1181cb1ba1e7d6614d576739335e0c675688334464a043cc73c8c7b202e3f8",
+    "metros.csv": "65e3d5d869f7c1f7c69673793c66a4fcc12849465d99b440052dbee932e5551d",
+    "metros-twice.csv": "07aa540fd4d7abecfaa65bce7ac4f6910b548004c9d9795781778ee3101496ee",
+    "metros-short.csv": "d147002d2baa0531116f06f596ccfa6dda09ba74c2afb6f58ea329a699e0f6d7"
+  },
+  "twice": {
+    "status": "refused",
+    "reason": "table.derive: join with metro: the key county 3 appears twice in metro, which expect many_to_one holds once",
+    "receipt": {
+      "kind": "table.derive",
+      "tool": "table-derive@1.0.0",
+      "key": "cac6b283c1fde78961b8734f4bb70fd964219f67f0825dec2e753319a4fbdec4",
+      "build": "d1:bb1110963db3ecba683429e679661a420620f02ef81d1fc2c75ebaf6f6ee2e04",
+      "cache": "miss",
+      "inputs": {
+        "county": "8b1181cb1ba1e7d6614d576739335e0c675688334464a043cc73c8c7b202e3f8",
+        "metro": "07aa540fd4d7abecfaa65bce7ac4f6910b548004c9d9795781778ee3101496ee",
+        "#tables": "5d6852e2c328fb55beadd37e09520d5c3c5920e6176b2b978b1434abba061a47"
+      }
+    }
+  },
+  "short": {
+    "outputs": {
+      "table": "a1ecd0ac144f09dfcf611d0b843a4d7e8c3ce28d565da17deecc0cfdf8ed5e45",
+      "lineage": "985d35add35a333a231c1efe0455642fd5acf09a5eb58dc67046c1425cbef328",
+      "receipt": "62767b3da6c263dc243b81c5a2015a82bbfa284df17ebc91b1592b953e188648",
+      "record": "1b424edbc90c521270fc1736dccbf276b7d0ad4f3505630d1c2e0688e4d84bee"
+    },
+    "table": "metro,workers,counties\nA,250,4\nB,300,1\n",
+    "receipt": {
+      "rows_in": 6,
+      "rows_out": 2,
+      "dropped": 1,
+      "skipped": {},
+      "nonfinite": {}
+    }
+  }
+}

@@ -1,13 +1,29 @@
 // One proof check run (#685): the spec's runner, Lean 4 or Kani. The fault is the kit's alone: the fill the
 // plug-in registers always runs with none.
 import type { CheckContext } from '@deepbuild/conformance';
-import { kani } from './kani.js';
-import { lean } from './lean.js';
-import { missingRun } from './run.js';
-import type { Checked, Fault, ProofSpec } from './types.js';
+import { kani, kaniMutants } from './kani.js';
+import { lean, leanMutants } from './lean.js';
+import { cantFail, missingRun } from './run.js';
+import type { Checked, Fault, MutantReport, ProofRunner, ProofSpec } from './types.js';
+
+interface Runner {
+  check(spec: ProofSpec, ctx: CheckContext, fault: Fault): Checked;
+  mutants(spec: ProofSpec, ctx: CheckContext): MutantReport;
+}
+const RUNNERS: Record<ProofRunner, Runner> = {
+  lean4: { check: lean, mutants: leanMutants },
+  kani: { check: kani, mutants: kaniMutants },
+};
+const runnerOf = (spec: ProofSpec): Runner | undefined => (typeof spec.runner === 'string' && Object.hasOwn(RUNNERS, spec.runner) ? RUNNERS[spec.runner] : undefined);
+const unheld = (spec: ProofSpec): string => `a proof runner named ${String(spec.runner)}, which this plug-in doesn't have`;
 
 export function check(spec: ProofSpec, ctx: CheckContext, fault: Fault = 'none'): Checked {
-  if (spec.runner === 'lean4') return lean(spec, ctx, fault);
-  if (spec.runner === 'kani') return kani(spec, ctx, fault);
-  return missingRun(spec, `a proof runner named ${String(spec.runner)}, which this plug-in doesn't have`);
+  return runnerOf(spec)?.check(spec, ctx, fault) ?? missingRun({}, unheld(spec));
+}
+
+export function runMutants(spec: ProofSpec, ctx: CheckContext): MutantReport {
+  const runner = runnerOf(spec);
+  if (runner) return runner.mutants(spec, ctx);
+  const theorems = spec.theorems.map((theorem) => ({ theorem, killed: [], survived: [] }));
+  return { theorems, cantFail: cantFail(theorems, unheld(spec)) };
 }

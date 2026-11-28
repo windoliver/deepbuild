@@ -39,6 +39,7 @@ export interface FileRef { path: string; bytes: number; sha256: string }
 /** A fetched asset as the store keeps it: its main file's hash, its files, its license and its upstream. */
 export interface AssetRecord {
   sha256: string; library?: string; pack?: string; id: string; license: AssetLicense; upstream: { url: string; version: string; modified: string }; files: FileRef[];
+  fetched?: { url: string; at: number };
 }
 /** What a fill's fetch answers: the file, its sidecars, the license and the upstream from the library's own record. */
 interface Picked { file: FileRef; sidecars: FileRef[]; license: AssetLicense; upstream: AssetRecord['upstream']; pack?: { ref: string; url: string } }
@@ -419,12 +420,17 @@ export class Libraries {
       return { status: 'refused', reason };
     }
     for (const file of staged) await rm(file, { force: true });
-    const asset: AssetRecord = { sha256: picked.file.sha256, ...(picked.pack ? { pack: picked.pack.ref } : { library }), id, license: picked.license, upstream: picked.upstream, files };
+    const asset: AssetRecord = { sha256: picked.file.sha256, ...(picked.pack ? { pack: picked.pack.ref } : { library }), id, license: picked.license, upstream: picked.upstream, files, fetched: { url: picked.pack?.url ?? picked.upstream.url, at: this.d.now() } };
     if (!asset.pack) this.saved.assets[asset.sha256] = asset;
     (this.saved.cache ??= {})[key] = asset;
     this.save();
     this.fetches.set(key, { state: 'fetched', asset });
     return { status: 'fetched', asset };
+  }
+
+  fetchedFile(sha: string): { url: string; fetched: number } | undefined {
+    const found = [...Object.values(this.saved.cache ?? {}), ...Object.values(this.saved.assets)].find((a) => a.sha256 === sha && a.fetched);
+    return found?.fetched && { url: found.fetched.url, fetched: found.fetched.at };
   }
 
   /** A fetched asset by its file's hash, with the license it was kept with; undefined for any other hash. */
