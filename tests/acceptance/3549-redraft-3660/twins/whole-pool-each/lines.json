@@ -2,12 +2,15 @@
   "scripts/throttle.mjs": [
     {
       "find": [
-        "          const lend = Math.max(0, Math.min(share - me.lent, pool() - turns.reduce((sum, grant) => sum + 1 + grant.lent, 0)));",
-        "          me.lent += lend;"
+        "          const lend = Math.max(0, Math.min(share - me.lent, left()));",
+        "          me.lent += lend;",
+        "          const spare = !waiting && left() > 0 && me.lent === Math.min(...turns.map((grant) => grant.lent)) ? 1 : 0;",
+        "          me.lent += spare;"
       ],
       "wrong": [
         "          const lend = free + (me.whole ? 0 : pool());",
-        "          me.whole = true;"
+        "          me.whole = true;",
+        "          const spare = 0;"
       ]
     }
   ]

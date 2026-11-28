@@ -2,7 +2,7 @@
   "scripts/throttle.mjs": [
     {
       "find": [
-        "      if (stall !== undefined && (kind !== 'turn' || build)) {"
+        "      if (stall !== undefined && (kind !== 'turn' || build())) {"
       ],
       "wrong": [
         "      if (stall !== undefined && kind !== 'turn') {"
