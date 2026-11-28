@@ -1,0 +1,764 @@
+Runs of tests/acceptance/3066-redraft-3699/same-failures.test.mjs, 2026-11-27, on an APFS clone (cp -cR) of the checkout at claude/issue-3699-3066-redraft-c (origin/main 673760b70 + 74beb4623 + c7ff5314b) with this folder's working tree, under $TMPDIR, node 24. Stack lines and the assertion's own actual/expected fields are cut; each failure keeps its message and diff.
+
+=== (1) the merge base 673760b70: its scripts/ (git checkout 673760b70 -- scripts) with this folder laid in
+load: { 63.10 64.10 62.38 }
+✔ #3066.4268aebb scripts/known-failures.json names the same failures as on the merge base: the same test IDs, lint findings, timing IDs and skips (227.141875ms)
+✔ #3066.4268aebb #3699.c037e2f6 every test file of the merge base still runs where it ran, moved only between the alone and parallel blocks or to by hand in the place of a blind redraft that redrafted maps it to and this checkout holds (21777.029083ms)
+✔ #3066.4268aebb #3699.79b40a54 a test file of the merge base that moves to by hand with no redrafted entry fails the check, naming the file (2798.615209ms)
+✔ #3066.4268aebb #3699.f7548a54 a test file of the merge base that moves to by hand while its redrafted entry names a missing path, or a path holding no test file, fails the check, naming the file (3714.988458ms)
+✔ #3066.4268aebb #3699.2b06b98e a checkout equal to its merge base passes the place check when the merge base's lane.json files name timed and slow files (3784.75375ms)
+✔ #3066.4268aebb #3699.e1f9065f a move to by hand passes only when its redrafted target is inside the checkout, is not the original or a folder holding it, and holds a test file that is not itself by hand; each other case fails, naming the file (50803.988625ms)
+✔ #3066.4268aebb #3699.4c1cb484 a test file of the merge base that the checkout no longer holds fails the place check, naming the file (3108.913042ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 87639.314667
+exit 0
+
+=== (2) the branch as is (c7ff5314b: the change's lines in scripts/lanes-lists.mjs) with this folder's working tree
+load: { 65.04 64.13 62.54 }
+✔ #3066.4268aebb scripts/known-failures.json names the same failures as on the merge base: the same test IDs, lint findings, timing IDs and skips (220.99625ms)
+✔ #3066.4268aebb #3699.c037e2f6 every test file of the merge base still runs where it ran, moved only between the alone and parallel blocks or to by hand in the place of a blind redraft that redrafted maps it to and this checkout holds (22979.23725ms)
+✔ #3066.4268aebb #3699.79b40a54 a test file of the merge base that moves to by hand with no redrafted entry fails the check, naming the file (3190.192792ms)
+✔ #3066.4268aebb #3699.f7548a54 a test file of the merge base that moves to by hand while its redrafted entry names a missing path, or a path holding no test file, fails the check, naming the file (2790.334125ms)
+✔ #3066.4268aebb #3699.2b06b98e a checkout equal to its merge base passes the place check when the merge base's lane.json files name timed and slow files (2539.122292ms)
+✔ #3066.4268aebb #3699.e1f9065f a move to by hand passes only when its redrafted target is inside the checkout, is not the original or a folder holding it, and holds a test file that is not itself by hand; each other case fails, naming the file (49086.129166ms)
+✔ #3066.4268aebb #3699.4c1cb484 a test file of the merge base that the checkout no longer holds fails the place check, naming the file (2566.453417ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 84551.404125
+exit 0
+
+laid scripts/lanes-lists.mjs: 1 edit(s)
+=== (3) the branch with the twin unmapped laid over it
+load: { 61.61 63.44 62.44 }
+✔ #3066.4268aebb scripts/known-failures.json names the same failures as on the merge base: the same test IDs, lint findings, timing IDs and skips (221.08225ms)
+✖ #3066.4268aebb #3699.c037e2f6 every test file of the merge base still runs where it ran, moved only between the alone and parallel blocks or to by hand in the place of a blind redraft that redrafted maps it to and this checkout holds (19414.013583ms)
+✖ #3066.4268aebb #3699.79b40a54 a test file of the merge base that moves to by hand with no redrafted entry fails the check, naming the file (0.433708ms)
+✔ #3066.4268aebb #3699.f7548a54 a test file of the merge base that moves to by hand while its redrafted entry names a missing path, or a path holding no test file, fails the check, naming the file (2388.254875ms)
+✔ #3066.4268aebb #3699.2b06b98e a checkout equal to its merge base passes the place check when the merge base's lane.json files name timed and slow files (2637.601ms)
+✔ #3066.4268aebb #3699.e1f9065f a move to by hand passes only when its redrafted target is inside the checkout, is not the original or a folder holding it, and holds a test file that is not itself by hand; each other case fails, naming the file (42792.703708ms)
+✔ #3066.4268aebb #3699.4c1cb484 a test file of the merge base that the checkout no longer holds fails the place check, naming the file (4849.088ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 5
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 73342.492167
+
+✖ failing tests:
+
+test at tests/acceptance/3066-redraft-3699/same-failures.test.mjs:33:1
+✖ #3066.4268aebb #3699.c037e2f6 every test file of the merge base still runs where it ran, moved only between the alone and parallel blocks or to by hand in the place of a blind redraft that redrafted maps it to and this checkout holds (19414.013583ms)
+  AssertionError [ERR_ASSERTION]: 1 test files of the merge base no longer run where they ran
+    tests/acceptance/3066/same-failures.test.mjs: parallel/node -> skipped/by hand, with no redrafted entry
+  + actual - expected
+  
+  + [
+  +   'tests/acceptance/3066/same-failures.test.mjs: parallel/node -> skipped/by hand, with no redrafted entry'
+  + ]
+  - []
+  
+
+test at tests/acceptance/3066-redraft-3699/same-failures.test.mjs:55:1
+✖ #3066.4268aebb #3699.79b40a54 a test file of the merge base that moves to by hand with no redrafted entry fails the check, naming the file (0.433708ms)
+  AssertionError [ERR_ASSERTION]: 1 test files of the merge base moved to by hand with no redrafted entry
+    tests/acceptance/3066/same-failures.test.mjs: parallel/node -> skipped/by hand, with no redrafted entry
+  + actual - expected
+  
+  + [
+  +   'tests/acceptance/3066/same-failures.test.mjs'
+  + ]
+  - []
+  
+exit 1
+
+laid scripts/lanes-lists.mjs: 1 edit(s)
+=== (3) the branch with the twin missing-redraft laid over it
+load: { 66.51 64.34 62.85 }
+✔ #3066.4268aebb scripts/known-failures.json names the same failures as on the merge base: the same test IDs, lint findings, timing IDs and skips (274.009792ms)
+✖ #3066.4268aebb #3699.c037e2f6 every test file of the merge base still runs where it ran, moved only between the alone and parallel blocks or to by hand in the place of a blind redraft that redrafted maps it to and this checkout holds (18168.760334ms)
+✔ #3066.4268aebb #3699.79b40a54 a test file of the merge base that moves to by hand with no redrafted entry fails the check, naming the file (3351.512542ms)
+✖ #3066.4268aebb #3699.f7548a54 a test file of the merge base that moves to by hand while its redrafted entry names a missing path, or a path holding no test file, fails the check, naming the file (0.464334ms)
+✔ #3066.4268aebb #3699.2b06b98e a checkout equal to its merge base passes the place check when the merge base's lane.json files name timed and slow files (2731.491375ms)
+✔ #3066.4268aebb #3699.e1f9065f a move to by hand passes only when its redrafted target is inside the checkout, is not the original or a folder holding it, and holds a test file that is not itself by hand; each other case fails, naming the file (36607.340625ms)
+✔ #3066.4268aebb #3699.4c1cb484 a test file of the merge base that the checkout no longer holds fails the place check, naming the file (2195.512791ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 5
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 64790.814667
+
+✖ failing tests:
+
+test at tests/acceptance/3066-redraft-3699/same-failures.test.mjs:33:1
+✖ #3066.4268aebb #3699.c037e2f6 every test file of the merge base still runs where it ran, moved only between the alone and parallel blocks or to by hand in the place of a blind redraft that redrafted maps it to and this checkout holds (18168.760334ms)
+  AssertionError [ERR_ASSERTION]: 1 test files of the merge base no longer run where they ran
+    tests/acceptance/3066/same-failures.test.mjs: parallel/node -> skipped/by hand, redrafted to tests/acceptance/3066-redraft-3699-missing/, which this checkout does not hold
+  + actual - expected
+  
+  + [
+  +   'tests/acceptance/3066/same-failures.test.mjs: parallel/node -> skipped/by hand, redrafted to tests/acceptance/3066-redraft-3699-missing/, which this checkout does not hold'
+  + ]
+  - []
+  
+
+test at tests/acceptance/3066-redraft-3699/same-failures.test.mjs:66:1
+✖ #3066.4268aebb #3699.f7548a54 a test file of the merge base that moves to by hand while its redrafted entry names a missing path, or a path holding no test file, fails the check, naming the file (0.464334ms)
+  AssertionError [ERR_ASSERTION]: 1 test files of the merge base moved to by hand in the place of a redraft this checkout does not hold
+    tests/acceptance/3066/same-failures.test.mjs: parallel/node -> skipped/by hand, redrafted to tests/acceptance/3066-redraft-3699-missing/, which this checkout does not hold
+  + actual - expected
+  
+  + [
+  +   'tests/acceptance/3066/same-failures.test.mjs'
+  + ]
+  - []
+  
+exit 1
+
+laid scripts/lanes-lists.mjs: 1 edit(s)
+=== (3) the branch with the twin redraft-holds-no-test laid over it
+load: { 62.02 63.77 62.77 }
+✔ #3066.4268aebb scripts/known-failures.json names the same failures as on the merge base: the same test IDs, lint findings, timing IDs and skips (205.544541ms)
+✖ #3066.4268aebb #3699.c037e2f6 every test file of the merge base still runs where it ran, moved only between the alone and parallel blocks or to by hand in the place of a blind redraft that redrafted maps it to and this checkout holds (12503.90825ms)
+✔ #3066.4268aebb #3699.79b40a54 a test file of the merge base that moves to by hand with no redrafted entry fails the check, naming the file (2073.879333ms)
+✖ #3066.4268aebb #3699.f7548a54 a test file of the merge base that moves to by hand while its redrafted entry names a missing path, or a path holding no test file, fails the check, naming the file (0.374583ms)
+✔ #3066.4268aebb #3699.2b06b98e a checkout equal to its merge base passes the place check when the merge base's lane.json files name timed and slow files (1885.218417ms)
+✔ #3066.4268aebb #3699.e1f9065f a move to by hand passes only when its redrafted target is inside the checkout, is not the original or a folder holding it, and holds a test file that is not itself by hand; each other case fails, naming the file (33641.034708ms)
+✔ #3066.4268aebb #3699.4c1cb484 a test file of the merge base that the checkout no longer holds fails the place check, naming the file (1774.714542ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 5
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 52919.730625
+
+✖ failing tests:
+
+test at tests/acceptance/3066-redraft-3699/same-failures.test.mjs:33:1
+✖ #3066.4268aebb #3699.c037e2f6 every test file of the merge base still runs where it ran, moved only between the alone and parallel blocks or to by hand in the place of a blind redraft that redrafted maps it to and this checkout holds (12503.90825ms)
+  AssertionError [ERR_ASSERTION]: 1 test files of the merge base no longer run where they ran
+    tests/acceptance/3066/same-failures.test.mjs: parallel/node -> skipped/by hand, redrafted to tests/acceptance/3066-redraft-3699/README.md, which holds no test file
+  + actual - expected
+  
+  + [
+  +   'tests/acceptance/3066/same-failures.test.mjs: parallel/node -> skipped/by hand, redrafted to tests/acceptance/3066-redraft-3699/README.md, which holds no test file'
+  + ]
+  - []
+  
+
+test at tests/acceptance/3066-redraft-3699/same-failures.test.mjs:66:1
+✖ #3066.4268aebb #3699.f7548a54 a test file of the merge base that moves to by hand while its redrafted entry names a missing path, or a path holding no test file, fails the check, naming the file (0.374583ms)
+  AssertionError [ERR_ASSERTION]: 1 test files of the merge base moved to by hand in the place of a redraft this checkout does not hold
+    tests/acceptance/3066/same-failures.test.mjs: parallel/node -> skipped/by hand, redrafted to tests/acceptance/3066-redraft-3699/README.md, which holds no test file
+  + actual - expected
+  
+  + [
+  +   'tests/acceptance/3066/same-failures.test.mjs'
+  + ]
+  - []
+  
+exit 1
+
+laid scripts/known-failures.json: 1 edit(s)
+=== (3) the branch with the twin names-another-failure laid over it
+load: { 57.08 62.16 62.24 }
+✖ #3066.4268aebb scripts/known-failures.json names the same failures as on the merge base: the same test IDs, lint findings, timing IDs and skips (113.412541ms)
+✔ #3066.4268aebb #3699.c037e2f6 every test file of the merge base still runs where it ran, moved only between the alone and parallel blocks or to by hand in the place of a blind redraft that redrafted maps it to and this checkout holds (11570.801084ms)
+✔ #3066.4268aebb #3699.79b40a54 a test file of the merge base that moves to by hand with no redrafted entry fails the check, naming the file (1771.209583ms)
+✔ #3066.4268aebb #3699.f7548a54 a test file of the merge base that moves to by hand while its redrafted entry names a missing path, or a path holding no test file, fails the check, naming the file (1748.352791ms)
+✔ #3066.4268aebb #3699.2b06b98e a checkout equal to its merge base passes the place check when the merge base's lane.json files name timed and slow files (1705.020084ms)
+✔ #3066.4268aebb #3699.e1f9065f a move to by hand passes only when its redrafted target is inside the checkout, is not the original or a folder holding it, and holds a test file that is not itself by hand; each other case fails, naming the file (29062.3485ms)
+✔ #3066.4268aebb #3699.4c1cb484 a test file of the merge base that the checkout no longer holds fails the place check, naming the file (1942.316291ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 6
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 48476.1255
+
+✖ failing tests:
+
+test at tests/acceptance/3066-redraft-3699/same-failures.test.mjs:22:1
+✖ #3066.4268aebb scripts/known-failures.json names the same failures as on the merge base: the same test IDs, lint findings, timing IDs and skips (113.412541ms)
+  AssertionError [ERR_ASSERTION]: scripts/known-failures.json does not name the failures the merge base's names
+  + actual - expected
+  ... Skipped lines
+  
+      failures: [
+        'cargo -p deep-app --test acceptance_1141 › ac2_each_sessions_state_title_and_open_asks_and_the_notifiers_posts_and_withdrawals_equal_the_merge_bases',
+        "cargo -p deep-replica --test acceptance_1425 › #1425.3d839088 the view each panel registers in a slot draws the merge base's tree, byte for byte",
+        'cargo -p deep-replica --test acceptance_1454_panel_redraft › the_fixture_loads_and_paints_its_words_in_the_sidebar_slot',
+  ...
+        'tests/acceptance/166/physics.test.ts › #166.59c5001c a wake behind a floating body reads the physics output; one behind a logic array is refused › #166.59c5001c a wake behind an item a logic array moves is refused at check, naming the item',
+  +     'tests/acceptance/3066-redraft-3699/planted.test.mjs › a failure the merge base never named',
+        "tests/acceptance/451/ac2-world-anchor.test.ts › AC2 #451.6846b36f a world-space emitter's anchor: refused when logic or a drag moves it, emitting at the same buckets on two displays when a channel does › AC2 #451.6846b36f a world-space emitter whose anchor a logic array or a live drag moves is refused at check, naming the anchor",
+        "tests/acceptance/490-redraft-2/opening.test.ts › #490 AC2 (redraft) opening the eases as ease@1 leaves the shipped fixtures byte for byte the same › AC2 every content key, golden and corpus snapshot of the shipped fixtures, and of a channel keyed with in_out_cubic, is the merge base's after the opening",
+        "tests/acceptance/490/redraft-2047/opening.test.ts › #490.ac6f64d6 opening the eases as ease@1 leaves the shipped fixtures byte for byte the same, and deep://registries lists it › #490.ac6f64d6 deep://registries lists ease@1 with since, digest, fill, each entry's origin and kit result; every content key, golden and corpus snapshot of the shipped fixtures and of a channel keyed with in_out_cubic is the merge base's; and a planted opening that renumbers the entries changes that channel's key and fails, naming the ease and the item"
+      ],
+      lint: [
+  
+exit 1
+
+laid scripts/lanes-lists.mjs: 1 edit(s)
+=== (3) the branch with the twin maps-to-itself laid over it
+load: { 50.81 59.69 61.31 }
+✔ #3066.4268aebb scripts/known-failures.json names the same failures as on the merge base: the same test IDs, lint findings, timing IDs and skips (109.143084ms)
+✖ #3066.4268aebb #3699.c037e2f6 every test file of the merge base still runs where it ran, moved only between the alone and parallel blocks or to by hand in the place of a blind redraft that redrafted maps it to and this checkout holds (14903.84325ms)
+✔ #3066.4268aebb #3699.79b40a54 a test file of the merge base that moves to by hand with no redrafted entry fails the check, naming the file (1539.844667ms)
+✔ #3066.4268aebb #3699.f7548a54 a test file of the merge base that moves to by hand while its redrafted entry names a missing path, or a path holding no test file, fails the check, naming the file (1754.905792ms)
+✔ #3066.4268aebb #3699.2b06b98e a checkout equal to its merge base passes the place check when the merge base's lane.json files name timed and slow files (1705.49875ms)
+✖ #3066.4268aebb #3699.e1f9065f a move to by hand passes only when its redrafted target is inside the checkout, is not the original or a folder holding it, and holds a test file that is not itself by hand; each other case fails, naming the file (0.523917ms)
+✔ #3066.4268aebb #3699.4c1cb484 a test file of the merge base that the checkout no longer holds fails the place check, naming the file (1543.815084ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 5
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 22114.32375
+
+✖ failing tests:
+
+test at tests/acceptance/3066-redraft-3699/same-failures.test.mjs:33:1
+✖ #3066.4268aebb #3699.c037e2f6 every test file of the merge base still runs where it ran, moved only between the alone and parallel blocks or to by hand in the place of a blind redraft that redrafted maps it to and this checkout holds (14903.84325ms)
+  AssertionError [ERR_ASSERTION]: 1 test files of the merge base no longer run where they ran
+    tests/acceptance/3066/same-failures.test.mjs: parallel/node -> skipped/by hand, redrafted to tests/acceptance/3066/same-failures.test.mjs, which is the original or a folder holding it
+  + actual - expected
+  
+  + [
+  +   'tests/acceptance/3066/same-failures.test.mjs: parallel/node -> skipped/by hand, redrafted to tests/acceptance/3066/same-failures.test.mjs, which is the original or a folder holding it'
+  + ]
+  - []
+  
+
+test at tests/acceptance/3066-redraft-3699/same-failures.test.mjs:96:1
+✖ #3066.4268aebb #3699.e1f9065f a move to by hand passes only when its redrafted target is inside the checkout, is not the original or a folder holding it, and holds a test file that is not itself by hand; each other case fails, naming the file (0.523917ms)
+  AssertionError [ERR_ASSERTION]: 1 test files of the merge base moved to by hand in the place of a redraft that is outside this checkout, is the original or holds it, or runs only by hand
+    tests/acceptance/3066/same-failures.test.mjs: parallel/node -> skipped/by hand, redrafted to tests/acceptance/3066/same-failures.test.mjs, which is the original or a folder holding it
+  + actual - expected
+  
+  + [
+  +   'tests/acceptance/3066/same-failures.test.mjs'
+  + ]
+  - []
+  
+exit 1
+
+laid scripts/lanes-lists.mjs: 1 edit(s)
+=== (3) the branch with the twin maps-to-its-folder laid over it
+load: { 48.35 58.57 60.87 }
+✔ #3066.4268aebb scripts/known-failures.json names the same failures as on the merge base: the same test IDs, lint findings, timing IDs and skips (94.248125ms)
+✖ #3066.4268aebb #3699.c037e2f6 every test file of the merge base still runs where it ran, moved only between the alone and parallel blocks or to by hand in the place of a blind redraft that redrafted maps it to and this checkout holds (12021.250834ms)
+✔ #3066.4268aebb #3699.79b40a54 a test file of the merge base that moves to by hand with no redrafted entry fails the check, naming the file (1850.622833ms)
+✔ #3066.4268aebb #3699.f7548a54 a test file of the merge base that moves to by hand while its redrafted entry names a missing path, or a path holding no test file, fails the check, naming the file (1923.840083ms)
+✔ #3066.4268aebb #3699.2b06b98e a checkout equal to its merge base passes the place check when the merge base's lane.json files name timed and slow files (1886.504167ms)
+✖ #3066.4268aebb #3699.e1f9065f a move to by hand passes only when its redrafted target is inside the checkout, is not the original or a folder holding it, and holds a test file that is not itself by hand; each other case fails, naming the file (0.329792ms)
+✔ #3066.4268aebb #3699.4c1cb484 a test file of the merge base that the checkout no longer holds fails the place check, naming the file (1642.96425ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 5
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 20200.918125
+
+✖ failing tests:
+
+test at tests/acceptance/3066-redraft-3699/same-failures.test.mjs:33:1
+✖ #3066.4268aebb #3699.c037e2f6 every test file of the merge base still runs where it ran, moved only between the alone and parallel blocks or to by hand in the place of a blind redraft that redrafted maps it to and this checkout holds (12021.250834ms)
+  AssertionError [ERR_ASSERTION]: 1 test files of the merge base no longer run where they ran
+    tests/acceptance/3066/same-failures.test.mjs: parallel/node -> skipped/by hand, redrafted to tests/acceptance/3066/, which is the original or a folder holding it
+  + actual - expected
+  
+  + [
+  +   'tests/acceptance/3066/same-failures.test.mjs: parallel/node -> skipped/by hand, redrafted to tests/acceptance/3066/, which is the original or a folder holding it'
+  + ]
+  - []
+  
+
+test at tests/acceptance/3066-redraft-3699/same-failures.test.mjs:96:1
+✖ #3066.4268aebb #3699.e1f9065f a move to by hand passes only when its redrafted target is inside the checkout, is not the original or a folder holding it, and holds a test file that is not itself by hand; each other case fails, naming the file (0.329792ms)
+  AssertionError [ERR_ASSERTION]: 1 test files of the merge base moved to by hand in the place of a redraft that is outside this checkout, is the original or holds it, or runs only by hand
+    tests/acceptance/3066/same-failures.test.mjs: parallel/node -> skipped/by hand, redrafted to tests/acceptance/3066/, which is the original or a folder holding it
+  + actual - expected
+  
+  + [
+  +   'tests/acceptance/3066/same-failures.test.mjs'
+  + ]
+  - []
+  
+exit 1
+
+laid scripts/lanes-lists.mjs: 1 edit(s)
+=== (3) the branch with the twin maps-to-tests laid over it
+load: { 46.68 57.36 60.37 }
+✔ #3066.4268aebb scripts/known-failures.json names the same failures as on the merge base: the same test IDs, lint findings, timing IDs and skips (161.980834ms)
+✖ #3066.4268aebb #3699.c037e2f6 every test file of the merge base still runs where it ran, moved only between the alone and parallel blocks or to by hand in the place of a blind redraft that redrafted maps it to and this checkout holds (14000.853542ms)
+✔ #3066.4268aebb #3699.79b40a54 a test file of the merge base that moves to by hand with no redrafted entry fails the check, naming the file (1946.2055ms)
+✔ #3066.4268aebb #3699.f7548a54 a test file of the merge base that moves to by hand while its redrafted entry names a missing path, or a path holding no test file, fails the check, naming the file (1949.444083ms)
+✔ #3066.4268aebb #3699.2b06b98e a checkout equal to its merge base passes the place check when the merge base's lane.json files name timed and slow files (1606.421833ms)
+✖ #3066.4268aebb #3699.e1f9065f a move to by hand passes only when its redrafted target is inside the checkout, is not the original or a folder holding it, and holds a test file that is not itself by hand; each other case fails, naming the file (0.366125ms)
+✔ #3066.4268aebb #3699.4c1cb484 a test file of the merge base that the checkout no longer holds fails the place check, naming the file (1706.922416ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 5
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 22008.435334
+
+✖ failing tests:
+
+test at tests/acceptance/3066-redraft-3699/same-failures.test.mjs:33:1
+✖ #3066.4268aebb #3699.c037e2f6 every test file of the merge base still runs where it ran, moved only between the alone and parallel blocks or to by hand in the place of a blind redraft that redrafted maps it to and this checkout holds (14000.853542ms)
+  AssertionError [ERR_ASSERTION]: 1 test files of the merge base no longer run where they ran
+    tests/acceptance/3066/same-failures.test.mjs: parallel/node -> skipped/by hand, redrafted to tests/, which is the original or a folder holding it
+  + actual - expected
+  
+  + [
+  +   'tests/acceptance/3066/same-failures.test.mjs: parallel/node -> skipped/by hand, redrafted to tests/, which is the original or a folder holding it'
+  + ]
+  - []
+  
+
+test at tests/acceptance/3066-redraft-3699/same-failures.test.mjs:96:1
+✖ #3066.4268aebb #3699.e1f9065f a move to by hand passes only when its redrafted target is inside the checkout, is not the original or a folder holding it, and holds a test file that is not itself by hand; each other case fails, naming the file (0.366125ms)
+  AssertionError [ERR_ASSERTION]: 1 test files of the merge base moved to by hand in the place of a redraft that is outside this checkout, is the original or holds it, or runs only by hand
+    tests/acceptance/3066/same-failures.test.mjs: parallel/node -> skipped/by hand, redrafted to tests/, which is the original or a folder holding it
+  + actual - expected
+  
+  + [
+  +   'tests/acceptance/3066/same-failures.test.mjs'
+  + ]
+  - []
+  
+exit 1
+
+laid scripts/lanes-lists.mjs: 1 edit(s)
+=== (3) the branch with the twin maps-to-checkout laid over it
+load: { 46.81 56.70 60.07 }
+✔ #3066.4268aebb scripts/known-failures.json names the same failures as on the merge base: the same test IDs, lint findings, timing IDs and skips (182.694833ms)
+✖ #3066.4268aebb #3699.c037e2f6 every test file of the merge base still runs where it ran, moved only between the alone and parallel blocks or to by hand in the place of a blind redraft that redrafted maps it to and this checkout holds (16367.733042ms)
+✔ #3066.4268aebb #3699.79b40a54 a test file of the merge base that moves to by hand with no redrafted entry fails the check, naming the file (1400.606292ms)
+✔ #3066.4268aebb #3699.f7548a54 a test file of the merge base that moves to by hand while its redrafted entry names a missing path, or a path holding no test file, fails the check, naming the file (1572.639584ms)
+✔ #3066.4268aebb #3699.2b06b98e a checkout equal to its merge base passes the place check when the merge base's lane.json files name timed and slow files (1216.457167ms)
+✖ #3066.4268aebb #3699.e1f9065f a move to by hand passes only when its redrafted target is inside the checkout, is not the original or a folder holding it, and holds a test file that is not itself by hand; each other case fails, naming the file (0.304666ms)
+✔ #3066.4268aebb #3699.4c1cb484 a test file of the merge base that the checkout no longer holds fails the place check, naming the file (1683.969208ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 5
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 23151.359083
+
+✖ failing tests:
+
+test at tests/acceptance/3066-redraft-3699/same-failures.test.mjs:33:1
+✖ #3066.4268aebb #3699.c037e2f6 every test file of the merge base still runs where it ran, moved only between the alone and parallel blocks or to by hand in the place of a blind redraft that redrafted maps it to and this checkout holds (16367.733042ms)
+  AssertionError [ERR_ASSERTION]: 1 test files of the merge base no longer run where they ran
+    tests/acceptance/3066/same-failures.test.mjs: parallel/node -> skipped/by hand, redrafted to ., which is the original or a folder holding it
+  + actual - expected
+  
+  + [
+  +   'tests/acceptance/3066/same-failures.test.mjs: parallel/node -> skipped/by hand, redrafted to ., which is the original or a folder holding it'
+  + ]
+  - []
+  
+
+test at tests/acceptance/3066-redraft-3699/same-failures.test.mjs:96:1
+✖ #3066.4268aebb #3699.e1f9065f a move to by hand passes only when its redrafted target is inside the checkout, is not the original or a folder holding it, and holds a test file that is not itself by hand; each other case fails, naming the file (0.304666ms)
+  AssertionError [ERR_ASSERTION]: 1 test files of the merge base moved to by hand in the place of a redraft that is outside this checkout, is the original or holds it, or runs only by hand
+    tests/acceptance/3066/same-failures.test.mjs: parallel/node -> skipped/by hand, redrafted to ., which is the original or a folder holding it
+  + actual - expected
+  
+  + [
+  +   'tests/acceptance/3066/same-failures.test.mjs'
+  + ]
+  - []
+  
+exit 1
+
+laid scripts/lanes-lists.mjs: 1 edit(s)
+=== (3) the branch with the twin maps-outside laid over it
+load: { 43.60 55.19 59.43 }
+✔ #3066.4268aebb scripts/known-failures.json names the same failures as on the merge base: the same test IDs, lint findings, timing IDs and skips (215.376375ms)
+✖ #3066.4268aebb #3699.c037e2f6 every test file of the merge base still runs where it ran, moved only between the alone and parallel blocks or to by hand in the place of a blind redraft that redrafted maps it to and this checkout holds (15639.373208ms)
+✔ #3066.4268aebb #3699.79b40a54 a test file of the merge base that moves to by hand with no redrafted entry fails the check, naming the file (2087.227042ms)
+✔ #3066.4268aebb #3699.f7548a54 a test file of the merge base that moves to by hand while its redrafted entry names a missing path, or a path holding no test file, fails the check, naming the file (2621.608042ms)
+✔ #3066.4268aebb #3699.2b06b98e a checkout equal to its merge base passes the place check when the merge base's lane.json files name timed and slow files (2606.334625ms)
+✖ #3066.4268aebb #3699.e1f9065f a move to by hand passes only when its redrafted target is inside the checkout, is not the original or a folder holding it, and holds a test file that is not itself by hand; each other case fails, naming the file (0.934625ms)
+✔ #3066.4268aebb #3699.4c1cb484 a test file of the merge base that the checkout no longer holds fails the place check, naming the file (2146.286458ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 5
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 26079.894292
+
+✖ failing tests:
+
+test at tests/acceptance/3066-redraft-3699/same-failures.test.mjs:33:1
+✖ #3066.4268aebb #3699.c037e2f6 every test file of the merge base still runs where it ran, moved only between the alone and parallel blocks or to by hand in the place of a blind redraft that redrafted maps it to and this checkout holds (15639.373208ms)
+  AssertionError [ERR_ASSERTION]: 1 test files of the merge base no longer run where they ran
+    tests/acceptance/3066/same-failures.test.mjs: parallel/node -> skipped/by hand, redrafted to ../tests/acceptance/3066-redraft-3699/, which is outside this checkout
+  + actual - expected
+  
+  + [
+  +   'tests/acceptance/3066/same-failures.test.mjs: parallel/node -> skipped/by hand, redrafted to ../tests/acceptance/3066-redraft-3699/, which is outside this checkout'
+  + ]
+  - []
+  
+
+test at tests/acceptance/3066-redraft-3699/same-failures.test.mjs:96:1
+✖ #3066.4268aebb #3699.e1f9065f a move to by hand passes only when its redrafted target is inside the checkout, is not the original or a folder holding it, and holds a test file that is not itself by hand; each other case fails, naming the file (0.934625ms)
+  AssertionError [ERR_ASSERTION]: 1 test files of the merge base moved to by hand in the place of a redraft that is outside this checkout, is the original or holds it, or runs only by hand
+    tests/acceptance/3066/same-failures.test.mjs: parallel/node -> skipped/by hand, redrafted to ../tests/acceptance/3066-redraft-3699/, which is outside this checkout
+  + actual - expected
+  
+  + [
+  +   'tests/acceptance/3066/same-failures.test.mjs'
+  + ]
+  - []
+  
+exit 1
+
+laid scripts/lanes-lists.mjs: 1 edit(s)
+=== (3) the branch with the twin maps-to-by-hand laid over it
+load: { 44.13 54.41 59.02 }
+✔ #3066.4268aebb scripts/known-failures.json names the same failures as on the merge base: the same test IDs, lint findings, timing IDs and skips (164.036ms)
+✖ #3066.4268aebb #3699.c037e2f6 every test file of the merge base still runs where it ran, moved only between the alone and parallel blocks or to by hand in the place of a blind redraft that redrafted maps it to and this checkout holds (12307.65825ms)
+✔ #3066.4268aebb #3699.79b40a54 a test file of the merge base that moves to by hand with no redrafted entry fails the check, naming the file (1666.516667ms)
+✔ #3066.4268aebb #3699.f7548a54 a test file of the merge base that moves to by hand while its redrafted entry names a missing path, or a path holding no test file, fails the check, naming the file (1979.763875ms)
+✔ #3066.4268aebb #3699.2b06b98e a checkout equal to its merge base passes the place check when the merge base's lane.json files name timed and slow files (2071.642875ms)
+✖ #3066.4268aebb #3699.e1f9065f a move to by hand passes only when its redrafted target is inside the checkout, is not the original or a folder holding it, and holds a test file that is not itself by hand; each other case fails, naming the file (0.321459ms)
+✔ #3066.4268aebb #3699.4c1cb484 a test file of the merge base that the checkout no longer holds fails the place check, naming the file (1607.728ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 5
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 20300.509333
+
+✖ failing tests:
+
+test at tests/acceptance/3066-redraft-3699/same-failures.test.mjs:33:1
+✖ #3066.4268aebb #3699.c037e2f6 every test file of the merge base still runs where it ran, moved only between the alone and parallel blocks or to by hand in the place of a blind redraft that redrafted maps it to and this checkout holds (12307.65825ms)
+  AssertionError [ERR_ASSERTION]: 1 test files of the merge base no longer run where they ran
+    tests/acceptance/3066/same-failures.test.mjs: parallel/node -> skipped/by hand, redrafted to tests/acceptance/3295/, whose test files all run by hand
+  + actual - expected
+  
+  + [
+  +   'tests/acceptance/3066/same-failures.test.mjs: parallel/node -> skipped/by hand, redrafted to tests/acceptance/3295/, whose test files all run by hand'
+  + ]
+  - []
+  
+
+test at tests/acceptance/3066-redraft-3699/same-failures.test.mjs:96:1
+✖ #3066.4268aebb #3699.e1f9065f a move to by hand passes only when its redrafted target is inside the checkout, is not the original or a folder holding it, and holds a test file that is not itself by hand; each other case fails, naming the file (0.321459ms)
+  AssertionError [ERR_ASSERTION]: 1 test files of the merge base moved to by hand in the place of a redraft that is outside this checkout, is the original or holds it, or runs only by hand
+    tests/acceptance/3066/same-failures.test.mjs: parallel/node -> skipped/by hand, redrafted to tests/acceptance/3295/, whose test files all run by hand
+  + actual - expected
+  
+  + [
+  +   'tests/acceptance/3066/same-failures.test.mjs'
+  + ]
+  - []
+  
+exit 1
+
+=== (4) the wrong check before-holds-only-lane-files, laid over this folder's helpers.mjs: node tests/acceptance/3066-redraft-3699/wrong-checks/lay.mjs before-holds-only-lane-files
+load: { 39.96 52.62 58.24 }
+laid the wrong check before-holds-only-lane-files over helpers.mjs
+✔ #3066.4268aebb scripts/known-failures.json names the same failures as on the merge base: the same test IDs, lint findings, timing IDs and skips (214.840541ms)
+✖ #3066.4268aebb #3699.c037e2f6 every test file of the merge base still runs where it ran, moved only between the alone and parallel blocks or to by hand in the place of a blind redraft that redrafted maps it to and this checkout holds (12118.111375ms)
+✔ #3066.4268aebb #3699.79b40a54 a test file of the merge base that moves to by hand with no redrafted entry fails the check, naming the file (1428.893667ms)
+✔ #3066.4268aebb #3699.f7548a54 a test file of the merge base that moves to by hand while its redrafted entry names a missing path, or a path holding no test file, fails the check, naming the file (1059.444958ms)
+✖ #3066.4268aebb #3699.2b06b98e a checkout equal to its merge base passes the place check when the merge base's lane.json files name timed and slow files (4370.195375ms)
+✔ #3066.4268aebb #3699.e1f9065f a move to by hand passes only when its redrafted target is inside the checkout, is not the original or a folder holding it, and holds a test file that is not itself by hand; each other case fails, naming the file (27684.151625ms)
+✔ #3066.4268aebb #3699.4c1cb484 a test file of the merge base that the checkout no longer holds fails the place check, naming the file (1973.957667ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 5
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 49349.914959
+
+✖ failing tests:
+
+test at tests/acceptance/3066-redraft-3699/same-failures.test.mjs:33:1
+✖ #3066.4268aebb #3699.c037e2f6 every test file of the merge base still runs where it ran, moved only between the alone and parallel blocks or to by hand in the place of a blind redraft that redrafted maps it to and this checkout holds (12118.111375ms)
+  AssertionError [ERR_ASSERTION]: 2 test files of the merge base no longer run where they ran
+    tests/acceptance/3225/ac7-budget.test.ts: alone/vitest -> timed/vitest
+    tests/acceptance/3569/ac10-budget.test.ts: alone/vitest -> timed/vitest
+  + actual - expected
+  
+  + [
+  +   'tests/acceptance/3225/ac7-budget.test.ts: alone/vitest -> timed/vitest',
+  +   'tests/acceptance/3569/ac10-budget.test.ts: alone/vitest -> timed/vitest'
+  + ]
+  - []
+  
+
+test at tests/acceptance/3066-redraft-3699/same-failures.test.mjs:80:1
+✖ #3066.4268aebb #3699.2b06b98e a checkout equal to its merge base passes the place check when the merge base's lane.json files name timed and slow files (4370.195375ms)
+  AssertionError [ERR_ASSERTION]: a checkout equal to its merge base failed the place check
+    tests/acceptance/3699/budgets.test.ts: alone/vitest -> timed/vitest
+    tests/acceptance/3699/build.test.ts: alone/vitest -> slow/vitest
+  + actual - expected
+  
+  + [
+  +   'tests/acceptance/3699/budgets.test.ts: alone/vitest -> timed/vitest',
+  +   'tests/acceptance/3699/build.test.ts: alone/vitest -> slow/vitest'
+  + ]
+  - []
+  
+exit 1
+
+=== (4) the wrong check skips-deleted, laid over this folder's helpers.mjs: node tests/acceptance/3066-redraft-3699/wrong-checks/lay.mjs skips-deleted
+load: { 39.05 50.54 57.16 }
+laid the wrong check skips-deleted over helpers.mjs
+✔ #3066.4268aebb scripts/known-failures.json names the same failures as on the merge base: the same test IDs, lint findings, timing IDs and skips (213.361792ms)
+✔ #3066.4268aebb #3699.c037e2f6 every test file of the merge base still runs where it ran, moved only between the alone and parallel blocks or to by hand in the place of a blind redraft that redrafted maps it to and this checkout holds (16036.971542ms)
+✔ #3066.4268aebb #3699.79b40a54 a test file of the merge base that moves to by hand with no redrafted entry fails the check, naming the file (2297.372417ms)
+✔ #3066.4268aebb #3699.f7548a54 a test file of the merge base that moves to by hand while its redrafted entry names a missing path, or a path holding no test file, fails the check, naming the file (2283.116167ms)
+✔ #3066.4268aebb #3699.2b06b98e a checkout equal to its merge base passes the place check when the merge base's lane.json files name timed and slow files (2487.3915ms)
+✔ #3066.4268aebb #3699.e1f9065f a move to by hand passes only when its redrafted target is inside the checkout, is not the original or a folder holding it, and holds a test file that is not itself by hand; each other case fails, naming the file (30270.670458ms)
+✖ #3066.4268aebb #3699.4c1cb484 a test file of the merge base that the checkout no longer holds fails the place check, naming the file (1791.941583ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 6
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 56448.163333
+
+✖ failing tests:
+
+test at tests/acceptance/3066-redraft-3699/same-failures.test.mjs:131:1
+✖ #3066.4268aebb #3699.4c1cb484 a test file of the merge base that the checkout no longer holds fails the place check, naming the file (1791.941583ms)
+  AssertionError [ERR_ASSERTION]: the check did not fail by name tests/acceptance/3699/deleted.test.mjs, a test file of the merge base this checkout no longer holds
+  
+  + actual - expected
+  
+  + []
+  - [
+  -   'tests/acceptance/3699/deleted.test.mjs: deleted'
+  - ]
+  
+exit 1
+
+=== (4) the wrong check no-original-rule, laid over this folder's helpers.mjs: node tests/acceptance/3066-redraft-3699/wrong-checks/lay.mjs no-original-rule
+load: { 46.95 50.80 56.83 }
+laid the wrong check no-original-rule over helpers.mjs
+✔ #3066.4268aebb scripts/known-failures.json names the same failures as on the merge base: the same test IDs, lint findings, timing IDs and skips (73.587583ms)
+✔ #3066.4268aebb #3699.c037e2f6 every test file of the merge base still runs where it ran, moved only between the alone and parallel blocks or to by hand in the place of a blind redraft that redrafted maps it to and this checkout holds (13566.091375ms)
+✔ #3066.4268aebb #3699.79b40a54 a test file of the merge base that moves to by hand with no redrafted entry fails the check, naming the file (1695.176417ms)
+✔ #3066.4268aebb #3699.f7548a54 a test file of the merge base that moves to by hand while its redrafted entry names a missing path, or a path holding no test file, fails the check, naming the file (1723.032667ms)
+✔ #3066.4268aebb #3699.2b06b98e a checkout equal to its merge base passes the place check when the merge base's lane.json files name timed and slow files (1268.527541ms)
+✖ #3066.4268aebb #3699.e1f9065f a move to by hand passes only when its redrafted target is inside the checkout, is not the original or a folder holding it, and holds a test file that is not itself by hand; each other case fails, naming the file (22155.329ms)
+✔ #3066.4268aebb #3699.4c1cb484 a test file of the merge base that the checkout no longer holds fails the place check, naming the file (1386.802083ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 6
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 42433.8105
+
+✖ failing tests:
+
+test at tests/acceptance/3066-redraft-3699/same-failures.test.mjs:96:1
+✖ #3066.4268aebb #3699.e1f9065f a move to by hand passes only when its redrafted target is inside the checkout, is not the original or a folder holding it, and holds a test file that is not itself by hand; each other case fails, naming the file (22155.329ms)
+  AssertionError [ERR_ASSERTION]: the check did not fail by name tests/acceptance/1003/cells.test.mjs, sent to by hand in the place of each target it refuses
+    tests/acceptance/1003/cells.test.mjs: tests/acceptance/1003/cells.test.mjs: redraft holds only by-hand test files
+    tests/acceptance/1003/: passed
+    tests/acceptance/1003: passed
+    tests/: passed
+    .: passed
+    ./: passed
+    $TMPDIR/deep-3699-mhXrdi/redraft: tests/acceptance/1003/cells.test.mjs: redraft outside the checkout
+    ../deep-3699-mhXrdi/redraft/: tests/acceptance/1003/cells.test.mjs: redraft outside the checkout
+    ../: tests/acceptance/1003/cells.test.mjs: redraft outside the checkout
+    tests/acceptance/1015/own-repo.test.ts: tests/acceptance/1003/cells.test.mjs: redraft holds only by-hand test files
+    tests/acceptance/1016/: tests/acceptance/1003/cells.test.mjs: redraft holds only by-hand test files
+  + actual - expected
+  
+    [
+      [
+        'tests/acceptance/1003/cells.test.mjs',
+        [
+  +       'tests/acceptance/1003/cells.test.mjs: redraft holds only by-hand test files'
+  -       'tests/acceptance/1003/cells.test.mjs: redraft is the original or holds it'
+        ]
+      ],
+      [
+        'tests/acceptance/1003/',
+  +     []
+  -     [
+  -       'tests/acceptance/1003/cells.test.mjs: redraft is the original or holds it'
+  -     ]
+      ],
+      [
+        'tests/acceptance/1003',
+  +     []
+  -     [
+  -       'tests/acceptance/1003/cells.test.mjs: redraft is the original or holds it'
+  -     ]
+      ],
+      [
+        'tests/',
+  +     []
+  -     [
+  -       'tests/acceptance/1003/cells.test.mjs: redraft is the original or holds it'
+  -     ]
+      ],
+      [
+        '.',
+  +     []
+  -     [
+  -       'tests/acceptance/1003/cells.test.mjs: redraft is the original or holds it'
+  -     ]
+      ],
+      [
+        './',
+  +     []
+  -     [
+  -       'tests/acceptance/1003/cells.test.mjs: redraft is the original or holds it'
+  -     ]
+      ],
+      [
+        '$TMPDIR/deep-3699-mhXrdi/redraft',
+        [
+          'tests/acceptance/1003/cells.test.mjs: redraft outside the checkout'
+  
+exit 1
+
+=== (4) the wrong check no-by-hand-rule, laid over this folder's helpers.mjs: node tests/acceptance/3066-redraft-3699/wrong-checks/lay.mjs no-by-hand-rule
+load: { 48.20 50.61 56.46 }
+laid the wrong check no-by-hand-rule over helpers.mjs
+✔ #3066.4268aebb scripts/known-failures.json names the same failures as on the merge base: the same test IDs, lint findings, timing IDs and skips (92.396584ms)
+✔ #3066.4268aebb #3699.c037e2f6 every test file of the merge base still runs where it ran, moved only between the alone and parallel blocks or to by hand in the place of a blind redraft that redrafted maps it to and this checkout holds (11751.554125ms)
+✔ #3066.4268aebb #3699.79b40a54 a test file of the merge base that moves to by hand with no redrafted entry fails the check, naming the file (1368.736875ms)
+✔ #3066.4268aebb #3699.f7548a54 a test file of the merge base that moves to by hand while its redrafted entry names a missing path, or a path holding no test file, fails the check, naming the file (1529.53975ms)
+✔ #3066.4268aebb #3699.2b06b98e a checkout equal to its merge base passes the place check when the merge base's lane.json files name timed and slow files (1547.335709ms)
+✖ #3066.4268aebb #3699.e1f9065f a move to by hand passes only when its redrafted target is inside the checkout, is not the original or a folder holding it, and holds a test file that is not itself by hand; each other case fails, naming the file (15050.159625ms)
+✔ #3066.4268aebb #3699.4c1cb484 a test file of the merge base that the checkout no longer holds fails the place check, naming the file (1680.484125ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 6
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 33513.590958
+
+✖ failing tests:
+
+test at tests/acceptance/3066-redraft-3699/same-failures.test.mjs:96:1
+✖ #3066.4268aebb #3699.e1f9065f a move to by hand passes only when its redrafted target is inside the checkout, is not the original or a folder holding it, and holds a test file that is not itself by hand; each other case fails, naming the file (15050.159625ms)
+  AssertionError [ERR_ASSERTION]: the check did not fail by name tests/acceptance/1003/cells.test.mjs, sent to by hand in the place of each target it refuses
+    tests/acceptance/1003/cells.test.mjs: tests/acceptance/1003/cells.test.mjs: redraft is the original or holds it
+    tests/acceptance/1003/: tests/acceptance/1003/cells.test.mjs: redraft is the original or holds it
+    tests/acceptance/1003: tests/acceptance/1003/cells.test.mjs: redraft is the original or holds it
+    tests/: tests/acceptance/1003/cells.test.mjs: redraft is the original or holds it
+    .: tests/acceptance/1003/cells.test.mjs: redraft is the original or holds it
+    ./: tests/acceptance/1003/cells.test.mjs: redraft is the original or holds it
+    $TMPDIR/deep-3699-JMt7mM/redraft: tests/acceptance/1003/cells.test.mjs: redraft outside the checkout
+    ../deep-3699-JMt7mM/redraft/: tests/acceptance/1003/cells.test.mjs: redraft outside the checkout
+    ../: tests/acceptance/1003/cells.test.mjs: redraft outside the checkout
+    tests/acceptance/1015/own-repo.test.ts: passed
+    tests/acceptance/1016/: passed
+  + actual - expected
+  ... Skipped lines
+  
+    [
+      [
+        'tests/acceptance/1003/cells.test.mjs',
+        [
+          'tests/acceptance/1003/cells.test.mjs: redraft is the original or holds it'
+  ...
+        'tests/acceptance/1015/own-repo.test.ts',
+  +     []
+  -     [
+  -       'tests/acceptance/1003/cells.test.mjs: redraft holds only by-hand test files'
+  -     ]
+      ],
+      [
+        'tests/acceptance/1016/',
+  +     []
+  -     [
+  -       'tests/acceptance/1003/cells.test.mjs: redraft holds only by-hand test files'
+  -     ]
+      ]
+    ]
+  
+exit 1
+
+=== (4) the wrong check counts-every-file, laid over this folder's helpers.mjs: node tests/acceptance/3066-redraft-3699/wrong-checks/lay.mjs counts-every-file
+load: { 60.25 52.73 56.96 }
+laid the wrong check counts-every-file over helpers.mjs
+✔ #3066.4268aebb scripts/known-failures.json names the same failures as on the merge base: the same test IDs, lint findings, timing IDs and skips (165.53325ms)
+✔ #3066.4268aebb #3699.c037e2f6 every test file of the merge base still runs where it ran, moved only between the alone and parallel blocks or to by hand in the place of a blind redraft that redrafted maps it to and this checkout holds (15956.74825ms)
+✔ #3066.4268aebb #3699.79b40a54 a test file of the merge base that moves to by hand with no redrafted entry fails the check, naming the file (2394.783625ms)
+✖ #3066.4268aebb #3699.f7548a54 a test file of the merge base that moves to by hand while its redrafted entry names a missing path, or a path holding no test file, fails the check, naming the file (2360.391292ms)
+✔ #3066.4268aebb #3699.2b06b98e a checkout equal to its merge base passes the place check when the merge base's lane.json files name timed and slow files (2216.408958ms)
+✔ #3066.4268aebb #3699.e1f9065f a move to by hand passes only when its redrafted target is inside the checkout, is not the original or a folder holding it, and holds a test file that is not itself by hand; each other case fails, naming the file (34740.139292ms)
+✔ #3066.4268aebb #3699.4c1cb484 a test file of the merge base that the checkout no longer holds fails the place check, naming the file (1724.432792ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 6
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 60427.890959
+
+✖ failing tests:
+
+test at tests/acceptance/3066-redraft-3699/same-failures.test.mjs:66:1
+✖ #3066.4268aebb #3699.f7548a54 a test file of the merge base that moves to by hand while its redrafted entry names a missing path, or a path holding no test file, fails the check, naming the file (2360.391292ms)
+  AssertionError [ERR_ASSERTION]: the check did not fail by name each file sent to by hand in the place of a redraft this checkout does not hold
+    tests/acceptance/1003/cells.test.mjs: parallel/node -> skipped/by hand, redrafted to tests/acceptance/3066-redraft-3699-missing/, which this checkout does not hold
+    tests/acceptance/1003/look.test.mjs: parallel/node -> skipped/by hand, redrafted to tests/acceptance/3066-redraft-3699/README.md, which holds no test file
+  + actual - expected
+  
+    [
+      'tests/acceptance/1003/cells.test.mjs: redraft missing',
+      'tests/acceptance/1003/look.test.mjs: redraft holds no test file',
+  -   'tests/acceptance/1003/redraft-1458/look.test.mjs: redraft holds no test file'
+    ]
+  
+exit 1
+
