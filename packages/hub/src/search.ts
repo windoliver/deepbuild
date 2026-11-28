@@ -218,47 +218,32 @@ async function pastHits(past: NonNullable<SearchIn['past']>, wanted: readonly st
     .map(({ m }) => ({ session: m.session, source: `session:${m.session.replace(/[^0-9A-Za-z]/g, '')}#${m.id}`, quote: around(m.text, wanted), history: true, from: whose(m) }));
 }
 
-/** Every hit for the query, each citing its source: the wiki's and the spec's, then the session's own, then decisions, newest first, then past sessions. */
+/** How many of a query's words an empty reply's note reads, one search a word. */
+const NOTE_WORDS = 16;
+/** The most characters of one word a note names, so 16 words keep the reply well under the cap. */
+const NOTE_WORD = 64;
+/**
+ * Why a query with words found nothing (#3460): each word read, of its first 16, that no source the call may read
+ * holds, by the search's own word rule and scope, one search a word that stops at the first source holding it; or,
+ * when each is held somewhere, that no one source holds them all.
+ */
+async function whyNothing(input: SearchIn, wanted: readonly string[]): Promise<string> {
+  const unheld: string[] = [];
+  for (const word of new Set(wanted.slice(0, NOTE_WORDS))) if (!(await everyHit(input, [word], word, true)).length) unheld.push(word);
+  const named = unheld.map((w) => ([...w].length > NOTE_WORD ? `${[...w].slice(0, NOTE_WORD).join('')}…` : w));
+  const left = Math.max(0, wanted.length - NOTE_WORDS);
+  return `${named.length ? `No source this call may read holds these words: ${named.join(', ')}.` : 'Each word is held by a source this call may read, but no one source holds them all.'}${left ? ` The search read the query's first ${NOTE_WORDS} words and left ${left} unread.` : ''}`;
+}
+
+/** Every hit for the query, each citing its source: your decisions, newest first, then the wiki's and the spec's, then the session's own, then readings, then past sessions. */
 export async function search(input: SearchIn): Promise<{ hits: Hit[]; more: number; next?: string; note?: string }> {
   const wanted = words(input.query);
   if (!wanted.length) return { hits: [], more: 0, note: NO_WORDS };
-  const hits: Hit[] = await wikiHits(input.index ? await input.index.search(input.query) : await ledgerSearch(input, wanted), input);
-
-  const asked = mightHold('a.question', wanted);
-  const decisions = (await input.raw(`SELECT e.id AS id, a.question AS question, e.data AS data FROM events e JOIN asks a ON a.id = substr(json_extract(e.data, '$.ask'), 5)
-    WHERE e.kind = 'decision.created' AND ${asked.sql} ORDER BY e.log_pos DESC`, asked.params)) as { id: string; question: string; data: string }[];
-  const decided: Hit[] = [];
-  for (const d of decisions) {
-    if (!holds(d.question, wanted)) continue;
-    const { answer, scope } = JSON.parse(d.data) as { answer: string; scope: string };
-    if (input.decides && !input.decides(scope)) continue;
-    decided.push({ source: `decision:${d.id}`, quote: `${d.question} → ${answer} (${scope})`.slice(0, QUOTE) });
-  }
-
-  const own = input.session;
-  const record: Hit[] = [];
-  if (own !== undefined) {
-    const whose = typeof own === 'string' ? 'AND session_id = ?' : '';
-    const held = mightHold('data', wanted);
-    const rows = (await input.raw(`SELECT id, kind, data FROM events WHERE kind IN ('open_item.opened', 'verdict.made') ${whose} AND ${held.sql} ORDER BY log_pos DESC`, [...(typeof own === 'string' ? [own] : []), ...held.params])) as { id: string; kind: string; data: string }[];
-    for (const row of rows) {
-      const d = JSON.parse(row.data) as { task_ref?: string; text?: string; verdict?: string; reasons?: string[]; smallest?: string };
-      const text = row.kind === 'open_item.opened' ? String(d.text) : [...(d.reasons ?? []), d.smallest ?? ''].join(' ');
-      if (holds(text, wanted)) record.push({ source: row.kind === 'open_item.opened' ? String(d.task_ref) : String(d.verdict), quote: text.slice(0, QUOTE) });
-    }
-  }
-
-  if (input.worktree) {
-    const file = join(input.worktree, '.deepbuild', 'done.yaml');
-    let text = '';
-    try { text = readFileSync(file, 'utf8'); } catch { /* a repo with no spec has nothing to find */ }
-    text.split('\n').forEach((line, i) => { if (holds(line, wanted)) hits.push({ source: `${file}#L${i + 1}`, quote: line.trim().slice(0, QUOTE) }); });
-  }
-  const numbers: Hit[] = (await input.readings(input.query)).map(({ reading, source, as_of, status }) => ({ source, as_of, reading, status, quote: `${status === 'STALE' ? 'STALE ' : ''}${reading.id}${reading.subject ? ` ${reading.subject}` : ''}: ${reading.value === null ? 'unknown' : String(reading.value)} ${reading.unit}`.slice(0, QUOTE) }));
-  const history = input.past ? await pastHits(input.past, wanted) : [];
-  const all: Hit[] = [...hits, ...record, ...numbers, ...decided, ...history];
+  const all = await everyHit(input, wanted, input.query);
   const from = input.cursor === undefined ? 0 : Number(/^h(\d+)$/.exec(input.cursor)?.[1] ?? NaN);
   if (!Number.isSafeInteger(from) || from > all.length) return { hits: [], more: 0, note: `No reply continues at ${input.cursor}.` };
+  // An empty reply says why, so it never reads as nothing known.
+  if (!all.length) return { hits: [], more: 0, note: await whyNothing(input, wanted) };
   const page = all.slice(from, from + MAX_HITS);
   // A past session's hit says what the record and its branch head tell of that session, read for this reply's hits only.
   const told = input.past ? await input.past.about([...new Set(page.flatMap((h) => ('session' in h ? [h.session as string] : [])))]) : new Map<string, PastSession>();
@@ -277,4 +262,51 @@ export async function search(input: SearchIn): Promise<{ hits: Hit[]; more: numb
   }
   const end = from + n;
   return { hits: shown.slice(0, n), more: Math.max(0, all.length - end), ...(end < all.length ? { next: `h${end}` } : {}) };
+}
+
+/**
+ * Every hit for the words a query asks for, in a reply's order, read only where the call may read. `first` stops at
+ * the first source that holds them, for a note that only asks whether any does.
+ */
+async function everyHit(input: SearchIn, wanted: readonly string[], query: string, first = false): Promise<Hit[]> {
+  const hits: Hit[] = await wikiHits(input.index ? await input.index.search(query) : await ledgerSearch(input, wanted), input);
+  if (first && hits.length) return hits;
+
+  const asked = mightHold('a.question', wanted);
+  const decisions = (await input.raw(`SELECT e.id AS id, a.question AS question, e.data AS data FROM events e JOIN asks a ON a.id = substr(json_extract(e.data, '$.ask'), 5)
+    WHERE e.kind = 'decision.created' AND ${asked.sql} ORDER BY e.log_pos DESC`, asked.params)) as { id: string; question: string; data: string }[];
+  const decided: Hit[] = [];
+  for (const d of decisions) {
+    if (!holds(d.question, wanted)) continue;
+    const { answer, scope } = JSON.parse(d.data) as { answer: string; scope: string };
+    if (input.decides && !input.decides(scope)) continue;
+    decided.push({ source: `decision:${d.id}`, quote: `${d.question} → ${answer} (${scope})`.slice(0, QUOTE) });
+  }
+  if (first && decided.length) return decided;
+
+  const own = input.session;
+  const record: Hit[] = [];
+  if (own !== undefined) {
+    const whose = typeof own === 'string' ? 'AND session_id = ?' : '';
+    const held = mightHold('data', wanted);
+    const rows = (await input.raw(`SELECT id, kind, data FROM events WHERE kind IN ('open_item.opened', 'verdict.made') ${whose} AND ${held.sql} ORDER BY log_pos DESC`, [...(typeof own === 'string' ? [own] : []), ...held.params])) as { id: string; kind: string; data: string }[];
+    for (const row of rows) {
+      const d = JSON.parse(row.data) as { task_ref?: string; text?: string; verdict?: string; reasons?: string[]; smallest?: string };
+      const text = row.kind === 'open_item.opened' ? String(d.text) : [...(d.reasons ?? []), d.smallest ?? ''].join(' ');
+      if (holds(text, wanted)) record.push({ source: row.kind === 'open_item.opened' ? String(d.task_ref) : String(d.verdict), quote: text.slice(0, QUOTE) });
+    }
+  }
+  if (first && record.length) return record;
+
+  if (input.worktree) {
+    const file = join(input.worktree, '.deepbuild', 'done.yaml');
+    let text = '';
+    try { text = readFileSync(file, 'utf8'); } catch { /* a repo with no spec has nothing to find */ }
+    text.split('\n').forEach((line, i) => { if (holds(line, wanted)) hits.push({ source: `${file}#L${i + 1}`, quote: line.trim().slice(0, QUOTE) }); });
+  }
+  if (first && hits.length) return hits;
+  const numbers: Hit[] = (await input.readings(query)).map(({ reading, source, as_of, status }) => ({ source, as_of, reading, status, quote: `${status === 'STALE' ? 'STALE ' : ''}${reading.id}${reading.subject ? ` ${reading.subject}` : ''}: ${reading.value === null ? 'unknown' : String(reading.value)} ${reading.unit}`.slice(0, QUOTE) }));
+  if (first && numbers.length) return numbers;
+  const history = input.past ? await pastHits(input.past, wanted) : [];
+  return [...decided, ...hits, ...record, ...numbers, ...history];
 }

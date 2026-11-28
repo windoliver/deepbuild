@@ -196,7 +196,7 @@ The ways your answer reaches DeepBuild that prove it is yours: the app, the comm
 ### Layers
 
 **Core**:
-The part of DeepBuild that nothing replaces or extends: the record, the floor and verdicts, asks and the adapter contract. The canvas core is another thing, a part of the trusted ring.
+The part of DeepBuild that nothing replaces or extends: the record, the contract, capabilities, the trusted path, the floor and verdicts, and asks, as [Building blocks](docs/technical-design.md#blocks) lists them. The canvas core is another thing, a part of the trusted ring.
 _Avoid_: kernel
 
 **Contract**:
