@@ -1,0 +1,1 @@
+{ "alone": true, "why": "shared: each test promotes builds and restarts the sandboxed installed hub through the launchd stand-in, after #1334's rollback scene, and holds a hub's exit to race deep hub start" }
