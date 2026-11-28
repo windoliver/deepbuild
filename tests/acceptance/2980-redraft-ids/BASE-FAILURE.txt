@@ -1,0 +1,211 @@
+Redraft without comments (the comment ratchet's ceiling for a blind suite is 0): only comment lines were removed
+from the .mjs files, so the darwin record further below stands, but its file:line positions are the commented
+draft's. The redraft was run once on Linux at b1fee208c, which already holds #2980's change (node v24.22.0,
+1-minute load 153 on the Spark): exit 0, 9 tests, 6 pass, 0 fail, 3 skipped (darwin only). The darwin tests were
+not run in this redraft.
+
+---- redraft output, Linux, Sat Nov 28 09:01:49 UTC 2026 ----
+﹣ #2980.a86df9c6 on darwin, with one settling test grant held, a second request waits at memory 16 GiB - 1 byte, load 1 on 64 cores (3.191991ms) # darwin only: a Mac run budgets 8 GiB
+﹣ #2980.a86df9c6 on darwin, with one settling test grant held, a second request is granted at once at exactly 16 GiB, load 1 on 64 cores (0.218816ms) # darwin only: a Mac run budgets 8 GiB
+✔ #2980.4c98823b section 6 states the Mac reads kern.memorystatus_level and budgets 8 GiB a run, and the Spark budgets 24 GiB a run (10.670472ms)
+✔ #2980.4c98823b section 13 states the Mac reads kern.memorystatus_level and budgets 8 GiB a run, and the Spark budgets 24 GiB a run (0.558289ms)
+✔ #2980.bc75bb06 on Linux, with one settling test grant held, a second request waits at memory 48 GiB - 1 byte, load 1 on 64 cores (8344.020014ms)
+✔ #2980.bc75bb06 on Linux, with one settling test grant held, a second request is granted at once at exactly 48 GiB, load 1 on 64 cores (1389.687583ms)
+﹣ #2980.a3bd16e8 on darwin, machineReadings().memory is kern.memorystatus_level x hw.memsize / 100 as sysctl reads them, not os.freemem() (4.058409ms) # darwin only: the Mac reads kern.memorystatus_level
+✔ #2980.a3bd16e8 on Linux, machineReadings().memory is os.freemem() (1.425891ms)
+✔ #2980.a3bd16e8 machineReadings().load is os.loadavg()[0] and cores is os.cpus().length (6.047773ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 3
+ℹ todo 0
+ℹ duration_ms 9838.508058
+
+real	0m9.889s
+user	0m0.525s
+sys	0m0.573s
+
+---- the first draft's record on the base, darwin ----
+Base ee05e7257cc7c7b90b1ca6ba965d21ec36da4e05, macOS (Mac18,1, 12 cores, 32 GiB), node v24.22.0, one run of
+  node --test tests/acceptance/2980-redraft-ids/*.test.mjs
+from the checkout root, at a 1-minute load of 65-72 on 12 cores (other sessions' builds). Exit 1: 9 tests, 1 pass,
+5 fail, 3 skipped (Linux only). Verbatim output below the reasons.
+
+Why each test fails, passes or skips on this base:
+
+- readings.test.mjs, #2980.a3bd16e8 darwin memory: FAIL at assert.equal(typeof throttle.machineReadings, 'function').
+  The base exports acquire, ancestors, holds, release, roomForTest and no machineReadings; its machine's table reads
+  os.freemem() on darwin. Expected failure.
+- readings.test.mjs, #2980.a3bd16e8 load and cores: FAIL at the same assertion, for the same reason. Expected.
+- readings.test.mjs, #2980.a3bd16e8 Linux memory: SKIP (darwin host).
+- darwin-grants.test.mjs, #2980.a86df9c6 waits at 16 GiB - 1 byte: PASS. The base reserves 24 GiB per settling
+  grant and needs 24 GiB a run, so it waits below 48 GiB, which includes 16 GiB - 1 byte. It is the unchanged side of
+  the criterion; it fails on the planted twins listed in README (a settling grant reserving nothing, a darwin run of
+  4 GiB), see README: Wrong programs.
+- darwin-grants.test.mjs, #2980.a86df9c6 granted at once at exactly 16 GiB: FAIL at the 2924 helper's
+  assert.ok(start) in started(): the second's command hadn't started after 30 s and its throttle.mjs was still
+  waiting, the holder still running; the log shows only the holder's grant. The base needs 48 GiB here. Expected.
+- linux-grants.test.mjs, both #2980.bc75bb06: SKIP (darwin host). On a Linux base they are expected to pass: they
+  are #2924 AC2's numbers, which the base already meets; they fail on the twins listed in README.
+- design.test.mjs, #2980.4c98823b section 6: FAIL at assert.deepEqual(missing, []): section 6 names neither
+  kern.memorystatus_level nor 8 GiB for the Mac (it does name the Spark's MemoryMax=24G). Expected.
+- design.test.mjs, #2980.4c98823b section 13: FAIL likewise: it names neither, and its 24 GiB sentence names no
+  machine. Expected.
+
+A throwaway planted twin (never committed: the base's throttle.mjs with an exported machineReadings() reading
+sysctl kern.memorystatus_level x hw.memsize / 100 on darwin, RUN_MEMORY 8 GiB on darwin, and one sentence added to
+sections 6 and 13) passed all 6 darwin-run tests on this Mac. Each mutant of it failed the test README names for it:
+darwin memory as os.freemem(); load as os.loadavg()[1]; a settling grant reserving nothing; memory compared with >
+instead of >=; section 13 without the Mac's 8 GiB.
+
+---- output ----
+Sat Nov 28 03:43:29 UTC 2026
+19:43  up 8 days, 10 mins, 3 users, load averages: 71.87 81.29 77.59
+ee05e7257cc7c7b90b1ca6ba965d21ec36da4e05
+v24.22.0
+✔ #2980.a86df9c6 on darwin, with one settling test grant held, a second request waits at memory 16 GiB - 1 byte, load 1 on 64 cores (8167.128291ms)
+✖ #2980.a86df9c6 on darwin, with one settling test grant held, a second request is granted at once at exactly 16 GiB, load 1 on 64 cores (30239.624042ms)
+✖ #2980.4c98823b section 6 states the Mac reads kern.memorystatus_level and budgets 8 GiB a run, and the Spark budgets 24 GiB a run (1.540459ms)
+✖ #2980.4c98823b section 13 states the Mac reads kern.memorystatus_level and budgets 8 GiB a run, and the Spark budgets 24 GiB a run (0.2045ms)
+﹣ #2980.bc75bb06 on Linux, with one settling test grant held, a second request waits at memory 48 GiB - 1 byte, load 1 on 64 cores (2.02ms) # Linux only: a Spark run budgets 24 GiB
+﹣ #2980.bc75bb06 on Linux, with one settling test grant held, a second request is granted at once at exactly 48 GiB, load 1 on 64 cores (0.1215ms) # Linux only: a Spark run budgets 24 GiB
+✖ #2980.a3bd16e8 on darwin, machineReadings().memory is kern.memorystatus_level x hw.memsize / 100 as sysctl reads them, not os.freemem() (7.525417ms)
+﹣ #2980.a3bd16e8 on Linux, machineReadings().memory is os.freemem() (0.116417ms) # Linux only: Linux reads os.freemem() (MemAvailable)
+✖ #2980.a3bd16e8 machineReadings().load is os.loadavg()[0] and cores is os.cpus().length (0.325666ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 1
+ℹ fail 5
+ℹ cancelled 0
+ℹ skipped 3
+ℹ todo 0
+ℹ duration_ms 38467.265542
+
+✖ failing tests:
+
+test at tests/acceptance/2980-redraft-ids/darwin-grants.test.mjs:14:1
+✖ #2980.a86df9c6 on darwin, with one settling test grant held, a second request is granted at once at exactly 16 GiB, load 1 on 64 cores (30239.624042ms)
+  AssertionError [ERR_ASSERTION]: second never ran its command under the throttle (its throttle.mjs ended first, or 30000 ms passed)
+  events:
+  {"name":"holder","throttle":"test:1fcfd6132731d20d"}
+  log:
+  {"at":"2026-11-28T03:43:38.352Z","event":"granted","class":"test","grant":"top-level","id":"1fcfd6132731d20d","pid":39793,"index":1,"load":65.447265625,"cores":12,"wait":1,"readings":{"memory":17179869184,"load":1,"cores":64}}
+  second: still running
+  
+  holder: still running
+  
+      at started (file://<checkout>/tests/acceptance/2924/helpers.mjs:111:10)
+      at async secondGranted (file://<checkout>/tests/acceptance/2980-redraft-ids/grants.mjs:37:3)
+      at async TestContext.<anonymous> (file://<checkout>/tests/acceptance/2980-redraft-ids/darwin-grants.test.mjs:15:3)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2980-redraft-ids/design.test.mjs:31:3
+✖ #2980.4c98823b section 6 states the Mac reads kern.memorystatus_level and budgets 8 GiB a run, and the Spark budgets 24 GiB a run (1.540459ms)
+  AssertionError [ERR_ASSERTION]: section 6 of docs/parallel-proof.md doesn't state: the Mac reads kern.memorystatus_level; the Mac budgets 8 GiB a run
+  + actual - expected
+  
+  + [
+  +   'the Mac reads kern.memorystatus_level',
+  +   'the Mac budgets 8 GiB a run'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2980-redraft-ids/design.test.mjs:34:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'the Mac reads kern.memorystatus_level', 'the Mac budgets 8 GiB a run' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2980-redraft-ids/design.test.mjs:31:3
+✖ #2980.4c98823b section 13 states the Mac reads kern.memorystatus_level and budgets 8 GiB a run, and the Spark budgets 24 GiB a run (0.2045ms)
+  AssertionError [ERR_ASSERTION]: section 13 of docs/parallel-proof.md doesn't state: the Mac reads kern.memorystatus_level; the Mac budgets 8 GiB a run; the Spark budgets 24 GiB a run
+  + actual - expected
+  
+  + [
+  +   'the Mac reads kern.memorystatus_level',
+  +   'the Mac budgets 8 GiB a run',
+  +   'the Spark budgets 24 GiB a run'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2980-redraft-ids/design.test.mjs:34:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'the Mac reads kern.memorystatus_level', 'the Mac budgets 8 GiB a run', 'the Spark budgets 24 GiB a run' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2980-redraft-ids/readings.test.mjs:28:1
+✖ #2980.a3bd16e8 on darwin, machineReadings().memory is kern.memorystatus_level x hw.memsize / 100 as sysctl reads them, not os.freemem() (7.525417ms)
+  AssertionError [ERR_ASSERTION]: scripts/throttle.mjs exports no machineReadings function; its exports: acquire, ancestors, holds, release, roomForTest
+  + actual - expected
+  
+  + 'undefined'
+  - 'function'
+  
+      at bracketed (file://<checkout>/tests/acceptance/2980-redraft-ids/readings.test.mjs:19:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2980-redraft-ids/readings.test.mjs:31:45)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'undefined',
+    expected: 'function',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2980-redraft-ids/readings.test.mjs:48:1
+✖ #2980.a3bd16e8 machineReadings().load is os.loadavg()[0] and cores is os.cpus().length (0.325666ms)
+  AssertionError [ERR_ASSERTION]: scripts/throttle.mjs exports no machineReadings function; its exports: acquire, ancestors, holds, release, roomForTest
+  + actual - expected
+  
+  + 'undefined'
+  - 'function'
+  
+      at bracketed (file://<checkout>/tests/acceptance/2980-redraft-ids/readings.test.mjs:19:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2980-redraft-ids/readings.test.mjs:49:45)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'undefined',
+    expected: 'function',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+real	0m38.516s
+user	0m0.684s
+sys	0m0.878s

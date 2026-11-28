@@ -1,0 +1,12 @@
+{
+  "scripts/throttle.mjs": [
+    {
+      "find": [
+        "  return { memory, load: loadavg()[0], cores: cpus().length };"
+      ],
+      "wrong": [
+        "  return { memory, load: loadavg()[0], cores: cpus().length + 1 };"
+      ]
+    }
+  ]
+}
