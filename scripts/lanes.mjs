@@ -160,7 +160,6 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/1881-redraft-2047/', 'tests/acceptance/96-redraft-1412/',
   ],
   timing: [
-    'tests/acceptance/3405/',
     'tests/acceptance/2513-redraft-2047/',
     'tests/acceptance/896/', 'tests/acceptance/16/', 'tests/acceptance/1098/budgets.test.ts', 'tests/acceptance/1015/budgets.test.ts', 'tests/acceptance/1417-redraft-ac3/',
     'tests/acceptance/1022/', 'tests/acceptance/823/', 'tests/acceptance/14/budgets.test.ts', 'tests/acceptance/42/budgets.test.ts', 'tests/acceptance/62/budgets.test.ts',
@@ -181,6 +180,7 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/268-redraft-1830/', 'tests/acceptance/465-redraft-1830/', 'tests/acceptance/968-redraft-1830/', 'tests/acceptance/1830/ac2-timing.test.ts',
     'tests/acceptance/1801/', 'tests/acceptance/2760-redraft-ac8/', 'tests/acceptance/2777/', 'tests/acceptance/553/',
     'tests/acceptance/980-redraft-ac9/', 'tests/acceptance/2317/', 'tests/acceptance/2740/',
+    'tests/acceptance/3405/',
   ],
   'shared: Docker': [
     'tests/acceptance/580/', 'tests/acceptance/238/', 'tests/acceptance/1255/', 'tests/acceptance/194/', 'tests/acceptance/531/', 'tests/acceptance/532/', 'tests/acceptance/190/',
