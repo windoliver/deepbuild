@@ -1070,6 +1070,15 @@ impl Env<'_> {
                 .unwrap_or_else(|| Fact::top(4));
                 tex.finite_part()
             }
+            "bitcast" => {
+                let x = get("x").hull();
+                let below_inf = x.finite() && x.lo >= 0.0 && x.hi < f64::from(0x7f80_0000u32);
+                if !below_inf {
+                    return Err(Why::Unknown);
+                }
+                let bits = |v: f64| f64::from(f32::from_bits(v as u32));
+                Fact::of(vec![Lane::range(bits(x.lo.floor()), bits(x.hi.ceil()))])
+            }
             _ => return Err(Why::Unknown),
         };
         Ok(out.splat(n))
