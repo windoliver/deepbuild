@@ -79,7 +79,7 @@ Outcome: pin moved
 | #377 | pass |
 | #390 | pass |
 | #391 | pass |
-| #140 | not run: its sRGB test passes; the live color check and the pacing test read INCONCLUSIVE on this machine |
+| #140 | not run: its sRGB test and its live color check pass; the pacing test read INCONCLUSIVE on this machine |
 | #358 | pass |
 | #124 | pass |
 | #177 | pass |
@@ -93,12 +93,12 @@ Outcome: pin moved
 | #1489 | pass |
 | #1546 | pass |
 | #1550 | pass |
-| #1551 | fail: deep-show live answers not_presented for its still board, as the merge base's own build does; #3502's still-window test passes |
+| #1551 | fail: the document check refuses its still board's label "Q3 revenue" as a number with no source, as the merge base's own build does; #3502's still-window test passes |
 | #1843 | pass |
-| #2471 | not run: its test skips on macOS; it needs the Linux lane |
-| #3232 | not run: its unseen-window test passes; live.test.ts read BLOCKED, another window took the front |
+| #2471 | pass |
+| #3232 | not run: its unseen-window test passes; live.test.ts read BLOCKED three times, by another window in front and by a locked screen |
 
-A suite's result here is the result of its carried rows' tests, the ones the table above names, each run on this tree on a loaded Mac17,10. `pass` means every one of them passed. The workspace builds (`cargo build --workspace --locked`) and `node scripts/vendor-rebase.mjs check` passes. Three suites fail as they do on the merge base, one misses its frame rate under load, and three could not be read here, so this trial is open: the pin is moved on the branch, and the move is not proven.
+A suite's result here is the result of its carried rows' tests, the ones the table above names, each run on this tree on a loaded Mac17,10. `pass` means every one of them passed. The workspace builds (`cargo build --workspace --locked`) and `node scripts/vendor-rebase.mjs check` passes. #2471's test ran on Linux, in the deep-ubuntu VM. Three suites fail as they do on the merge base, one misses its frame rate under load, and two could not be read here, so this trial is open: the pin is moved on the branch, and the move is not proven.
 
 No row was removed: 0.3.14's own line breaking does not pass #1550's test (right-to-left rows out of text order, and 14,259 boundaries LineBreakTest.txt does not allow), so that row is carried again.
 

@@ -44,9 +44,9 @@ fn shaped_bytes(s: &Shaped) -> u64 {
 
 /// What an outline holds: two f32s a point of its rings.
 fn outline_bytes(rings: &Option<Rings>) -> u64 {
-    rings
-        .as_ref()
-        .map_or(0, |rings| rings.iter().map(|ring| 8 * ring.len() as u64).sum())
+    rings.as_ref().map_or(0, |rings| {
+        rings.iter().map(|ring| 8 * ring.len() as u64).sum()
+    })
 }
 
 /// A Text item's fields a label needs (canvas primitives: Text `text@1`).
@@ -286,7 +286,11 @@ fn flattened(glyph: &Glyph, bucket: i32) -> Option<Vec<Vec<[f32; 2]>>> {
     Some(
         rings(&cmds, FLAT_PX * u_per_px)
             .into_iter()
-            .map(|ring| ring.into_iter().map(|p| [p[0] as f32, p[1] as f32]).collect())
+            .map(|ring| {
+                ring.into_iter()
+                    .map(|p| [p[0] as f32, p[1] as f32])
+                    .collect()
+            })
             .collect(),
     )
 }
@@ -739,9 +743,10 @@ pub fn paint_runs(
                     pen,
                     grapheme,
                 } => {
-                    let mut builder = PathBuilder::fill().with_style(PathStyle::Fill(FillOptions {
-                        fill_rule: FillRule::NonZero,
-                    }));
+                    let mut builder =
+                        PathBuilder::fill().with_style(PathStyle::Fill(FillOptions {
+                            fill_rule: FillRule::NonZero,
+                        }));
                     for ring in rings.iter() {
                         let points: Vec<Point<Pixels>> = ring
                             .iter()

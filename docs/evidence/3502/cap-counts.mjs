@@ -1,7 +1,3 @@
-// #3502 AC5: #3441's tick lists played through the pin's own cap, and the counts kept beside this script.
-// The lists, the rule's text and the program around it are the acceptance suite's (tests/acceptance/3502/cap.mjs):
-// the rule is taken as text from vendor/gpui-pre and built by rustc. Run from the repository's root:
-//   node docs/evidence/3502/cap-counts.mjs
 import { readFileSync, writeFileSync } from 'node:fs';
 import { LISTS, listName, play, treeRule } from '../../../tests/acceptance/3502/cap.mjs';
 

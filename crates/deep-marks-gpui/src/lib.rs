@@ -23,15 +23,12 @@ pub fn stroke(points: Vec<[f64; 2]>, width: f64) -> Mesh {
     mesh
 }
 
-/// A fill by the nonzero rule: contours wound one way fill their union.
 fn fill() -> PathBuilder {
     PathBuilder::fill().with_style(PathStyle::Fill(FillOptions {
         fill_rule: FillRule::NonZero,
     }))
 }
 
-/// Adds `corners`, moved by `offset` px, to `builder` as one closed contour, wound the way every
-/// contour of the path is; false for corners that enclose no area, which add nothing.
 fn contour(builder: &mut PathBuilder, corners: &[[f32; 2]], offset: [f32; 2]) -> bool {
     let n = corners.len();
     let area: f32 = (0..n)
@@ -56,8 +53,6 @@ fn contour(builder: &mut PathBuilder, corners: &[[f32; 2]], offset: [f32; 2]) ->
     true
 }
 
-/// The GPUI path `paint` paints for `mesh`, moved by `offset` px: its triangles, each a closed
-/// contour; `None` for a mesh with no triangle that has an area.
 pub fn path(mesh: &Mesh, offset: [f32; 2]) -> Option<Path> {
     let mut builder = fill();
     let mut any = false;
@@ -77,23 +72,14 @@ pub fn paint(mesh: &Mesh, offset: [f32; 2], color: Hsla, window: &mut Window) {
     }
 }
 
-/// How far past a stroke's edge its strip reaches, in device px. What is painted ends at the
-/// edge ([`paint_strip`]); the reach is kept so a strip's corners, and the cache entries that hold
-/// them, are what they were.
 const FRINGE_PX: f64 = 1.25;
-/// `s` over `t` in a strip's second coordinates, kept with the reach.
 const S_PER_T: f32 = 0.05;
 /// A join whose half angle's cosine is below this breaks the strip: its miter would reach past
 /// the stroke paint's miter limit of 4.
 const SHARPEST: f64 = 0.25;
 
-/// A stroke as triangles in u, each corner with `(s, t)`, `t` its distance inside the stroke's
-/// nearer edge in u (issue #140, criterion 6): above 0 inside the stroke, 0 on its edge and below
-/// 0 past it. Each side of the line is its own band, from the centreline out past the edge, its
 /// segments meeting at miter corners so no two triangles overlap; a join past the miter limit
 /// breaks the band and fills its outer corner solid, and a butt end is cut where the stroke ends.
-/// [`paint_strip`] paints each triangle's part where `t` is 0 or more, which is the stroke itself,
-/// and GPUI takes the edge's coverage from the path's winding at each pixel.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Strip {
     /// Each triangle's three corners in turn: a position in u and its `(s, t)`.
@@ -200,9 +186,6 @@ pub fn strip(lines: &[Polyline], width: f64, u_per_px: f64) -> Strip {
     out
 }
 
-/// The part of a strip's triangle inside the stroke's edge, where `t` is 0 or more: its corners
-/// in turn and how many there are, none for a triangle wholly past the edge. `t` runs evenly over
-/// a triangle, so the cut is a straight line.
 fn inside_edge(triangle: &[([f32; 2], [f32; 2]); 3]) -> ([[f32; 2]; 4], usize) {
     let mut out = ([[0.; 2]; 4], 0);
     for i in 0..3 {
@@ -212,9 +195,11 @@ fn inside_edge(triangle: &[([f32; 2], [f32; 2]); 3]) -> ([[f32; 2]; 4], usize) {
             out.1 += 1;
         }
         if (t >= 0.) != (u >= 0.) {
-            // From the corner inside to the one past the edge, so the two triangles that share
-            // this side cut it at the same point.
-            let ((a, ta), (b, tb)) = if t >= 0. { ((p, t), (q, u)) } else { ((q, u), (p, t)) };
+            let ((a, ta), (b, tb)) = if t >= 0. {
+                ((p, t), (q, u))
+            } else {
+                ((q, u), (p, t))
+            };
             let k = ta / (ta - tb);
             out.0[out.1] = [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k];
             out.1 += 1;
@@ -223,7 +208,6 @@ fn inside_edge(triangle: &[([f32; 2], [f32; 2]); 3]) -> ([[f32; 2]; 4], usize) {
     out
 }
 
-/// Paints `strip`'s stroke, moved by `offset` px: each triangle's part inside the edge.
 pub fn paint_strip(strip: &Strip, offset: [f32; 2], color: Hsla, window: &mut Window) {
     let mut builder = fill();
     let mut any = false;

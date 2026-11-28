@@ -915,8 +915,5 @@ for (const entry of laneFolders.filter((folder) => !unread.includes(folder))) {
   for (const file of lists?.slow ?? []) if (!slow.includes(file)) slow.push(file), fromLaneFiles.slow.push(file);
 }
 
-// #3502: these two judge a time on a reference Mac (judgeLimit).
 timed.push('tests/acceptance/3502/animation.test.mjs', 'tests/acceptance/3502/withdrawals.test.mjs');
-// #3502: every carried row's test and the whole workspace's build take hours, and two files read the merge base's
-// own build, named by DEEP_3502_BASE_DRIVE and DEEP_3502_BASE_SHOW.
 byHand.push('tests/acceptance/3502/rows.test.mjs', 'tests/acceptance/3502/build.test.mjs', 'tests/acceptance/3502/pictures.test.mjs', 'tests/acceptance/3502/withdrawals.test.mjs');

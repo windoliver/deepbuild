@@ -55,8 +55,6 @@ const POLL: Duration = Duration::from_millis(10);
 /// How long after a wake its frame may present and still answer it (README #1551: `wakes`), and
 /// the span before it in which request-frame callbacks mean the window wasn't idle.
 const WAKE_ANSWER: i64 = 500_000_000;
-/// #3502: how long a run waits for a `withdrawals` wake's event to be heard at all: past twenty
-/// withdrawals whose every call takes 2 s on the UI thread.
 const WITHDRAWALS_DEADLINE: i64 = 180_000_000_000;
 /// #1551: a window settles once its frame source is quiet too (no request-frame callback for
 /// this long), or this long after the frames settle when a link never stops.
@@ -378,8 +376,6 @@ impl State {
         }
     }
 
-    /// The frame that answers a wake, with its presented time. #3502: a `withdrawals` wake's is
-    /// the first latched after the window's input callback heard its event, whenever it presents.
     fn answer(&self, a: &Asked, presented: &[(u64, i64)]) -> Option<(u64, i64)> {
         let (after, by) = match (a.by, a.heard_ns) {
             (By::Withdrawals, None) => return None,
@@ -574,7 +570,6 @@ impl Render for View {
             .on_mouse_move(cx.listener(|this, _: &MouseMoveEvent, _, cx| {
                 let mut st = this.state.borrow_mut();
                 if let Some(i) = st.pending_input.take() {
-                    // #3502: a `withdrawals` wake was asked when its event was posted; here it is heard.
                     if st.asked[i].by == By::Withdrawals {
                         st.asked[i].heard_ns = Some(host_ns());
                     } else {
@@ -607,9 +602,7 @@ fn ns_window(window: &Window) -> *mut AnyObject {
     }
 }
 
-/// #3502: whether the window is the key window of the active app (`live.window.focused`).
 fn window_focused(window: &Window) -> bool {
-    // SAFETY: null or the window's live NSWindow, on the main thread.
     unsafe { idle::window_focused(ns_window(window)) }
 }
 
@@ -903,7 +896,6 @@ pub fn run(scenario: &'static Scenario, startup: &'static Startup, options: Opti
                     .detach();
                 wait_visible(window, st, SHOW_FRAMES);
                 cx.new(|cx| {
-                    // #3502: the window losing its key status, whenever it does.
                     let focus = view_state.clone();
                     cx.observe_window_activation(window, move |_, window, _| {
                         if let Some(track) = focus.borrow_mut().track.as_mut() {
@@ -1042,7 +1034,6 @@ pub fn run(scenario: &'static Scenario, startup: &'static Startup, options: Opti
                         unsafe { idle::accept_posted_moves(st.ns_window) };
                     }
                     let mut track = Track::new(host_ns(), shown);
-                    // SAFETY: as above.
                     track.focus(unsafe { idle::window_focused(st.ns_window) });
                     st.track = Some(track);
                     st.hub.scenario.planted == Some(Planted::ArmsEachVsync)
@@ -1160,13 +1151,13 @@ pub fn run(scenario: &'static Scenario, startup: &'static Startup, options: Opti
                 });
                 after_out.push(entry.unwrap_or(Value::Null));
             }
-            // #3502: a watch on a document that never settles reads its window from its first
-            // presented frame.
             if options.watch.is_some() && state.borrow().track.is_none() {
                 let mut st = state.borrow_mut();
-                // SAFETY: null or the window's live NSWindow, on the main thread.
                 let (shown, focused) = unsafe {
-                    (idle::window_state(st.ns_window), idle::window_focused(st.ns_window))
+                    (
+                        idle::window_state(st.ns_window),
+                        idle::window_focused(st.ns_window),
+                    )
                 };
                 let mut track = Track::new(first, shown);
                 track.focus(focused);
@@ -1235,8 +1226,6 @@ pub fn run(scenario: &'static Scenario, startup: &'static Startup, options: Opti
                         });
                     }
                     By::Withdrawals => {
-                        // #3502: one thread posts the pointer move while this one, the UI thread,
-                        // withdraws `count` notifications in a row, as the app does when asks close.
                         let posted = Arc::new(std::sync::atomic::AtomicI64::new(0));
                         let stamp = posted.clone();
                         let _ = handle.update(cx, |_, window, cx| {
@@ -1250,7 +1239,6 @@ pub fn run(scenario: &'static Scenario, startup: &'static Startup, options: Opti
                                 height - (panel[1] + panel[3] / 2.),
                             );
                             let ns_window = ns_window(window);
-                            // SAFETY: null is refused; else the window's live NSWindow, on the main thread.
                             let event = (!ns_window.is_null())
                                 .then(|| unsafe {
                                     idle::pointer_move(ns_window, point, host_ns() as f64 / 1e9)
@@ -1263,8 +1251,10 @@ pub fn run(scenario: &'static Scenario, startup: &'static Startup, options: Opti
                                 }
                             });
                             for k in 0..w.count {
-                                cx.dismiss_system_notification(&format!("deep-show-withdrawal-{k}"))
-                                    .detach();
+                                cx.dismiss_system_notification(&format!(
+                                    "deep-show-withdrawal-{k}"
+                                ))
+                                .detach();
                             }
                             let _ = poster.join();
                         });
@@ -1322,8 +1312,6 @@ pub fn run(scenario: &'static Scenario, startup: &'static Startup, options: Opti
                     .timer(Duration::from_nanos(wait as u64))
                     .await;
             }
-            // #3502: a `withdrawals` wake's frame may come long after it was asked: the run goes on
-            // until it presents, or 500 ms after its event was heard with none.
             loop {
                 let waiting = {
                     let st = state.borrow();
@@ -1357,7 +1345,6 @@ pub fn run(scenario: &'static Scenario, startup: &'static Startup, options: Opti
                 let (frames, wakeups) = match watch {
                     None => (Vec::new(), 0),
                     Some((from, to)) => {
-                        // #3502: how long each frame's draw waited for its drawable.
                         let waits: std::collections::HashMap<u64, u64> =
                             presentation::take_waits().into_iter().collect();
                         let frames: Vec<Value> = st

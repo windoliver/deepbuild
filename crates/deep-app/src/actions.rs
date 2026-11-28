@@ -62,7 +62,6 @@ fn context(name: &str) -> Option<&'static str> {
     }
 }
 
-/// The operating system this build runs on, whose conventions a key string read at run time follows.
 pub fn host() -> gpui::OperatingSystem {
     if cfg!(target_os = "macos") {
         gpui::OperatingSystem::Mac
@@ -73,11 +72,18 @@ pub fn host() -> gpui::OperatingSystem {
     }
 }
 
-/// A binding of `key`, a key string read at run time, to `action` under `context`; `None` for a key or a
-/// context GPUI can't read.
-fn binding(key: &str, action: Box<dyn gpui::Action>, context: Option<&str>, cx: &App) -> Option<KeyBinding> {
+fn binding(
+    key: &str,
+    action: Box<dyn gpui::Action>,
+    context: Option<&str>,
+    cx: &App,
+) -> Option<KeyBinding> {
     let predicate = match context {
-        Some(context) => Some(gpui::KeyBindingContextPredicate::parse(context).ok()?.into()),
+        Some(context) => Some(
+            gpui::KeyBindingContextPredicate::parse(context)
+                .ok()?
+                .into(),
+        ),
         None => None,
     };
     KeyBinding::load(key, action, predicate, false, None, cx).ok()
@@ -146,7 +152,12 @@ fn bind(cx: &mut App) {
             continue;
         }
         if let Some(old) = before {
-            bindings.extend(binding(&old, Box::new(NoAction {}), context(&action.name), cx));
+            bindings.extend(binding(
+                &old,
+                Box::new(NoAction {}),
+                context(&action.name),
+                cx,
+            ));
         }
         if let Some(key) = &key {
             let run = Run {
@@ -603,7 +614,10 @@ mod tests {
         assert_eq!(names.len(), count, "a name is the action's, once");
         for action in table() {
             if let Some(key) = &action.key {
-                assert!(Keystroke::parse_with_os(key, host()).is_ok(), "{key} parses");
+                assert!(
+                    Keystroke::parse_with_os(key, host()).is_ok(),
+                    "{key} parses"
+                );
                 assert!(!key.contains("ctrl"), "⌃ chords are the terminal's");
             }
         }
