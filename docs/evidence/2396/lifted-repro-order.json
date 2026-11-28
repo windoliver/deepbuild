@@ -1,0 +1,124 @@
+{
+ "format": 1,
+ "profile": "scene",
+ "title": "A vase on a lifted table",
+ "description": "A vase rests on a table a channel lifts: #2396 visual check (repro-order).",
+ "size": [
+  640,
+  480
+ ],
+ "camera": "cam",
+ "requires": {
+  "modules": {
+   "scene3d": "^1",
+   "motion": "^1"
+  }
+ },
+ "channels": {
+  "lift": {
+   "target": "items/table/at/pos/1",
+   "type": "f32",
+   "keys": {
+    "k0": {
+     "t": "0s",
+     "value": 0,
+     "interp": "linear"
+    },
+    "k1": {
+     "t": "2s",
+     "value": 0.25,
+     "interp": "linear"
+    }
+   }
+  }
+ },
+ "constraints": {
+  "rest": {
+   "owner": "vase",
+   "kind": "rest_on",
+   "on": "table"
+  }
+ },
+ "items": {
+  "cam": {
+   "id": "cam",
+   "name": "cam",
+   "kind": "camera@1",
+   "order": "a0",
+   "params": {
+    "projection": "perspective",
+    "target": [
+     0,
+     0.2,
+     0
+    ],
+    "orbit": {
+     "azimuth": 30,
+     "elevation": 25,
+     "distance": 5
+    },
+    "fov": 40
+   }
+  },
+  "table": {
+   "id": "table",
+   "name": "table",
+   "kind": "mark.box@1",
+   "order": "a1",
+   "params": {
+    "size": [
+     1.2,
+     0.05,
+     0.8
+    ]
+   },
+   "at": {
+    "pos": [
+     0,
+     0,
+     0
+    ]
+   }
+  },
+  "vase": {
+   "id": "vase",
+   "name": "vase",
+   "kind": "mark.sphere@1",
+   "order": "a2",
+   "params": {
+    "size": [
+     0.2,
+     0.2,
+     0.2
+    ]
+   },
+   "at": {
+    "pos": [
+     0.2,
+     1.0,
+     0.1
+    ]
+   }
+  },
+  "flag": {
+   "id": "flag",
+   "name": "flag",
+   "kind": "slab@1",
+   "order": "a3",
+   "params": {
+    "size": [
+     0.1,
+     1.5,
+     0.6
+    ]
+   },
+   "at": {
+    "pos": [
+     3,
+     0,
+     0
+    ]
+   }
+  }
+ }
+}

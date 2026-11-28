@@ -1,0 +1,11 @@
+Base 58b4a8cb2, deep-show built --no-default-features --features full, run 2026-11-22 with npx vitest run tests/acceptance/2396 (observed, not read from code).
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/acceptance/2396/ac1-either-order.test.ts > #2396.e524c371 a moving rest_on presents with its items in either order > #2396.e524c371 listed cam, flag, table, vase and cam, table, vase, flag, the document presents, and the vase rests in the same place at 0, 1 and 2 s
+AssertionError: the document listed cam, table, vase, flag: the check raises no error (no no_support): expected [ Array(1) ] to deeply equal []
++   "{\"check\":\"document.validate\",\"code\":\"no_support\",\"severity\":\"error\",\"ids\":[],\"path\":\"constraints/rest\",\"actual\":{\"rests\":[{\"code\":\"no_support\",\"path\":\"constraints/rest\"}]},\"what\":\"scene3d.restlive can't evaluate this\",\"fix\":\"See the issue.\"}",
+ FAIL  tests/acceptance/2396/ac2-shuffle.test.ts > #2396.9c791087 a shuffle of a moving-rest document's items leaves every node's key and result unchanged > #2396.9c791087 for the reproduction's order, the reverse and seeded shuffles, every node's key and result at 0, 1 and 2 s equal the ID-order document's
+AssertionError: the document listed cam, table, vase, flag: the check raises no error (no no_support): expected [ Array(1) ] to deeply equal []
++   "{\"check\":\"document.validate\",\"code\":\"no_support\",\"severity\":\"error\",\"ids\":[],\"path\":\"constraints/rest\",\"actual\":{\"rests\":[{\"code\":\"no_support\",\"path\":\"constraints/rest\"}]},\"what\":\"scene3d.restlive can't evaluate this\",\"fix\":\"See the issue.\"}",
+      Tests  2 failed (2)
+EXIT 1

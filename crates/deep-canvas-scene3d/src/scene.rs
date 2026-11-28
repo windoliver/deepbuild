@@ -1236,23 +1236,22 @@ pub(crate) struct Items<'a> {
 }
 
 impl<'a> Items<'a> {
-    /// `doc`'s items, with `written` from [`eval::written`] of its program at `state`. The
-    /// program's items are the document's in its order, so item `i`'s transform is its
-    /// `TRANSFORM` slots from `i * TRANSFORM`.
+    /// `doc`'s items, with `written` from [`eval::written`] of its program at `state`. Item `id`'s
+    /// `TRANSFORM` slots start at `i * TRANSFORM`, `i` its place in the program's items, which a
+    /// canonical-form program lists in ID order whatever order `doc` lists them in (#2396).
     fn new(
         doc: &'a Map<String, Value>,
         written: &'a Map<String, Value>,
         state: &'a State,
         program: &Program,
     ) -> Self {
+        let slot: HashMap<_, _> = program.items.iter().map(String::as_str).zip(0..).collect();
         let mut entries = HashMap::with_capacity(doc.len());
         let mut copies = written.iter().peekable();
-        for (i, (id, item)) in doc.iter().enumerate() {
-            let entry = match copies.next_if(|(w, _)| *w == id) {
-                Some((_, evaluated)) => (evaluated, None),
-                None => (item, item.is_object().then_some(i)),
-            };
-            entries.insert(id.as_str(), entry);
+        for (id, item) in doc {
+            let at = slot.get(id.as_str()).copied().filter(|_| item.is_object());
+            let entry = copies.next_if(|(w, _)| *w == id).map(|(_, e)| (e, None));
+            entries.insert(id.as_str(), entry.unwrap_or((item, at)));
         }
         let assemblies = program
             .assemblies
