@@ -7,7 +7,7 @@ export interface Turn {
   id: string; text: string; outside: boolean; role?: string; tool?: string;
   of?: string; error?: boolean;
 }
-export interface TranscriptReader { start(): (line: unknown, n: number) => Turn | undefined }
+export interface TranscriptReader { start(): (line: unknown, n: number, piece: number) => Turn | undefined }
 
 const OUTSIDE = /^(WebFetch|WebSearch|Glob|Grep|Task|Agent|mcp__.+)$/;
 const SAFE_ID = /^[A-Za-z0-9._-]+$/;
@@ -32,8 +32,8 @@ const texts = (content: unknown): string[] => (Array.isArray(content) ? content 
 const codexTranscript: TranscriptReader = {
   start() {
     const calls = new Map<string, string>();
-    const said = new Set<string>();
-    return (line, n) => {
+    const said = new Map<string, number>();
+    return (line, n, piece) => {
       if (!isObj(line) || line.type !== 'response_item' || !isObj(line.payload)) return undefined;
       const p = line.payload;
       if (p.type === 'message') {
@@ -47,13 +47,13 @@ const codexTranscript: TranscriptReader = {
         calls.set(call, typeof p.name === 'string' ? p.name : '');
         const command = codexCommand(p);
         if (command === undefined) return undefined;
-        said.add(call);
+        said.set(call, piece);
         return { id: call, text: command, outside: true, role: 'assistant' };
       }
       if (p.type === 'function_call_output' || p.type === 'custom_tool_call_output') {
         const out = typeof p.output === 'string' ? p.output : texts(p.output).join('\n');
         const tool = calls.get(call) ?? '';
-        return { id: `${call}.out`, text: out, outside: tool === '' || OUTSIDE.test(tool), role: 'user', tool, error: codexFailed(out), ...(said.has(call) ? { of: call } : {}) };
+        return { id: `${call}.out`, text: out, outside: tool === '' || OUTSIDE.test(tool), role: 'user', tool, error: codexFailed(out), ...(said.get(call) === piece ? { of: call } : {}) };
       }
       return undefined;
     };

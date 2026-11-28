@@ -4,6 +4,7 @@
 // of its paired gain beats the base on every declared measure, and regresses when that bound is worse on any one.
 // Anything else is INCONCLUSIVE (design: The learned layer).
 import { createHash } from 'node:crypto';
+import { modelFamily } from '@deepbuild/contracts';
 
 export interface Measure { name: string; better: 'higher' | 'lower' }
 /** Files written over the checkout: path → text. */
@@ -79,9 +80,6 @@ export function planHash(plan: ReplayPlan): string {
   return createHash('sha256').update(canonical(plan)).digest('hex');
 }
 
-/** A model's family is its maker, read from its name; other names count as their own first word. */
-const MAKERS: [RegExp, string][] = [[/^claude/, 'Anthropic'], [/^(gpt|o\d|codex|chatgpt)/, 'OpenAI'], [/^gemini/, 'Google']];
-const familyOf = (model: string): string => MAKERS.find(([re]) => re.test(model.toLowerCase()))?.[1] ?? model.toLowerCase().split(/[-_.\s]/)[0]!;
 
 // The one-sided t quantile, from the regularized incomplete beta (Numerical Recipes, 6.1 and 6.4).
 function lnGamma(x: number): number {
@@ -152,8 +150,8 @@ export function compareReplay(result: ReplayResult, tasks: string[] = result.pla
   const { plan, runs } = result;
   const refused = (reason: string): Comparison => ({ outcome: 'refused', reason, n: 0, measures: [], tasks: [], broke: [] });
   if (plan.rule !== RULE) return refused(`the plan names the rule ${String(plan.rule)}; the one comparison rule is ${RULE}`);
-  const family = familyOf(plan.models.agent);
-  if (familyOf(plan.models.judge) === family) return refused(`the judge ${plan.models.judge} is of the agents' own family (${family}, as ${plan.models.agent}); it must come from another`);
+  const family = modelFamily(plan.models.agent);
+  if (modelFamily(plan.models.judge) === family) return refused(`the judge ${plan.models.judge} is of the agents' own family (${family}, as ${plan.models.agent}); it must come from another`);
   const hash = planHash(plan);
   const off = runs.find((r) => r.plan !== hash);
   if (off) return refused(`${off.task}'s ${off.side} repeat ${off.repeat} ran under plan ${String(off.plan).slice(0, 12)}, not the plan compared (${hash.slice(0, 12)}): a plan that changed after either side ran can't be compared`);

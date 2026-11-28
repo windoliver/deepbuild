@@ -11,4 +11,5 @@ export { contextBoundFor, joinHookReplies, negotiateFeatures, type HookContribut
 export { checkManifest } from './manifest.js';
 export { extensionApi, hubSlots, type ApiEntry, type HubSlot } from './slots.js';
 export { codeWords } from './words.js';
+export { modelFamily } from './makers.js';
 export { LIFECYCLE_OBJECTS, lifecycleGaps, machineProblems, machines, type Machine, type MachineMove } from './lifecycle.js';

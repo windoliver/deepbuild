@@ -79,20 +79,21 @@ export interface Turn {
 export type Entry = Omit<Turn, 'id'>;
 /**
  * An agent's transcript format, which its adapter reads (#1894): `start` gives a reader for one transcript, fed each
- * line in order, parsed, with its line number, which returns the turn that line holds.
+ * line in order, parsed, with its line number and the piece it is read in (a transcript past the bytes kept is read
+ * in pieces; any other is piece 0), which returns the turn that line holds.
  */
-export interface TranscriptReader { start(): (line: unknown, n: number) => Turn | undefined }
+export interface TranscriptReader { start(): (line: unknown, n: number, piece: number) => Turn | undefined }
 /** One transcript's line readers, each started: a line's turn is the first one any of them reads. */
-type Started = ((line: unknown, n: number) => Turn | undefined)[];
+type Started = ((line: unknown, n: number, piece: number) => Turn | undefined)[];
 const started = (readers: readonly TranscriptReader[]): Started => readers.map((r) => r.start());
-function readTranscript(bytes: Uint8Array, read: Started, first = 0): Map<string, Entry> {
+function readTranscript(bytes: Uint8Array, read: Started, first = 0, piece = 0): Map<string, Entry> {
   const entries = new Map<string, Entry>();
   if (!read.length) return entries;
   for (const [n, line] of Buffer.from(bytes).toString('utf8').split('\n').entries()) {
     let entry: unknown;
     try { entry = JSON.parse(line); } catch { continue; }
     for (const reader of read) {
-      const turn = reader(entry, first + n);
+      const turn = reader(entry, first + n, piece);
       if (!turn) continue;
       const { id, ...rest } = turn;
       entries.set(id, rest);
@@ -478,9 +479,9 @@ async function streamTranscript(store: EvidenceStore, readers: readonly Transcri
   const found = new Map<string, Entry>();
   const read = started(readers);
   const decoder = new StringDecoder('utf8');
-  let tail = '', first = 0;
+  let tail = '', first = 0, piece = 0;
   const parse = (text: string) => {
-    for (const [id, entry] of readTranscript(Buffer.from(text), read, first)) if (wanted === undefined || id === wanted) found.set(id, entry);
+    for (const [id, entry] of readTranscript(Buffer.from(text), read, first, piece++)) if (wanted === undefined || id === wanted) found.set(id, entry);
     for (let at = text.indexOf('\n'); at >= 0; at = text.indexOf('\n', at + 1)) first++;
   };
   for await (const bytes of store.chunks(sha)) {
