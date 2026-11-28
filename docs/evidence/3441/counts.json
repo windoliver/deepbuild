@@ -1,0 +1,290 @@
+{
+  "ticks": 600,
+  "seeds": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+  ],
+  "jitterMicrosEitherWay": 200,
+  "counts": [
+    {
+      "cap": "thermal",
+      "hz": 60,
+      "after": {
+        "exact": 600,
+        "exactLongestGapMs": 16.667,
+        "jittered": [
+          600,
+          600,
+          600,
+          600,
+          600,
+          600,
+          600,
+          600
+        ],
+        "jitteredLongestGapMs": 17.067
+      },
+      "mergeBase": {
+        "exact": 300,
+        "exactLongestGapMs": 33.333,
+        "jittered": [
+          379,
+          368,
+          372,
+          379,
+          376,
+          374,
+          372,
+          372
+        ],
+        "jitteredLongestGapMs": 33.733
+      }
+    },
+    {
+      "cap": "thermal",
+      "hz": 120,
+      "after": {
+        "exact": 300,
+        "exactLongestGapMs": 16.667,
+        "jittered": [
+          300,
+          300,
+          300,
+          300,
+          300,
+          300,
+          300,
+          300
+        ],
+        "jitteredLongestGapMs": 17.067
+      },
+      "mergeBase": {
+        "exact": 200,
+        "exactLongestGapMs": 25,
+        "jittered": [
+          232,
+          227,
+          229,
+          233,
+          230,
+          227,
+          235,
+          231
+        ],
+        "jitteredLongestGapMs": 25.35
+      }
+    },
+    {
+      "cap": "inactive",
+      "hz": 60,
+      "after": {
+        "exact": 300,
+        "exactLongestGapMs": 33.333,
+        "jittered": [
+          300,
+          300,
+          300,
+          300,
+          300,
+          300,
+          300,
+          300
+        ],
+        "jitteredLongestGapMs": 33.733
+      },
+      "mergeBase": {
+        "exact": 300,
+        "exactLongestGapMs": 33.333,
+        "jittered": [
+          238,
+          234,
+          238,
+          235,
+          235,
+          232,
+          239,
+          237
+        ],
+        "jitteredLongestGapMs": 50.325
+      }
+    },
+    {
+      "cap": "inactive",
+      "hz": 120,
+      "after": {
+        "exact": 150,
+        "exactLongestGapMs": 33.333,
+        "jittered": [
+          150,
+          150,
+          150,
+          150,
+          150,
+          150,
+          150,
+          150
+        ],
+        "jitteredLongestGapMs": 33.733
+      },
+      "mergeBase": {
+        "exact": 150,
+        "exactLongestGapMs": 33.333,
+        "jittered": [
+          133,
+          133,
+          133,
+          132,
+          132,
+          133,
+          132,
+          132
+        ],
+        "jitteredLongestGapMs": 41.992
+      }
+    }
+  ],
+  "sideBySide": [
+    {
+      "cap": "thermal",
+      "hz": 60,
+      "same": true,
+      "opened": 600,
+      "presented": 600,
+      "firstModelTicks": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "firstWindowTicks": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ]
+    },
+    {
+      "cap": "thermal",
+      "hz": 120,
+      "same": true,
+      "opened": 300,
+      "presented": 300,
+      "firstModelTicks": [
+        0,
+        2,
+        4,
+        6,
+        8,
+        10
+      ],
+      "firstWindowTicks": [
+        0,
+        2,
+        4,
+        6,
+        8,
+        10
+      ]
+    },
+    {
+      "cap": "inactive",
+      "hz": 60,
+      "same": true,
+      "opened": 300,
+      "presented": 300,
+      "firstModelTicks": [
+        0,
+        2,
+        4,
+        6,
+        8,
+        10
+      ],
+      "firstWindowTicks": [
+        0,
+        2,
+        4,
+        6,
+        8,
+        10
+      ]
+    },
+    {
+      "cap": "inactive",
+      "hz": 120,
+      "same": true,
+      "opened": 150,
+      "presented": 150,
+      "firstModelTicks": [
+        0,
+        4,
+        8,
+        12,
+        16,
+        20
+      ],
+      "firstWindowTicks": [
+        0,
+        4,
+        8,
+        12,
+        16,
+        20
+      ]
+    }
+  ],
+  "plantedModel": [
+    {
+      "cap": "thermal",
+      "hz": 60,
+      "planted": "model_cap_time_threshold",
+      "firstModelTicks": [
+        0,
+        2,
+        4,
+        6,
+        8,
+        10
+      ],
+      "firstWindowTicks": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ]
+    },
+    {
+      "cap": "thermal",
+      "hz": 120,
+      "planted": "model_cap_time_threshold",
+      "firstModelTicks": [
+        0,
+        3,
+        6,
+        9,
+        12,
+        15
+      ],
+      "firstWindowTicks": [
+        0,
+        2,
+        4,
+        6,
+        8,
+        10
+      ]
+    }
+  ]
+}

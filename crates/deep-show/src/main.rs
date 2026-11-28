@@ -526,38 +526,9 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 agent: acting(c)?.is_some(),
             })
         }
-        "activate" => {
-            return Some(Call::Activate {
-                window: match c.get("window")? {
-                    Value::Null => None,
-                    w => Some(w.as_str()?.to_string()),
-                },
-                agent: acting(c)?.is_some(),
-            })
-        }
-        "thermal" => {
-            return Some(Call::Thermal {
-                hot: match c.get("state")?.as_str()? {
-                    "nominal" | "fair" => false,
-                    "serious" | "critical" => true,
-                    _ => return None,
-                },
-                agent: acting(c)?.is_some(),
-            })
-        }
-        "hide_window" => {
-            return Some(Call::HideWindow {
-                window: c.get("window")?.as_str()?.to_string(),
-                hidden: c.get("hidden")?.as_bool()?,
-                agent: acting(c)?.is_some(),
-            })
-        }
-        "frontmost" => {
-            return Some(Call::Frontmost {
-                window: c.get("window")?.as_str()?.to_string(),
-                front: c.get("frontmost")?.as_bool()?,
-                agent: acting(c)?.is_some(),
-            })
+        "activate" | "thermal" | "hide_window" | "frontmost" | "tick" => {
+            let report = placement::parse_report(name, c)?;
+            return Some(Call::Report(report, acting(c)?.is_some()));
         }
         "test_window" => {
             c.get("id")?.as_str()?;

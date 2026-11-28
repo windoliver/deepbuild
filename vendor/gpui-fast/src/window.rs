@@ -78,6 +78,7 @@ mod painted; // DeepBuild patch (windoliver/deepbuild#1427)
 mod chrome_layer; // DeepBuild patch (windoliver/deepbuild#1434)
 pub use chrome_layer::plant_multiplies_per_element;
 mod present_only; // DeepBuild patch (windoliver/deepbuild#1551)
+mod frame_cap; // DeepBuild patch (windoliver/deepbuild#3441)
 pub use painted::{Painted, note_paints, take_painted};
 
 pub use a11y::A11ySubtreeBuilder;
@@ -1957,6 +1958,7 @@ impl Window {
             let input_rate_tracker = input_rate_tracker.clone();
             let mut deferred_force_render = false;
             let mut frame_pacer = FramePacer::default();
+            let mut frame_cap = frame_cap::FrameCap::default(); // DeepBuild patch (windoliver/deepbuild#3441)
             move |request_frame_options| {
                 #[cfg(feature = "profiler")]
                 let (_foreground_turn, window_id) = {
@@ -2043,7 +2045,12 @@ impl Window {
                 let now = Instant::now();
                 // Idle display-link ticks must neither consume a frame slot nor
                 // wake a demand-driven frame source.
-                if has_frame_demand && frame_pacer.should_defer(now, min_frame_interval) {
+                let refresh = handle.update(&mut cx, |_, window, cx| window.refresh_interval(cx));
+                let urgent = request_frame_options.force_render || request_frame_options.require_presentation;
+                let counted = min_frame_interval.filter(|cap| has_frame_demand && Some(*cap) != animation_frame_interval);
+                if frame_cap.holds(counted, refresh.ok().flatten(), urgent) // DeepBuild patch (windoliver/deepbuild#3441)
+                    || has_frame_demand && frame_pacer.should_defer(now, animation_frame_interval)
+                {
                     // Don't lose a pending forced render to throttling.
                     deferred_force_render |= force_render;
                     // Deferred by throttling: ask demand-driven platforms to retry.

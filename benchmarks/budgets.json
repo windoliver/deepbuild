@@ -1036,6 +1036,9 @@
         "terminal-60hz"
       ],
       "margin": 0.5,
+      "criteria": [
+        "#3441.e80d0654"
+      ],
       "limits": {},
       "initialReason": "Issue #402 first measurement: the merge base has no terminals. One process installs a plug-in whose panel shows a terminal's cell grid, feeds the terminal 600 numbered lines, one every 1/60 s, through `deep-show run` on the virtual clock, and reads its updates, failing unless every update is presented in a frame of its own; p50 includes Node's and the binary's start. The issue's 60 updates a second stays in tests/acceptance/402/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
@@ -1156,7 +1159,8 @@
       },
       "initialReason": "Issue #854 first measurement: the merge base has no idle reading. Issue #1551: a release deep-show live holds the still fixture document in the app's real, shown window, from the moment it settles, for 60 s of the real clock a run, reading the frames it presented, the request-frame callbacks its display link ran, its wakeups and its CPU from its own process (proc_pid_rusage), and whether AppKit showed the window throughout; five runs after a warm-up one, so the command takes over six minutes. A run whose window was hidden, covered or on a sleeping display reads INCONCLUSIVE, and so does a headless one. A wakeup is a package-idle wakeup (Activity Monitor's Idle Wake Ups); interrupt wakeups are kept as a reading, since a process that has drawn with Metal takes about 22 a minute from the driver whatever it does. canvas.mjs judge holds frames on any machine and wakeups and CPU on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
       "criteria": [
-        "#854.022ea575"
+        "#854.022ea575",
+        "#3441.e80d0654"
       ]
     },
     {

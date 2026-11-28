@@ -14,11 +14,15 @@
 //! frontmost by the platform's own report.
 
 use std::collections::BTreeMap;
+use std::time::Duration;
 
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 
 use crate::refused;
 use crate::shared::FLICKS;
+
+#[path = "../../../vendor/gpui-pre/src/window/frame_cap.rs"]
+mod frame_cap;
 
 /// Question card: `arm_after` is 500 ms.
 const ARM_AFTER: i64 = FLICKS / 2;
@@ -27,6 +31,20 @@ const MARGIN: f64 = 20.0;
 /// Frame clock and scheduler: a window's `caps: {inactive: 30 Hz, thermal: 60 Hz, hidden: 0}`.
 const INACTIVE_HZ: i64 = 30;
 const THERMAL_HZ: i64 = 60;
+const WINDOW_INACTIVE_MICROS: i64 = 33_333;
+const WINDOW_THERMAL_MICROS: i64 = 16_667;
+
+fn window_micros(hz: i64) -> i64 {
+    if hz == INACTIVE_HZ {
+        WINDOW_INACTIVE_MICROS
+    } else {
+        WINDOW_THERMAL_MICROS
+    }
+}
+
+fn within_micros(flicks: i64, micros: i64) -> bool {
+    flicks * 1_000_000 < micros * FLICKS
+}
 
 /// The window and input backend this build chose, and what it can do (Seam and backend: the
 /// window and input seams declare capabilities).
@@ -320,6 +338,9 @@ pub struct Planted {
     /// #140: with a backend that reports no occlusion, the card treats unknown occlusion as
     /// unobscured and judges only the app's own windows.
     pub ignores_unknown_occlusion: bool,
+    pub window_cap_time_threshold: bool,
+    pub model_cap_time_threshold: bool,
+    pub window_cap_defers_forced: bool,
 }
 
 impl Planted {
@@ -337,6 +358,9 @@ impl Planted {
             "arms_from_delivery" => &mut self.arms_from_delivery,
             "never_rearms" => &mut self.never_rearms,
             "accepts_any_ring_serial" => &mut self.accepts_any_ring_serial,
+            "window_cap_time_threshold" => &mut self.window_cap_time_threshold,
+            "model_cap_time_threshold" => &mut self.model_cap_time_threshold,
+            "window_cap_defers_forced" => &mut self.window_cap_defers_forced,
             _ => return None,
         })
     }
@@ -395,8 +419,51 @@ pub struct Placement {
     /// The input router's serials, each the panel it was delivered to and when.
     serials: BTreeMap<u64, (String, i64)>,
     reports: Reports,
+    paces: BTreeMap<String, Pace>,
     next_id: u32,
     planted: Planted,
+}
+
+#[derive(Default)]
+struct Pace {
+    cap: frame_cap::FrameCap,
+    passed_at: Option<i64>,
+}
+
+pub enum Report {
+    Activate(Option<String>),
+    Frontmost(String, bool),
+    Thermal(bool),
+    HideWindow(String, bool),
+    Tick {
+        window: String,
+        force_render: bool,
+        require_presentation: bool,
+    },
+}
+
+pub fn parse_report(name: &str, c: &Map<String, Value>) -> Option<Report> {
+    let window = || Some(c.get("window")?.as_str()?.to_string());
+    let flag = |k: &str| c.get(k).map_or(Some(false), Value::as_bool);
+    Some(match name {
+        "activate" => Report::Activate(match c.get("window")? {
+            Value::Null => None,
+            w => Some(w.as_str()?.to_string()),
+        }),
+        "thermal" => Report::Thermal(match c.get("state")?.as_str()? {
+            "nominal" | "fair" => false,
+            "serious" | "critical" => true,
+            _ => return None,
+        }),
+        "hide_window" => Report::HideWindow(window()?, c.get("hidden")?.as_bool()?),
+        "frontmost" => Report::Frontmost(window()?, c.get("frontmost")?.as_bool()?),
+        "tick" => Report::Tick {
+            window: window()?,
+            force_render: flag("force_render")?,
+            require_presentation: flag("require_presentation")?,
+        },
+        _ => return None,
+    })
 }
 
 /// Input router: a token lives at most 30 s (`token: {serial, writer, kind, expires ≤ 30 s}`).
@@ -424,6 +491,7 @@ impl Placement {
             inputs: Vec::new(),
             serials: BTreeMap::new(),
             reports: Reports::default(),
+            paces: BTreeMap::new(),
             next_id: 1,
             planted,
         };
@@ -549,6 +617,57 @@ impl Placement {
         Some((w, self.display(paced_by)?))
     }
 
+    pub fn take(&mut self, at: i64, report: &Report, agent: bool) -> Value {
+        match report {
+            Report::Activate(window) => self.activate(at, window.as_deref(), agent),
+            Report::Frontmost(window, front) => self.frontmost(at, window, *front, agent),
+            Report::Thermal(hot) => self.thermal(at, *hot, agent),
+            Report::HideWindow(window, hidden) => self.hide_window(at, window, *hidden, agent),
+            Report::Tick {
+                window,
+                force_render,
+                require_presentation,
+            } => self.tick(at, window, *force_render, *require_presentation, agent),
+        }
+    }
+
+    fn tick(
+        &mut self,
+        at: i64,
+        window: &str,
+        force_render: bool,
+        require_presentation: bool,
+        agent: bool,
+    ) -> Value {
+        if let Err(e) = self.report(Some(window), agent) {
+            return e;
+        }
+        let micros = match self.cap(window, at) {
+            Some(0) => return json!({"presented": false}),
+            cap => cap.map(window_micros),
+        };
+        let refresh = (self.windows.iter())
+            .find(|w| w.id == window)
+            .and_then(|w| self.display(&w.display))
+            .map(|d| Duration::from_secs_f64(1.0 / d.refresh_hz as f64));
+        let planted = self.planted;
+        let pace = self.paces.entry(window.to_string()).or_default();
+        let held = if planted.window_cap_time_threshold {
+            !require_presentation
+                && (micros.zip(pace.passed_at))
+                    .is_some_and(|(micros, passed)| within_micros(at - passed, micros))
+        } else {
+            let cap = micros.map(|micros| Duration::from_micros(micros as u64));
+            let urgent =
+                (force_render || require_presentation) && !planted.window_cap_defers_forced;
+            pace.cap.holds(cap, refresh, urgent)
+        };
+        if !held {
+            pace.passed_at = Some(at);
+        }
+        json!({"presented": !held})
+    }
+
     /// `activate`: the window server's report that `window` became the key window, or with
     /// `None` that you switched to another app.
     pub fn activate(&mut self, at: i64, window: Option<&str>, agent: bool) -> Value {
@@ -653,6 +772,14 @@ impl Placement {
         }
     }
 
+    fn model_holds(&self, hz: i64, since: i64) -> bool {
+        if self.planted.model_cap_time_threshold {
+            within_micros(since, window_micros(hz))
+        } else {
+            since < FLICKS / hz
+        }
+    }
+
     /// The vsyncs of `grid` through `now` at which `window` may present, each judged at its
     /// latch, `lead` before it, against the window's caps; and the vsyncs at whose latches a hidden
     /// window still evaluates its sessions, which only the planted twin has.
@@ -667,7 +794,7 @@ impl Placement {
                         unseen.push(vsync);
                     }
                 }
-                Some(hz) if last.is_some_and(|l| vsync - l < FLICKS / hz) => {}
+                Some(hz) if last.is_some_and(|l| self.model_holds(hz, vsync - l)) => {}
                 _ => {
                     last = Some(vsync);
                     open.push(vsync);
