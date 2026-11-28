@@ -139,5 +139,6 @@ line against the right merge base is the person's to see; code can't judge wheth
 `BASE-FAILURE.txt` holds the run at `c13122f6a`, with Node's version, the load and the counts. Each test fails for the
 expected reason: no lint command names a planted line or part; so no check is found for the real docs and the base run;
 the guide says kernel twice in prose; the headings still say kernel; and no call is recorded.
+The test sandbox's own HOME is written as `~`.
 
 Not run: the proof lanes (before lane, twins). No twins are given: every test fails on the merge base itself.

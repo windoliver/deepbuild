@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, expect, it } from 'vitest';
-import { asks, fetchA, kinds, newAsks, readyWorld, until, yes, type PackWorld } from '../../../tests/acceptance/1820/helpers.ts';
+import { asks, fetchA, job, newAsks, readyWorld, until, yes, type PackWorld } from '../../../tests/acceptance/1820-redraft-3525/helpers.ts';
 import { A } from '../../../tests/acceptance/1820/pack.ts';
 import { Libraries } from '../src/libraries.js';
 
@@ -10,7 +10,7 @@ let w: PackWorld;
 beforeAll(async () => { w = await readyWorld(); }, 600_000);
 it('#1820 restores pending authority from its persisted fetch record without another ask or a network call', async () => {
   const before = (await asks(w)).length;
-  const held = await kinds(w, fetchA(A.pad));
+  const held = await job(w, fetchA(A.pad));
   expect(held.value.status).toBe('held');
   const raised = await newAsks(w, before, 'authority');
   expect(raised).toHaveLength(1);

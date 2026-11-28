@@ -102,7 +102,6 @@ fn refusals_what(r: &[Refusal]) -> String {
         .join("; ")
 }
 
-/// A program's check and rewrite: its rewritten bytes, or why the check refused it.
 type Checked = Result<Rewritten, Vec<Refusal>>;
 
 /// What a passed pack check gave the host it ran in, kept for the next host of this process.

@@ -1,0 +1,122 @@
+# #3525 redraft (criteria 1, 2, 5, 6): the folder run once on the base checkout b134dd38f (origin/main), Node 24.22.0.
+# Command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/3525-redraft --no-file-parallelism --testTimeout=900000
+# The first and last lines are `uptime` before and after (load recorded, not waited on). Home paths shown as ~.
+
+ 1:59  up 2 days, 19:49, 2 users, load averages: 37.06 57.27 84.06
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/3525-redraft
+
+ ❯ together.test.ts (1 test | 1 failed) 124568ms
+   ❯ lookups sent together answer as they would alone (1)
+     × AC6 #3525.92738dfb with a deep_wait held, four deep_kinds lookups sent together each answer before the wait ends, with the bytes each gives when sent alone; a planted server that answers one with another's reply fails, naming both request IDs 124297ms
+ ❯ forms.test.ts (1 test | 1 failed) 99764ms
+   ❯ every form of deep_kinds changes nothing (1)
+     × AC2 #3525.aacef461 each form deep_kinds' schema takes is called on a fixture hub with a library source that serves one model, and the record gains no asset, ask, job, evidence or revision, the store no file, and no process starts; a planted deep_kinds that still takes fetch fails, naming the asset it brought in 99553ms
+ ❯ plan.test.ts (1 test | 1 failed) 65175ms
+   ❯ a session in plan mode can look up what the canvas draws (1)
+     × AC5 #3525.db140e2e a stand-in client that holds every call not listed read-only sends deep_kinds list, field, read and word, and all four answer 64961ms
+ ❯ listed.test.ts (1 test | 1 failed) 56181ms
+   ❯ deep_kinds is listed as a read (1)
+     × AC1 #3525.2c40eb3b deep mcp lists deep_kinds with readOnlyHint true and idempotentHint true, equal to the generated table 55870ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  forms.test.ts > every form of deep_kinds changes nothing > AC2 #3525.aacef461 each form deep_kinds' schema takes is called on a fixture hub with a library source that serves one model, and the record gains no asset, ask, job, evidence or revision, the store no file, and no process starts; a planted deep_kinds that still takes fetch fails, naming the asset it brought in
+AssertionError: every form of deep_kinds leaves the record, the store and the library as they were (calls: op list {}: answered {"core_version":"core@0.0.0","module_set":"f4a7bb3d9fc43f25944740e16d4f226350cd8e43f5bc9292cd9884bb29149f75","modules":[{"name":"building","version":"1.0.0","kit":{"verdict":"PASS","digest":"839b730dc | op word {"word":"BoxGeometry"}: answered {"word":"BoxGeometry","state":"mapped","target":"familiar.box@1","conversion":"its parameters by name; angles in degrees; Object3D's rotation (XYZ) through the rotation matrix to ours (Rz·Ry·Rx), its  | op search {"query":"counter"}: answered {"hits":[{"kind":"example","name":"Logic: a counter and its preview","title":"Logic: a counter and its preview","hash":"e33b7c39f67fc91eb299324ce7932a8540c5f4db76a6ac300593245cec66b602"}],"core":"core | op read {"guide":"logic"}: answered {"guide":"logic","offset":0,"text":"# Logic: work across steps, and rolls keyed by the action\n\nA logic item's step has two limits. Its fuel budget caps one step at 10,000,000 fuel. Its step ceiling  | op read {"example":"e33b7c39f67fc91eb299324ce7932a8540c5f4db76a6ac300593245cec66b602"}: answered {"example":"e33b7c39f67fc91eb299324ce7932a8540c5f4db76a6ac300593245cec66b602","title":"Logic: a counter and its preview","text":"{\n  \"format\": 1,\n  \"profile\": \"figure\",\n  \"title\": \"Logic:  | op gallery {}: answered {"examples":[{"hash":"74ea0e63a07b39adbc43d4fe23934da85a1b835837e13e4064d6f533499c9e0c","title":"Product reveal: a lamp on a turntable","steps":240,"status":"not_run"},{"hash":"45eb70120d12261cb5210c9 | op sheet {}: answered {"module_set":"f4a7bb3d9fc43f25944740e16d4f226350cd8e43f5bc9292cd9884bb29149f75","bytes":40111,"offset":0,"text":"# deep_kinds: every available entry of core@0.0.0\n\n## building\n- arch.wall@1: a kin | op step_ceilings {}: answered {"step_ceilings":{"30":{"core_view":{"app":6000000,"web":3836317},"data_view":{"app":6000000,"web":3836317},"figure":{"app":12000000,"web":7672634},"work_product":{"app":12000000,"web":7672634},"showp | op field {"path":"logic@1"}: answered {"path":"logic@1","lines":[{"name":"program","type":"json","unit":null,"range":null,"list":false,"default":null,"grammar":"form","forms":["asset ID"],"path":"logic@1.program","module":"logic","stabili | op closure {"list":"camera@1.projection"}: answered {"list":"camera@1.projection","entry":"camera@1","field":"projection","words":["perspective","orthographic","isometric"],"closure":{"closed":"interval_forms","reopens_if":"a shot needs a projection wi | op bindings {"doc":"01JB7D00000000000000000001","item":"counter","language":"rust"}: answered {"bindings":{"language":"rust","item":"counter","digest":"2538d33e2889fdf0","file":"regions.rs","source":"//! Bindings for logic item `counter` (layout digest 2538d33e2889fdf0), from its region map in | op assets {"query":"chair"}: answered {"rows":[{"id":"pine-chair","name":"Pine Kitchen Chair","kind":"model","license":{"id":"CC0-1.0","terms":"https://creativecommons.org/publicdomain/zero/1.0/","shareable":true,"credit":null},"size_m":0 | op fetch {"library":"ext.shelf.library","id":"pine-chair"}: answered {"status":"fetched","asset":{"sha256":"1705e4e6d03b3147fb7de687f3c181f9f886ec5a06def29b7c162a6d08809625","library":"ext.shelf.library","id":"pine-chair","license":{"id":"CC0-1.0","terms":"https://crea): expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep_kinds op assets ({\"query\":\"chair\"}) brought in or changed: evidence.stored 01M8E7BNR7JB5G5QPBA431FNNG {\"sha256\":\"ac6645b90397dc589fbe713686d6d8a5a8cdc7e38bcfc755d1684d7640f0e300\",\"kind\":\"asset.thumbnail\",\"type\":\"binary\",\"size\":75,\"origin\":\"deepbuild\",\"redaction\":\"complete\",\"license\":\"CC0-1.0\",\"derived; the store gained store file ac/6645b90397dc589fbe713686d6d8a5a8cdc7e38bcfc755d1684d7640f0e300",
++   "deep_kinds op fetch ({\"library\":\"ext.shelf.library\",\"id\":\"pine-chair\"}) brought in or changed: evidence.stored 01M8E7BPSSWTPZ5YCNVHK51SB2 {\"sha256\":\"1705e4e6d03b3147fb7de687f3c181f9f886ec5a06def29b7c162a6d08809625\",\"kind\":\"asset.library\",\"type\":\"binary\",\"size\":1131,\"origin\":\"deepbuild\",\"redaction\":\"complete\",\"license\":\"CC0-1.0\",\"derived; evidence.stored 01M8E7BPSW4V6GYYJ4CFXQ7PCW {\"sha256\":\"075e0f30fb10df224bbb8bfbd1c4c3a0a9c16e74ad121819322543d7955eb2bf\",\"kind\":\"asset.library\",\"type\":\"binary\",\"size\":168,\"origin\":\"deepbuild\",\"redaction\":\"complete\",\"license\":\"CC0-1.0\",\"derived_; the store gained pine-chair's /files/pine-chair.bin (075e0f30fb10df224bbb8bfbd1c4c3a0a9c16e74ad121819322543d7955eb2bf); the store gained pine-chair's /files/pine-chair.gltf (1705e4e6d03b3147fb7de687f3c181f9f886ec5a06def29b7c162a6d08809625); the library served /files/pine-chair.gltf; the library served /files/pine-chair.bin",
++ ]
+
+ ❯ forms.test.ts:43:148
+     41|     const w = await lookupWorld([{ label: 'agent' }]);
+     42|     const real = await formFailures(w, w.sessions.get('agent')!);
+     43|     expect(real.failures, `every form of deep_kinds leaves the record,…
+       |                                                                                                                                                    ^
+     44|
+     45|     // The planted deep_kinds that still takes fetch: the same server …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  listed.test.ts > deep_kinds is listed as a read > AC1 #3525.2c40eb3b deep mcp lists deep_kinds with readOnlyHint true and idempotentHint true, equal to the generated table
+AssertionError: deep_kinds' listed hints ({"title":"Look up what the canvas can draw","readOnlyHint":false,"destructiveHint":false,"idempotentHint":false,"openWorldHint":true}): expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep mcp lists deep_kinds readOnlyHint false; the issue says true",
++   "deep mcp lists deep_kinds idempotentHint false; the issue says true",
++ ]
+
+ ❯ listed.test.ts:21:66
+     19|     const wrong = Object.entries(issue).filter(([hint, want]) => liste…
+     20|       .map(([hint, want]) => `deep mcp lists deep_kinds ${hint} ${list…
+     21|     expect(wrong, `deep_kinds' listed hints (${brief(listed)})`).toEqu…
+       |                                                                  ^
+     22|
+     23|     const generated = generatedAnnotations();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  plan.test.ts > a session in plan mode can look up what the canvas draws > AC5 #3525.db140e2e a stand-in client that holds every call not listed read-only sends deep_kinds list, field, read and word, and all four answer
+AssertionError: in plan mode the four lookups reach deep mcp; the first held: deep_kinds list was held (plan mode holds deep_kinds: it is listed readOnlyHint false): expected [ …(4) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep_kinds list was held (plan mode holds deep_kinds: it is listed readOnlyHint false)",
++   "deep_kinds field was held (plan mode holds deep_kinds: it is listed readOnlyHint false)",
++   "deep_kinds read was held (plan mode holds deep_kinds: it is listed readOnlyHint false)",
++   "deep_kinds word was held (plan mode holds deep_kinds: it is listed readOnlyHint false)",
++ ]
+
+ ❯ plan.test.ts:27:104
+     25|
+     26|     const held = sent.filter((s) => s.reply.held).map((s) => `deep_kin…
+     27|     expect(held, `in plan mode the four lookups reach deep mcp; the fi…
+       |                                                                                                        ^
+     28|     const unanswered = sent.filter((s) => !s.reply.held && (s.reply.ou…
+     29|       .map((s) => `deep_kinds ${s.op}: ${s.reply.held ? '' : brief(s.r…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  together.test.ts > lookups sent together answer as they would alone > AC6 #3525.92738dfb with a deep_wait held, four deep_kinds lookups sent together each answer before the wait ends, with the bytes each gives when sent alone; a planted server that answers one with another's reply fails, naming both request IDs
+AssertionError: each lookup sent together answers before the wait ends, as it answers alone (deep_wait {"ask":"ask:01M8E753C6ZZB23NRYXGDAW18Y","status":"waiting","answer":null,"deadline":1795859999110,"default":"blue"} | together-kinds-list#13 list: {"content":[{"type":"text","text":"{\"core_version\":\"core@0.0.0\",\"module_set\":\"f4a7bb3d9fc43f25944740e16d4f226350c | together-kinds-field#14 field: {"content":[{"type":"text","text":"{\"path\":\"logic@1\",\"lines\":[{\"name\":\"program\",\"type\":\"json\",\"unit\":nul | together-kinds-read#15 read: {"content":[{"type":"text","text":"{\"guide\":\"logic\",\"offset\":0,\"text\":\"# Logic: work across steps, and rolls ke | together-kinds-word#16 word: {"content":[{"type":"text","text":"{\"word\":\"BoxGeometry\",\"state\":\"mapped\",\"target\":\"familiar.box@1\",\"conver): expected [ …(4) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "request together-kinds-list#13 (deep_kinds list) answered only after the wait ended (deep_kinds is listed readOnlyHint false)",
++   "request together-kinds-field#14 (deep_kinds field) answered only after the wait ended (deep_kinds is listed readOnlyHint false)",
++   "request together-kinds-read#15 (deep_kinds read) answered only after the wait ended (deep_kinds is listed readOnlyHint false)",
++   "request together-kinds-word#16 (deep_kinds word) answered only after the wait ended (deep_kinds is listed readOnlyHint false)",
++ ]
+
+ ❯ together.test.ts:48:133
+     46|     const w = await lookupWorld([{ label: 'agent' }, { label: 'mix', p…
+     47|     const real = await togetherFailures(w.sessions.get('agent')!);
+     48|     expect(real.failures, `each lookup sent together answers before th…
+       |                                                                                                                                     ^
+     49|
+     50|     const mixed = await togetherFailures(w.sessions.get('mix')!);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  4 failed (4)
+   Start at  01:59:48
+   Duration  349.59s (tests 99%, import 1%)
+
+ 2:05  up 2 days, 19:55, 2 users, load averages: 123.44 107.62 97.71

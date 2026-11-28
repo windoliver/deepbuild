@@ -1,21 +1,3 @@
-// The hub as it is installed, for the budget window (issue #3438): node benchmarks/hub-launchd.mjs <mode>. Every other
-// hub task starts `deep hub run` as its own child. launchd holds a job, and each command the job starts, to the limits
-// of its ProcessType, so these read a hub launchd started. A run has `deep hub start` write the build's own definition
-// in a home of its own, loads it into the user's launchd domain under a label of its own, never com.deepbuild.hub,
-// reads the hub's parent process before any sample, takes its readings, removes every label it loaded and prints one
-// report as its last line:
-//   round-trip     1,000 PreToolUse requests a sample, one connection each: 20 samples on that hub and 20 on a hub
-//                  started as a child, in alternated rounds
-//   record-append  `benchmarks/record.mjs append-20k` as a run each hub starts, the same 20 samples a side
-//   hook-overhead  deep-hook's p95 over a native no-op's, as `deep-hook.mjs overhead` reads it, five times
-//   idle           the hub's CPU over 5 s, five times, once it has settled
-//   commands       a 5 s spin of one core, and 256 MiB written and synced, each started by the hub and from this
-//                  process in 10 alternated pairs, and the same pairs on a hub with the type planted as Background
-// With `absent` after the mode, the hub is loaded with no ProcessType instead: the same readings for the other column,
-// which the judge never passes. A home under a temp folder gets no login service (#2203): the report then holds no hub
-// and one ask. `judge` reads `{current}` on stdin, as scripts/benchmark.mjs's judgeTargets hands a report over, and
-// holds it to the task's targets. The surface is tests/acceptance/3438/README.md's. DEEP_HUB_PLANT=child-as-launchd is
-// its planted run: a child reported as launchd's. A budget run gets 300 s (measureOnce), so a run ends itself at 270.
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { randomFillSync } from 'node:crypto';
 import { chmodSync, closeSync, copyFileSync, fsyncSync, mkdirSync, mkdtempSync, openSync, readFileSync, realpathSync, rmSync, writeFileSync, writeSync } from 'node:fs';
@@ -43,7 +25,6 @@ const launchctl = (...args) => spawnSync('launchctl', args, { encoding: 'utf8' }
 const ps = (field, pid) => execFileSync('ps', ['-o', `${field}=`, '-p', String(pid)], { encoding: 'utf8' }).trim();
 const cpuMs = () => { const { user, system } = process.cpuUsage(); return (user + system) / 1000; };
 
-/** One connection: resolves once the hub says hello, or with the round trip of `request`, from its write to the answer. */
 function exchange(socket, request) {
   return new Promise((resolve, reject) => {
     const sock = net.connect(socket);
@@ -66,13 +47,11 @@ function exchange(socket, request) {
     });
   });
 }
-/** A PreToolUse request as deep-hook sends it. */
 function hookRequest(home, i) {
   const session = '6f1c2b9e-1111-4222-8333-444455556666';
   const payload = { session_id: session, transcript_path: join(home, '.claude', 'projects', 'work', `${session}.jsonl`), cwd: join(home, 'work'), hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: `ls src/${i}` }, tool_use_id: `call_${i}` };
   return { v: 1, agent: 'claude-code', event: 'PreToolUse', seq: `${1_760_013_451_000_000_000n + BigInt(i)}`, id: `01K74FKZVK8Q2X5R7M${String(i).padStart(8, '0')}`, pid: process.pid, ppid: process.ppid, matched: [], payload };
 }
-/** A connection as the app, with the hub's control token: `call` resolves with a reply, `finished` with a run's end. */
 function asApp(hub) {
   return new Promise((resolve, reject) => {
     const sock = net.connect(hub.socket), waiting = new Map(), ended = new Map();
@@ -99,32 +78,23 @@ function asApp(hub) {
 }
 
 const loaded = [], children = [], connections = [], pids = [];
-/** Boots out every label this run loaded, and stops each hub it started as a child, by PID. */
 function remove() {
   for (const sock of connections) sock.destroy();
   for (const label of loaded.splice(0)) launchctl('bootout', `${DOMAIN}/${label}`);
   for (const child of children) child.kill('SIGTERM');
 }
 const alive = (pid) => { try { return process.kill(pid, 0); } catch { return false; } };
-/** Boots out each label an earlier run left loaded whose process is gone: one stopped by SIGKILL removes nothing. */
 function sweep() {
   for (const [, label, pid] of launchctl('print', DOMAIN).stdout?.matchAll(/(com\.deepbuild\.hub\.budget\.(\d+)\.\w+)/g) ?? []) if (!alive(Number(pid))) launchctl('bootout', `${DOMAIN}/${label}`);
 }
-/** Waits for the hubs this run started to end, 10 s at most, so none writes into a home that is being removed. */
 async function ended() {
   for (const from = performance.now(); pids.some(alive) && performance.now() - from < 10_000;) await sleep(50);
 }
-/** A hub's row in the report: its label, the type it was loaded with, and its parent as the OS gives it. */
 function found(hub, pid) {
   pids.push(pid);
   const ppid = Number(ps('ppid', pid));
   return { ...hub, socket: join(hub.home, '.deepbuild', 'hub.sock'), pid, ppid, parent: ps('comm', ppid) };
 }
-/**
- * A hub launchd started from the build's definition under a label of this run's own: `deep hub start` writes the
- * definition in the hub's home and hands it to this file's `load`, and returns once the hub's core answers. `type` is
- * the ProcessType it is loaded with: the build's when undefined, none when null.
- */
 function loadedHub(dir, name, type, seed) {
   const home = join(dir, name), label = `${INSTALLED}.budget.${process.pid}.${name}`;
   mkdirSync(join(home, 'work'), { recursive: true });
@@ -135,7 +105,6 @@ function loadedHub(dir, name, type, seed) {
   if (started.status !== 0 || !pid) throw Error(`no hub launchd started under ${label} answered: ${`${started.stderr}${started.stdout}`.trim().slice(-600)}`);
   return found({ label, process_type: type === undefined ? PROCESS_TYPE : type, home }, pid);
 }
-/** A hub started as this process's child, as benchmarks/hub.mjs starts one, once it answers. */
 async function childHub(dir, name, seed) {
   const home = join(dir, name);
   mkdirSync(join(home, 'work'), { recursive: true });
@@ -154,13 +123,11 @@ async function childHub(dir, name, seed) {
 }
 
 let sent = 0, runs = 0;
-/** 1,000 PreToolUse requests, one connection each, as `hub.mjs round-trip` sends them: their time in ms. */
 async function roundTrip(hub) {
   const from = performance.now();
   for (let i = 0; i < 1000; i++) await exchange(hub.socket, hookRequest(hub.home, sent++));
   return performance.now() - from;
 }
-/** A command started by the hub, through run.start, to its end: its time in ms. */
 async function started(hub, argv) {
   hub.app ??= await asApp(hub).then(async (app) => { await app.call('stream.subscribe', { after: 0 }); return app; });
   const from = performance.now();
@@ -170,7 +137,6 @@ async function started(hub, argv) {
   if (data.outcome !== 'passed') throw Error(`${argv.slice(1, 3).join(' ')}, started by ${hub.label ?? 'the child-started hub'}, ended ${data.outcome}: ${data.findings.join('; ')}`);
   return performance.now() - from;
 }
-/** 20 rounds, a sample on each hub a round, which of the launchd-started and the child-started first alternating. */
 async function sides(hubs, sample) {
   for (const hub of Object.values(hubs)) await sample(hub);
   const out = { launchd: [], child: [], first: [], loads: [] };
@@ -182,7 +148,6 @@ async function sides(hubs, sample) {
   }
   return out;
 }
-/** Five readings after a warm-up one. */
 async function five(read) {
   await read();
   const out = { runs: [], loads: [] };
@@ -193,9 +158,7 @@ async function five(read) {
   }
   return out;
 }
-/** The hub's CPU time so far, in seconds, as ps gives it. */
 const cpuOf = (hub) => ps('time', hub.pid).split(/[:.]/).map(Number).reduce((sum, part, i, all) => (i === all.length - 1 ? sum + part / 100 : sum * 60 + part), 0);
-/** deep-hook's p95 over the native no-op's p95, in ms, over 1,000 forwarded PreToolUse calls to the hub. */
 function overhead(hub) {
   const out = join(hub.home, 'hyperfine.json');
   execFileSync('hyperfine', ['-N', '--runs', '1000', '--warmup', '20', '--input', join(hub.home, 'call.json'), '--export-json', out, join(REPO, 'target/release/deep-hook-floor'), `${join(REPO, 'target/release/deep-hook')} claude-code PreToolUse`], { cwd: join(hub.home, 'work'), env: { ...process.env, HOME: hub.home }, stdio: 'ignore' });
@@ -204,7 +167,6 @@ function overhead(hub) {
   const [floor, hook] = results.map(({ times }) => rank(times, 0.95) * 1000);
   return hook - floor;
 }
-/** A home with the shipped guard entries, and the PreToolUse JSON of one `ls` call in a session there. */
 function guarded(home) {
   mkdirSync(join(home, '.deepbuild'), { recursive: true });
   copyFileSync(join(REPO, 'crates/deep-hook/default-rules.json'), join(home, '.deepbuild', 'rules.json'));
@@ -216,13 +178,7 @@ function spin(iterations) {
   for (let i = 0; i < iterations; i++) x = (Math.imul(x, 31) + i) | 0;
   return x;
 }
-/**
- * 10 pairs a command: once from this process, a terminal's child, and once started by each hub, which first
- * alternating. A pair's spin on the Background hub runs beside its other two spins, on a core of its own, so a run
- * fits its 300 s; its writes take turns on the one disk.
- */
 async function commands(hubs, dir) {
-  // The spin is sized by a run of its own, from this process: the iterations one core does in SPIN_MS and a twentieth more.
   execFileSync(process.execPath, [SELF, 'spin', 'size', join(dir, 'size')]);
   const kinds = { spin_ratio: ['spin', readFileSync(join(dir, 'size'), 'utf8')], write_sync_ratio: ['write'] };
   const out = Object.fromEntries(Object.keys(kinds).map((target) => [target, Object.fromEntries(Object.keys(hubs).map((name) => [name, { hub: [], terminal: [], first: [], loads: [] }]))]));
@@ -251,7 +207,6 @@ async function commands(hubs, dir) {
   return out;
 }
 
-/** What each task starts beside the launchd-started hub, and its readings by target. */
 const MODES = {
   'round-trip': { beside: ['child'], read: async (hubs) => ({ round_trip_p50_ratio: await sides(hubs, roundTrip) }) },
   'record-append': { beside: ['child'], read: async (hubs) => ({ record_append_p50_ratio: await sides(hubs, (hub) => started(hub, [process.execPath, join(REPO, 'benchmarks/record.mjs'), 'append-20k'])) }) },
@@ -273,7 +228,6 @@ const MODES = {
 
 const times = (values, count) => Array.isArray(values) && values.length === count && values.every((value) => Number.isFinite(value) && value > 0);
 const turns = (first, count, sides) => Array.isArray(first) && first.length === count && first.every((side, i) => sides.includes(side) && side !== first[i - 1]);
-/** Why readings taken at `loads` on `machine` are readings and no budget result (#568); undefined when they count. */
 function reading(machine, loads, count) {
   if (!Array.isArray(loads) || loads.length !== count || loads.some((load) => ![load?.start, load?.end].every((value) => Number.isFinite(value) && value >= 0))) return { status: 'BLOCKED', reason: `the load at the start and end of each of its ${count} readings is missing` };
   const on = judgeLimit({ limit: 1, runs: [1, 1, 1, 1, 1], fingerprint: machine, loads: Array(5).fill({ start: 0, end: 0 }) });
@@ -281,7 +235,6 @@ function reading(machine, loads, count) {
   const { cores, name } = references.find(({ model }) => model === machine.model), high = Math.max(...loads.flatMap(({ start, end }) => [start, end]));
   return high < cores ? undefined : { status: 'INCONCLUSIVE', reason: `a reading, not a budget result: the load reached ${high} on the ${cores} cores of ${name}` };
 }
-/** Why the `what` a report names was not started by launchd under a label of the run's own from the definition with `type`; undefined when it was. */
 function notLaunchds(hub, type, what) {
   if (!hub) return { status: 'BLOCKED', reason: `the report names no ${what}` };
   if (!Number.isInteger(hub.ppid) || typeof hub.parent !== 'string') return { status: 'BLOCKED', reason: `the parent process of the ${what} was never read` };
@@ -290,12 +243,10 @@ function notLaunchds(hub, type, what) {
   return hub.process_type === type ? undefined : { status: 'BLOCKED', reason: `the ${what} was loaded with ${hub.process_type ? `ProcessType ${hub.process_type}` : 'no ProcessType'}, where ${type} was to be read` };
 }
 const JUDGES = {
-  // The five-run rule (scripts/benchmark.mjs, judgeLimit), on the report's own machine and loads.
   limit(limit, read, machine) {
     const judged = judgeLimit({ limit, runs: read?.runs, fingerprint: machine, loads: Array(5).fill({ start: 0, end: 0 }) });
     return (['PASS', 'FAIL'].includes(judged.status) ? reading(machine, read.loads, 5) : undefined) ?? { reason: `five readings within ${limit}`, ...judged };
   },
-  // The design's regression rule, with the child-started hub in the merge base's place.
   sides(limit, read, machine) {
     if (!times(read?.launchd, 20) || !times(read.child, 20) || !turns(read.first, 20, ['launchd', 'child'])) return { status: 'BLOCKED', reason: '20 samples a side in alternated rounds were to be read' };
     const ratio = p50(read.launchd) / p50(read.child);
@@ -316,7 +267,6 @@ const JUDGES = {
     return ratio.background > limit ? { status: 'PASS', reason: said, ratio } : { status: 'INCONCLUSIVE', reason: `${said}, within ${limit} times as well: this Mac doesn't tell the limits apart`, ratio };
   },
 };
-/** A report held to its task's targets (tests/acceptance/3438/README.md, The judge). */
 function judge(current) {
   const targets = JSON.parse(readFileSync(new URL('./budgets.json', import.meta.url), 'utf8')).tasks.find(({ id }) => id === current?.task)?.targets;
   if (!targets) return { status: 'BLOCKED', reason: 'no report of a task that reads a hub launchd started', targets: {}, asks: [] };
@@ -340,7 +290,6 @@ if (mode === 'judge') {
   }
   console.log(JSON.stringify(verdict));
 } else if (mode === 'load') {
-  // `deep hub start`'s launcher: the definition it wrote, loaded under the run's label. A loaded label is left alone.
   const { DEEP_BENCH_LABEL: label, DEEP_BENCH_TYPE: type } = process.env;
   if (launchctl('print', `${DOMAIN}/${label}`).status !== 0) {
     let text = readFileSync(rest[0], 'utf8').replace(`<string>${INSTALLED}</string>`, `<string>${label}</string>`);

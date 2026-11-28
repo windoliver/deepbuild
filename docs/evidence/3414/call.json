@@ -1,0 +1,17 @@
+{
+  "criterion": "#3414.2b712213",
+  "who": "Claude, the implementing agent, on the owner's delegation (AGENTS.md, Delivery: a taste criterion is delegated; the owner overrules by reopening)",
+  "when": "2026-11-28T00:04:56.909Z",
+  "call": "right",
+  "why": "All 25 changed lines read beside the lines they replaced: each still says what it said, with only the layer's name changed, except the deliberate rewrites of the scope line, Building blocks' first sentence and its done-gate sentence, the canvas section's sentence, and canvas-primitives.md:695, corrected on purpose: it said the design's row listed five ask kinds, and the design's Ask lists the same six. The one list (the record, the contract with its two rules and the adapter contract, capabilities, the trusted path, the floor and verdicts, and asks) is the issue's draft. Bound again on 2026-11-28 to the text after main 0dbd16ef7, whose edits to the design (lines 65, 2416, 2442-2469, 3047-3056) and canvas (8132-8133) touch none of these lines; two of them moved from 2820 and 2862 to 2848 and 2890, and changed-lines.md says so.",
+  "shown": {
+    "docs/evidence/3414/changed-lines.md": "2bb2d29779e93dad0788feea3569fd333423e1f3e66744717c92e47523cc13f5",
+    "docs/evidence/3414/core-list.md": "85c8ee23821dcfbb8f897b6ef06362383b85cef6c032a69e1d94be4a0d8c6c40"
+  },
+  "text": {
+    "docs/technical-design.md": "e6c2329c92a70f95569cc64b69e24b68966ca1a485ed80ab28d2173ac43294db",
+    "docs/canvas-primitives.md": "f88be29ca8c6adfac413943e1f1e1fc866d9dc961353f5a9eb183b1efe48b4e2",
+    "docs/parallel-proof.md": "0c85e21ff8a0a188c43e0a5a7662b462163a68d1c6357445a7fa13b46848775a",
+    "docs/extension-guide.md": "d5ca9ec4f206a0a9d11ee975d1d347f1eaaa44204cecdf83c7ab1e7675feb765"
+  }
+}

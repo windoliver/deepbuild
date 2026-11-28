@@ -1,0 +1,219 @@
+#3225's acceptance tests at the base
+
+Base: 5a81b58de3991a17df22dc966914c8f1e7eb9ffd (its last merge is #3353), in the checkout these tests were written in,
+a worktree detached at that commit whose only change is this folder.
+Host: a 16-inch MacBook Pro, Mac17,10 (M5 Max, 18 cores), shared and loaded.
+
+The blind job that wrote the tests started no build, no deep-show and no test. Its caller built the base and ran the
+files in the machine's one build slot, and kept a build log and each run's whole output; this file is cut from those
+eight logs. What only the caller's account gives is marked so.
+
+The build, 2026-11-26 03:33:30 to 03:38:27, the 1-minute load 40.61 at its start (cargo: "Finished `dev` profile
+[unoptimized] target(s) in 4m 55s"):
+
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked -j 8 --bin deep-show
+
+  target/debug/deep-show, sha256 74bfa4e1ebc749fb5f3ed52d5b7083e7f9e18439645d851fcda53d1b7275ca1e
+
+The runs, 2026-11-26 03:42:20 to 03:42:26, Vitest 5.0.5: each file once, from the checkout's root, by the README's
+command. By the caller's account DEEP_BIN_DIR and CARGO_TARGET_DIR were unset, so each test took the binary above;
+each run was under the machine's test throttle; and the 1-minute load was about 40.
+
+  NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/3225 --no-file-parallelism <file>
+
+Each run ended `Test Files  1 failed (1)`, `Tests  1 failed (1)`.
+
+Line numbers. The runs were made on the files as they then were, which held comments. The comments were taken out
+afterwards, and no run has been made since. No code changed: each of the ten `.ts` files, emitted by the checkout's
+TypeScript with comments removed, is byte for byte what it was at the runs, and its tokens are the same. Every line
+number below is the run's own, as its log gives it; a line given as `now` is the line of the same statement in the
+files as they stand.
+
+## Summary
+
+| File | Criterion | At the base | Line at the run | Line now | Test time |
+|---|---|---|---|---|---|
+| ac1-room.test.ts | AC1 #3225.d1ce56ce | FAIL at its assertion: the room's row is BLOCKED, not PASS | :87 | :53 | 2758 ms |
+| ac2-lamp.test.ts | AC2 #3225.e8197c07 | FAIL at its assertion: lamp on table's row is BLOCKED, not FAIL | :46 | :25 | 179 ms |
+| ac3-readings.test.ts | AC3 #3225.288ab799 | FAIL at its assertion: chair_90 facing table's row is BLOCKED, not FAIL | :55 | :29 | 174 ms |
+| ac4-count.test.ts | AC4 #3225.561aacf0 | FAIL at its assertion: the row required of 4 is BLOCKED, not FAIL | :35 | :19 | 158 ms |
+| ac5-tipped.test.ts | AC5 #3225.441d60b6 | FAIL at its assertion: the row is BLOCKED, not INCONCLUSIVE | :40 | :22 | 168 ms |
+| ac6-measure.test.ts | AC6 #3225.39a420ed | FAIL at its assertion: none of poses 0 to 99's 700 readings is there | :61 | :33 | 259 ms |
+| ac7-budget.test.ts | AC7 #3225.ecf55c06 | FAIL at its assertion: the row is BLOCKED, not PASS | :42, from :51 | :21, from :30 | 446 ms |
+
+No test passes at the base. Every failure is an AssertionError of vitest's expect, raised in helpers.ts `none` (line
+39 at the run, now 23) from the test's own line, on the test's first judgement of a `scene.relations` row. The reason is the one every
+criterion shares: the check kind is new. At the base no module registers `scene.relations`, so `verdict` leaves each
+such row
+
+  {"id":"req:01JB3225Q…","kind":"scene.relations","issues":[],"machines":"any","determinism":"exact",
+   "result":"BLOCKED","blocked":[{"code":"module_missing","kind":"scene.relations","ids":[]}]}
+
+with no `results` and no `timing`: nothing reads a relation from where the items stand. No failure is at load, at a
+fixture, at the binary or at a planted name.
+
+## Each test's failing assertion
+
+Each is cut to its message and its frames; `{the row}` stands for the BLOCKED row above, with the requirement's ID.
+
+### ac1-room.test.ts
+
+ FAIL  ac1-room.test.ts > AC1 #3225.d1ce56ce #1732's room reads each of its relations held, by whichever route its
+ items were placed > AC1 #3225.d1ce56ce #1732's room solved by arrange@1 reads each of its relations held within 1 mm
+ and 1°; the same room written with at alone at the solved poses gives the same results, by hash; a planted check that
+ reads the document's arrangement list passes a room whose lamp was broken out and moved, and fails this test
+AssertionError: #1732's room solved by arrange@1:
+  #1732's room solved by arrange@1 is BLOCKED, not PASS: {the row}
+  #1732's room solved by arrange@1: chair_1 next_to table: the row has 0 results for it, not one: null
+  #1732's room solved by arrange@1: chair_2 next_to table: the row has 0 results for it, not one: null
+  [the same line for chair_3 and chair_4 next_to table, chair_1 to chair_4 facing table, lamp on table, shelf against
+   wall_n and rug on floor]
+  … and 1 more: expected [ …(13) ] to deeply equal []
+ ❯ none helpers.ts:39:56
+ ❯ ac1-room.test.ts:87:5
+Now: helpers.ts:23, from ac1-room.test.ts:53.
+
+Run 1 alone ran: the room was shown and presented, its eight solved poses were read by deep_query, and the claim was
+judged. Runs 2 and 3 and the planted runs were not reached.
+
+### ac2-lamp.test.ts
+
+ FAIL  ac2-lamp.test.ts > AC2 #3225.e8197c07 lamp on table is read from where the lamp stands, which the geometry
+ audit doesn't judge > AC2 #3225.e8197c07 with the lamp on the floor beside the table, lamp on table fails
+ scene.relation_missed, naming both and a miss of at least the table's height, while the geometry audit passes that
+ room; lifted 0.2 m straight above the table it reads a miss of 0.2 m within 1e-9 m
+AssertionError: lamp on table fails scene.relation_missed, naming both and a miss of at least the table's height:
+  the lamp on the floor beside the table: lamp on table: the requirement is BLOCKED, not FAIL: {the row}
+  the lamp on the floor beside the table: lamp on table: the row has 0 results for it, not one: null
+  the lamp on the floor beside the table: lamp on table: no scene.relation_missed issue names lamp and table and the
+  relation on: []: expected [ …(3) ] to deeply equal []
+ ❯ none helpers.ts:39:56
+ ❯ ac2-lamp.test.ts:46:5
+Now: helpers.ts:23, from ac2-lamp.test.ts:25.
+
+The judgement before it, ac2-lamp.test.ts:45 (now :24), passed (below). The lifted lamp's judgement was not reached.
+
+### ac3-readings.test.ts
+
+ FAIL  ac3-readings.test.ts > AC3 #3225.288ab799 facing, inside, apart and near read from where the items stand > AC3
+ #3225.288ab799 a chair turned 90° from the table's centre reads facing missed by 70° within 1e-9° and one turned 15°
+ reads held; the rug with one corner 0.3 m outside the room reads inside missed by 0.3 m; two crates 0.3 m apart read
+ apart with d 0.5 missed by 0.2 m and near with d 0.5 held
+AssertionError: a chair turned 90° from the table's centre reads facing missed by 70° within 1e-9°:
+  the chair turned 90° from the table's centre: chair_90 facing table: the requirement is BLOCKED, not FAIL: {the row}
+  the chair turned 90° from the table's centre: chair_90 facing table: the row has 0 results for it, not one: null
+  the chair turned 90° from the table's centre: chair_90 facing table: no scene.relation_missed issue names chair_90
+  and the relation facing: []: expected [ …(3) ] to deeply equal []
+ ❯ none helpers.ts:39:56
+ ❯ ac3-readings.test.ts:55:5
+Now: helpers.ts:23, from ac3-readings.test.ts:29.
+
+The four judgements after it (chair_15, the rug, the crates apart and near) were not reached.
+
+### ac4-count.test.ts
+
+ FAIL  ac4-count.test.ts > AC4 #3225.561aacf0 a collection reads one result per member and the count of those that
+ hold > AC4 #3225.561aacf0 three books on a shelf and a fourth on the floor read count 3 for on shelf; a requirement
+ of 4 fails scene.relation_count, naming 3, and a requirement of [3, 5] passes
+AssertionError: a requirement of 4 fails scene.relation_count, naming 3:
+  books on shelf, required of 4 is BLOCKED, not FAIL: {the row}
+  books on shelf, required of 4: book_1 on shelf: the row has 0 results for it, not one: null
+  [the same line for book_2, book_3 and book_4 on shelf]
+  books on shelf, required of 4: no result of books on shelf gives its count: null
+  books on shelf, required of 4: no scene.relation_count issue names on shelf, the expected 4 and the actual 3: []:
+  expected [ …(7) ] to deeply equal []
+ ❯ none helpers.ts:39:56
+ ❯ ac4-count.test.ts:35:5
+Now: helpers.ts:23, from ac4-count.test.ts:19.
+
+The requirement of [3, 5] was not reached.
+
+### ac5-tipped.test.ts
+
+ FAIL  ac5-tipped.test.ts > AC5 #3225.441d60b6 a relation that needs a tipped item's side faces reads unknown, and
+ its requirement INCONCLUSIVE > AC5 #3225.441d60b6 a chair tipped 30° on its back legs reads unknown for facing, and
+ the requirement reads INCONCLUSIVE; a planted check that reads its bounds as if upright returns a number and fails,
+ naming the chair
+AssertionError: the tipped chair reads unknown for facing, and the requirement INCONCLUSIVE:
+  the chair tipped 30° on its back legs: chair_tipped facing table: the requirement that needs it is BLOCKED, not
+  INCONCLUSIVE: {the row}
+  the chair tipped 30° on its back legs: chair_tipped facing table: the row has 0 results for it, not one: null:
+  expected [ …(2) ] to deeply equal []
+ ❯ none helpers.ts:39:56
+ ❯ ac5-tipped.test.ts:40:5
+Now: helpers.ts:23, from ac5-tipped.test.ts:22.
+
+The planted run was not reached.
+
+### ac6-measure.test.ts
+
+ FAIL  ac6-measure.test.ts > AC6 #3225.39a420ed one measure serves the solve and the check > AC6 #3225.39a420ed for
+ 1,000 seeded poses of two boxes each reading equals, bit for bit, what the solve's own measure gives for those poses;
+ a planted check with a measure of its own that differs in the last place fails, naming the pose
+AssertionError: poses 0 to 99: each reading equals what the solve's own measure gives:
+  pose 0 (a_0000 [0.6319613598708438,0.7235993105832197,0.20614678415811652] m at
+  [1.9757413794245862,2.2925286722405547,-1.5129036364316972] yaw 10.789720707907378°; b_0000
+  [1.2233585701367953,1.0471341105472867,0.4158897280059047] m at [0,0.5235670552736433,0] yaw 345.9611225821507°;
+  near d 0.852728991448525): a_0000 on b_0000: the row is BLOCKED; a_0000 on b_0000: the row has 0 results for it, not
+  one: null
+  [the same line, each naming its pose, for a_0000 inside, next_to, against, facing, near and apart b_0000, then for
+   pose 1 (a_0001 … b_0001 …) on, inside, next_to, against and facing]
+  … and 688 more: expected [ …(13) ] to deeply equal []
+ ❯ none helpers.ts:39:56
+ ❯ ac6-measure.test.ts:61:7
+Now: helpers.ts:23, from ac6-measure.test.ts:33.
+
+The first document alone ran, poses 0 to 99: all 700 of its readings (seven relations a pose) are missing. Documents
+2 to 10 (poses 100 to 999) and the planted runs were not reached.
+
+### ac7-budget.test.ts
+
+ FAIL  ac7-budget.test.ts > AC7 #3225.ecf55c06 scene.relations' budget on the reference Mac > AC7 #3225.ecf55c06 64
+ relations over a 1,000-item scene read in under 5 ms, on the reference Mac
+AssertionError: 64 relations over the 1000-item scene read, each one held:
+  64 relations over the 1000-item scene is BLOCKED, not PASS: {the row}
+  64 relations over the 1000-item scene: vase_000 on plinth_000: the row has 0 results for it, not one: null
+  64 relations over the 1000-item scene: vase_000 inside hall: the row has 0 results for it, not one: null
+  [the same line for the next nine relations, crate_000 next_to plinth_000 to crate_001 against plinth_001]
+  … and 53 more: expected [ …(13) ] to deeply equal []
+ ❯ none helpers.ts:39:56
+ ❯ reading ac7-budget.test.ts:42:3
+ ❯ ac7-budget.test.ts:51:5
+Now: helpers.ts:23, from `reading` at ac7-budget.test.ts:21, from ac7-budget.test.ts:30.
+
+The row's `timing.check_ms`, the lane's gate and the release build were not reached: no timing was read, and no
+cargo was started by the test.
+
+## What passes at the base, and why it should
+
+No test passes. Inside the failing tests these lines ran before the failure and passed, each as it should, since each
+reads what the base already has and none reads `scene.relations`:
+
+- ac2-lamp.test.ts:45 (now :24), the one judgement that passes: the `geometry.audit` row of the room whose lamp stands on the
+  floor is PASS with no error and no warning. The criterion says so itself ("while the geometry audit passes that
+  room"): the audit is the base's own check kind, nothing in that room passes into anything or floats, and the
+  definition declares the floor floating. That this row passes while `lamp on table` can't be judged is the gap the
+  issue names.
+- `presented`, on every fixture a run showed: #1732's room (ac1); the placed room with the lamp on the floor and
+  with it lifted (ac2); the turned chairs, the rug across the wall and the crates (ac3); the books (ac4); the tipped
+  chair (ac5); poses 0 to 99, whose `arrange@1` places nothing (ac6); the 1,000-item scene (ac7). Each is the base's
+  own kinds, shown with no error issue and no item skipped.
+- ac1-room.test.ts `solved`: `deep_query` gives each of the room's eight pieces three finite numbers for `at/pos` and
+  `at/rot`, as #1732's suite reads the solve.
+- ac6-measure.test.ts:50 and :52 (now :22 and :24): the reply's `audit.failures` reads, each `relation` failure with its `a`, `rel`,
+  `b`, `by` and `deg`; and it reports `apart` of 6 m as missed for each of poses 0 to 99. That is the base's scene
+  audit and the solve's own measure, the side of the comparison the base already has.
+- ac7-budget.test.ts:50 (now :29): the check's `expect` holds 64 relations.
+
+## Not shown by these runs
+
+Each test stops at its first failure, so the base runs don't show:
+
+- ac1: that the room written with `at` alone is presented, that the patch which lifts the lamp is applied and breaks
+  the lamp out, and that the solved lamp stands above the table's height (lines 88 to 92, now 54 to 58). #1732's suite holds the
+  solve and the break-out at this base.
+- ac2: the lifted lamp's row. ac3: the rows of chair_15, the rug and the crates. ac4: the row required of [3, 5].
+- ac6: documents 2 to 10, poses 100 to 999, built as the first is.
+- ac7: any timing. The lane's gate was not asked and nothing was built in release.
+- Any planted check. None can be built at the base, which has no check to plant in; had a run reached one, the base
+  would refuse its name with `bad_input` (README: The planted checks).

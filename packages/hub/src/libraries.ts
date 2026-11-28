@@ -39,7 +39,6 @@ export interface FileRef { path: string; bytes: number; sha256: string }
 /** A fetched asset as the store keeps it: its main file's hash, its files, its license and its upstream. */
 export interface AssetRecord {
   sha256: string; library?: string; pack?: string; id: string; license: AssetLicense; upstream: { url: string; version: string; modified: string }; files: FileRef[];
-  /** The URL the hub fetched the file from and when, in ms (#3570): what a table a job read from it traces to. */
   fetched?: { url: string; at: number };
 }
 /** What a fill's fetch answers: the file, its sidecars, the license and the upstream from the library's own record. */
@@ -258,7 +257,7 @@ export class Libraries {
     return this.authorize(library, path, picked, this.saved.packRules?.[this.packs.get(pack)!.id]);
   }
 
-  /** A deep_kinds fetch of a row a library gave: held on your answer, fetched, refused naming why, or BLOCKED with one unblock ask. */
+  /** A deep_job fetch of a row a library gave: held on your answer, fetched, refused naming why, or BLOCKED with one unblock ask. */
   async fetch(library: string, id: string): Promise<FetchReply> {
     if (!this.saved.on.includes(library) || !this.registered(library)) {
       const on = this.saved.on.includes(library);
@@ -429,7 +428,6 @@ export class Libraries {
     return { status: 'fetched', asset };
   }
 
-  /** The URL and time the hub fetched a file from, by its hash, from any library or pack; undefined for a file it never fetched. */
   fetchedFile(sha: string): { url: string; fetched: number } | undefined {
     const found = [...Object.values(this.saved.cache ?? {}), ...Object.values(this.saved.assets)].find((a) => a.sha256 === sha && a.fetched);
     return found?.fetched && { url: found.fetched.url, fetched: found.fetched.at };
