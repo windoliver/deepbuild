@@ -1,0 +1,1 @@
+{ "alone": true, "why": "shared: the GPU; each file builds deep-show (full,test-export-guards) with cargo and draws 1080p render-backs on the Metal device, and budget.test.ts reads the frame count's GPU time", "timed": ["budget.test.ts"] }
