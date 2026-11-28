@@ -118,6 +118,7 @@ elif (export GIT_OBJECT_DIRECTORY="$d/o"; run "$d/tree" ls-tree -r "$B") && run 
       RE=$RE awk 'BEGIN { re = ENVIRON["RE"] } $0 ~ re' "$d/added" > "$d/addown"
       run "$d/addhash" hash-object --no-filters --stdin-paths < "$d/addown"
       paste "$d/addhash" "$d/addown" > "$d/left"; out left "$d/left"
+      cut -f2 "$d/own" | LC_ALL=C xargs -r -d '\n' stat --printf '%z %i\t%n\n' -- > "$d/stamp" 2> /dev/null || :; out stamp "$d/stamp"
       o=$(awk -F "$T" '$2 == "package.json" { split($1, m, " "); print m[3] }' "$d/tree")
       if [ -n "$o" ]; then g cat-file blob "$o" > "$d/was" && [ "$(g hash-object --no-filters --stdin < "$d/was")" = "$o" ] && out was "$d/was" || say 'the commit %s holds no package.json there that is the object its id names' "$B"; fi
       [ -f package.json ] && head -c 1048576 package.json > "$d/now" && out now "$d/now"
@@ -328,9 +329,10 @@ export class HostSessions {
       const failed = text('unread');
       if (failed.length) return unread(failed.join('; '));
       const [diff, others, tracked] = [list('diff'), list('others'), list('tracked')];
-      const untracked = new Map(list('left').map((l) => [l.slice(l.indexOf('\t') + 1), l.slice(0, l.indexOf('\t'))]));
+      const split = (l: string): [string, string] => [l.slice(l.indexOf('\t') + 1), l.slice(0, l.indexOf('\t'))];
+      const [untracked, stamps] = [new Map(list('left').map(split)), new Map(list('stamp').map(split))];
       const configs = new Map([...await this.files(host, text('top')[0] || cwd, [...new Set([...tracked, ...others].filter(runnerConfig))], 1 << 20)].map(([path, bytes]) => [path, bytes.toString('utf8')]));
-      return { changed: [...new Set([...diff, ...others])].sort(), configs, scripts: diff.includes('package.json') && scriptsOf(text('was')[0]) !== scriptsOf(text('now')[0]), untracked };
+      return { changed: [...new Set([...diff, ...others])].sort(), configs, scripts: diff.includes('package.json') && scriptsOf(text('was')[0]) !== scriptsOf(text('now')[0]), untracked, stamps };
     })().catch((error: unknown) => unread(error instanceof Error ? error.message : String(error)));
     return Promise.race([read, late]).finally(() => clearTimeout(timer));
   }

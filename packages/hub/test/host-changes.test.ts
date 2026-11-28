@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { RecordedRun } from '@deepbuild/gate';
 import type { Connection } from '@deepbuild/record';
 import { GateRunner, type GateOptions } from '../src/gate-runner.js';
+import { changesOf } from '../src/claim-changes.js';
 import { HostSessions } from '../src/host-sessions.js';
 import { sshEnded, sshScript } from '../src/hosts.js';
 
@@ -373,6 +374,35 @@ describe('what a claim on a host changed (#3511)', () => {
     const v = await claimed({ base: BASE, head: { 'price.txt': '18.00\n' }, during: (dir) => writeFileSync(join(dir, 'tests/last-run.log'), 'ran\n'), next: { 'tests/last-run.log': 'edited\n' } });
     expect(v?.outcome, JSON.stringify(v)).not.toBe('PASS');
     expect(v?.reasons).toContainEqual(expect.stringMatching(/price-approved counts as the agent's own: the claim changed tests\/last-run\.log, which it may load/));
+  }, 60_000);
+
+  it('a check\'s own file edited and put back on the host before the read after its run is still no change set (#3511.5bba85cf)', async () => {
+    const v = await claimed({ base: BASE, head: { 'price.txt': '19.00\n' }, during: (dir) => { const file = join(dir, 'tests/price_test.sh'); const was = readFileSync(file); writeFileSync(file, 'exit 0\n'); writeFileSync(file, was); } });
+    expect(v?.outcome, JSON.stringify(v)).not.toBe('PASS');
+    expect(v?.reasons).toContainEqual(expect.stringMatching(/tests\/price_test\.sh changed on gpu-box after the read, while a check ran/));
+  }, 60_000);
+
+  it('a changed justfile in a subfolder counts as the check\'s own (#3511.80ee3c2c)', async () => {
+    const v = await claimed({ base: { ...BASE, 'app/justfile': 'check:\n\tsh tests/price_test.sh\n' }, head: { 'app/justfile': 'check:\n\t@true\n' } });
+    expect(v?.outcome, JSON.stringify(v)).not.toBe('PASS');
+    expect(v?.reasons).toContainEqual(expect.stringMatching(/price-approved counts as the agent's own: the claim changed app\/justfile, which it may load/));
+  }, 60_000);
+
+  it('the local read names an own file it can\'t open as changed, never failing the read (#3511.80ee3c2c)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'local-unreadable-'));
+    dirs.push(dir);
+    const git = (...args: string[]) => execFileSync('git', ['-c', 'user.name=T', '-c', 'user.email=t@example.test', '-c', 'commit.gpgsign=false', ...args], { cwd: dir }).toString().trim();
+    git('init', '-q');
+    for (const [path, text] of Object.entries(BASE)) { mkdirSync(join(dir, path, '..'), { recursive: true }); writeFileSync(join(dir, path), text); }
+    git('add', '-A');
+    git('commit', '-qm', 'one');
+    chmodSync(join(dir, 'tests/price_test.sh'), 0o000);
+    try {
+      const read = await changesOf(dir, git('rev-parse', 'HEAD'), 30_000);
+      expect(read.changed).toContain('tests/price_test.sh');
+    } finally {
+      chmodSync(join(dir, 'tests/price_test.sh'), 0o644);
+    }
   }, 60_000);
 
   it('a link that never answers: the stop returns at its hold with the check still to run, and the claim has no verdict yet, never PASS', async () => {

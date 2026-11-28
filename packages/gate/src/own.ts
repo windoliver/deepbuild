@@ -21,8 +21,8 @@ export const ownRead = (path: string): boolean => path.split('/').slice(0, -1).s
 
 /** A test runner's config, or pytest's conftest.py: the tool finds and loads it by its own rules, wherever it lies. */
 const LOADED_BY_TOOL = /(^|\/)((vitest|vite|jest)\.config\.[cm]?[jt]s|vitest\.workspace\.[cm]?[jt]s|pytest\.ini|conftest\.py)$/;
-const SCRIPT_FILE = /^(GNUmakefile|[Mm]akefile|[Jj]ustfile|\.justfile)$/;
-export const OWN_BY_NAME = `(^|/)(${[...OWN_FOLDERS].join('|')})/|${LOADED_BY_TOOL.source.replace(/\\\//g, '/')}|^package\\.json$|${SCRIPT_FILE.source}`;
+const SCRIPT_FILE = /(^|\/)(GNUmakefile|[Mm]akefile|[Jj]ustfile|\.justfile)$/;
+export const OWN_BY_NAME = `(^|/)(${[...OWN_FOLDERS].join('|')})/|${LOADED_BY_TOOL.source.replace(/\\\//g, '/')}|^package\\.json$|${SCRIPT_FILE.source.replace(/\\\//g, '/')}`;
 export type ChangesPlant = 'edited-check-approved' | 'own-files-test-folders-only';
 type Changes = { changed: readonly string[]; configs: ReadonlyMap<string, string>; scripts: boolean };
 /**

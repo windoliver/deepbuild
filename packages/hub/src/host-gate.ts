@@ -46,7 +46,8 @@ export async function stopOnHost(g: Runner, r: Parameters<GateRunner['stop']>[0]
     for (const [path, oid] of now.untracked ?? []) if (before.untracked?.get(path) !== oid) claim.written!.set(path, oid);
     const tracked = (c: Changes): Changes => ({ ...c, changed: c.changed.filter((path) => !c.untracked?.has(path)) });
     const was = new Set(ownChanges(tracked(before), null));
-    const since = ownChanges(tracked(now), null).filter((path) => !was.has(path));
+    const touched = [...before.stamps ?? []].filter(([path, stamp]) => now.stamps?.get(path) !== stamp).map(([path]) => path);
+    const since = [...new Set([...ownChanges(tracked(now), null).filter((path) => !was.has(path)), ...touched])];
     if (since.length && !claim.changes?.unread) claim.changes = { ...claim.changes!, unread: `${since.join(', ')} changed on ${r.host} after the read, while a check ran` };
   };
   const runs = r.checks.map(async (c) => {

@@ -8,7 +8,7 @@ import { dirname, join, relative } from 'node:path';
 import { OWN_BY_NAME, runnerConfig } from '@deepbuild/gate';
 
 /** What a claim's worktree changed against its merge base when its snapshot was taken, and the test runners' configs it held, each with its text (#33). */
-export interface Changes { changed: string[]; configs: Map<string, string>; scripts: boolean; unread?: string; untracked?: Map<string, string> }
+export interface Changes { changed: string[]; configs: Map<string, string>; scripts: boolean; unread?: string; untracked?: Map<string, string>; stamps?: Map<string, string> }
 export const scriptsOf = (text: string | undefined): string => { try { return JSON.stringify((JSON.parse(text ?? '{}') as { scripts?: unknown }).scripts ?? null); } catch { return 'unreadable'; } };
 export async function changesOf(cwd: string, base: string, ms: number): Promise<Changes> {
   const deadline = Date.now() + ms;
@@ -39,7 +39,7 @@ export async function changesOf(cwd: string, base: string, ms: number): Promise<
   const [diff, others, tracked, ignored, entries, format, top] = await Promise.all([paths(['diff', '-z', '--name-only', '--no-renames', base]), paths(['ls-files', '-z', '--others', '--exclude-standard']), paths(['ls-files', '-z']),
     paths(['ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--directory']), paths(['ls-tree', '-r', '-z', '--full-tree', base]), git(['rev-parse', '--show-object-format']), git(['rev-parse', '--show-toplevel'])]);
   const workTree = top.toString('utf8').trim();
-  const here = realpathSync(cwd);
+  const here = ((): string => { try { return realpathSync(cwd); } catch { return cwd; } })();
   const nested = (): boolean => { for (let d = here; d !== workTree && d !== dirname(d); d = dirname(d)) if (existsSync(join(d, '.git'))) return true; return false; };
   if (workTree && (relative(workTree, here).startsWith('..') || !existsSync(join(workTree, '.git')) || nested())) unread.push(`git takes ${workTree} for the work tree of ${here}`);
   const own = new RegExp(OWN_BY_NAME);
@@ -48,7 +48,9 @@ export async function changesOf(cwd: string, base: string, ms: number): Promise<
   const blob = (bytes: Buffer): string => createHash(algorithm).update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
   const differs = await Promise.all(entries.map(async (entry): Promise<string | undefined> => {
     const [meta, path] = [entry.slice(0, entry.indexOf('\t')), entry.slice(entry.indexOf('\t') + 1)];
-    if (!own.test(path)) return undefined;
+    return own.test(path) ? compared(meta, path).catch(() => path) : undefined;
+  }));
+  async function compared(meta: string, path: string): Promise<string | undefined> {
     const [mode, kind, oid] = meta.split(' ');
     if (kind !== 'blob') return undefined;
     const at = join(workTree || cwd, path);
@@ -57,7 +59,7 @@ export async function changesOf(cwd: string, base: string, ms: number): Promise<
     if (mode === '120000') return stat.isSymbolicLink() && blob(Buffer.from(await readlink(at))) === oid ? undefined : path;
     if (!stat.isFile() || (mode === '100755') !== ((stat.mode & 0o100) !== 0)) return path;
     return blob(await readFile(at)) === oid ? undefined : path;
-  }));
+  }
   const configs = new Map<string, string>();
   for (const path of new Set([...tracked, ...others].filter(runnerConfig))) {
     const text = await readFile(join(cwd, path), 'utf8').catch(() => undefined);
