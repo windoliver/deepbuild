@@ -88,7 +88,7 @@ const PARAMS: [(&str, &str); 28] = [
         "profile",
         "{arrays: {name → {type, count?: u32}}, request: name}",
     ),
-    ("settings", "{name → default number}"),
+    ("settings", "{name → number}"),
     (
         "preview",
         "{reads?: [control ID | path], writes?: {name → {type, count?: u32}}}",
