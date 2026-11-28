@@ -1,0 +1,119 @@
+The run at the base, e92eff449 (claude/issue-1713-doctor-exit), on macOS. Both tests fail.
+
+$ npx vitest run --root tests/acceptance/668-redraft-1713 --no-file-parallelism
+(base e92eff449, load averages: 86.31 76.42 82.88)
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/agent-a4017eb1b9d914c18/tests/acceptance/668-redraft-1713
+
+ ❯ doctor.test.ts (2 tests | 2 failed) 28822ms
+   ❯ AC4 #668.3ee80c65 after setup and the session no item of `deep doctor` is failed and it exits 0 or 3, and the entry removed by hand is still named with its fix (2)
+     × AC4 #668.3ee80c65 after setup and the session, deep doctor shows no failed item and exits 0 or 3 as the exit-code table sets it; with DeepBuild's PreToolUse entry removed by hand (the hub stopped) it names the missing installation with the fix `deep setup` and exits 1, and that fix puts the entry back 28731ms
+     × AC4 #668.3ee80c65 (planted doctors) a doctor that exits 0 with an item not checked, one that exits 3 over a failed item, and one that trusts setup's record of its hooks each fail the same check, naming the criterion 2ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  doctor.test.ts > AC4 #668.3ee80c65 after setup and the session no item of `deep doctor` is failed and it exits 0 or 3, and the entry removed by hand is still named with its fix > AC4 #668.3ee80c65 after setup and the session, deep doctor shows no failed item and exits 0 or 3 as the exit-code table sets it; with DeepBuild's PreToolUse entry removed by hand (the hub stopped) it names the missing installation with the fix `deep setup` and exits 1, and that fix puts the entry back
+AssertionError: #668.3ee80c65 the doctor after setup and the session, then with DeepBuild's entry removed by hand: expected [ …(5) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "#668.3ee80c65 after setup and the session no item of deep doctor may be failed: hub.service fail (service_unpromoted): the hub's login service (/private/tmp/dh668-88Sta8/h/Library/LaunchAgents/com.deepbuild.hub.plist) runs ~/private/deepbuild-core/.claude/worktrees/agent-a4017eb1b9d914c18/packages/cli/dist/main.js, in a git worktree, ~/private/deepbuild-core/.claude/worktrees/agent-a4017eb1b9d914c18, which can move or vanish under the run; fix: Promote a build main watch passed with `deep hub promote <build folder>`, so the service runs ~/.deepbuild/versions/current.",
++   "#668.3ee80c65 after setup and the session no item of deep doctor may be failed: canvas.gpu fail (binary_missing): no deep-gpu is built under ~/private/deepbuild-core/.claude/worktrees/agent-a4017eb1b9d914c18/target; fix: Run `cargo build --locked --bin deep-gpu`, then `deep doctor` again.",
++   "#668.3ee80c65 after setup and the session no item of deep doctor may be failed: canvas.headless fail (render_failed): no deep-canvas-render is built under ~/private/deepbuild-core/.claude/worktrees/agent-a4017eb1b9d914c18/target, so nothing can render headless; fix: Run `cargo build --locked --bin deep-canvas-render`, then `deep doctor` again.",
++   "#668.3ee80c65 after setup and the session no item of deep doctor may be failed: canvas.verdict fail (render_failed): the canvas is unhealthy: canvas.gpu failed, canvas.headless failed; fix: Run `cargo build --locked --bin deep-gpu`, then `deep doctor` again.",
++   "#668.3ee80c65 after setup and the session deep doctor must exit 0 or 3: `deep doctor --json` exit 1, stdout \"{\\\"item\\\":\\\"hub.socket\\\",\\\"agent\\\":\\\"deepbuild\\\",\\\"code\\\":\\\"healthy\\\",\\\"level\\\":\\\"ok\\\",\\\"evidence\\\":\\\"the hub answers at unix:/private/tmp/dh668-88Sta8/h/.deepbuild/hub.sock\\\",\\\"fix\\\":\\\"Nothing to do.\\\"}\\n{\\\"item\\\":\\\"hub.jobs\\\",\\\"agent\\\":\\\"deepbuild\\\",\\\"code\\\":\\\"healthy\\\",\\\"level\\\":\\\"ok\\\",\\\"evidence\\\":\\\"none of the hub's 17 jobs has failed 3 times in a row\\\",\\\"fix\\\":\\\"Nothing to do.\\\"}\\n{\\\"item\\\":\\\"canvas.packs\\\",\\\"agent\\\":\\\"deepbuild\\\",\\\"code\\\":\\\"not_checked\\\",\\\"level\\\":\\\"skip\\\",\\\"evidence\\\":\\\"the canvas core hasn't checked deepbuild/art@1.0.0 (packs/art-1.0.0), deepbuild/blender@1.0.0 (packs/blender-1.0.0), deepbuild/chrome-fx@1.0.0 (packs/chrome-fx-1.0.0), deepbuild/circuit@1.0.0 (packs/circuit-1.0.0), deepbuild/circuit@2.0.0 (packs/circuit-2.0.0), deepbuild/composites@1.0.0 (packs/composites-1.0.0), deepbuild/explain@1.0.0 (packs/explain-1.0.0), deepbuild/familiar@1.0.0 (packs/familiar-1.0.0), deepbuild/familiar@1.1.0 (packs/familiar-1.1.0), deepbuild/foley@1.0.0 (packs/foley-1.0.0), deepbuild/fx@1.0.0 (packs/fx-1.0.0), deepbuild/godot@1.0.0 (packs/godot-1.0.0), deepbuild/godot@1.1.0 (packs/godot-1.1.0), deepbuild/interfaces@1.0.0 (packs/interfaces-1.0.0), deepbuild/lanes@1.0.0 (packs/lanes-1.0.0), deepbuild/math@1.0.0 (packs/math-1.0.0), deepbuild/modslib@1.0.0 (packs/modslib-1.0.0), deepbuild/process@1.0.0 (packs/process-1.0.0), deepbuild/sense@1.0.0 (packs/sense-1.0.0), deepbuild/separation@1.0.0 (packs/separation-1.0.0), deepbuild/unreal@1.0.0 (packs/unreal-1.0.0), deepbuild/verbs@1.0.0 (packs/verbs-1.0.0) since the hub started\\\",\\\"fix\\\":\\\"Run deep_kinds once, or show a document that names a pack, then `deep doctor` again.\\\"}\\n{\\\"item\\\":\\\"app.notifications\\\",\\\"agent\\\":\\\"deepbuild\\\",\\\"code\\\":\\\"not_checked\\\",\\\"level\\\":\\\"skip\\\",\\\"evidence\\\":\\\"the app hasn't reported its notification setting since the hub started\\\",\\\"fix\\\":\\\"Open DeepBuild, then run deep doctor again.\\\"}\\n{\\\"item\\\":\\\"hub.disk\\\",\\\"agent\\\":\\\"deepbuild\\\",\\\"code\\\":\\\"healthy\\\",\\\"level\\\":\\\"ok\\\",\\\"evidence\\\":\\\"19.4 GB free where /private/tmp/dh668-88Sta8/h/.deepbuild lives\\\",\\\"fix\\\":\\\"Nothing to do.\\\"}\\n{\\\"item\\\":\\\"hub.service\\\",\\\"agent\\\":\\\"deepbuild\\\",\\\"code\\\":\\\"service_unpromoted\\\",\\\"level\\\":\\\"fail\\\",\\\"evidence\\\":\\\"the hub's login service (/private/tmp/dh668-88Sta8/h/Library/LaunchAgents/com.deepbuild.hub.plist) runs ~/private/deepbuild-core/.claude/worktrees/agent-a4017eb1b9d914c18/packages/cli/dist/main.js, in a git worktree, ~/private/deepbuild-core/.claude/worktrees/agent-a4017eb1b9d914c18, which can move or vanish under the run\\\",\\\"fix\\\":\\\"Promote a build main watch passed with `deep hub promote <build \", stderr \"\"",
++ ]
+
+ ❯ doctor.test.ts:78:116
+     76|     if (w.fix.code !== 0 || !w.back) problems.push(`${AC4} the fix the…
+     77|     if (missingItems(w.fixed, w.h, 'PreToolUse').length) problems.push…
+     78|     expect(problems, `${AC4} the doctor after setup and the session, t…
+       |                                                                                                                    ^
+     79|   }, 900_000);
+     80|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  doctor.test.ts > AC4 #668.3ee80c65 after setup and the session no item of `deep doctor` is failed and it exits 0 or 3, and the entry removed by hand is still named with its fix > AC4 #668.3ee80c65 (planted doctors) a doctor that exits 0 with an item not checked, one that exits 3 over a failed item, and one that trusts setup's record of its hooks each fail the same check, naming the criterion
+Error: #668.3ee80c65 INCONCLUSIVE: the planted doctor not-checked-exits-0 differs from the right one only when no item fails and one reads not checked, and here hub.service, canvas.gpu, canvas.headless, canvas.verdict failed, so it plants nothing: `deep doctor --json` exit 1, stdout "{\"item\":\"hub.socket\",\"agent\":\"deepbuild\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"the hub answers at unix:/private/tmp/dh668-88Sta8/h/.deepbuild/hub.sock\",\"fix\":\"Nothing to do.\"}\n{\"item\":\"hub.jobs\",\"agent\":\"deepbuild\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"none of the hub's 17 jobs has failed 3 times in a row\",\"fix\":\"Nothing to do.\"}\n{\"item\":\"canvas.packs\",\"agent\":\"deepbuild\",\"code\":\"not_checked\",\"level\":\"skip\",\"evidence\":\"the canvas core hasn't checked deepbuild/art@1.0.0 (packs/art-1.0.0), deepbuild/blender@1.0.0 (packs/blender-1.0.0), deepbuild/chrome-fx@1.0.0 (packs/chrome-fx-1.0.0), deepbuild/circuit@1.0.0 (packs/circuit-1.0.0), deepbuild/circuit@2.0.0 (packs/circuit-2.0.0), deepbuild/composites@1.0.0 (packs/composites-1.0.0), deepbuild/explain@1.0.0 (packs/explain-1.0.0), deepbuild/familiar@1.0.0 (packs/familiar-1.0.0), deepbuild/familiar@1.1.0 (packs/familiar-1.1.0), deepbuild/foley@1.0.0 (packs/foley-1.0.0), deepbuild/fx@1.0.0 (packs/fx-1.0.0), deepbuild/godot@1.0.0 (packs/godot-1.0.0), deepbuild/godot@1.1.0 (packs/godot-1.1.0), deepbuild/interfaces@1.0.0 (packs/interfaces-1.0.0), deepbuild/lanes@1.0.0 (packs/lanes-1.0.0), deepbuild/math@1.0.0 (packs/math-1.0.0), deepbuild/modslib@1.0.0 (packs/modslib-1.0.0), deepbuild/process@1.0.0 (packs/process-1.0.0), deepbuild/sense@1.0.0 (packs/sense-1.0.0), deepbuild/separation@1.0.0 (packs/separation-1.0.0), deepbuild/unreal@1.0.0 (packs/unreal-1.0.0), deepbuild/verbs@1.0.0 (packs/verbs-1.0.0) since the hub started\",\"fix\":\"Run deep_kinds once, or show a document that names a pack, then `deep doctor` again.\"}\n{\"item\":\"app.notifications\",\"agent\":\"deepbuild\",\"code\":\"not_checked\",\"level\":\"skip\",\"evidence\":\"the app hasn't reported its notification setting since the hub started\",\"fix\":\"Open DeepBuild, then run deep doctor again.\"}\n{\"item\":\"hub.disk\",\"agent\":\"deepbuild\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"19.4 GB free where /private/tmp/dh668-88Sta8/h/.deepbuild lives\",\"fix\":\"Nothing to do.\"}\n{\"item\":\"hub.service\",\"agent\":\"deepbuild\",\"code\":\"service_unpromoted\",\"level\":\"fail\",\"evidence\":\"the hub's login service (/private/tmp/dh668-88Sta8/h/Library/LaunchAgents/com.deepbuild.hub.plist) runs ~/private/deepbuild-core/.claude/worktrees/agent-a4017eb1b9d914c18/packages/cli/dist/main.js, in a git worktree, ~/private/deepbuild-core/.claude/worktrees/agent-a4017eb1b9d914c18, which can move or vanish under the run\",\"fix\":\"Promote a build main watch passed with `deep hub promote <build ", stderr ""
+ ❯ doctor.test.ts:90:35
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  21:00:56
+   Duration  29.41s (tests 99%)
+
+(exit 1)
+
+
+The doctor runs the tests read (deep doctor --json, from $TMPDIR/deep-668-proof/redraft-1713/terminal.txt), each item not OK with its level and code, and the exit:
+$ deep setup
+  exit 0
+$ deep doctor --json
+  canvas.packs skip not_checked: fix: Run deep_kinds once, or show a document that names a pack, then `deep doctor` again.
+  app.notifications skip not_checked: fix: Open DeepBuild, then run deep doctor again.
+  hub.service fail service_unpromoted: fix: Promote a build main watch passed with `deep hub promote <build folder>`, so the service runs ~/.deepbuild/versions/current.
+  claude.prompt skip not_checked: fix: Run `deep doctor --prompt` to send Claude Code one test prompt.
+  canvas.gpu fail binary_missing: fix: Run `cargo build --locked --bin deep-gpu`, then `deep doctor` again.
+  canvas.headless fail render_failed: fix: Run `cargo build --locked --bin deep-canvas-render`, then `deep doctor` again.
+  canvas.verdict fail render_failed: fix: Run `cargo build --locked --bin deep-gpu`, then `deep doctor` again.
+  app.footprint skip not_checked: fix: Open the DeepBuild app, then run `deep doctor` again.
+  exit 1
+DEEP_HUB_PLANT=not-checked-exits-0 $ deep doctor --json
+  canvas.packs skip not_checked: fix: Run deep_kinds once, or show a document that names a pack, then `deep doctor` again.
+  app.notifications skip not_checked: fix: Open DeepBuild, then run deep doctor again.
+  hub.service fail service_unpromoted: fix: Promote a build main watch passed with `deep hub promote <build folder>`, so the service runs ~/.deepbuild/versions/current.
+  claude.prompt skip not_checked: fix: Run `deep doctor --prompt` to send Claude Code one test prompt.
+  canvas.gpu fail binary_missing: fix: Run `cargo build --locked --bin deep-gpu`, then `deep doctor` again.
+  canvas.headless fail render_failed: fix: Run `cargo build --locked --bin deep-canvas-render`, then `deep doctor` again.
+  canvas.verdict fail render_failed: fix: Run `cargo build --locked --bin deep-gpu`, then `deep doctor` again.
+  app.footprint skip not_checked: fix: Open the DeepBuild app, then run `deep doctor` again.
+  exit 1
+(DeepBuild's PreToolUse entry removed by hand, the hub stopped) $ deep doctor --json
+  hub.socket fail hub_unreachable: fix: Run `deep hub start`; deep setup installs it as a login service.
+  hub.service fail service_unpromoted: fix: Promote a build main watch passed with `deep hub promote <build folder>`, so the service runs ~/.deepbuild/versions/current.
+  claude.hooks fail hooks_missing: fix: Run `deep setup`, which writes them back beside yours.
+  claude.prompt skip not_checked: fix: Run `deep doctor --prompt` to send Claude Code one test prompt.
+  canvas.gpu fail binary_missing: fix: Run `cargo build --locked --bin deep-gpu`, then `deep doctor` again.
+  canvas.headless fail render_failed: fix: Run `cargo build --locked --bin deep-canvas-render`, then `deep doctor` again.
+  canvas.verdict fail render_failed: fix: Run `cargo build --locked --bin deep-gpu`, then `deep doctor` again.
+  app.footprint skip not_checked: fix: Open the DeepBuild app, then run `deep doctor` again.
+  exit 1
+DEEP_HUB_PLANT=doctor-not-checked-first $ deep doctor --json
+  hub.socket fail hub_unreachable: fix: Run `deep hub start`; deep setup installs it as a login service.
+  hub.service fail service_unpromoted: fix: Promote a build main watch passed with `deep hub promote <build folder>`, so the service runs ~/.deepbuild/versions/current.
+  claude.hooks fail hooks_missing: fix: Run `deep setup`, which writes them back beside yours.
+  claude.prompt skip not_checked: fix: Run `deep doctor --prompt` to send Claude Code one test prompt.
+  canvas.gpu fail binary_missing: fix: Run `cargo build --locked --bin deep-gpu`, then `deep doctor` again.
+  canvas.headless fail render_failed: fix: Run `cargo build --locked --bin deep-canvas-render`, then `deep doctor` again.
+  canvas.verdict fail render_failed: fix: Run `cargo build --locked --bin deep-gpu`, then `deep doctor` again.
+  app.footprint skip not_checked: fix: Open the DeepBuild app, then run `deep doctor` again.
+  exit 3
+DEEP_HUB_PLANT=doctor-misses-hooks $ deep doctor --json
+  hub.socket fail hub_unreachable: fix: Run `deep hub start`; deep setup installs it as a login service.
+  hub.service fail service_unpromoted: fix: Promote a build main watch passed with `deep hub promote <build folder>`, so the service runs ~/.deepbuild/versions/current.
+  claude.prompt skip not_checked: fix: Run `deep doctor --prompt` to send Claude Code one test prompt.
+  canvas.gpu fail binary_missing: fix: Run `cargo build --locked --bin deep-gpu`, then `deep doctor` again.
+  canvas.headless fail render_failed: fix: Run `cargo build --locked --bin deep-canvas-render`, then `deep doctor` again.
+  canvas.verdict fail render_failed: fix: Run `cargo build --locked --bin deep-gpu`, then `deep doctor` again.
+  app.footprint skip not_checked: fix: Open the DeepBuild app, then run `deep doctor` again.
+  exit 1
+$ deep setup
+  exit 0
+$ deep doctor --json
+  canvas.packs skip not_checked: fix: Run deep_kinds once, or show a document that names a pack, then `deep doctor` again.
+  app.notifications skip not_checked: fix: Open DeepBuild, then run deep doctor again.
+  hub.service fail service_unpromoted: fix: Promote a build main watch passed with `deep hub promote <build folder>`, so the service runs ~/.deepbuild/versions/current.
+  claude.prompt skip not_checked: fix: Run `deep doctor --prompt` to send Claude Code one test prompt.
+  canvas.gpu fail binary_missing: fix: Run `cargo build --locked --bin deep-gpu`, then `deep doctor` again.
+  canvas.headless fail render_failed: fix: Run `cargo build --locked --bin deep-canvas-render`, then `deep doctor` again.
+  canvas.verdict fail render_failed: fix: Run `cargo build --locked --bin deep-gpu`, then `deep doctor` again.
+  app.footprint skip not_checked: fix: Open the DeepBuild app, then run `deep doctor` again.
+  exit 1
