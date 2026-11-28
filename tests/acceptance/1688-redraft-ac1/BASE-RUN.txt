@@ -1,0 +1,54 @@
+Run of tests/acceptance/1688-redraft-ac1/ac1-clean.test.mjs at commit 923842f72 (base e87cefc44 plus the blind suite
+tests/acceptance/1688/; no scripts/unread-exports.mjs), made 2026-11-28T05:11Z.
+node v24.22.0, macOS 27.2.1 arm64, load average 24.87 60.19 81.84 (1, 5, 15 min), wall time 0.15 s (/usr/bin/time -p).
+The checkout's path is replaced by <checkout> and test durations by <ms>. Expected: both tests fail at their first
+assertion, that the lint exists, before any copy is made.
+
+$ node --test --test-concurrency=1 tests/acceptance/1688-redraft-ac1/ac1-clean.test.mjs
+✖ #1688.e0a10d9d AC1: the lint passes on the change's files (<ms>)
+✖ #1688.e0a10d9d AC1: the lint passes with every packages/*/src file in the change (redraft) (<ms>)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms <ms>
+
+✖ failing tests:
+
+test at tests/acceptance/1688-redraft-ac1/ac1-clean.test.mjs:11:1
+✖ #1688.e0a10d9d AC1: the lint passes on the change's files (<ms>)
+  AssertionError [ERR_ASSERTION]: scripts/unread-exports.mjs, the lint of exports with no reader outside their file, does not exist
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/1688-redraft-ac1/ac1-clean.test.mjs:12:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1688-redraft-ac1/ac1-clean.test.mjs:19:1
+✖ #1688.e0a10d9d AC1: the lint passes with every packages/*/src file in the change (redraft) (<ms>)
+  AssertionError [ERR_ASSERTION]: scripts/unread-exports.mjs, the lint of exports with no reader outside their file, does not exist
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/1688-redraft-ac1/ac1-clean.test.mjs:20:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+exit 1

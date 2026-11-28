@@ -916,6 +916,8 @@ redrafted['tests/acceptance/1352-redraft-3402/ac1-section.test.mjs'] = 'tests/ac
 byHand.push('tests/acceptance/1352-redraft-3402/ac1-section.test.mjs');
 redrafted['tests/acceptance/2790/purpose.test.ts'] = 'tests/acceptance/2790-redraft-3413/';
 byHand.push('tests/acceptance/2790/purpose.test.ts');
+redrafted['tests/acceptance/1688/ac1-clean.test.mjs'] = 'tests/acceptance/1688-redraft-ac1/';
+byHand.push('tests/acceptance/1688/ac1-clean.test.mjs');
 
 // #3525 moves the asset fetch from deep_kinds to deep_job and refuses deep_kinds' fetch, so the files below, which
 // brought an asset in through deep_kinds, no longer hold their scene; #2898's table, reads and repeats files state
