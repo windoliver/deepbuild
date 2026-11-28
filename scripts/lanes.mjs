@@ -75,6 +75,7 @@ timed.push('tests/acceptance/3611/ac6-first-reply.test.mjs');
 export const aloneReasons = {};
 for (const [reason, entries] of Object.entries({
   binary: [
+    'tests/acceptance/1881-redraft-2047/', 'tests/acceptance/96-redraft-1412/',
     'tests/acceptance/2386/', 'tests/acceptance/2086-redraft-2047/', 'tests/acceptance/172-redraft-ac4/', 'tests/acceptance/1490-redraft-2892/', 'tests/acceptance/192/packs-redraft-2892/', 'tests/acceptance/2386-redraft-ac6-hashes/', 'tests/acceptance/1456-redraft-ac2-ac4/', 'tests/acceptance/323-redraft-2171/', 'tests/acceptance/2896/',
     'tests/acceptance/2700/heap.test.mjs', 'tests/acceptance/2700/equal.test.mjs', 'tests/acceptance/2700/data-row.test.mjs', 'tests/acceptance/2700/as-given.test.mjs', 'tests/acceptance/2700/reached.test.mjs',
     'tests/acceptance/1523/', 'tests/acceptance/84/', 'tests/acceptance/994/hub.test.ts', 'tests/acceptance/994/deadline-redraft/', 'tests/acceptance/20/', 'tests/acceptance/65/', 'tests/acceptance/1581/proposal.test.ts',
@@ -97,7 +98,7 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/18/binding/', 'tests/acceptance/18/mapping/callers.test.ts', 'tests/acceptance/18/mapping/failures.test.ts', 'tests/acceptance/18/mapping/loops.test.ts',
     'tests/acceptance/18/mapping/mcp.test.ts', 'tests/acceptance/18/mapping/prompts.test.ts', 'tests/acceptance/18/mapping/record.test.ts',
     'tests/acceptance/18/mapping/replies.test.ts', 'tests/acceptance/453/', 'tests/acceptance/1633/', 'packages/hub/test/reopened-items.test.ts', 'tests/acceptance/46/',
-    'packages/github/test/', 'tests/acceptance/2078/', 'tests/acceptance/2218/', 'tests/acceptance/2648/', 'tests/acceptance/167/', 'tests/acceptance/1328/',
+    'packages/github/test/github.test.ts', 'tests/acceptance/2078/', 'tests/acceptance/2218/', 'tests/acceptance/2648/', 'tests/acceptance/167/', 'tests/acceptance/1328/',
     'tests/acceptance/18/install/coexist.test.ts', 'tests/acceptance/18/install/disable.test.ts', 'tests/acceptance/18/install/install.test.ts',
     'tests/acceptance/18/install/stophold.test.ts', 'tests/acceptance/18/install/tamper.test.ts', 'tests/acceptance/18/install/waiter.test.ts', 'tests/acceptance/19/',
     'tests/acceptance/629/', 'tests/acceptance/25/routes/', 'tests/acceptance/25/fallbacks/', 'tests/acceptance/321/', 'tests/acceptance/303/', 'tests/acceptance/344/',
@@ -159,6 +160,7 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/1500-oracle/', 'tests/acceptance/3234/', 'tests/acceptance/3234-redraft-ac3/', 'tests/acceptance/2039-oracle/',
   ],
   timing: [
+    'tests/acceptance/3405/',
     'tests/acceptance/2513-redraft-2047/',
     'tests/acceptance/896/', 'tests/acceptance/16/', 'tests/acceptance/1098/budgets.test.ts', 'tests/acceptance/1015/budgets.test.ts', 'tests/acceptance/1417-redraft-ac3/',
     'tests/acceptance/1022/', 'tests/acceptance/823/', 'tests/acceptance/14/budgets.test.ts', 'tests/acceptance/42/budgets.test.ts', 'tests/acceptance/62/budgets.test.ts',
@@ -191,6 +193,7 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/1518-redraft-ac1/',
   ],
   'shared: the GPU': [
+    'tests/acceptance/1219/', 'tests/acceptance/231/', 'tests/acceptance/2844/', 'tests/acceptance/2844-redraft-moving/', 'tests/acceptance/3036/', 'tests/acceptance/853/',
     'tests/acceptance/1297-redraft-2047/', 'tests/acceptance/959/', 'tests/acceptance/278/', 'tests/acceptance/2892/', 'tests/acceptance/172-redraft-2892/', 'tests/acceptance/210-redraft-2892/', 'tests/acceptance/2053/',
     'tests/acceptance/149/', 'tests/acceptance/149-redraft-ac5/', 'tests/acceptance/149-redraft-ac10/', 'tests/acceptance/390/', 'tests/acceptance/391/', 'tests/acceptance/392/',
     'tests/acceptance/393/', 'tests/acceptance/854/', 'tests/acceptance/495/', 'tests/acceptance/417/', 'tests/acceptance/418/', 'tests/acceptance/464/', 'tests/acceptance/1646/',
@@ -233,6 +236,7 @@ for (const [reason, entries] of Object.entries({
   ],
   "shared: the checkout's built packages": ['tests/acceptance/2696/'],
   'shared: the sandbox log stream': [
+    'tests/acceptance/3570/',
     'tests/acceptance/67/', 'tests/acceptance/66/', 'tests/acceptance/103/', 'tests/acceptance/363/', 'tests/acceptance/365/', 'tests/acceptance/262/', 'tests/acceptance/366/',
     'tests/acceptance/881/', 'tests/acceptance/411/', 'tests/acceptance/236/', 'tests/acceptance/30/', 'tests/acceptance/104/', 'tests/acceptance/989/', 'tests/acceptance/37/',
     'tests/acceptance/348/', 'tests/acceptance/349/', 'tests/acceptance/351/', 'tests/acceptance/355/', 'tests/acceptance/139/', 'tests/acceptance/996/', 'tests/acceptance/832/',
