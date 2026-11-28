@@ -995,7 +995,7 @@
   "crates/deep-hook/src/tests.rs": 2,
   "crates/deep-hook/src/tool_paths.rs": 21,
   "crates/deep-hook/tests/busy_disk.rs": 28,
-  "crates/deep-hook/tests/cli.rs": 90,
+  "crates/deep-hook/tests/cli.rs": 76,
   "crates/deep-hook/tests/unreadable_payloads.rs": 37,
   "crates/deep-images/src/animated.rs": 54,
   "crates/deep-images/src/level.rs": 29,
