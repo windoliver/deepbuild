@@ -141,7 +141,7 @@ const listEdit = (before, after) => {
   return [added.length && `adds ${added.join(', ')}`, removed.length && `removes ${removed.join(', ')}`].filter(Boolean).join(' and ') || 'changes it';
 };
 
-/** Why a suite's lane file isn't `{ "alone": true, "why": "<reason>" }` (lanes.mjs, LANE_FILE), or null when it is. */
+/** Why a suite's lane file isn't `{ "alone": true, "why": "<reason>" }`, with `timed` and `slow` name lists at most, or null. */
 function laneFileProblem(text) {
   let lane;
   try {
@@ -150,10 +150,19 @@ function laneFileProblem(text) {
     return 'it is not JSON';
   }
   if (!lane || typeof lane !== 'object' || Array.isArray(lane)) return 'it is not a JSON object';
-  const others = Object.keys(lane).filter((key) => key !== 'alone' && key !== 'why');
-  if (others.length) return `it says ${others.map((key) => JSON.stringify(key)).join(', ')}, and a lane file may say only "alone" and "why"`;
+  const others = Object.keys(lane).filter((key) => !['alone', 'why', 'timed', 'slow'].includes(key));
+  if (others.length) return `it says ${others.map((key) => JSON.stringify(key)).join(', ')}, and a lane file may say only "alone", "why", "timed" and "slow"`;
   if (lane.alone !== true) return 'its "alone" is not true';
   if (typeof lane.why !== 'string' || !lane.why.trim()) return 'it gives no "why"';
+  for (const key of ['timed', 'slow']) if (key in lane && !(Array.isArray(lane[key]) && lane[key].every((name) => typeof name === 'string' && name))) return `its "${key}" is not a list of file names`;
+  return null;
+}
+
+function namedFileProblem(name, folder, holds, added) {
+  const path = posix.normalize(`${folder}${name}`);
+  if (name.startsWith('/') || !path.startsWith(folder) || !/\.test\.(?:ts|mjs|js)$/.test(name)) return `it names ${JSON.stringify(name)}, which is no test file of ${folder}`;
+  if (!holds(path)) return `it names ${path}, which the tree doesn't hold`;
+  if (!added(path)) return `it names ${path}, which an earlier commit added; a lane file names only the files the commit that adds it adds`;
   return null;
 }
 
@@ -216,14 +225,23 @@ export function guard({ root, change, issue }, approvals, say) {
       if (text === null) return;
       // A name a disk that folds case reads as tests/acceptance/<issue>/lane.json is refused even approved, as is a wrong
       // shape there; anywhere else lanes.mjs never reads it.
-      const problem = laneFileProblem(text), folder = LANE_FILE.exec(path)?.[1], read = LANE_FILE.test(fold(path));
-      if (read && !folder) judge({ detail: `${path}: a lane file named other than exactly ${fold(path)}, which a disk that folds case reads in its place${how}`, hard: true }, path);
-      else if (problem && read) judge({ detail: `${path}: a suite's lane file refused${how}, since ${problem}`, hard: true }, path);
-      else if (landed) return;
-      else if (!folder) judge({ detail: `${path}: a lane file lanes.mjs never reads, since it reads only tests/acceptance/<issue>/lane.json` }, path);
-      else if (folder !== String(issue?.number)) judge({ detail: `${path}: a lane file in #${folder}'s folder, added by a change ${issue?.number ? `that names #${issue.number}` : 'that names no issue'}; a new one lands only with its own issue's suite` }, path);
-      // A landed suite's tests run where they ran: alone, a test that fails only beside the parallel block would pass.
-      else if (git(root, ['ls-tree', '--name-only', change.base, '--', `tests/acceptance/${folder}/`]).trim()) judge({ detail: `${path}: a lane file added to tests/acceptance/${folder}/, whose files landed before it; a new one lands only with its suite` }, path);
+      const problem = laneFileProblem(text), place = LANE_FILE.exec(path), read = LANE_FILE.test(fold(path));
+      const folder = path.slice(0, -'lane.json'.length), own = place && !place[2] && !place[3];
+      if (read && !place) return judge({ detail: `${path}: a lane file named other than exactly ${fold(path)}, which a disk that folds case reads in its place${how}`, hard: true }, path);
+      if (problem && read) return judge({ detail: `${path}: a suite's lane file refused${how}, since ${problem}`, hard: true }, path);
+      if (landed) return;
+      if (place) {
+        const adding = change.commits.find((at) => show(root, at.parent, path) === null && show(root, at.sha, path) !== null) ?? commit, head = change.commits.at(-1) ?? commit;
+        const lane = JSON.parse(text);
+        for (const name of [...lane.timed ?? [], ...lane.slow ?? []]) {
+          const why = namedFileProblem(name, folder, (file) => show(root, commit.sha, file) !== null && show(root, head.sha, file) !== null, (file) => show(root, adding.parent, file) === null && show(root, adding.sha, file) !== null);
+          if (why) judge({ detail: `${path}: a suite's lane file refused${how}, since ${why}`, hard: true }, path);
+        }
+      }
+      if (!place) judge({ detail: `${path}: a lane file lanes.mjs never reads, since it reads only a numbered suite's tests/acceptance/<issue>/lane.json, a redraft or oracle folder's tests/acceptance/<issue>-<suffix>/lane.json, or a redraft or oracle subfolder's` }, path);
+      else if (own && place[1] !== String(issue?.number)) judge({ detail: `${path}: a lane file in #${place[1]}'s folder, added by a change ${issue?.number ? `that names #${issue.number}` : 'that names no issue'}; a new one lands only with its own issue's suite` }, path);
+      // A landed folder's tests run where they ran: alone, a test that fails only beside the parallel block would pass.
+      else if (git(root, ['ls-tree', '--name-only', change.base, '--', folder]).trim()) judge({ detail: `${path}: a lane file added to ${folder}, whose files landed before it; a new one lands only with its folder's files` }, path);
     };
     for (const path of (commit.merge?.conflicts ?? []).filter(isLaneFile)) laneEdits(path, true, ' in resolving a merge conflict');
     if (commit.merge?.conflicts.includes(APPROVERS)) judge({ detail: `${APPROVERS}: changed in resolving a merge conflict` }, APPROVERS);

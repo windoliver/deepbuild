@@ -1,0 +1,12 @@
+{
+  "packages/reading/src/index.ts": [
+    {
+      "find": [
+        "    const note = none && p.file === undefined && (p.what.match(/[\\p{L}\\p{M}\\p{N}]+/gu)?.length ?? 0) > 1 ? `Nothing in the record holds ${JSON.stringify(p.what)} as one run of characters.` : undefined;"
+      ],
+      "wrong": [
+        "    const note = none && p.file === undefined && (p.what.match(/[\\p{L}\\p{M}\\p{N}]+/gu)?.length ?? 0) > 0 ? `Nothing in the record holds ${JSON.stringify(p.what)} as one run of characters.` : undefined;"
+      ]
+    }
+  ]
+}

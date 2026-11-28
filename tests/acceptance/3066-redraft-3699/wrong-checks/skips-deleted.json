@@ -1,0 +1,12 @@
+[
+  {
+    "find": [
+      "  const deleted = before.tests.filter((path) => !existsSync(join(root, path)));",
+      "  const files = before.tests.filter((path) => !deleted.includes(path));"
+    ],
+    "wrong": [
+      "  const deleted = [];",
+      "  const files = before.tests.filter((path) => existsSync(join(root, path)));"
+    ]
+  }
+]

@@ -22,6 +22,7 @@ import { controlToken, hubAddress, installedRoot, underTemp } from './paths.js';
 import { majorsApart, outsideContract } from './wire.js';
 import { activePlant as plant } from './plant.js';
 import { counted, rebuilding, replayingOf } from './replay.js';
+import { covered, listedPlugin, paseoCovered, paseoVersion, PLUGIN_ID, pluginProblem, pluginSource, sourceProblem } from './paseo-reading.js';
 import { serviceFile } from './service.js';
 import { relationItems } from './setup.js';
 import { describe, unrunnable } from './hook-programs.js';
@@ -197,8 +198,8 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
   // Each agent's binary, version, sign-in and billing; Claude Code's token lifetime, test prompt and jobs' binary.
   const path = env.PATH ?? '';
   const loginPath = loginPathOf(root);
-  const [claude, codex] = await Promise.all([which('claude', path), which('codex', path)]);
-  await Promise.all([claudeItems(claude, loginPath, env, options.prompt, add), codexItems(codex, env, add)]);
+  const [claude, codex, paseo] = await Promise.all([which('claude', path), which('codex', path), which('paseo', path)]);
+  await Promise.all([claudeItems(claude, loginPath, env, options.prompt, add), codexItems(codex, env, add), paseo ? paseoItems(paseo, add) : undefined]);
   // The canvas: its GPU adapter and tier, a fixture rendered headless against its golden, and its verdict (#140).
   items.push(...(await canvasItems(env)));
   // The app's footprint beside the gauges for what it owns (#1431).
@@ -375,6 +376,23 @@ async function codexItems(codex: string | undefined, env: NodeJS.ProcessEnv, add
   if (signedIn === 'signed_in') add('codex.sign_in', agent, 'healthy', 'ok', 'codex login status exits 0: signed in', 'Nothing to do.');
   else add('codex.sign_in', agent, 'signed_out', 'fail', signedIn === 'signed_out' ? 'codex login status exits non-zero: not signed in' : "codex login status couldn't be read: not signed in", 'Run codex login.');
   billing(agent, 'Codex', env, add);
+}
+async function paseoItems(paseo: string, add: (...a: [string, string, Item['code'], Item['level'], string, string]) => void): Promise<void> {
+  const agent = 'paseo';
+  const [read, listed, unresolved] = await Promise.all([paseoVersion(paseo, 30_000), listedPlugin(paseo, 30_000), sourceProblem(30_000)]);
+  if ('unread' in read) add('paseo.binary', agent, 'binary_missing', 'fail', read.unread, 'Reinstall paseo.');
+  else if (!paseoCovered(read.version)) add('paseo.binary', agent, 'version_uncovered', 'fail', `${paseo} is paseo ${read.version}, not a version DeepBuild's plugin covers (${covered()}): paseo refuses to load the plugin, so agents with no hooks of their own run there ungated`, `Install a paseo the facts cover (${covered()}), or a DeepBuild that covers ${read.version}.`);
+  else add('paseo.binary', agent, 'healthy', 'ok', `${paseo} is paseo ${read.version}, which DeepBuild's plugin covers`, 'Nothing to do.');
+  if ('unread' in listed) add('paseo.plugin', agent, 'not_checked', 'skip', `${listed.unread}, so whether paseo loaded DeepBuild's plugin wasn't read`, "Start paseo's daemon, then run deep doctor again.");
+  else if (!listed.plugin) add('paseo.plugin', agent, 'hooks_missing', 'fail', `paseo lists no plugin ${PLUGIN_ID}, so agents with no hooks of their own run there ungated`, 'Run `deep setup`, which installs it through paseo plugin install.');
+  else {
+    const problem = pluginProblem(listed.plugin);
+    if (!problem) add('paseo.plugin', agent, 'healthy', 'ok', `paseo lists its plugin ${PLUGIN_ID} installed, enabled and loaded`, 'Nothing to do.');
+    else if (listed.plugin.status === 'disabled' || listed.plugin.enabled === false) add('paseo.plugin', agent, 'hooks_disabled', 'fail', problem, `Run \`paseo plugin enable ${PLUGIN_ID}\`.`);
+    else add('paseo.plugin', agent, 'not_loaded', 'fail', problem, 'Fix what paseo names, then run `paseo plugin reload deepbuild`.');
+  }
+  if (unresolved) add('paseo.source', agent, 'source_unresolved', 'fail', `${unresolved}, so deep setup can't install the plugin`, 'Update DeepBuild to a release whose plugin source resolves.');
+  else add('paseo.source', agent, 'healthy', 'ok', `the plugin's source ${pluginSource()} resolves`, 'Nothing to do.');
 }
 /** A billing key set where your sessions start makes them bill an API account; never shows its value. */
 function billing(agent: string, name: string, env: NodeJS.ProcessEnv, add: (...a: [string, string, Item['code'], Item['level'], string, string]) => void): void {

@@ -1,11 +1,11 @@
 // Installed data packs (#1820): immutable manifests and license files, pinned by owner/name@version.
 // Downloads and authority live in the library fetch job; this module never calls the network or admits bytes.
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { canonicalize, isRecord as object, type JsonValue } from '@deepbuild/contracts';
-import { checkPacks, type Canvas } from './canvas.js';
+import { checkPacks, type Canvas, type PackChecks } from './canvas.js';
 
 type Obj = Record<string, unknown>;
 const hash = (v: string | Uint8Array) => createHash('sha256').update(v).digest('hex');
@@ -15,7 +15,9 @@ export interface PackAsset {
   path: string; url: string; sha256: string; size: number;
   license: { id: string; terms: string; shareable: boolean; credit: string | null };
   upstream: { url: string; version: string; modified: string };
+  title?: string; publisher?: string; edition?: string;
 }
+export const PUBLICATION_FIELDS = ['title', 'publisher', 'edition'] as const;
 export interface PackVersion {
   id: string; version: string; ref: string; digest: string; manifest: Obj; assets: PackAsset[];
   /** How many times the canvas core's pack check ran on this version, for a pack the release ships (#1720). */
@@ -52,6 +54,7 @@ export function readPack(from: string, shipped = false): PackVersion {
     if (a.url === undefined) { a.hex = local(from, a.path).toString('hex'); continue; }
     const l = a.license, u = a.upstream;
     if (typeof a.url !== 'string' || !object(l) || typeof l.id !== 'string' || !l.id || typeof l.terms !== 'string' || !l.terms || typeof l.shareable !== 'boolean' || (l.credit !== null && typeof l.credit !== 'string') || !object(u) || typeof u.url !== 'string' || typeof u.version !== 'string' || typeof u.modified !== 'string') throw Error(`${m.id}: ${a.path} needs its URL, license terms and pinned upstream`);
+    for (const field of PUBLICATION_FIELDS) if (a[field] !== undefined && (typeof a[field] !== 'string' || !a[field])) throw Error(`${m.id}: ${a.path} names its ${field} as text, or leaves it out`);
     urlOf(a.url); urlOf(u.url);
     if (/^https:\/\//.test(l.terms)) urlOf(l.terms);
     else l.terms = local(from, l.terms).toString('utf8');
@@ -90,11 +93,13 @@ export interface Refusal { ref: string; digest: string; issues: unknown[]; check
 export class Packs {
   private readonly held = new Map<string, PackVersion>();
   private readonly folder: string;
+  readonly checks: PackChecks;
   /** The release's packs, read, checked and installed once a process, as the canvas core starts (#1720). */
   private shipping?: ReturnType<typeof releasePacks>;
   private release?: Promise<Obj[]>;
   constructor(root: string) {
     this.folder = join(root, 'packs');
+    this.checks = { dir: join(this.folder, 'checked'), key: randomBytes(32).toString('hex') };
     mkdirSync(join(this.folder, 'refused'), { recursive: true });
     for (const name of readdirSync(this.folder)) if (name.endsWith('.json')) {
       const pack = JSON.parse(readFileSync(join(this.folder, name), 'utf8')) as PackVersion;
@@ -139,7 +144,7 @@ export class Packs {
     const staged = fresh.map(({ folder, pack }) => ({ folder, pack, dir: this.stage(pack) }));
     let checked: Obj[];
     try {
-      checked = await checkPacks(canvas, staged.map(({ pack, dir }) => ({ id: pack.id, dir })));
+      checked = await checkPacks(canvas, staged.map(({ pack, dir }) => ({ id: pack.id, dir })), this.checks);
     } catch (error) {
       const why = error instanceof Error ? error.message : String(error);
       return [...rows, ...fresh.map(({ folder, pack }) => ({ folder, pack: pack.id, version: pack.version, state: 'not_checked', issues: [why] }))];

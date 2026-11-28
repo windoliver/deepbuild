@@ -29,7 +29,7 @@ fn texel(f: wgpu::TextureFormat) -> u64 {
 /// What the renderers drawing `scene` hold beside the view's slots and upscale:
 /// - each internal pixel: the linear, ID and depth targets, the geometry pass's stored samples
 ///   of the IDs and depth (its color's are memoryless), and, while a list is culled on the GPU,
-///   the cull's prepass depth at those samples and its pyramid, a third more for its mips; and
+///   the cull's pyramid, a third more for its mips; and
 ///   a quarter of the same for a mirror's own view, which draws at half the internal size
 ///   (#2691);
 /// - whatever that size: each view's own (each solid's record, the glyph atlas where a label
@@ -63,8 +63,10 @@ fn view(scene: &Scene, planted: &Planted) -> Held {
         (texel(LINEAR) + texel(IDS) + texel(DEPTH) + samples * (texel(IDS_MS) + texel(DEPTH)))
             as f64;
     if culls(scene) {
-        per_px += (samples * texel(DEPTH)) as f64
-            + texel(wgpu::TextureFormat::R32Float) as f64 * 4.0 / 3.0;
+        per_px += texel(wgpu::TextureFormat::R32Float) as f64 * 4.0 / 3.0;
+        if planted.estimate_counts_occluders_depth {
+            per_px += (samples * texel(DEPTH)) as f64;
+        }
     }
     let solids = scene
         .layers

@@ -26,6 +26,7 @@ const TILE: u32 = 16;
 pub struct Planted {
     /// A circle of confusion linear in |d − s|, matched to the physical one at 10 m.
     pub linear_coc: bool,
+    pub reads_shared_before_write: bool,
 }
 
 deep_gpu::paired! { params: "dof.wgsl", Params;
@@ -59,6 +60,8 @@ pub struct Dofer {
     params: wgpu::Buffer,
     written: Written,
     sized: Option<Sized>,
+    /// The wrong programs the last frame's prepare was given.
+    planted: Planted,
 }
 
 impl Dofer {
@@ -165,6 +168,7 @@ impl Dofer {
             params,
             written: Written::default(),
             sized: None,
+            planted: Planted::default(),
         }
     }
 
@@ -190,6 +194,7 @@ impl Dofer {
         exposure: f64,
         planted: Planted,
     ) {
+        self.planted = planted;
         let [w, h] = [size[0] as f32, size[1] as f32];
         // The CoC is in px of the scene's frame; the targets may draw at another size.
         let scale = f64::from(size[0]) / camera.size[0].max(1.0);
@@ -244,6 +249,7 @@ impl Dofer {
         size: [u32; 2],
         linear: &wgpu::TextureView,
         depth: &wgpu::TextureView,
+        resolved: &(wgpu::Texture, wgpu::TextureView),
     ) -> Sized {
         let d = &device.device;
         let texture = |label: &str, size: [u32; 2], format, usage| {
@@ -276,12 +282,6 @@ impl Dofer {
             wgpu::TextureFormat::R32Float,
             both,
         );
-        let resolved = texture(
-            "scene3d.dof resolved",
-            size,
-            LINEAR,
-            wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::COPY_SRC,
-        );
         let scattered = d.create_buffer(&wgpu::BufferDescriptor {
             label: Some("scene3d.dof scattered"),
             size: u64::from(size[0]) * u64::from(size[1]) * 12,
@@ -289,8 +289,8 @@ impl Dofer {
             mapped_at_creation: false,
         });
         let view = |t: &wgpu::Texture| t.create_view(&Default::default());
-        let (base_view, coc_view, tiles_view, resolved_view) =
-            (view(&base), view(&coc), view(&tiles), view(&resolved));
+        let (base_view, coc_view, tiles_view) = (view(&base), view(&coc), view(&tiles));
+        let resolved_view = &resolved.1;
         let entry = |binding, resource| wgpu::BindGroupEntry { binding, resource };
         let tex = wgpu::BindingResource::TextureView;
         let params = self.params.as_entire_binding();
@@ -337,7 +337,7 @@ impl Dofer {
                     entry(7, scattered.as_entire_binding()),
                     entry(8, tex(&base_view)),
                     entry(9, tex(&tiles_view)),
-                    entry(10, tex(&resolved_view)),
+                    entry(10, tex(resolved_view)),
                 ],
             ),
         ];
@@ -347,26 +347,25 @@ impl Dofer {
             depth: depth.clone(),
             coc,
             scattered,
-            resolved,
+            resolved: resolved.0.clone(),
             binds,
         }
     }
 
-    /// The dof over `linear` (its texture and view) against `depth`, at `size`.
     pub fn job(
         &mut self,
         device: &Device,
         size: [u32; 2],
         linear: (&wgpu::Texture, &wgpu::TextureView),
         depth: &wgpu::TextureView,
+        resolved: &(wgpu::Texture, wgpu::TextureView),
         profiler: &Option<crate::Profiler>,
     ) -> Job {
-        let keep = self
-            .sized
-            .as_ref()
-            .is_some_and(|s| s.size == size && &s.linear == linear.1 && &s.depth == depth);
+        let keep = self.sized.as_ref().is_some_and(|s| {
+            s.size == size && &s.linear == linear.1 && &s.depth == depth && s.resolved == resolved.0
+        });
         if !keep {
-            self.sized = Some(self.sized(device, size, linear.1, depth));
+            self.sized = Some(self.sized(device, size, linear.1, depth, resolved));
         }
         let s = self.sized.as_ref().expect("sized above");
         let (pipes, binds) = (self.pipes.clone(), s.binds.clone());
@@ -375,10 +374,20 @@ impl Dofer {
         let profiler = profiler.clone();
         let pixels = [size[0].div_ceil(8), size[1].div_ceil(8)];
         let tiles = [size[0].div_ceil(TILE), size[1].div_ceil(TILE)];
+        let extent = wgpu::Extent3d {
+            width: size[0],
+            height: size[1],
+            depth_or_array_layers: 1,
+        };
+        let early = self.planted.reads_shared_before_write;
         Box::new(move |encoder| {
             encoder.clear_buffer(&scattered, 0, None);
             // Each pass is timed under DOF_PASS; the profiler sums them by label.
             for (k, (pipe, bind)) in pipes.iter().zip(&binds).enumerate() {
+                if early && k == 3 {
+                    let (from, to) = (resolved.as_image_copy(), linear_texture.as_image_copy());
+                    encoder.copy_texture_to_texture(from, to, extent);
+                }
                 let query = profiler
                     .as_ref()
                     .map(|p| crate::status::lock(p).begin_pass_query(DOF_PASS, encoder));
@@ -399,15 +408,10 @@ impl Dofer {
                     crate::status::lock(p).end_query(encoder, q);
                 }
             }
-            encoder.copy_texture_to_texture(
-                resolved.as_image_copy(),
-                linear_texture.as_image_copy(),
-                wgpu::Extent3d {
-                    width: size[0],
-                    height: size[1],
-                    depth_or_array_layers: 1,
-                },
-            );
+            if !early {
+                let (from, to) = (resolved.as_image_copy(), linear_texture.as_image_copy());
+                encoder.copy_texture_to_texture(from, to, extent);
+            }
         })
     }
 }

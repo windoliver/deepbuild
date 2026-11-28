@@ -394,7 +394,10 @@ mod tests {
     #[std::prelude::v1::test]
     fn a_match_ends_on_a_whole_character() {
         // İ lower-cases to two characters: a query ending inside it isn't there.
-        assert_eq!(found("xİy", "xi\u{307}y"), [0..4]);
+        assert_eq!(
+            found("xİy", "xi\u{307}y"),
+            [std::ops::Range { start: 0, end: 4 }]
+        );
         assert!(found("xİy", "xi").is_empty());
     }
 }
