@@ -8,6 +8,8 @@ import { isObject, OPERATIONS, shippedIn } from './facts.js';
 import type { Adapter, AdapterRegistry, Drift, JsonObject } from './types.js';
 
 export { ADAPTERS, factsAdapter, factsFiles, readFacts } from './facts.js';
+export { LiveTranscriptReader } from './live-transcript.js';
+export { transcriptReaders } from './transcripts.js';
 
 export type {
   Adapter, AdapterCaps, AdapterEvent, AdapterParts, AdapterRegistry, DoctorItem, Drift, HookOutput, HookRequestLine, JsonObject, Mapped, PermissionAnswer, Reading,

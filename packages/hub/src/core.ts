@@ -112,7 +112,7 @@ import { CODEX_BINARY, CLAUDE_BINARY, HOUR, ARCHIVED_THREADS_MS, DRIFT_MS, DAY, 
 import { leasesScreen, offScreen } from './screen-gate.js';
 
 import { HubCanvas } from './hub-canvas.js';
-import { TranscriptReader } from './transcript-reader.js';
+import { LiveTranscriptReader, transcriptReaders } from '@deepbuild/adapters';
 import { AnswerDelivery } from './answer-delivery.js';
 import { StopJudging } from './stop-judging.js';
 import { SessionMemory } from './session-memory.js';
@@ -185,7 +185,7 @@ export class Core {
     this.control = new HubControl({ settings: this.options, services: lazyServices({ wikiWritten: () => this.providers.knowledge.writtenOf, log: () => this.log, people: () => this.people, numbers: () => this.numbers, staging: () => this.staging, agents: () => this.agents, box: () => this.box, extensions: () => this.extensions, runs: () => this.runs, hosts: () => this.hosts, sessionStarts: () => this.sessionStarts, heavy: () => this.heavy, wikiBuild: () => this.wikiBuild, raw: () => this.raw, root: () => this.root, record: () => this.record, now: () => this.now, acceptance: () => this.acceptance, landing: () => this.landing, work: () => this.work, runner: () => this.runner, checkKinds: () => this.checkKinds, canvasSide: () => this.canvasSide, spaces: () => this.spaces, asks: () => this.asks, tasks: () => this.tasks, entries: () => this.entries, store: () => this.store, devices: () => this.devices, confirmer: () => this.confirmer, teardowns: () => this.teardowns, openItems: () => this.openItems, checkouts: () => this.checkouts, channels: () => this.channels, libraries: () => this.libraries, jobKinds: () => this.jobKinds, durable: () => this.durable, stacks: () => this.stacks, intakeOf: () => this.providers.workspaces.intake }), delivery: () => this.delivery, judging: () => this.judging, state: () => this.state, memory: () => this.memory, transcripts: () => this.transcripts, events: { connection: (writer, extra) => this.connection(writer, extra), appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), appendReading: (session, agent, reading, hook, code) => this.appendReading(session, agent, reading, hook, code), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { get ready() { return readready(); }, get blocked() { return readblocked(); }, get jobs() { return readjobs(); } }, schedule: { testClock: (params) => this.testClock(params), replayLate: (kept) => this.replayLate(kept), get replaying() { return readreplaying(); }, queue: (work, starting) => this.queue(work, starting) } });
   }
 
-  private transcriptReader!: TranscriptReader;
+  private transcriptReader!: LiveTranscriptReader;
   private canvasSide!: HubCanvas;
   private root!: Root;
   private now!: () => number;
@@ -381,7 +381,7 @@ export class Core {
   }
   private wireHookServices(): void {
     const options = this.options;
-    this.transcriptReader = new TranscriptReader({ plant: options.plant, now: () => this.now() });
+    this.transcriptReader = new LiveTranscriptReader({ plant: options.plant, now: () => this.now() });
     this.flags = new SessionFlags({ services: lazyServices({ record: () => this.record, now: () => this.now, asks: () => this.asks, agents: () => this.agents, root: () => this.root, siblings: () => this.siblings, transcriptReader: () => this.transcriptReader }), state: () => this.state, mcp: () => this.mcp, events: { append: (connection, input, backfill) => this.append(connection, input, backfill), connection: (writer, extra) => this.connection(writer, extra) }, schedule: { queue: (work, starting) => this.queue(work, starting) }, readCodexTrust: (cwd) => this.readCodexTrust(cwd), wake: (job) => this.beats.wake(job) });
     this.canvasSide = new HubCanvas({
       root: rootOf(options.root), now: () => this.now(), plant: options.plant, doneSpec: this.doneSpec,
@@ -655,7 +655,7 @@ export class Core {
     // Each event its own commit, but the core's own made in one turn, an answer and the decision it saves, share one
     // (#22): the durable write points a run makes depend only on the events it appends, so a cut at any one can be replayed.
     // Each read counted against the call it runs for, where one counts its queries (#1576).
-    this.record = counted(receipting(await openRecord({ path: this.root.ledger, now: this.now, evidence: this.store, commitEach: true, ...(storage ? { storage } : {}), ...(this.options.plant === 'turn-closes-at-child-stop' ? { plant: this.options.plant } : {}), ...(this.replayTold ? { replaying: this.replayTold } : {}) })));
+    this.record = counted(receipting(await openRecord({ path: this.root.ledger, now: this.now, evidence: this.store, readers: transcriptReaders, commitEach: true, ...(storage ? { storage } : {}), ...(this.options.plant === 'turn-closes-at-child-stop' ? { plant: this.options.plant } : {}), ...(this.replayTold ? { replaying: this.replayTold } : {}) })));
     if (process.env.DEEP_HUB_TEST_CRASH) this.record = crashing(this.record, process.env.DEEP_HUB_TEST_CRASH);
     if (process.env.DEEP_HUB_TEST_READS) this.record = readsLogged(this.record, process.env.DEEP_HUB_TEST_READS);
     // Every append reaches the stream, whoever appends it: the hub, the asks core, the supervisor or the leases.

@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { afterAll, expect, test } from 'vitest';
 import { session, tag } from '../../../tests/acceptance/63/corpus.ts';
 import { cleanup } from '../../../tests/acceptance/63/helpers.ts';
-import { dataOf, openWorld, runReading } from '../../../tests/acceptance/63/world.ts';
+import { dataOf, openWorld, runReading } from '../../../tests/acceptance/63-redraft-1894/world.ts';
 
 afterAll(cleanup);
 

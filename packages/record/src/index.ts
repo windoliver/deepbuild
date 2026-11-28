@@ -12,7 +12,7 @@ import type { JsonValue, Registry, SchemaEntry } from '@deepbuild/contracts';
 import { scrubText } from '@deepbuild/evidence';
 import type { EvidenceStore, Writer as EvidenceWriter } from '@deepbuild/evidence';
 import { findMessages, foldText, refreshIndex, touched, type FoundMessage } from './archive.js';
-import { CHECKED, copyMessages, loadLearned, parseClaimLine, readEvidence, replayCheck, resolveHandle, ROLLERS, placingTranscript, YOURS, sessionTranscript, startSlice, toRollBack, dependsOn, type ClaimLine, type Entry as Resolved, type HeldAtLoad, type LearnedChange, type LearnedLoad, type Message, type Placing, type SliceEntry, type Transcripts } from './learned.js';
+import { CHECKED, copyMessages, loadLearned, parseClaimLine, readEvidence, replayCheck, resolveHandle, ROLLERS, placingTranscript, YOURS, sessionTranscript, startSlice, toRollBack, dependsOn, type ClaimLine, type Entry as Resolved, type HeldAtLoad, type LearnedChange, type LearnedLoad, type Message, Placing, type SliceEntry, type TranscriptReader, Transcripts, type Turn } from './learned.js';
 import { compareReplay, planHash } from './replay.js';
 import { movable, type Refusal } from './lifecycle.js';
 import { PROJECTIONS, Projector, tableDef, type Projected } from './projections.js';
@@ -26,7 +26,7 @@ export { openTrust, type ProjectTrust } from './trust.js';
 export { recordSize } from './storage.js';
 export { RecordError, writerGeneration, type RecordErrorCode } from './meta.js';
 export type { Comparison, Measure, MeasureResult, ReplayPlan, ReplayResult, ReplayRun, TaskPair, Variant } from './replay.js';
-export type { Backend, ClaimLine, HeldAtLoad, LearnedLoad, Message, Resolved, SliceEntry, Storage, SyncCall, TestStorage };
+export type { Backend, ClaimLine, HeldAtLoad, LearnedLoad, Message, Resolved, SliceEntry, Storage, SyncCall, TestStorage, TranscriptReader, Turn };
 
 /** What the hub's socket proved about a writer's connection (#16 proves it; the record only reads it). */
 export interface Connection {
@@ -88,6 +88,7 @@ export interface RecordOptions {
   now: () => number;
   storage?: Storage;
   evidence?: EvidenceStore;
+  readers?: readonly TranscriptReader[];
   contentFree?: boolean;
   /** Commit each stream event in its own commit, in its append call, so the durable write points depend only on the events (the hub, #16). */
   commitEach?: boolean;
@@ -361,8 +362,8 @@ class SqliteRecord implements RecordStore {
   private unclean = false;
   private next = 1;
   private blockEnd = 1;
-  private readonly transcripts: Transcripts = new Map();
-  private readonly placing: Placing = new Map();
+  private readonly transcripts: Transcripts;
+  private readonly placing: Placing;
   /** The rollback running now, which the next one waits for. */
   private rolling: Promise<unknown> = Promise.resolve();
   /** The archive index's refresh running now (#1515), which the next one waits for, and a close too. */
@@ -372,6 +373,8 @@ class SqliteRecord implements RecordStore {
 
   constructor(private readonly options: RecordOptions, backend: Backend) {
     this.backend = backend;
+    this.transcripts = new Transcripts(options.readers ?? []);
+    this.placing = new Placing(options.readers ?? []);
     this.db = backend.open(options.path);
     // The version first, before any DDL: a record a newer version wrote is refused as it was found.
     const hasMeta = this.db.prepare("SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'meta'").get();
@@ -1070,7 +1073,7 @@ class SqliteRecord implements RecordStore {
 
   indexTranscripts(): Promise<void> {
     // One refresh at a time; each commits a session's rows on its own, so appends go between them.
-    this.indexing = this.indexing.catch(() => undefined).then(() => refreshIndex(this.db, (sha) => copyMessages(this.options.evidence, sha), (work) => this.backend.commit(this.db, 'normal', work), () => this.closing !== undefined));
+    this.indexing = this.indexing.catch(() => undefined).then(() => refreshIndex(this.db, (sha) => copyMessages(this.options.evidence, this.options.readers ?? [], sha), (work) => this.backend.commit(this.db, 'normal', work), () => this.closing !== undefined));
     return this.indexing;
   }
 
@@ -1205,9 +1208,9 @@ export interface RecordReader {
   touched(file: string, cwd?: string): Promise<{ session: string; path: string }[]>;
   close(): void;
 }
-export function openRecordReader(options: { path: string; evidence?: EvidenceStore }): RecordReader {
+export function openRecordReader(options: { path: string; evidence?: EvidenceStore; readers?: readonly TranscriptReader[] }): RecordReader {
   const db = openReadOnly(options.path);
-  const transcripts: Transcripts = new Map();
+  const transcripts = new Transcripts(options.readers ?? []);
   return {
     resolve: (handle) => resolveHandle(db, options.evidence, transcripts, handle),
     transcript: (session) => sessionTranscript(db, options.evidence, transcripts, session),

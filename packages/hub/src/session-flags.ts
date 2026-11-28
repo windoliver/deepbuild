@@ -22,7 +22,7 @@ import { headOf, unpushedOf } from './session-facts.js';
 import type { Session } from './session-types.js';
 import type { Siblings } from './siblings.js';
 import { callFrom, REPEATS, repeatOf } from './status.js';
-import type { TranscriptReader } from './transcript-reader.js';
+import type { LiveTranscriptReader } from '@deepbuild/adapters';
 import { gatesOff, watched, watchWords, type WatchCause } from './watch.js';
 import { derivedId, ulid, type Draft, type HookMeta } from './wire.js';
 
@@ -34,7 +34,7 @@ export interface SessionFlagsOptions {
     readonly agents: Agents;
     readonly root: Root;
     readonly siblings: Siblings;
-    readonly transcriptReader: TranscriptReader;
+    readonly transcriptReader: LiveTranscriptReader;
   };
   state: () => Pick<SessionStatePort, 'sessions' | 'live' | 'versioned'>;
   mcp: () => Pick<McpOperationsPort, 'pinOf'>;

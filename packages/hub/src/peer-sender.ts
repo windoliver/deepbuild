@@ -2,7 +2,7 @@ import { childPrompt, isObj, type Obj } from './hub-shared.js';
 import type { Plant } from './plant.js';
 import type { Live, Session } from './session-types.js';
 import type { Siblings } from './siblings.js';
-import type { TranscriptReader } from './transcript-reader.js';
+import type { LiveTranscriptReader } from '@deepbuild/adapters';
 import { turnFrom } from './turn-loops.js';
 import type { HookMeta } from './wire.js';
 
@@ -49,7 +49,7 @@ export async function loopHoldFor(
   live: Live | undefined,
   session: Session | undefined,
   siblings: Siblings,
-  transcriptReader: TranscriptReader,
+  transcriptReader: LiveTranscriptReader,
   raw: RawQuery,
   sessions: ReadonlyMap<string, Session>,
   plant?: Plant,

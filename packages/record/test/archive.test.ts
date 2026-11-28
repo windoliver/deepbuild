@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { openEvidenceStore } from '@deepbuild/evidence';
+import { transcriptReaders } from '@deepbuild/adapters';
 import { foldText, openRecord, openRecordReader, ulid, type Connection } from '../src/index.js';
 
 const T0 = 1_760_013_451_000;
@@ -15,7 +16,7 @@ it('searches a session at its newest archived copy, before and after the index c
   const root = mkdtempSync(join(tmpdir(), 'deep-archive-index-'));
   roots.push(root);
   const store = await openEvidenceStore({ root: join(root, 'evidence'), now: () => T0 });
-  const record = await openRecord({ path: join(root, 'ledger.db'), now: () => T0, evidence: store });
+  const record = await openRecord({ path: join(root, 'ledger.db'), now: () => T0, evidence: store, readers: transcriptReaders });
   const S = 'sa1';
   const core: Connection = { writer: 'core', actor: 'you', scope: 'you', session: S };
   await record.append({ ...core, writer: 'hook' }, { v: 1, id: ulid(T0), kind: 'session.start', ts: T0, data: { agent: 'claude-code', worktree: '/tmp/shop', branch: 'main', thread: S } });
@@ -26,7 +27,7 @@ it('searches a session at its newest archived copy, before and after the index c
     await record.append(core, { v: 1, id: ulid(at), kind: 'transcript.archived', ts: at, data: { session: `session:${S}`, evidence: put.evidence.sha256 } });
   };
   const found = async (word: string) => {
-    const reader = openRecordReader({ path: join(root, 'ledger.db'), evidence: store });
+    const reader = openRecordReader({ path: join(root, 'ledger.db'), evidence: store, readers: transcriptReaders });
     try {
       return { store: (await record.findMessages([[foldText(word)]])).map((m) => `${m.session}#${m.id}`), reader: (await reader.findMessages([[foldText(word)]])).map((m) => `${m.session}#${m.id}`) };
     } finally { reader.close(); }

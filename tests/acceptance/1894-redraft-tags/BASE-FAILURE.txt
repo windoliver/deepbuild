@@ -1,0 +1,158 @@
+
+ RUN  v5.0.5 <repo>/tests/acceptance/1894-redraft-tags
+
+ ✓ rows.test.ts > AC3 #1894: the learned rows of the recorded sessions are byte for byte the merge base's > the golden holds every shipped format, with rows both in force and refused 2ms
+ × rows.test.ts > AC3 #1894: the learned rows of the recorded sessions are byte for byte the merge base's > AC3 #1894.6158c2a1 with the shipped agents' readers, the record gives the base's learned rows, resolved handles and session transcripts 3ms
+   → @deepbuild/adapters exports transcriptReaders, the shipped agents' transcript readers: expected false to be true // Object.is equality
+ ✓ names.test.ts > AC1 #1894: packages/record/src names no agent and imports no adapter > ordinary words that look like agent names are not findings 4ms
+ ✓ names.test.ts > AC1 #1894: packages/record/src names no agent and imports no adapter > the scan fails on a copy of the sources with Claude Code planted 9ms
+ ✓ names.test.ts > AC1 #1894: packages/record/src names no agent and imports no adapter > the scan fails on a copy of the sources with claude-code planted 10ms
+ ✓ names.test.ts > AC1 #1894: packages/record/src names no agent and imports no adapter > the scan fails on a copy of the sources with Codex planted 8ms
+ ✓ names.test.ts > AC1 #1894: packages/record/src names no agent and imports no adapter > the scan fails on a copy of the sources with pi planted 7ms
+ ✓ names.test.ts > AC1 #1894: packages/record/src names no agent and imports no adapter > the scan fails on a copy of the sources with Cursor planted 5ms
+ ✓ names.test.ts > AC1 #1894: packages/record/src names no agent and imports no adapter > the scan fails on a copy of the sources with Gemini planted 7ms
+ ✓ names.test.ts > AC1 #1894: packages/record/src names no agent and imports no adapter > the scan fails on a copy of the sources with OpenCode planted 9ms
+ ✓ names.test.ts > AC1 #1894: packages/record/src names no agent and imports no adapter > the scan fails on a copy of the sources with an adapter import planted 6ms
+ ✓ names.test.ts > AC1 #1894: packages/record/src names no agent and imports no adapter > the scan fails on a copy of the sources with an adapter path import planted 10ms
+ ✓ names.test.ts > AC1 #1894: packages/record/src names no agent and imports no adapter > the scan fails on a copy of the sources with an adapter dynamic import planted 7ms
+ × names.test.ts > AC1 #1894: packages/record/src names no agent and imports no adapter > AC1 #1894.e096ddb3 no file under packages/record/src names an agent or imports an adapter 12ms
+   → expected 'learned.ts:79 names Claude / Claude C…' to be '' // Object.is equality
+ × format.test.ts > AC2 #1894: a transcript format added in a test adapter is learned from with no edit under packages/record > AC2 #1894.93152973 a learned change quoting a turn of the new format is in force; one quoting words the turn lacks is refused 136ms
+   → the quote is in the person's turn t1: expected { …(15) } to match object { state: 'applied', reason: null }
+(13 matching properties omitted from actual)
+ × format.test.ts > AC2 #1894: a transcript format added in a test adapter is learned from with no edit under packages/record > AC2 #1894.93152973 the record and its reader resolve the new format's handles and give its turns, a reader started for each transcript 29ms
+   → expected undefined to match object { …(3) }
+ × format.test.ts > AC2 #1894: a transcript format added in a test adapter is learned from with no edit under packages/record > AC2 #1894.93152973 for each line the first reader that returns a turn names it 29ms
+   → expected undefined to match object { …(2) }
+ ✓ format.test.ts > AC2 #1894: a transcript format added in a test adapter is learned from with no edit under packages/record > with no readers the record reads no turn of the new format 37ms
+ ✓ format.test.ts > AC2 #1894: a transcript format added in a test adapter is learned from with no edit under packages/record > nothing under packages/record names the new format 8ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  format.test.ts > AC2 #1894: a transcript format added in a test adapter is learned from with no edit under packages/record > AC2 #1894.93152973 a learned change quoting a turn of the new format is in force; one quoting words the turn lacks is refused
+AssertionError: the quote is in the person's turn t1: expected { …(15) } to match object { state: 'applied', reason: null }
+(13 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "reason": null,
+-   "state": "applied",
++   "reason": "the quote \"closes at midnight\" is not at its handle session:01K74FKZQR0000000000000000#t1",
++   "state": "refused",
+  }
+
+ ❯ format.test.ts:69:77
+     67|     const agents = await learn(w, { layer: 'learned', target: 'slice:l…
+     68|     const fromDisk = await learn(w, { layer: 'learned', target: 'slice…
+     69|     expect(await rowOf(w, quoted), 'the quote is in the person\'s turn…
+       |                                                                             ^
+     70|     expect(await rowOf(w, lineNamed), 'a turn named by its line number…
+     71|     expect(await rowOf(w, ruled), 'a rule you typed, quoting t1').toMa…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  format.test.ts > AC2 #1894: a transcript format added in a test adapter is learned from with no edit under packages/record > AC2 #1894.93152973 the record and its reader resolve the new format's handles and give its turns, a reader started for each transcript
+AssertionError: expected undefined to match object { …(3) }
+
+- Expected:
+{
+  "outside": false,
+  "role": "user",
+  "text": "the ledger closes at midnight UTC",
+}
+
++ Received:
+undefined
+
+ ❯ format.test.ts:83:55
+     81|   it('AC2 #1894.93152973 the record and its reader resolve the new for…
+     82|     const { w, S, O } = await world([tallowmere]);
+     83|     expect(await w.record.resolve(`session:${S}#t1`)).toMatchObject({ …
+       |                                                       ^
+     84|     expect(await w.record.transcript(S)).toEqual(EXPECTED);
+     85|     expect(await w.record.resolve(`session:${O}#u1`), 'the call t3 is …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  format.test.ts > AC2 #1894: a transcript format added in a test adapter is learned from with no edit under packages/record > AC2 #1894.93152973 for each line the first reader that returns a turn names it
+AssertionError: expected undefined to match object { …(2) }
+
+- Expected:
+{
+  "outside": false,
+  "text": "the ledger closes at midnight UTC",
+}
+
++ Received:
+undefined
+
+ ❯ format.test.ts:100:55
+     98|   it('AC2 #1894.93152973 for each line the first reader that returns a…
+     99|     const { w, S } = await world([silent, tallowmere, greedy]);
+    100|     expect(await w.record.resolve(`session:${S}#t1`)).toMatchObject({ …
+       |                                                       ^
+    101|     expect(await w.record.resolve(`session:${S}#n0`), 'the head line, …
+    102|     await w.record.close();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  names.test.ts > AC1 #1894: packages/record/src names no agent and imports no adapter > AC1 #1894.e096ddb3 no file under packages/record/src names an agent or imports an adapter
+AssertionError: expected 'learned.ts:79 names Claude / Claude C…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ learned.ts:79 names Claude / Claude Code / claude-code: * One Claude Code transcript entry: its text, and whether it is no first-hand source: the result of a tool that
++ learned.ts:87 names Codex: /** The shell command a Codex call holds, as text: `cmd` or `command` of a function call's arguments, or the `cmd` an exec script passes. */
++ learned.ts:88 names Codex: function codexCommand(p: Obj): string | undefined {
++ learned.ts:99 names Codex: /** Whether a Codex call's output says the command failed: a non-zero exit, or its metadata's. */
++ learned.ts:100 names Codex: function codexFailed(output: string): boolean {
++ learned.ts:109 names Codex: // A Codex rollout's message (#356): its ID without the `msg_` its type adds, or its line when it has none (a
++ learned.ts:118 names Codex: // A Codex tool call (#356): the agent's own turn, its command as text; and its output, a tool's result.
++ learned.ts:123 names Codex: const command = codexCommand(p);
++ learned.ts:131 names Codex: entries.set(`${call}.out`, { text: out, outside: tool === '' || OUTSIDE.test(tool), role: 'user', tool, error: codexFailed(out), ...(entries.has(call) ? { of: c
++ learned.ts:136 names Claude / Claude Code / claude-code: // Claude Code's message has its `uuid`, pi's its entry's `id`; a Cursor line has neither, so its line names it (#111).
++ learned.ts:136 names pi: // Claude Code's message has its `uuid`, pi's its entry's `id`; a Cursor line has neither, so its line names it (#111).
++ learned.ts:136 names Cursor: // Claude Code's message has its `uuid`, pi's its entry's `id`; a Cursor line has neither, so its line names it (#111).
++ learned.ts:142 names Claude / Claude Code / claude-code: // The agent's turns, and what Claude Code writes under the user's role in its stead: a compaction summary,
++ replay.ts:83 names Claude / Claude Code / claude-code: const MAKERS: [RegExp, string][] = [[/^claude/, 'Anthropic'], [/^(gpt|o\d|codex|chatgpt)/, 'OpenAI'], [/^gemini/, 'Google']];
++ replay.ts:83 names Codex: const MAKERS: [RegExp, string][] = [[/^claude/, 'Anthropic'], [/^(gpt|o\d|codex|chatgpt)/, 'OpenAI'], [/^gemini/, 'Google']];
++ replay.ts:83 names Gemini: const MAKERS: [RegExp, string][] = [[/^claude/, 'Anthropic'], [/^(gpt|o\d|codex|chatgpt)/, 'OpenAI'], [/^gemini/, 'Google']];
+
+ ❯ names.test.ts:48:45
+     46|
+     47|   it('AC1 #1894.e096ddb3 no file under packages/record/src names an ag…
+     48|     expect(shownFindings(scanSources(SRC))).toBe('');
+       |                                             ^
+     49|   });
+     50| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  rows.test.ts > AC3 #1894: the learned rows of the recorded sessions are byte for byte the merge base's > AC3 #1894.6158c2a1 with the shipped agents' readers, the record gives the base's learned rows, resolved handles and session transcripts
+AssertionError: @deepbuild/adapters exports transcriptReaders, the shipped agents' transcript readers: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ rows.test.ts:20:136
+     18|
+     19|   it('AC3 #1894.6158c2a1 with the shipped agents\' readers, the record…
+     20|     expect(Array.isArray(transcriptReaders), '@deepbuild/adapters expo…
+       |                                                                                                                                        ^
+     21|     expect(transcriptReaders.length, 'one reader for each of Claude Co…
+     22|     const now = await runScenario(transcriptReaders);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  5 failed | 14 passed (19)
+   Start at  03:21:28
+   Duration  928ms (transform 69%, tests 18%, import 13%, worker 1%)
+

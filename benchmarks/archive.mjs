@@ -5,7 +5,7 @@
 import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { shipped } from '../packages/adapters/dist/index.js';
+import { shipped, transcriptReaders } from '../packages/adapters/dist/index.js';
 import { openArchive } from '../packages/archive/dist/index.js';
 import { openAsks } from '../packages/asks/dist/index.js';
 import { openEvidenceStore, scrubText } from '../packages/evidence/dist/index.js';
@@ -45,7 +45,7 @@ try {
   const folder = join(env.CLAUDE_CONFIG_DIR, 'projects', '-tmp-shop');
   mkdirSync(folder, { recursive: true });
   const store = await openEvidenceStore({ root: join(root, 'evidence'), now: () => now });
-  const record = await openRecord({ path: join(root, 'ledger.db'), now: () => now, evidence: store });
+  const record = await openRecord({ path: join(root, 'ledger.db'), now: () => now, evidence: store, readers: transcriptReaders });
   const asks = await openAsks({ record, now: () => now, deliver: () => undefined });
   const archive = await openArchive({ record, evidence: store, asks, adapters: shipped(), env, connection: { writer: 'ext:deepbuild/archive', actor: 'you', scope: 'you' }, now: () => now });
   const pathOf = (s) => join(folder, `${s.id}.jsonl`);

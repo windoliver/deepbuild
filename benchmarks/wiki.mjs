@@ -11,7 +11,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { shipped } from '../packages/adapters/dist/index.js';
+import { shipped, transcriptReaders } from '../packages/adapters/dist/index.js';
 import { openArchive } from '../packages/archive/dist/index.js';
 import { openAsks } from '../packages/asks/dist/index.js';
 import { openEvidenceStore } from '../packages/evidence/dist/index.js';
@@ -52,7 +52,7 @@ try {
   }
   const hub = join(root, 'hub');
   const store = await openEvidenceStore({ root: join(hub, 'evidence'), now });
-  const record = await openRecord({ path: join(hub, 'ledger.db'), now, evidence: store });
+  const record = await openRecord({ path: join(hub, 'ledger.db'), now, evidence: store, readers: transcriptReaders });
   const asks = await openAsks({ record, now, deliver: () => undefined });
   const { repoOf } = await import('../packages/hub/dist/paths.js');
   const archive = await openArchive({ record, evidence: store, asks, adapters: shipped(), env, connection: { writer: 'ext:deepbuild/archive', actor: 'you', scope: 'you' }, now, projectOf: (cwd) => repoOf(cwd) });

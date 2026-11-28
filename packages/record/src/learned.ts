@@ -28,12 +28,6 @@ const LEARNED = ['wiki:', 'slice:', 'offer:', 'ext:', 'playbook:', 'step:', 'dra
 const LOCAL_FIRST = 'rule:localfirst';
 /** The rule that applies the claims learned at install, at the scope their evidence covers. */
 const INSTALL = 'rule:install';
-/**
- * Tools whose results are no first-hand source: what the agent fetched, searched for, got from an MCP server, or a
- * subagent's report. Any other tool's result reads as first-hand, as the issue defines outside content: a check's
- * output is the evidence this product runs on, though a file the agent wrote and read back is its own words.
- */
-const OUTSIDE = /^(WebFetch|WebSearch|Glob|Grep|Task|Agent|mcp__.+)$/;
 /** A wiki claim's line, as its page and its change's diff hold it (#355): `- <text> <!-- deep:claim <its record> -->`. */
 export interface ClaimLine { text: string; record: { [key: string]: JsonValue } }
 const CLAIM_LINE = /^- (.*?) <!-- deep:claim (\{.*\}) -->$/;
@@ -75,100 +69,36 @@ const textOf = (stored: string | null): string => {
   return typeof value === 'string' ? value : JSON.stringify(value);
 };
 
-/**
- * One Claude Code transcript entry: its text, and whether it is no first-hand source: the result of a tool that
- * brings outside content, or the agent's own words, which may repeat it (an agent's word is never evidence).
- */
-export interface Entry {
-  text: string; outside: boolean; role?: string; tool?: string;
+/** One turn of a transcript, as an adapter's reader gives it: its text, and whether it is no first-hand source. */
+export interface Turn {
+  id: string; text: string; outside: boolean; role?: string; tool?: string;
   /** A tool's result: the message that holds its call, and whether the tool reported an error (#356). */
   of?: string; error?: boolean;
 }
-/** The shell command a Codex call holds, as text: `cmd` or `command` of a function call's arguments, or the `cmd` an exec script passes. */
-function codexCommand(p: Obj): string | undefined {
-  let args: unknown = p.arguments;
-  if (typeof args === 'string') { try { args = JSON.parse(args); } catch { return undefined; } }
-  if (isObj(args)) {
-    const c = args.cmd ?? args.command;
-    return typeof c === 'string' ? c : Array.isArray(c) ? c.filter((x) => typeof x === 'string').join(' ').replace(/^\S*sh -lc /, '') : undefined;
-  }
-  const quoted = typeof p.input === 'string' ? /\bcmd:\s*("(?:[^"\\]|\\.)*")/.exec(p.input)?.[1] : undefined;
-  if (quoted === undefined) return undefined;
-  try { return JSON.parse(quoted) as string; } catch { return undefined; }
-}
-/** Whether a Codex call's output says the command failed: a non-zero exit, or its metadata's. */
-function codexFailed(output: string): boolean {
-  const code = /Process exited with code (\d+)/.exec(output)?.[1] ?? /"exit_code"\s*:\s*(\d+)/.exec(output)?.[1];
-  return code !== undefined ? code !== '0' : /^Script failed/.test(output);
-}
-function readTranscript(bytes: Uint8Array, tools = new Map<string, string>(), calls = new Map<string, string>(), first = 0): Map<string, Entry> {
+/** What a handle names: a turn, or what the record or an evidence file holds, without its ID. */
+export type Entry = Omit<Turn, 'id'>;
+/**
+ * An agent's transcript format, which its adapter reads (#1894): `start` gives a reader for one transcript, fed each
+ * line in order, parsed, with its line number and the piece it is read in (a transcript past the bytes kept is read
+ * in pieces; any other is piece 0), which returns the turn that line holds.
+ */
+export interface TranscriptReader { start(): (line: unknown, n: number, piece: number) => Turn | undefined }
+/** One transcript's line readers, each started: a line's turn is the first one any of them reads. */
+type Started = ((line: unknown, n: number, piece: number) => Turn | undefined)[];
+const started = (readers: readonly TranscriptReader[]): Started => readers.map((r) => r.start());
+function readTranscript(bytes: Uint8Array, read: Started, first = 0, piece = 0): Map<string, Entry> {
   const entries = new Map<string, Entry>();
+  if (!read.length) return entries;
   for (const [n, line] of Buffer.from(bytes).toString('utf8').split('\n').entries()) {
     let entry: unknown;
     try { entry = JSON.parse(line); } catch { continue; }
-    // A Codex rollout's message (#356): its ID without the `msg_` its type adds, or its line when it has none (a
-    // user message has none); anyone's words but yours are no first-hand source.
-    if (isObj(entry) && entry.type === 'response_item' && isObj(entry.payload) && entry.payload.type === 'message') {
-      const p = entry.payload;
-      const text = (Array.isArray(p.content) ? p.content : []).flatMap((c) => (isObj(c) && typeof c.text === 'string' ? [c.text] : [])).join('\n');
-      const id = typeof p.id === 'string' && /^[A-Za-z0-9._-]+$/.test(p.id.replace(/^msg_/, '')) ? p.id.replace(/^msg_/, '') : `l${first + n}`;
-      entries.set(id, { text, outside: p.role !== 'user', ...(typeof p.role === 'string' ? { role: p.role } : {}) });
-      continue;
+    for (const reader of read) {
+      const turn = reader(entry, first + n, piece);
+      if (!turn) continue;
+      const { id, ...rest } = turn;
+      entries.set(id, rest);
+      break;
     }
-    // A Codex tool call (#356): the agent's own turn, its command as text; and its output, a tool's result.
-    if (isObj(entry) && entry.type === 'response_item' && isObj(entry.payload) && typeof entry.payload.call_id === 'string' && /^[A-Za-z0-9._-]+$/.test(entry.payload.call_id)) {
-      const p = entry.payload;
-      const call = String(p.call_id);
-      if (p.type === 'function_call' || p.type === 'custom_tool_call') {
-        const command = codexCommand(p);
-        if (command !== undefined) entries.set(call, { text: command, outside: true, role: 'assistant' });
-        calls.set(call, typeof p.name === 'string' ? p.name : '');
-        continue;
-      }
-      if (p.type === 'function_call_output' || p.type === 'custom_tool_call_output') {
-        const out = typeof p.output === 'string' ? p.output : Array.isArray(p.output) ? p.output.flatMap((c) => (isObj(c) && typeof c.text === 'string' ? [c.text] : [])).join('\n') : '';
-        const tool = calls.get(call) ?? '';
-        entries.set(`${call}.out`, { text: out, outside: tool === '' || OUTSIDE.test(tool), role: 'user', tool, error: codexFailed(out), ...(entries.has(call) ? { of: call } : {}) });
-        continue;
-      }
-    }
-    if (!isObj(entry) || !isObj(entry.message)) continue;
-    // Claude Code's message has its `uuid`, pi's its entry's `id`; a Cursor line has neither, so its line names it (#111).
-    const id = typeof entry.uuid === 'string' ? entry.uuid : entry.type === 'message' && typeof entry.id === 'string' ? entry.id : typeof entry.role === 'string' ? `l${first + n}` : undefined;
-    if (id === undefined) continue;
-    const role = entry.message.role ?? entry.role;
-    const content = entry.message.content;
-    const parts: string[] = [];
-    // The agent's turns, and what Claude Code writes under the user's role in its stead: a compaction summary,
-    // and a subagent's run, whose prompt the agent composed.
-    let outside = role === 'assistant' || entry.isCompactSummary === true || entry.isSidechain === true || entry.isMeta === true;
-    // The tool whose result the entry holds ('' for one whose call the transcript doesn't hold).
-    let called: string | undefined;
-    let answers: string | undefined;
-    let failed: boolean | undefined;
-    if (typeof content === 'string') parts.push(content);
-    else if (Array.isArray(content)) {
-      for (const block of content) {
-        if (!isObj(block)) continue;
-        if (block.type === 'text' && typeof block.text === 'string') parts.push(block.text);
-        if (block.type === 'tool_use' && typeof block.id === 'string' && typeof block.name === 'string') {
-          tools.set(block.id, block.name);
-          // A shell command is quotable: the agent's own turn, which no first-hand source rests on alone (#356).
-          if (block.name === 'Bash' && isObj(block.input) && typeof block.input.command === 'string') { parts.push(block.input.command); calls.set(block.id, id); }
-        }
-        if (block.type === 'tool_result') {
-          // A result whose call the transcript doesn't hold is nobody's: no first-hand source either.
-          const tool = tools.get(String(block.tool_use_id));
-          if (tool === undefined || OUTSIDE.test(tool)) outside = true;
-          called = tool ?? '';
-          answers = calls.get(String(block.tool_use_id));
-          failed = block.is_error === true;
-          if (typeof block.content === 'string') parts.push(block.content);
-          else if (Array.isArray(block.content)) for (const c of block.content) if (isObj(c) && typeof c.text === 'string') parts.push(c.text);
-        }
-      }
-    }
-    entries.set(id, { text: parts.join('\n'), outside, ...(typeof role === 'string' ? { role } : {}), ...(called === undefined ? {} : { tool: called }), ...(answers === undefined ? {} : { of: answers }), ...(failed === undefined ? {} : { error: failed }) });
   }
   return entries;
 }
@@ -451,7 +381,7 @@ async function readStored(store: EvidenceStore | undefined, transcripts: Transcr
   }
   // A large session handle reads bounded pieces and keeps only the requested message, not the whole transcript.
   const meta = await store?.get(where.sha);
-  if (store && meta && meta.size > TRANSCRIPT_BYTES_KEPT) return (await streamTranscript(store, where.sha, where.message)).get(where.message);
+  if (store && meta && meta.size > TRANSCRIPT_BYTES_KEPT) return (await streamTranscript(store, transcripts.readers, where.sha, where.message)).get(where.message);
   return (await parsedTranscript(store, transcripts, where.sha))?.get(where.message);
 }
 /** The bytes of transcript files whose parses a cache keeps, at most: the newest one is kept whatever its size. */
@@ -466,7 +396,9 @@ const cachedBytes = new WeakMap<Transcripts, Map<string, number>>();
  * Transcript copies as an ask placing its plan's targets reads them (#1098), by SHA-256: each read as it is archived,
  * so a raise finds it parsed. Kept apart from the learned layer's, which reads a copy again when it couldn't.
  */
-export type Placing = Map<string, { bytes: number; messages: Promise<Message[] | undefined> }>;
+export class Placing extends Map<string, { bytes: number; messages: Promise<Message[] | undefined> }> {
+  constructor(readonly readers: readonly TranscriptReader[]) { super(); }
+}
 /** The placing copy of `sha`, read now when it isn't kept; the oldest go past TRANSCRIPT_BYTES_KEPT. */
 export function placingTranscript(store: EvidenceStore | undefined, placing: Placing, sha: string): Promise<Message[] | undefined> {
   const kept = placing.get(sha);
@@ -480,7 +412,7 @@ export function placingTranscript(store: EvidenceStore | undefined, placing: Pla
     const meta = await store?.get(sha);
     if (store && meta && meta.size > TRANSCRIPT_BYTES_KEPT) {
       placing.delete(sha);
-      return { messages: [...await streamTranscript(store, sha)].filter(([, e]) => e.text !== '').map(([id, e]) => ({ id, ...e })) };
+      return { messages: [...await streamTranscript(store, placing.readers, sha)].filter(([, e]) => e.text !== '').map(([id, e]) => ({ id, ...e })) };
     }
     return store && meta ? store.read(sha) : undefined;
   })().then((b) => {
@@ -494,7 +426,7 @@ export function placingTranscript(store: EvidenceStore | undefined, placing: Pla
       total -= e.bytes;
       placing.delete(oldest);
     }
-    return messagesOf(b);
+    return messagesOf(b, placing.readers);
   }, () => { placing.delete(sha); return undefined; });
   placing.set(sha, entry);
   return entry.messages;
@@ -516,7 +448,7 @@ function parsedTranscript(store: EvidenceStore | undefined, transcripts: Transcr
   };
   parsed = (async () => {
     const meta = await store?.get(sha);
-    if (store && meta && meta.size > TRANSCRIPT_BYTES_KEPT) { forget(); return streamTranscript(store, sha); }
+    if (store && meta && meta.size > TRANSCRIPT_BYTES_KEPT) { forget(); return streamTranscript(store, transcripts.readers, sha); }
     return store && meta ? store.read(sha) : undefined;
   })().then((b) => {
     if (b instanceof Map) return b;
@@ -535,21 +467,21 @@ function parsedTranscript(store: EvidenceStore | undefined, transcripts: Transcr
         transcripts.delete(oldest);
       }
     }
-    return readTranscript(b);
+    return readTranscript(b, started(transcripts.readers));
   });
   transcripts.set(sha, parsed);
   parsed.catch(forget);
   return parsed;
 }
 
-/** Parse line-aligned pieces with call/role context carried across parts, and no whole-file string. */
-async function streamTranscript(store: EvidenceStore, sha: string, wanted?: string): Promise<Map<string, Entry>> {
+/** Parse line-aligned pieces, each reader's state carried across parts, and no whole-file string. */
+async function streamTranscript(store: EvidenceStore, readers: readonly TranscriptReader[], sha: string, wanted?: string): Promise<Map<string, Entry>> {
   const found = new Map<string, Entry>();
-  const tools = new Map<string, string>(), calls = new Map<string, string>();
+  const read = started(readers);
   const decoder = new StringDecoder('utf8');
-  let tail = '', first = 0;
+  let tail = '', first = 0, piece = 0;
   const parse = (text: string) => {
-    for (const [id, entry] of readTranscript(Buffer.from(text), tools, calls, first)) if (wanted === undefined || id === wanted) found.set(id, entry);
+    for (const [id, entry] of readTranscript(Buffer.from(text), read, first, piece++)) if (wanted === undefined || id === wanted) found.set(id, entry);
     for (let at = text.indexOf('\n'); at >= 0; at = text.indexOf('\n', at + 1)) first++;
   };
   for await (const bytes of store.chunks(sha)) {
@@ -565,13 +497,13 @@ async function streamTranscript(store: EvidenceStore, sha: string, wanted?: stri
 /** One message of an archived transcript: its ID (`session:<id>#<message>`) and what it holds. */
 export interface Message extends Entry { id: string }
 /** Each message of a transcript copy that holds text, in order. */
-const messagesOf = (bytes: Uint8Array): Message[] => [...readTranscript(bytes)].filter(([, e]) => e.text !== '').map(([id, e]) => ({ id, ...e }));
+const messagesOf = (bytes: Uint8Array, readers: readonly TranscriptReader[]): Message[] => [...readTranscript(bytes, started(readers))].filter(([, e]) => e.text !== '').map(([id, e]) => ({ id, ...e }));
 /** A copy's messages, read now and kept nowhere: the archive's index reads each copy once (#1515). */
-export async function copyMessages(store: EvidenceStore | undefined, sha: string): Promise<Message[] | undefined> {
+export async function copyMessages(store: EvidenceStore | undefined, readers: readonly TranscriptReader[], sha: string): Promise<Message[] | undefined> {
   const meta = await store?.get(sha);
   if (!store || !meta) return undefined;
-  if (meta.size > TRANSCRIPT_BYTES_KEPT) return [...await streamTranscript(store, sha)].filter(([, e]) => e.text !== '').map(([id, e]) => ({ id, ...e }));
-  return messagesOf(await store.read(sha));
+  if (meta.size > TRANSCRIPT_BYTES_KEPT) return [...await streamTranscript(store, readers, sha)].filter(([, e]) => e.text !== '').map(([id, e]) => ({ id, ...e }));
+  return messagesOf(await store.read(sha), readers);
 }
 /**
  * A session's archived transcript (design: Reading by reference): the evidence its newest transcript.archived event
@@ -682,8 +614,10 @@ export async function readEvidence(db: Db, store: EvidenceStore | undefined, cha
   return undefined;
 }
 
-/** Parsed transcripts by hash: the store's files never change, so a parse is kept across appends. */
-export type Transcripts = Map<string, Promise<Map<string, Entry> | undefined>>;
+/** Parsed transcripts by hash, read with the record's readers: the store's files never change, so a parse is kept across appends. */
+export class Transcripts extends Map<string, Promise<Map<string, Entry> | undefined>> {
+  constructor(readonly readers: readonly TranscriptReader[]) { super(); }
+}
 
 /**
  * What a change's reading depends on, as text the append compares: which transcript each session it cites names

@@ -9,6 +9,7 @@ import { openEvidenceStore } from '@deepbuild/evidence';
 import { CAP } from '@deepbuild/reading';
 import { openRecord, ulid, type Connection } from '@deepbuild/record';
 import { aboutSessions, search } from '../src/search.js';
+import { transcriptReaders } from '@deepbuild/adapters';
 
 const T0 = 1_760_013_451_000;
 const roots: string[] = [];
@@ -18,7 +19,7 @@ it('cuts a reply at the cap and continues it by cursor, each past-session hit on
   const root = mkdtempSync(join(tmpdir(), 'deep-past-'));
   roots.push(root);
   const store = await openEvidenceStore({ root: join(root, 'evidence'), now: () => T0 });
-  const record = await openRecord({ path: join(root, 'ledger.db'), now: () => T0, evidence: store });
+  const record = await openRecord({ path: join(root, 'ledger.db'), now: () => T0, evidence: store, readers: transcriptReaders });
   const S = 'sa1';
   const core: Connection = { writer: 'core', actor: 'you', scope: 'you', session: S };
   await record.append({ ...core, writer: 'hook' }, { v: 1, id: ulid(T0), kind: 'session.start', ts: T0, data: { agent: 'codex', worktree: '/tmp/shop', branch: 'main', thread: S } });
@@ -61,7 +62,7 @@ it('marks a session whose commit the branch head reverts, and not one whose comm
   commit(T0, 'src/retry.ts', 'base\n');
   commit(T0, 'src/pool.ts', 'base\n');
   const store = await openEvidenceStore({ root: join(root, 'evidence'), now: () => T0 });
-  const record = await openRecord({ path: join(root, 'ledger.db'), now: () => T0, evidence: store });
+  const record = await openRecord({ path: join(root, 'ledger.db'), now: () => T0, evidence: store, readers: transcriptReaders });
   const session = async (id: string, at: number, file: string) => {
     const hook: Connection = { writer: 'hook', actor: 'you', scope: 'you', session: id };
     await record.append(hook, { v: 1, id: ulid(at), kind: 'session.start', ts: at, data: { agent: 'claude-code', worktree: repo, branch: 'main', thread: id } });

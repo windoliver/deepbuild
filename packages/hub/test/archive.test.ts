@@ -13,6 +13,7 @@ import { openEvidenceStore } from '@deepbuild/evidence';
 import { openRecord } from '@deepbuild/record';
 import { ulid } from '../src/wire.js';
 import { hookLine, send, withHub } from './hub.js';
+import { transcriptReaders } from '@deepbuild/adapters';
 
 const CLI = fileURLToPath(new URL('../../cli/dist/main.js', import.meta.url));
 const DAY = 86_400_000;
@@ -78,7 +79,7 @@ describe("the hub's retention", () => {
     const t0 = Date.now();
     try {
       const store = await openEvidenceStore({ root: join(root, 'evidence'), now: () => t0 });
-      const record = await openRecord({ path: join(root, 'ledger.db'), now: () => t0, evidence: store });
+      const record = await openRecord({ path: join(root, 'ledger.db'), now: () => t0, evidence: store, readers: transcriptReaders });
       const writer = store.connect({ role: 'deepbuild', via: 'capture' });
       const put = async (text: string) => {
         const stored = await writer.put({ bytes: new Uint8Array(Buffer.from(text)), kind: 'ci.log', source: 'test', redaction: 'complete', license: { name: 'session', allows: [] } });

@@ -8,6 +8,7 @@ import { afterEach, expect, test } from 'vitest';
 import { openEvidenceStore } from '@deepbuild/evidence';
 import { openRecord, ulid, type Connection, type RecordStore } from '@deepbuild/record';
 import { openWiki, type Wiki } from '../src/index.ts';
+import { transcriptReaders } from '@deepbuild/adapters';
 
 const YOU: Connection = { writer: 'app', actor: 'you', scope: 'you' };
 const dirs: string[] = [];
@@ -24,7 +25,7 @@ async function world(lines: string[]): Promise<{ record: RecordStore; wiki: Wiki
   const dir = mkdtempSync(join(tmpdir(), 'wiki355-'));
   dirs.push(dir);
   const store = await openEvidenceStore({ root: join(dir, 'evidence'), now: () => t });
-  const record = await openRecord({ path: join(dir, 'ledger.db'), now: () => t, evidence: store });
+  const record = await openRecord({ path: join(dir, 'ledger.db'), now: () => t, evidence: store, readers: transcriptReaders });
   records.push(record);
   const session = ulid(tick());
   await record.append({ writer: 'hook', actor: 'you', scope: 'you', session, project: 'api', agent: 'claude-code' }, { v: 1, id: ulid(t), kind: 'session.start', ts: t, data: { agent: 'claude-code', worktree: dir, branch: 'main', thread: session } });

@@ -4,6 +4,7 @@
 // claim on the wiki's pages. Every reply holds at most the cap of text, and a cut one says where to continue.
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { transcriptReaders } from '@deepbuild/adapters';
 import { openEvidenceStore, type EvidenceStore } from '@deepbuild/evidence';
 import { foldText, openRecordReader, parseClaimLine, type Message, type RecordReader } from '@deepbuild/record';
 
@@ -104,7 +105,7 @@ const entryOf = (at: string, m: Message, start: number, end: number): NonNullabl
 /** The slicer over a hub's root: its record at `<root>/ledger.db`, its evidence store and its wiki, read only; the hub hands the store it holds open. */
 export async function openSlicer(root: string, held?: EvidenceStore): Promise<Slicer> {
   const evidence = held ?? await openEvidenceStore({ root: join(root, 'evidence'), readOnly: true });
-  const record: RecordReader = openRecordReader({ path: join(root, 'ledger.db'), evidence });
+  const record: RecordReader = openRecordReader({ path: join(root, 'ledger.db'), evidence, readers: transcriptReaders });
 
   async function transcript(handle: string, session: string): Promise<Message[]> {
     const messages = await record.transcript(session);
