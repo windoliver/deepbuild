@@ -876,6 +876,10 @@ byHand.push('tests/acceptance/3295/late-close.test.mjs');
 Object.assign(redrafted, { 'tests/acceptance/3066/same-failures.test.mjs': 'tests/acceptance/3066-redraft-3699/' });
 byHand.push('tests/acceptance/3066/same-failures.test.mjs');
 
+const redrafted3289 = ['routes/wake', 'routes/session-end', 'fallbacks/flags'].map((name) => `tests/acceptance/25/${name}.test.ts`);
+Object.assign(redrafted, Object.fromEntries(redrafted3289.map((path) => [path, 'tests/acceptance/25-redraft-3289/'])));
+byHand.push(...redrafted3289);
+
 timed.push('tests/acceptance/3257/ac7-budget.test.ts');
 
 timed.push('tests/acceptance/1857/cap.test.ts', 'tests/acceptance/1857/budgets.test.ts');
