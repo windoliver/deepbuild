@@ -1,0 +1,22 @@
+{
+  "benchmarks/budgets.json": [
+    {
+      "find": [
+        "      \"id\": \"deep-mcp-30d\",",
+        "      \"command\": [",
+        "        \"node\",",
+        "        \"benchmarks/mcp.mjs\"",
+        "      ],",
+        "      \"margin\": 0.5,"
+      ],
+      "wrong": [
+        "      \"id\": \"deep-mcp-30d\",",
+        "      \"command\": [",
+        "        \"node\",",
+        "        \"benchmarks/mcp.mjs\"",
+        "      ],",
+        "      \"margin\": 1,"
+      ]
+    }
+  ]
+}
