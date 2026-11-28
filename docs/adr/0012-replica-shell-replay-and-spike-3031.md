@@ -24,6 +24,10 @@ Status: accepted (#3715). The decisions below were held in comments that main's 
 - **The trace itself is read and dropped.** `docs/spikes/3031/count.mjs`, `take`. It is some 18,000 lines a frame of the every-pass scene; `take` keeps `out/<fixture>.frames.json` and `out/<fixture>.overdraw.json`, and `record` reads only those.
 - **A pass that writes through a view of one layer or one mip leaves the rest of the texture as it was.** `docs/spikes/3031/trace.mjs`, `readTrace`, its `CreateTextureView` branch; the write-up (`docs/spikes/3031/README.md`) says such a view therefore counts as a read too. A layout taken from a pipeline binds what the pipeline's shaders declare in that group.
 - **The trace's reader knows only the RON that wgpu-core's trace writes.** `docs/spikes/3031/ron.mjs`. `Some(x)` reads as x and `None` as null; a variant with no fields reads as its name; `Name(a: 1)` reads as `{$: 'Name', a: 1}`, `Name(1, 2)` as `{$: 'Name', _: [1, 2]}`; an unnamed `(a: 1)` as `{a: 1}` and `(1, 2)` as `[1, 2]`. It throws, naming the place, on anything it doesn't know. The file is read in pieces, an action starting at column 0, so its size is no limit.
+- **Under a look that blurs by velocity, a frame's scene carries the travel between the evaluations at t − s/2 and t + s/2.** `spikes/3031/src/main.rs`, `Play::scene`. They are paired as the shipped view pairs them.
+- **A pass's `depth` in the trace is `Operational((load, store))`, or `ReadOnly`.** `docs/spikes/3031/trace.mjs`, `readTrace`.
+- **An identifier in the trace may be a raw one (`r#dont-care`).** `docs/spikes/3031/ron.mjs`. It is how a name that isn't Rust's is written.
+- **The added depth of field is focused on the camera's target, 14 m off.** `docs/spikes/3031/fixtures.mjs`. The rest are the effect's defaults.
 
 ## What the names mean
 
@@ -32,3 +36,4 @@ Status: accepted (#3715). The decisions below were held in comments that main's 
 - **`ShellSettingInReadRegion`.** `crates/deep-replica/src/drive/plant.rs`. The wrong program of #3605: a game shell hands a level a setting through its read region, with no entry on its track.
 - **`Checked`.** `crates/deep-show/src/sandbox.rs`. A program's check and rewrite: its rewritten bytes, or why the check refused it.
 - **`FLICKS`.** `spikes/3031/src/main.rs`, the constant of flicks a second: the unit of a document's time.
+- **`Rec.seq`.** `spikes/3031/src/held.rs`. It is −1 before the first.

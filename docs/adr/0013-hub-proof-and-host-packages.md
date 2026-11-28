@@ -1,6 +1,6 @@
 # 0013: The hub's paseo readings and table record, the shell journeys check and the Lean runner's flag
 
-Status: accepted (#3715). The comments these came from were taken out to bring their files back under the comment ratchet's ceilings; the design states the rest of what those comments held (`docs/technical-design.md`, The hub; `docs/canvas-primitives.md`, Asset: tables and Check input: shell journeys), and the decisions below are the ones written nowhere else.
+Status: accepted (#3715). The comments these came from were taken out to bring their files back under the comment ratchet's ceilings; the design states the rest of what those comments held (`docs/technical-design.md`, How it installs; `docs/canvas-primitives.md`, Asset: tables and Check input: shell journeys), and the decisions below are the ones written nowhere else.
 
 ## What the hub reads of paseo
 
@@ -24,6 +24,7 @@ Status: accepted (#3715). The comments these came from were taken out to bring t
 ## The Lean runner
 
 - **comparator runs with its no-sandbox flag on macOS.** `packages/proof/src/lean.ts`, `LEAN_FLAGS`. bubblewrap doesn't exist there; on Linux comparator runs in its own sandbox.
+- **A runner name `RUNNERS` doesn't hold is missing, for a run and for its mutants alike.** `packages/proof/src/check.ts`, `RUNNERS` (#1896).
 
 ## What the names mean
 

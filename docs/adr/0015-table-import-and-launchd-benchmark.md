@@ -43,6 +43,7 @@ Status: accepted (#3715). The table tool's card is `packages/jobs/import/README.
 - **The sides reading is the design's regression rule, with the child-started hub in the merge base's place.** `benchmarks/hub-launchd.mjs`, `JUDGES.sides`. The limit reading is the five-run rule (`scripts/benchmark.mjs`, `judgeLimit`) on the report's own machine and loads.
 - **The launcher leaves a loaded label alone.** `benchmarks/hub-launchd.mjs`, the `load` mode. It is `deep hub start`'s launcher: it loads the definition `deep hub start` wrote under the run's label.
 - **With `absent` after the mode, the hub is loaded with no ProcessType.** `benchmarks/hub-launchd.mjs`, `loadedHub`. The readings are for the other column, and the judge never passes them (#3438).
+- **The sample sizes.** `benchmarks/hub-launchd.mjs`. A round-trip sample is 1,000 PreToolUse requests, one connection each; hook-overhead reads `deep-hook.mjs overhead` five times; idle reads the hub's CPU over 5 s, five times, once it has settled.
 
 ## What the names mean
 
