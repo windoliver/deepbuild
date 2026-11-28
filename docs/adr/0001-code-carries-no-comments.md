@@ -46,6 +46,7 @@ One page per module topic. Each decision names the file and the symbol it govern
 - [0004](0004-gate-lanes-holds-and-slots.md): the gate's lanes, holds and slots
 - [0005](0005-gate-floor-verdict-and-measures.md): the gate's floor, a claim's verdict record, price and size
 - [0006](0006-web-export-set-ceilings.md): the web-export task's set ceilings
+- [0011](0011-a-budgets-work.md): the work a budget's run reports
 
 ## Open
 
