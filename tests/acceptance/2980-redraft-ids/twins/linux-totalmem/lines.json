@@ -1,0 +1,12 @@
+{
+  "scripts/throttle.mjs": [
+    {
+      "find": [
+        "  let memory = freemem();"
+      ],
+      "wrong": [
+        "  let memory = process.platform === 'linux' ? totalmem() : freemem();"
+      ]
+    }
+  ]
+}

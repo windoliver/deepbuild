@@ -1,0 +1,12 @@
+{
+  "scripts/throttle.mjs": [
+    {
+      "find": [
+        "const RUN_MEMORY = (process.platform === 'darwin' ? 8 : 24) * 2 ** 30;"
+      ],
+      "wrong": [
+        "const RUN_MEMORY = (process.platform === 'darwin' ? 4 : 24) * 2 ** 30;"
+      ]
+    }
+  ]
+}
