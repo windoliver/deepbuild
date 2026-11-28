@@ -126,6 +126,7 @@ impl Planted {
             "refusal_names_first_field" => p.refusal_names_first_field = true,
             "tracker_skips_memory_copy" => p.rewrite.skip_copy_pages = true,
             "tracker_skips_memory_fill" => p.rewrite.skip_fill_pages = true,
+            "store_skips_page_marked_last" => p.rewrite.store_skips_page_marked_last = true,
             "ranges_drop_second_at_step_5000" => p.ranges_drop_second_at_step_5000 = true,
             "ring_drops_oldest" => p.ring_drops_oldest = true,
             "keyframes_held_in_ring" => p.keyframes_held_in_ring = true,

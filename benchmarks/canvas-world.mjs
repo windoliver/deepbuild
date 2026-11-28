@@ -15,6 +15,8 @@ const TESTS = {
   'tests/acceptance/1868/status-runs.test.mjs': '#1868.bf84aa8b',
   'tests/acceptance/265/ac6-budgets.test.ts': '#265.e3eb2a00',
   'tests/acceptance/269-redraft-ac6/ac6-budgets.test.ts': '#269.6ad7e180',
+  'tests/acceptance/3530/ac3-writes.test.ts': '#3530.9355f915',
+  'tests/acceptance/3530/ac4-metering.test.ts': '#3530.80a29246',
 };
 const CHECKOUT = fileURLToPath(new URL('..', import.meta.url));
 
