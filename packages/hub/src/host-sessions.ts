@@ -8,6 +8,8 @@
 import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, normalize } from 'node:path';
+import { OWN_BY_NAME, runnerConfig } from '@deepbuild/gate';
+import { scriptsOf, type Changes } from './claim-changes.js';
 import { claudeCommand, longestDeadline, ourGroups, withHooks } from './claude-settings.js';
 import { shellQuote as q } from './shell.js';
 import { syncPath, writeAtomic } from './vfs.js';
@@ -55,6 +57,8 @@ for f in "$d"/taken-*.jsonl; do [ -f "$f" ] && printf 'file\t%s\t%s\n' "$(basena
 const DROP = String.raw`d="$HOME/.deepbuild/spool"; for f; do rm -f "$d/$f"; done`;
 const STARTED = String.raw`LC_ALL=C TZ=UTC ps -o lstart= -p "$1"`;
 const ARGS = String.raw`ps -o args= -p "$1"`;
+const TOP = String.raw`PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; export PATH; unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_CONFIG GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT GIT_CEILING_DIRECTORIES GIT_DISCOVERY_ACROSS_FILESYSTEM
+cd -- "$1" && git -c core.hooksPath=/dev/null rev-parse --show-toplevel`;
 /** A folder's HEAD on the host, and the branch it is on when it is on one. */
 const HEAD = String.raw`git -C "$1" rev-parse -q --verify HEAD 2>/dev/null; git -C "$1" symbolic-ref -q --short HEAD 2>/dev/null; true`;
 /** The repo's spec as a commit holds it there: its blob's id and its bytes, or `none`. Nothing of the repo's that runs a program is run. */
@@ -66,6 +70,63 @@ printf 'oid\t%s\ntext\t%s\n' "$o" "$(GIT_NO_REPLACE_OBJECTS=1 git -C "$1" -c cor
  */
 const FILES = String.raw`r=$(realpath -e -- "$1" 2>/dev/null) || { echo read; exit 0; }; max=$2; shift 2; i=0
 for p; do f=$(realpath -e -- "$r/$p" 2>/dev/null) && case "$f" in "$r"/*) [ -f "$f" ] && printf 'file\t%s\t%s\n' "$i" "$(head -c "$max" < "$f" | base64 -w0)" ;; esac; i=$((i + 1)); done; echo read`;
+const CHANGES = String.raw`set -e
+say() { printf 'unread\t%s\n' "$(printf "$@" | base64 -w0)"; }
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; TMPDIR=/tmp; export PATH TMPDIR; unset XDG_CONFIG_HOME
+[ -z "$LD_PRELOAD$LD_LIBRARY_PATH$LD_AUDIT" ] || { say 'the read runs with libraries set to load first'; echo read; exit 0; }
+cd -- "$1"
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_NAMESPACE GIT_CONFIG GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT GIT_CONFIG_GLOBAL GIT_CONFIG_SYSTEM GIT_CONFIG_NOSYSTEM GIT_ATTR_SOURCE GIT_GRAFT_FILE GIT_SHALLOW_FILE GIT_REPLACE_REF_BASE GIT_CEILING_DIRECTORIES GIT_DISCOVERY_ACROSS_FILESYSTEM
+export GIT_NO_REPLACE_OBJECTS=1
+B=$2; S=$3; RE=$4; T=$(printf '\t')
+g() { LC_ALL=C timeout -k 1 "$S" git -c core.quotePath=false -c core.commitGraph=false -c core.ignorecase=false "$@" 2>/dev/null; }
+run() { f=$1; shift; g "$@" > "$f" || { say 'git %s exited %s' "$*" "$?"; return 1; }; }
+out() { v=$(base64 -w0 < "$2"); printf '%s\t%s\n' "$1" "$v"; }
+d=$(mktemp -d)
+trap 'rm -rf "$d"' EXIT
+here=$(pwd -P); top=$(g rev-parse --show-toplevel) || top=; gd=$(g rev-parse --absolute-git-dir) || gd=
+case "$here/" in "$top"/*) ;; *) say 'git there takes %s for the work tree, not the folder' "$top"; echo read; exit 0 ;; esac
+p=$here; while [ "$p" != "$top" ] && [ "$p" != / ]; do [ -e "$p/.git" ] && { say 'git there takes %s for the work tree, though %s holds a .git of its own' "$top" "$p"; echo read; exit 0; }; p=$(dirname -- "$p"); done
+[ -n "$top" ] && [ -e "$top/.git" ] || { say 'git there finds no work tree holding a .git for the folder (it takes "%s")' "$top"; echo read; exit 0; }
+[ -n "$5" ] && [ "$top" = "$5" ] || { say 'git there takes %s for the repo top, not "%s", the one the session started in' "$top" "$5"; echo read; exit 0; }
+export GIT_DIR="$gd" GIT_WORK_TREE="$top"; cd -- "$top" || exit 0
+ok=n; { echo "$B"; g rev-parse "$B^{tree}"; g ls-tree -r -t -d "$B" | awk '$2 == "tree" { print $3 }'; } | sort -u > "$d/objs" && [ "$(wc -l < "$d/objs")" -ge 2 ] && mkdir -p "$d/o/pack" && g pack-objects --stdout -q < "$d/objs" > "$d/o/pack/p.pack" && g index-pack -o "$d/o/pack/p.idx" "$d/o/pack/p.pack" > /dev/null && g show-index < "$d/o/pack/p.idx" | cut -d' ' -f2 | sort > "$d/named" && cmp -s "$d/objs" "$d/named" && ok=y
+if [ $ok = n ]; then say 'the commit %s or a tree it holds there is not the object its id names' "$B"
+elif (export GIT_OBJECT_DIRECTORY="$d/o"; run "$d/tree" ls-tree -r "$B") && run "$d/listed" ls-files --cached --others --exclude-standard && run "$d/ign" ls-files --others --ignored --exclude-standard --directory && run "$d/diffed" diff --name-only --no-renames "$B"; then
+  RE=$RE awk 'BEGIN { re = ENVIRON["RE"] } $0 ~ re' "$d/ign" > "$d/igown"; : > "$d/igall"
+  while IFS= read -r p; do case "$p" in */) run "$d/one" ls-files --others --ignored --exclude-standard -- "$p"; cat "$d/one" >> "$d/igall" ;; *) printf '%s\n' "$p" >> "$d/igall" ;; esac; done < "$d/igown"
+  grep -v '\(^\|/\)__pycache__/' "$d/igall" >> "$d/listed" || :
+  if grep -q "$T\"" "$d/tree" || grep -q '^"' "$d/listed"; then say "git names a path it can't list plainly"
+  else
+    cut -f2 "$d/tree" > "$d/paths"
+    RE=$RE awk -F "$T" 'BEGIN { re = ENVIRON["RE"] } $2 ~ re' "$d/tree" > "$d/own"
+    cut -f2 "$d/own" | LC_ALL=C xargs -r -d '\n' stat --printf '%F\t%a\t%n\n' -- > "$d/stat" 2> /dev/null || :
+    : > "$d/hash"; : > "$d/oids"; : > "$d/links"; : > "$d/changed"
+    H=$d/hash O=$d/oids L=$d/links C=$d/changed awk -F "$T" '
+      BEGIN { h = ENVIRON["H"]; o = ENVIRON["O"]; l = ENVIRON["L"]; c = ENVIRON["C"] }
+      FILENAME == ARGV[1] { k[$3] = $1; x[$3] = substr($2, length($2) - 2, 1) % 2; next }
+      { split($1, m, " "); p = $2
+        if ((m[1] == "100644" || m[1] == "100755") && k[p] ~ /^regular (empty )?file$/ && x[p] == (m[1] == "100755")) { print p > h; print m[3] > o }
+        else if (m[1] == "120000" && k[p] == "symbolic link") print m[3] "\t" p > l
+        else print p > c }' "$d/stat" "$d/own"
+    while IFS="$T" read -r o p; do [ "$({ readlink -- "$p"; printf .; } | head -c -2 | g hash-object --stdin)" = "$o" ] || printf '%s\n' "$p" >> "$d/changed"; done < "$d/links"
+    if run "$d/hashes" hash-object --no-filters --stdin-paths < "$d/hash"; then
+      paste "$d/oids" "$d/hashes" "$d/hash" | awk -F "$T" '$1 != $2 { print $3 }' >> "$d/changed"
+      cat "$d/diffed" >> "$d/changed"
+      awk 'FILENAME == ARGV[1] { t[$0]; next } !($0 in t)' "$d/paths" "$d/listed" > "$d/added"
+      while IFS= read -r p; do case "$p" in */) ;; *) [ -d "$p" ] || continue ;; esac; say 'git lists %s as a folder it did not look in' "$p"; break; done < "$d/added"
+      cat "$d/paths" "$d/listed" > "$d/all"
+      printf '%s' "$top" > "$d/top"; out top "$d/top"; out diff "$d/changed"; out others "$d/added"; out tracked "$d/all"
+      RE=$RE awk 'BEGIN { re = ENVIRON["RE"] } $0 ~ re' "$d/added" > "$d/addown"
+      run "$d/addhash" hash-object --no-filters --stdin-paths < "$d/addown"
+      paste "$d/addhash" "$d/addown" > "$d/left"; out left "$d/left"
+      cut -f2 "$d/own" | LC_ALL=C xargs -r -d '\n' stat --printf '%z %i\t%n\n' -- > "$d/stamp" 2> /dev/null || :; out stamp "$d/stamp"
+      o=$(awk -F "$T" '$2 == "package.json" { split($1, m, " "); print m[3] }' "$d/tree")
+      if [ -n "$o" ]; then g cat-file blob "$o" > "$d/was" && [ "$(g hash-object --no-filters --stdin < "$d/was")" = "$o" ] && out was "$d/was" || say 'the commit %s holds no package.json there that is the object its id names' "$B"; fi
+      [ -f package.json ] && head -c 1048576 package.json > "$d/now" && out now "$d/now"
+    else say 'the files there could not all be hashed within %s s' "$S"; fi
+  fi
+fi
+echo read`;
 /** A prompt's own entry in a session's transcript there, among its last 4 MiB, as turn-loops' turnFrom finds one here. */
 const PROMPT = String.raw`[ -f "$1" ] && tail -c 4194304 -- "$1" | grep -F -- "$2" | grep -F -m 1 '"promptId"'; true`;
 /** Claude Code's own record there of the folders you trusted. */
@@ -230,6 +291,11 @@ export class HostSessions {
     const [sha, branch] = (await this.o.hosts.exec(host, [cwd], HEAD)).stdout.split('\n');
     return sha && /^[0-9a-f]{40}$/.test(sha) ? { sha, branch: branch || null } : undefined;
   }
+  async topOf(host: string, cwd: string): Promise<string | undefined> {
+    const r = await this.o.hosts.read(host, [cwd], TOP).catch(() => undefined);
+    const top = r?.code === 0 ? r.stdout.trim() : '';
+    return top.startsWith('/') ? top : undefined;
+  }
   /**
    * The repo's spec as `base` holds it in a session's folder on its host, in approvedSpec's shape: read from the
    * commit, never the folder the agent works in. A base that can't be read there throws: its revision is unknown.
@@ -250,6 +316,26 @@ export class HostSessions {
     const r = asked.length ? await this.o.hosts.read(host, [cwd, String(max), ...asked], FILES) : { code: 0, stdout: 'read\n', stderr: '' };
     if (r.code !== 0 || !r.stdout.endsWith('read\n')) throw Error(`the session's folder on ${host} couldn't be read over SSH: ${r.stderr.trim().slice(-300)}`);
     return new Map(r.stdout.split('\n').map((l) => l.split('\t')).filter((l) => l[0] === 'file' && asked[Number(l[1])] !== undefined).map((l) => [asked[Number(l[1])]!, Buffer.from(l[2] ?? '', 'base64')]));
+  }
+  async changes(host: string, cwd: string, base: string, ms: number, top: string | undefined): Promise<Changes> {
+    const unread = (why: string): Changes => ({ changed: [], configs: new Map(), scripts: false, unread: `on ${host}, ${why}` });
+    let timer: NodeJS.Timeout | undefined;
+    const late = new Promise<Changes>((done) => { timer = setTimeout(() => done(unread(`the read of what the claim changed ran past its ${Math.ceil(ms)} ms deadline`)), ms); });
+    const read = (async (): Promise<Changes> => {
+      const r = await this.o.hosts.read(host, [cwd, base, String(Math.max(1, Math.floor(ms / 1000))), OWN_BY_NAME, top ?? ''], CHANGES);
+      if (r.code !== 0 || !r.stdout.endsWith('read\n')) return unread(`the read of what the claim changed didn't end (ssh exit ${String(r.code)}: ${r.stderr.trim().slice(-200)})`);
+      const lines = r.stdout.split('\n').map((l) => l.split('\t'));
+      const text = (name: string): string[] => lines.filter((l) => l[0] === name).map((l) => Buffer.from(l[1] ?? '', 'base64').toString('utf8'));
+      const list = (name: string): string[] => text(name).flatMap((t) => t.split('\n').filter(Boolean));
+      const failed = text('unread');
+      if (failed.length) return unread(failed.join('; '));
+      const [diff, others, tracked] = [list('diff'), list('others'), list('tracked')];
+      const split = (l: string): [string, string] => [l.slice(l.indexOf('\t') + 1), l.slice(0, l.indexOf('\t'))];
+      const [untracked, stamps] = [new Map(list('left').map(split)), new Map(list('stamp').map(split))];
+      const configs = new Map([...await this.files(host, text('top')[0] || cwd, [...new Set([...tracked, ...others].filter(runnerConfig))], 1 << 20)].map(([path, bytes]) => [path, bytes.toString('utf8')]));
+      return { changed: [...new Set([...diff, ...others])].sort(), configs, scripts: diff.includes('package.json') && scriptsOf(text('was')[0]) !== scriptsOf(text('now')[0]), untracked, stamps };
+    })().catch((error: unknown) => unread(error instanceof Error ? error.message : String(error)));
+    return Promise.race([read, late]).finally(() => clearTimeout(timer));
   }
   /** A file a session's folder on its host holds, whole: a drafted check's bytes, as ask-tasks' bytesOf reads one here. */
   async bytesOf(host: string, cwd: string, path: string): Promise<Uint8Array | undefined> {

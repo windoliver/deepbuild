@@ -127,7 +127,8 @@ const LOAD_WAIT_MS = 30 * 60_000;
 interface Held { entry: Entry; why: 'background' | 'due' | 'grace'; record: HeldRecord }
 /** A reply that ended the turn before its fast lane was ready to place slow checks (#2075). */
 interface TurnEnd { session: string; background: string[]; stopAt: number; repliedAt: number; reading: LoopReading | undefined }
-export interface Claim { claim: string; session: string; task: string; cwd: string; base: string; snapshot: string; tree: string | undefined; checkout: Promise<TempCheckout> | null; requirements: ClaimRequirement[]; entries: Map<string, Entry>; repo: Promise<string>; installs: Promise<string>; names: Promise<string>; programs: Map<string, string>; state?: StatePin | undefined; changes?: Changes; ready?: boolean }
+export interface Claim { claim: string; session: string; task: string; cwd: string; base: string; snapshot: string; tree: string | undefined; checkout: Promise<TempCheckout> | null; requirements: ClaimRequirement[]; entries: Map<string, Entry>; repo: Promise<string>; installs: Promise<string>; names: Promise<string>; programs: Map<string, string>; state?: StatePin | undefined; changes?: Changes; ready?: boolean; host?: string; written?: Map<string, string> }
+const READ_FLOOR_MS = 5_000;
 /** Run outcomes a key keeps: a result. Missing, stopped and uncounted runs say nothing of the key, so they never carry. */
 const KEPT = new Set(['passed', 'failed', 'overran', 'ran_nothing']);
 /** A base run that ended as a run: what a fix is proven by, on its key as on its claim. */
@@ -522,7 +523,7 @@ export class GateRunner {
   private ownChanged(c: Claim, e: Entry): string[] {
     if (!c.changes || e.check.check === DEFINITION) return [];
     const plant = this.o.plant === 'edited-check-approved' || this.o.plant === 'own-files-test-folders-only' ? this.o.plant : undefined;
-    return ownChanges(c.changes, this.headOf(e)?.read ?? [], plant);
+    return ownChanges(c.changes, c.host ? null : this.headOf(e)?.read ?? [], plant);
   }
   /** The files a check's last run on the snapshot read under the test, fixture and script folders: its own (#875). */
   private ownOf(e: Entry): string[] {
@@ -579,11 +580,13 @@ export class GateRunner {
       checks: [...c.entries.values()].map((e) => {
         const { base, why } = this.baseOf(e) ?? {};
         if (why) whys.push(`${e.check.check} ${why}`);
-        const mine = e.check.source === 'own' ? [] : this.ownChanged(c, e);
+        const unread = e.check.source === 'own' || e.check.check === DEFINITION ? undefined : c.changes?.unread;
+        const mine = e.check.source === 'own' || unread ? [] : this.ownChanged(c, e);
         const { runs, needed } = this.unspent(c, e, this.runsOf(c, e, carried), spent);
-        if (mine.length) owns.push(`${e.check.check} counts as the agent's own: the claim changed ${mine.join(', ')}, which it loads`);
+        if (unread) owns.push(`${e.check.check} counts as the agent's own: what the claim changed couldn't be read (${unread})`);
+        if (mine.length) owns.push(`${e.check.check} counts as the agent's own: the claim changed ${mine.join(', ')}, which ${c.host ? `it may load (its run on ${c.host} records no read files)` : 'it loads'}`);
         return {
-          check: e.check.check, command: e.check.command, source: mine.length ? 'own' as const : e.check.source ?? 'definition' as const, covers: [...e.check.covers], depth: e.check.depth,
+          check: e.check.check, command: e.check.command, source: mine.length || unread ? 'own' as const : e.check.source ?? 'definition' as const, covers: [...e.check.covers], depth: e.check.depth,
           ...(needed !== undefined ? { needed } : {}), ...(e.check.min_tests !== undefined ? { min_tests: e.check.min_tests } : {}),
           runs,
           ...(base ? { base } : {}),
@@ -691,7 +694,7 @@ export class GateRunner {
    * the slow lane. Resolves once the fast lane has ended or the hold has, with the claim's checks as they stand.
    */
   async stop(r: { session: string; claim: string; task: string; cwd: string; base: string; requirements: ClaimRequirement[]; checks: ClaimCheck[]; stopAt: number; definition?: DefinitionState; joins?: boolean; state?: StatePin; host?: string }): Promise<{ fast: string[]; slow: string[]; snapshot: string; readyAt: number; budgetCost: string[]; changed: boolean }> {
-    if (r.host) return stopOnHost({ claims: this.claims, definition: (c, d, s) => this.definitionEntry(c, d, s), cantStart: (e, error) => this.cantStart(e, error), o: this.o }, { ...r, host: r.host });
+    if (r.host) return stopOnHost({ claims: this.claims, definition: (c, d, s) => this.definitionEntry(c, d, s), cantStart: (e, error) => this.cantStart(e, error), o: this.o, readMs: Math.max(READ_FLOOR_MS, (r.stopAt + this.o.hold_ms - this.o.now()) / 2) }, { ...r, host: r.host });
     // The snapshot and the checkout share one budget (#31): past it the claim is INCONCLUSIVE, naming the reason and
     // the count of untracked files, and none of its checks runs, in the live worktree or anywhere.
     const budget = this.o.checkouts().budget();
@@ -701,7 +704,7 @@ export class GateRunner {
     const repo = this.repoOf(r.cwd);
     let installs: Promise<string> | undefined;
     // Read beside the snapshot, from the same worktree: whose checks count turns on what the claim changed (#33).
-    const changes = changesOf(r.cwd, r.base);
+    const changes = changesOf(r.cwd, r.base, Math.max(READ_FLOOR_MS, (r.stopAt + this.o.hold_ms - this.o.now()) / 2));
     let snapshot = r.base;
     // Compared by tree: a snapshot of a dirty folder is a new commit even when its files are the last one's.
     let tree: string | undefined;

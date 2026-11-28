@@ -3,6 +3,7 @@
 import type { Checkouts } from '@deepbuild/gate';
 import type { Connection, EventInput } from '@deepbuild/record';
 import type { Admission } from './admission.js';
+import type { Changes } from './claim-changes.js';
 import type { Plant } from './plant.js';
 import type { StackWant } from './stacks.js';
 import type { Spent, Variant } from './variants.js';
@@ -22,6 +23,7 @@ export interface GateOptions {
   core: Connection;
   /** Starts one run of a claim's check in `cwd`, in its lane with its expected time; resolves with its run handle. */
   start(r: { claim: string; check: string; approved: string | null; command: string; commit: string; cwd: string; lane: 'fast' | 'slow'; expected_ms: number | null; deadline_ms: number | null; env?: Record<string, string>; hosts?: string[]; standIns?: string[]; references?: { path: string; sha256: string }[]; overlay?: Record<string, string>; variant?: Variant; key?: RunKey; stack?: StackWant; memory?: Admission; /** The host the run is on, in `cwd` there (#999). */ host?: string }): Promise<string>;
+  changesOn?(host: string, cwd: string, base: string, ms: number, session: string): Promise<Changes>;
   /** The call that spent a task's held-out variant, by its files (#3229); a runner without it knows of none. */
   spent?(task: string, files: Record<string, string>): Spent | undefined;
   /** The start a check's stack needs now, added to its expected time (#580). */
