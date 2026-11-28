@@ -1,0 +1,149 @@
+# Base run of #1880's tagged redraft at 654c560c1468816186f16ab34830840b96746f0c (2026-11-26T08:30:45Z)
+# node_modules and packages/*/dist are absent from this checkout, so vitest could not run and nothing was installed.
+# The one check that needs neither ran: the suite #1880.f9683a09 names, as agent-names.test.ts's first test runs it.
+$ systemd-run --user --scope -p MemoryMax=24G -p MemorySwapMax=2G /var/tmp/deep40/node/bin/node --test tests/agent-name-branches.test.mjs
+✖ the hub's branches on an agent's name are only those agent-name-branches.json lists (351.294727ms)
+✖ a planted branch on an agent's name fails, naming its file and line (169.046889ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 754.365555
+
+✖ failing tests:
+
+test at tests/agent-name-branches.test.mjs:53:1
+✖ the hub's branches on an agent's name are only those agent-name-branches.json lists (351.294727ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + [
+  +   "packages/hub/src/answer-delivery.ts:520 branches on an agent's name (?.agent === 'codex'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/answer-delivery.ts:1035 branches on an agent's name (?.agent === 'pi'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/answer-delivery.ts:1071,1124,1135 branches on an agent's name (meta.agent === 'paseo'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/answer-delivery.ts:1103 branches on an agent's name (session.agent !== 'paseo'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/doctor.ts:161 branches on an agent's name (i.agent === 'claude-code'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/hook-replies.ts:45 branches on an agent's name (agent !== 'claude-code'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/hook-replies.ts:45 branches on an agent's name (agent !== 'claude'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/hub-shared.ts:290 branches on an agent's name (meta.agent === 'codex'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/mcp-operations.ts:589 branches on an agent's name (?.agent === 'codex'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/rule-load.ts:283 branches on an agent's name (recorded === 'claude'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/server.ts:1100 branches on an agent's name (meta.agent !== 'claude-code'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/server.ts:1100 branches on an agent's name (meta.agent !== 'claude'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/session-memory.ts:145 branches on an agent's name (agent === 'codex'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/session-state.ts:410 branches on an agent's name (session.agent === 'codex'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/session-state.ts:802,804,812,831,832 branches on an agent's name (meta.agent === 'codex'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/session-state.ts:802 branches on an agent's name (meta.agent === 'paseo'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/session-state.ts:807 branches on an agent's name (meta.agent !== 'pi'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/session-state.ts:831 branches on an agent's name (meta.agent === 'claude-code'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/session-state.ts:831 branches on an agent's name (meta.agent === 'claude'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/session-state.ts:849 branches on an agent's name (meta.agent === 'pi'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/session-state.ts:849 branches on an agent's name (session.agent === 'pi'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/status.ts:528 branches on an agent's name (row.agent !== 'claude-code'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/status.ts:528 branches on an agent's name (row.agent !== 'claude'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/tool-load.ts:17 branches on an agent's name (agent !== 'claude-code'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/tool-load.ts:17 branches on an agent's name (agent !== 'claude'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/work.ts:1016 branches on an agent's name (agent === 'claude-code'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/work.ts:1016 branches on an agent's name (agent === 'codex'); read a cap or a fact its adapter declares instead",
+  +   `agent-name-branches.json allows 2 of "packages/hub/src/core.ts ?.agent === 'codex'" and the code has 0: lower it`,
+  +   `agent-name-branches.json allows 1 of "packages/hub/src/core.ts ?.agent === 'pi'" and the code has 0: lower it`,
+  +   `agent-name-branches.json allows 2 of "packages/hub/src/core.ts agent === 'codex'" and the code has 1: lower it`,
+  +   `agent-name-branches.json allows 1 of "packages/hub/src/core.ts meta.agent !== 'pi'" and the code has 0: lower it`,
+  +   `agent-name-branches.json allows 2 of "packages/hub/src/core.ts meta.agent === 'claude'" and the code has 1: lower it`,
+  +   `agent-name-branches.json allows 5 of "packages/hub/src/core.ts meta.agent === 'claude-code'" and the code has 4: lower it`,
+  +   `agent-name-branches.json allows 11 of "packages/hub/src/core.ts meta.agent === 'codex'" and the code has 5: lower it`,
+  +   `agent-name-branches.json allows 3 of "packages/hub/src/core.ts meta.agent === 'paseo'" and the code has 1: lower it`,
+  +   `agent-name-branches.json allows 3 of "packages/hub/src/core.ts meta.agent === 'pi'" and the code has 2: lower it`,
+  +   `agent-name-branches.json allows 1 of "packages/hub/src/core.ts session.agent !== 'paseo'" and the code has 0: lower it`,
+  +   `agent-name-branches.json allows 1 of "packages/hub/src/core.ts session.agent === 'codex'" and the code has 0: lower it`,
+  +   `agent-name-branches.json allows 1 of "packages/hub/src/core.ts session.agent === 'pi'" and the code has 0: lower it`,
+  +   `agent-name-branches.json allows 1 of "packages/hub/src/server.ts agent !== 'claude'" and the code has 0: lower it`,
+  +   `agent-name-branches.json allows 1 of "packages/hub/src/server.ts agent !== 'claude-code'" and the code has 0: lower it`,
+  +   `agent-name-branches.json allows 2 of "packages/hub/src/server.ts meta.agent === 'claude'" and the code has 1: lower it`,
+  +   `agent-name-branches.json allows 2 of "packages/hub/src/server.ts meta.agent === 'claude-code'" and the code has 1: lower it`
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://~/deepbuild/.claude/worktrees/redraft-1880-base/tests/agent-name-branches.test.mjs:54:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ "packages/hub/src/answer-delivery.ts:520 branches on an agent's name (?.agent === 'codex'); read a cap or a fact its adapter declares instead", "packages/hub/src/answer-delivery.ts:1035 branches on an agent's name (?.agent === 'pi'); read a cap or a fact its adapter declares instead", "packages/hub/src/answer-delivery.ts:1071,1124,1135 branches on an agent's name (meta.agent === 'paseo'); read a cap or a fact its adapter declares instead", "packages/hub/src/answer-delivery.ts:1103 branches on an agent's name (session.agent !== 'paseo'); read a cap or a fact its adapter declares instead", "packages/hub/src/doctor.ts:161 branches on an agent's name (i.agent === 'claude-code'); read a cap or a fact its adapter declares instead", "packages/hub/src/hook-replies.ts:45 branches on an agent's name (agent !== 'claude-code'); read a cap or a fact its adapter declares instead", "packages/hub/src/hook-replies.ts:45 branches on an agent's name (agent !== 'claude'); read a cap or a fact its adapter declares instead", "packages/hub/src/hub-shared.ts:290 branches on an agent's name (meta.agent === 'codex'); read a cap or a fact its adapter declares instead", "packages/hub/src/mcp-operations.ts:589 branches on an agent's name (?.agent === 'codex'); read a cap or a fact its adapter declares instead", "packages/hub/src/rule-load.ts:283 branches on an agent's name (recorded === 'claude'); read a cap or a fact its adapter declares instead", "packages/hub/src/server.ts:1100 branches on an agent's name (meta.agent !== 'claude-code'); read a cap or a fact its adapter declares instead", "packages/hub/src/server.ts:1100 branches on an agent's name (meta.agent !== 'claude'); read a cap or a fact its adapter declares instead", "packages/hub/src/session-memory.ts:145 branches on an agent's name (agent === 'codex'); read a cap or a fact its adapter declares instead", "packages/hub/src/session-state.ts:410 branches on an agent's name (session.agent === 'codex'); read a cap or a fact its adapter declares instead", "packages/hub/src/session-state.ts:802,804,812,831,832 branches on an agent's name (meta.agent === 'codex'); read a cap or a fact its adapter declares instead", "packages/hub/src/session-state.ts:802 branches on an agent's name (meta.agent === 'paseo'); read a cap or a fact its adapter declares instead", "packages/hub/src/session-state.ts:807 branches on an agent's name (meta.agent !== 'pi'); read a cap or a fact its adapter declares instead", "packages/hub/src/session-state.ts:831 branches on an agent's name (meta.agent === 'claude-code'); read a cap or a fact its adapter declares instead", "packages/hub/src/session-state.ts:831 branches on an agent's name (meta.agent === 'claude'); read a cap or a fact its adapter declares instead", "packages/hub/src/session-state.ts:849 branches on an agent's name (meta.agent === 'pi'); read a cap or a fact its adapter declares instead", "packages/hub/src/session-state.ts:849 branches on an agent's name (session.agent === 'pi'); read a cap or a fact its adapter declares instead", "packages/hub/src/status.ts:528 branches on an agent's name (row.agent !== 'claude-code'); read a cap or a fact its adapter declares instead", "packages/hub/src/status.ts:528 branches on an agent's name (row.agent !== 'claude'); read a cap or a fact its adapter declares instead", "packages/hub/src/tool-load.ts:17 branches on an agent's name (agent !== 'claude-code'); read a cap or a fact its adapter declares instead", "packages/hub/src/tool-load.ts:17 branches on an agent's name (agent !== 'claude'); read a cap or a fact its adapter declares instead", "packages/hub/src/work.ts:1016 branches on an agent's name (agent === 'claude-code'); read a cap or a fact its adapter declares instead", "packages/hub/src/work.ts:1016 branches on an agent's name (agent === 'codex'); read a cap or a fact its adapter declares instead", `agent-name-branches.json allows 2 of "packages/hub/src/core.ts ?.agent === 'codex'" and the code has 0: lower it`, `agent-name-branches.json allows 1 of "packages/hub/src/core.ts ?.agent === 'pi'" and the code has 0: lower it`, `agent-name-branches.json allows 2 of "packages/hub/src/core.ts agent === 'codex'" and the code has 1: lower it`, `agent-name-branches.json allows 1 of "packages/hub/src/core.ts meta.agent !== 'pi'" and the code has 0: lower it`, `agent-name-branches.json allows 2 of "packages/hub/src/core.ts meta.agent === 'claude'" and the code has 1: lower it`, `agent-name-branches.json allows 5 of "packages/hub/src/core.ts meta.agent === 'claude-code'" and the code has 4: lower it`, `agent-name-branches.json allows 11 of "packages/hub/src/core.ts meta.agent === 'codex'" and the code has 5: lower it`, `agent-name-branches.json allows 3 of "packages/hub/src/core.ts meta.agent === 'paseo'" and the code has 1: lower it`, `agent-name-branches.json allows 3 of "packages/hub/src/core.ts meta.agent === 'pi'" and the code has 2: lower it`, `agent-name-branches.json allows 1 of "packages/hub/src/core.ts session.agent !== 'paseo'" and the code has 0: lower it`, `agent-name-branches.json allows 1 of "packages/hub/src/core.ts session.agent === 'codex'" and the code has 0: lower it`, `agent-name-branches.json allows 1 of "packages/hub/src/core.ts session.agent === 'pi'" and the code has 0: lower it`, `agent-name-branches.json allows 1 of "packages/hub/src/server.ts agent !== 'claude'" and the code has 0: lower it`, `agent-name-branches.json allows 1 of "packages/hub/src/server.ts agent !== 'claude-code'" and the code has 0: lower it`, `agent-name-branches.json allows 2 of "packages/hub/src/server.ts meta.agent === 'claude'" and the code has 1: lower it`, `agent-name-branches.json allows 2 of "packages/hub/src/server.ts meta.agent === 'claude-code'" and the code has 1: lower it` ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/agent-name-branches.test.mjs:57:1
+✖ a planted branch on an agent's name fails, naming its file and line (169.046889ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+    [
+  +   "packages/hub/src/answer-delivery.ts:520 branches on an agent's name (?.agent === 'codex'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/answer-delivery.ts:1035 branches on an agent's name (?.agent === 'pi'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/answer-delivery.ts:1071,1124,1135 branches on an agent's name (meta.agent === 'paseo'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/answer-delivery.ts:1103 branches on an agent's name (session.agent !== 'paseo'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/doctor.ts:161 branches on an agent's name (i.agent === 'claude-code'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/hook-replies.ts:45 branches on an agent's name (agent !== 'claude-code'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/hook-replies.ts:45 branches on an agent's name (agent !== 'claude'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/hub-shared.ts:290 branches on an agent's name (meta.agent === 'codex'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/mcp-operations.ts:589 branches on an agent's name (?.agent === 'codex'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/rule-load.ts:283 branches on an agent's name (recorded === 'claude'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/server.ts:1100 branches on an agent's name (meta.agent !== 'claude-code'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/server.ts:1100 branches on an agent's name (meta.agent !== 'claude'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/session-memory.ts:145 branches on an agent's name (agent === 'codex'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/session-state.ts:410 branches on an agent's name (session.agent === 'codex'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/session-state.ts:802,804,812,831,832 branches on an agent's name (meta.agent === 'codex'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/session-state.ts:802 branches on an agent's name (meta.agent === 'paseo'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/session-state.ts:807 branches on an agent's name (meta.agent !== 'pi'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/session-state.ts:831 branches on an agent's name (meta.agent === 'claude-code'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/session-state.ts:831 branches on an agent's name (meta.agent === 'claude'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/session-state.ts:849 branches on an agent's name (meta.agent === 'pi'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/session-state.ts:849 branches on an agent's name (session.agent === 'pi'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/status.ts:528 branches on an agent's name (row.agent !== 'claude-code'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/status.ts:528 branches on an agent's name (row.agent !== 'claude'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/tool-load.ts:17 branches on an agent's name (agent !== 'claude-code'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/tool-load.ts:17 branches on an agent's name (agent !== 'claude'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/work.ts:1016 branches on an agent's name (agent === 'claude-code'); read a cap or a fact its adapter declares instead",
+  +   "packages/hub/src/work.ts:1016 branches on an agent's name (agent === 'codex'); read a cap or a fact its adapter declares instead",
+  +   `agent-name-branches.json allows 2 of "packages/hub/src/core.ts ?.agent === 'codex'" and the code has 0: lower it`,
+  +   `agent-name-branches.json allows 1 of "packages/hub/src/core.ts ?.agent === 'pi'" and the code has 0: lower it`,
+  +   `agent-name-branches.json allows 2 of "packages/hub/src/core.ts agent === 'codex'" and the code has 1: lower it`,
+  +   `agent-name-branches.json allows 1 of "packages/hub/src/core.ts meta.agent !== 'pi'" and the code has 0: lower it`,
+  +   `agent-name-branches.json allows 2 of "packages/hub/src/core.ts meta.agent === 'claude'" and the code has 1: lower it`,
+  +   `agent-name-branches.json allows 5 of "packages/hub/src/core.ts meta.agent === 'claude-code'" and the code has 4: lower it`,
+  +   `agent-name-branches.json allows 11 of "packages/hub/src/core.ts meta.agent === 'codex'" and the code has 6: lower it`,
+  +   `agent-name-branches.json allows 3 of "packages/hub/src/core.ts meta.agent === 'paseo'" and the code has 1: lower it`,
+  +   `agent-name-branches.json allows 3 of "packages/hub/src/core.ts meta.agent === 'pi'" and the code has 2: lower it`,
+  +   `agent-name-branches.json allows 1 of "packages/hub/src/core.ts session.agent !== 'paseo'" and the code has 0: lower it`,
+  +   `agent-name-branches.json allows 1 of "packages/hub/src/core.ts session.agent === 'codex'" and the code has 0: lower it`,
+  +   `agent-name-branches.json allows 1 of "packages/hub/src/core.ts session.agent === 'pi'" and the code has 0: lower it`,
+  +   `agent-name-branches.json allows 1 of "packages/hub/src/server.ts agent !== 'claude'" and the code has 0: lower it`,
+  +   `agent-name-branches.json allows 1 of "packages/hub/src/server.ts agent !== 'claude-code'" and the code has 0: lower it`,
+  +   `agent-name-branches.json allows 2 of "packages/hub/src/server.ts meta.agent === 'claude'" and the code has 1: lower it`,
+  +   `agent-name-branches.json allows 2 of "packages/hub/src/server.ts meta.agent === 'claude-code'" and the code has 1: lower it`
+  -   "packages/hub/src/core.ts:2639 branches on an agent's name (meta.agent === 'codex'); read a cap or a fact its adapter declares instead"
+    ]
+  
+      at TestContext.<anonymous> (file://~/deepbuild/.claude/worktrees/redraft-1880-base/tests/agent-name-branches.test.mjs:64:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ "packages/hub/src/answer-delivery.ts:520 branches on an agent's name (?.agent === 'codex'); read a cap or a fact its adapter declares instead", "packages/hub/src/answer-delivery.ts:1035 branches on an agent's name (?.agent === 'pi'); read a cap or a fact its adapter declares instead", "packages/hub/src/answer-delivery.ts:1071,1124,1135 branches on an agent's name (meta.agent === 'paseo'); read a cap or a fact its adapter declares instead", "packages/hub/src/answer-delivery.ts:1103 branches on an agent's name (session.agent !== 'paseo'); read a cap or a fact its adapter declares instead", "packages/hub/src/doctor.ts:161 branches on an agent's name (i.agent === 'claude-code'); read a cap or a fact its adapter declares instead", "packages/hub/src/hook-replies.ts:45 branches on an agent's name (agent !== 'claude-code'); read a cap or a fact its adapter declares instead", "packages/hub/src/hook-replies.ts:45 branches on an agent's name (agent !== 'claude'); read a cap or a fact its adapter declares instead", "packages/hub/src/hub-shared.ts:290 branches on an agent's name (meta.agent === 'codex'); read a cap or a fact its adapter declares instead", "packages/hub/src/mcp-operations.ts:589 branches on an agent's name (?.agent === 'codex'); read a cap or a fact its adapter declares instead", "packages/hub/src/rule-load.ts:283 branches on an agent's name (recorded === 'claude'); read a cap or a fact its adapter declares instead", "packages/hub/src/server.ts:1100 branches on an agent's name (meta.agent !== 'claude-code'); read a cap or a fact its adapter declares instead", "packages/hub/src/server.ts:1100 branches on an agent's name (meta.agent !== 'claude'); read a cap or a fact its adapter declares instead", "packages/hub/src/session-memory.ts:145 branches on an agent's name (agent === 'codex'); read a cap or a fact its adapter declares instead", "packages/hub/src/session-state.ts:410 branches on an agent's name (session.agent === 'codex'); read a cap or a fact its adapter declares instead", "packages/hub/src/session-state.ts:802,804,812,831,832 branches on an agent's name (meta.agent === 'codex'); read a cap or a fact its adapter declares instead", "packages/hub/src/session-state.ts:802 branches on an agent's name (meta.agent === 'paseo'); read a cap or a fact its adapter declares instead", "packages/hub/src/session-state.ts:807 branches on an agent's name (meta.agent !== 'pi'); read a cap or a fact its adapter declares instead", "packages/hub/src/session-state.ts:831 branches on an agent's name (meta.agent === 'claude-code'); read a cap or a fact its adapter declares instead", "packages/hub/src/session-state.ts:831 branches on an agent's name (meta.agent === 'claude'); read a cap or a fact its adapter declares instead", "packages/hub/src/session-state.ts:849 branches on an agent's name (meta.agent === 'pi'); read a cap or a fact its adapter declares instead", "packages/hub/src/session-state.ts:849 branches on an agent's name (session.agent === 'pi'); read a cap or a fact its adapter declares instead", "packages/hub/src/status.ts:528 branches on an agent's name (row.agent !== 'claude-code'); read a cap or a fact its adapter declares instead", "packages/hub/src/status.ts:528 branches on an agent's name (row.agent !== 'claude'); read a cap or a fact its adapter declares instead", "packages/hub/src/tool-load.ts:17 branches on an agent's name (agent !== 'claude-code'); read a cap or a fact its adapter declares instead", "packages/hub/src/tool-load.ts:17 branches on an agent's name (agent !== 'claude'); read a cap or a fact its adapter declares instead", "packages/hub/src/work.ts:1016 branches on an agent's name (agent === 'claude-code'); read a cap or a fact its adapter declares instead", "packages/hub/src/work.ts:1016 branches on an agent's name (agent === 'codex'); read a cap or a fact its adapter declares instead", `agent-name-branches.json allows 2 of "packages/hub/src/core.ts ?.agent === 'codex'" and the code has 0: lower it`, `agent-name-branches.json allows 1 of "packages/hub/src/core.ts ?.agent === 'pi'" and the code has 0: lower it`, `agent-name-branches.json allows 2 of "packages/hub/src/core.ts agent === 'codex'" and the code has 1: lower it`, `agent-name-branches.json allows 1 of "packages/hub/src/core.ts meta.agent !== 'pi'" and the code has 0: lower it`, `agent-name-branches.json allows 2 of "packages/hub/src/core.ts meta.agent === 'claude'" and the code has 1: lower it`, `agent-name-branches.json allows 5 of "packages/hub/src/core.ts meta.agent === 'claude-code'" and the code has 4: lower it`, `agent-name-branches.json allows 11 of "packages/hub/src/core.ts meta.agent === 'codex'" and the code has 6: lower it`, `agent-name-branches.json allows 3 of "packages/hub/src/core.ts meta.agent === 'paseo'" and the code has 1: lower it`, `agent-name-branches.json allows 3 of "packages/hub/src/core.ts meta.agent === 'pi'" and the code has 2: lower it`, `agent-name-branches.json allows 1 of "packages/hub/src/core.ts session.agent !== 'paseo'" and the code has 0: lower it`, `agent-name-branches.json allows 1 of "packages/hub/src/core.ts session.agent === 'codex'" and the code has 0: lower it`, `agent-name-branches.json allows 1 of "packages/hub/src/core.ts session.agent === 'pi'" and the code has 0: lower it`, `agent-name-branches.json allows 1 of "packages/hub/src/server.ts agent !== 'claude'" and the code has 0: lower it`, `agent-name-branches.json allows 1 of "packages/hub/src/server.ts agent !== 'claude-code'" and the code has 0: lower it`, `agent-name-branches.json allows 2 of "packages/hub/src/server.ts meta.agent === 'claude'" and the code has 1: lower it`, `agent-name-branches.json allows 2 of "packages/hub/src/server.ts meta.agent === 'claude-code'" and the code has 1: lower it` ],
+    expected: [ "packages/hub/src/core.ts:2639 branches on an agent's name (meta.agent === 'codex'); read a cap or a fact its adapter declares instead" ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+# exit 1

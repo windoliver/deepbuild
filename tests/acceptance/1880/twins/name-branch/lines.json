@@ -1,0 +1,12 @@
+{
+  "packages/reading/src/index.ts": [
+    {
+      "find": [
+        "      if (!runner.takesSubagents(agent)) {"
+      ],
+      "wrong": [
+        "      if (agent !== 'claude-code') {"
+      ]
+    }
+  ]
+}

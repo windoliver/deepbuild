@@ -318,6 +318,8 @@ class LocalRunner implements Runner {
     if (evaluate) await this.o.record.sync();
     if (!parts) return this.refuse(job, `no agent ${String(spec.agent)}`);
     if ((spec.writes || spec.workspace) && !parts.writing) return this.refuse(job, `${spec.agent} has no job that writes yet`);
+    const named = Object.keys(spec.subagents ?? {});
+    if (named.length && !parts.subagents) return this.refuse(job, `${spec.agent} takes no sub-agents, and this job names ${named.length > 1 ? 'some' : 'one'} (${named.join(', ')})`);
     if (spec.checkout) {
       const failed = await this.checkout(folder, spec.checkout).catch((error: unknown) => (error instanceof Error ? error.message : String(error)));
       job.preparing = false;
@@ -476,6 +478,9 @@ class LocalRunner implements Runner {
 
   account(agent: Agent): string | null {
     return AGENTS[agent]?.account(this.o.env.HOME ?? '', this.o.env) ?? null;
+  }
+  takesSubagents(agent: Agent): boolean {
+    return AGENTS[agent]?.subagents === true;
   }
 
   /** One trusted orchestration job; its model turns remain in the evaluator's existing sandboxed launcher. */

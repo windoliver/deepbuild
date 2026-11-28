@@ -1,0 +1,10 @@
+{
+  "packages/runner/src/agents.ts": [
+    {
+      "find": [
+        "      ...(Object.keys(subagents).length ? ['--agents', JSON.stringify(subagents)] : []),"
+      ],
+      "wrong": []
+    }
+  ]
+}

@@ -213,7 +213,9 @@ describe('the one-time choices', () => {
       writeFileSync(join(root, 'config.json'), JSON.stringify({ reading: { agent: 'codex' } }));
       await build(root);
       const jobs = ((await call(socket(root), token(root), 'job.list', {})) as { result: { jobs: { kind: string; agent: string }[] } }).result.jobs;
-      expect(jobs.filter((j) => j.kind === 'read').map((j) => j.agent)).toEqual(['codex']);
+      expect(jobs.filter((j) => j.kind === 'read')).toEqual([]);
+      const ended = rows<{ data: string }>(root, "SELECT data FROM events WHERE kind = 'reading.finished'").map((r) => JSON.parse(r.data) as Obj);
+      expect(ended).toMatchObject([{ state: 'BLOCKED', runs: [], invalid: expect.stringMatching(/^codex takes no sub-agents/) }]);
     });
   }, 120_000);
 });

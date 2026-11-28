@@ -22,6 +22,7 @@ export interface AgentParts {
   confine(mcp: Record<string, McpServer>, subagents: Record<string, Subagent>, writes?: string): string[];
   /** Its job can write one folder. */
   writing?: true;
+  subagents?: true;
   /** The account the agent records beside your sign-in, or null. */
   account(home: string, env: Record<string, string | undefined>): string | null;
   /** Your sign-in files the agent reads in place, never copied into a job's folder. */
@@ -91,6 +92,7 @@ export function codexWindows(limits: unknown): Map<string, { used: number; reset
 export const AGENTS: Partial<Record<Agent, AgentParts>> = {
   'claude-code': {
     facts: 'claude-code.facts.json',
+    subagents: true,
     writing: true,
     confine: (mcp, subagents, writes) => [
       '--mcp-config', JSON.stringify({ mcpServers: mcp }),
@@ -151,10 +153,7 @@ export const AGENTS: Partial<Record<Agent, AgentParts>> = {
   codex: {
     facts: 'codex.facts.json',
     // The MCP servers go on the command line, since the facts' launch ignores your config. Codex has no sub-agents to name.
-    confine: (mcp, subagents) => {
-      if (Object.keys(subagents).length) throw Error('a Codex job takes no sub-agents');
-      return Object.entries(mcp).flatMap(([name, server]) => ['-c', `mcp_servers.${JSON.stringify(name)}=${inlineToml(server)}`]);
-    },
+    confine: (mcp) => Object.entries(mcp).flatMap(([name, server]) => ['-c', `mcp_servers.${JSON.stringify(name)}=${inlineToml(server)}`]),
     account: (home, env) => {
       const v = readJson(join(codexHome(home, env), 'auth.json'));
       const id = isObj(v) && isObj(v.tokens) ? v.tokens.account_id : undefined;
@@ -233,9 +232,9 @@ export function codexLogRefused(log: string): boolean {
 
 AGENTS.pi = {
   facts: 'pi.facts.json',
-  // pi has no MCP and no sub-agents: a job that names them is refused, never run without them.
-  confine: (mcp, subagents) => {
-    if (Object.keys(mcp).length || Object.keys(subagents).length) throw Error('a pi job takes no MCP server and no sub-agent');
+  // pi has no MCP and no sub-agents: a job that names them is refused, never run without them (sub-agents at submit).
+  confine: (mcp) => {
+    if (Object.keys(mcp).length) throw Error('a pi job takes no MCP server');
     return [];
   },
   account: () => null,

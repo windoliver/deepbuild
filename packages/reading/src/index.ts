@@ -77,11 +77,12 @@ const TOOLS = fileURLToPath(new URL('../dist/tools.mjs', import.meta.url));
 /** Where the node that runs the job's tools reads itself from: its binary's folder, and the folders of the libraries
  *  it loaded besides the system's and its addons, which a Homebrew node links from its own prefix. */
 let reads: string[] | undefined;
+const own = (p: string): boolean => !/^\/(usr\/lib|System)\/|\.node$/.test(p);
 const nodeReads = (): string[] => {
   // Read once: a report takes milliseconds on the hub's loop, and the libraries node loaded at its start don't change.
   if (reads) return reads;
   const loaded = (process.report.getReport() as { sharedObjects?: string[] }).sharedObjects ?? [];
-  return (reads = [...new Set([process.execPath, ...loaded].filter((p) => !/^\/(usr\/lib|System)\/|\.node$/.test(p)).map((p) => dirname(realpathSync(p))))]);
+  return (reads = [...new Set([process.execPath, ...loaded].filter((p) => p.startsWith('/') && own(p)).map((p) => realpathSync(p)).filter(own).map((p) => dirname(p)))]);
 };
 const INSTALL = 'What should DeepBuild remember about each project from these sessions: how it starts, builds and is set up, and what you said to remember? Quote what to remember.';
 
@@ -257,6 +258,15 @@ export async function openReading(o: ReadingOptions): Promise<Reading> {
   return {
     async run(spec) {
       const reading = `reading:${ulid(now())}`;
+      const agent = spec.agent ?? 'claude-code';
+      if (!runner.takesSubagents(agent)) {
+        await append('reading.finished', {
+          reading, kind: spec.kind, runs: [], state: 'BLOCKED', findings: 0, dropped: 0, undelivered: 0, plan: null,
+          models: { final: 'unknown', subreads: [] }, written: 0,
+          invalid: `${agent} takes no sub-agents, and a reading hands its sub-reads to its reader sub-agent`,
+        });
+        return { reading, runs: [], findings: [], dropped: [], undelivered: 0, plan: 'not captured', models: { final: 'unknown', subreads: [] }, written: [] };
+      }
       // A reading that fails still ends on record: its job, if one started, what it dropped, and why.
       const at = { job: undefined as string | undefined, dropped: 0, finished: false };
       try {
@@ -273,7 +283,7 @@ export async function openReading(o: ReadingOptions): Promise<Reading> {
             // Before submit, which may launch the job: a reading taken after it could already hold the job's use.
             const before = runner.planWindows();
             const submitted = await runner.submit({
-              kind: 'read', agent: spec.agent ?? 'claude-code', model: STRONGEST, deadline_ms: DEADLINE,
+              kind: 'read', agent, model: STRONGEST, deadline_ms: DEADLINE,
               prompt: prompt(spec.kind, spec.question ?? INSTALL, handles),
               // The tools make no TLS call; a node built on a shared OpenSSL would otherwise read its config outside the grant.
               mcp: { reading: { command: process.execPath, args: ['--openssl-config=/dev/null', TOOLS, tools.socket] } },
