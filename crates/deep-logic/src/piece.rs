@@ -553,6 +553,7 @@ pub struct Item {
     /// With `on_input`, the offset in the write region of the i32 `due` names.
     pub due: Option<u32>,
     pub reads: Vec<String>,
+    pub settings: Vec<(String, f64)>,
     pub writes: Vec<Write>,
     pub layout: Layout,
     pub reads_at: u32,

@@ -57,7 +57,7 @@ it('a watch-only session whose FAIL no send-back reached never reads sent back; 
 
 it('an idle session with commits no remote branch holds is flagged; a working one is not', () => {
   const unpushed = { commits: 2, branch: 'fix/cart', at: at(9, 'commits.unpushed') };
-  expect(decide(facts({ status: 'finished', stopped: at(8, 'agent.stop'), unpushed }), NOW).flag?.text).toBe('2 commits on fix/cart on no remote branch');
+  expect(decide(facts({ status: 'finished', stopped: at(8, 'agent.stop'), unpushed }), NOW).flag?.text).toBe('2 saved changes on fix/cart, not shared yet');
   expect(decide(facts({ unpushed }), NOW).flag).toBeUndefined();
 });
 

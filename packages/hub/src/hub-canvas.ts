@@ -143,8 +143,9 @@ export class HubCanvas {
 
   /** The world the canvas core reads: the hub's live sessions, the record's asks and readings, and the world file. */
   private async canvasWorld(): Promise<CanvasWorld> {
-    const packs = this.packsNeeded ? await this.options.libraries()?.packs.installed(this.canvas()) : undefined;
-    const file: Obj = { ...this.worldFile.read(), packs: packs ?? [] };
+    const store = this.packsNeeded ? this.options.libraries()?.packs : undefined;
+    const packs = await store?.installed(this.canvas());
+    const file: Obj = { ...this.worldFile.read(), packs: packs ?? [], pack_checks: store?.checks };
     // The hub slot check.kind@1's fills deep_kinds lists: each check kind a plug-in registered, with its kit at install (#1415).
     const host = this.options.extensions();
     const kits = (await host?.installed() ?? []).flatMap((p) => p.kits).filter((k) => k.slot === 'check.kind@1');
@@ -369,8 +370,8 @@ export class HubCanvas {
    * no session; a refusal is the canvas core's error@2, at its path under the call's arguments.
    */
   async kinds(args: Obj): Promise<Obj> {
-    // Asset search and fetch (#1731) span the enabled libraries, which the hub reads; the canvas core holds none.
-    if (args.op === 'assets' || args.op === 'fetch') return this.assets(args);
+    // Asset search (#1731) spans the enabled libraries, which the hub reads; the canvas core holds none.
+    if (args.op === 'assets') return this.assets(args);
     this.packsNeeded = true;
     const call: Obj = { call: 'deep_kinds' };
     for (const [k, v] of Object.entries(args)) if (v !== null) call[k] = v;
@@ -381,12 +382,12 @@ export class HubCanvas {
   }
 
   /**
-   * deep_kinds `assets` and `fetch` (#1731): one ranked list over the enabled libraries' rows, and a fetch of one row
-   * by its library and id, held on your answer, refused naming why, or BLOCKED with one unblock ask.
+   * deep_kinds `assets` and deep_job `fetch` (#1731, #3525): one ranked list over the enabled libraries' rows, and a
+   * fetch of one row by its library and id, held on your answer, refused naming why, or BLOCKED with one unblock ask.
    */
-  private async assets(args: Obj): Promise<Obj> {
+  async assets(args: Obj): Promise<Obj> {
     const libraries = this.options.libraries();
-    if (!libraries) throw refuse('unavailable', '', 'The hub has no extension host yet; try again once it is ready.', 'deep_kinds', true);
+    if (!libraries) throw refuse('unavailable', '', 'The hub has no extension host yet; try again once it is ready.', args.op === 'fetch' ? 'deep_job' : 'deep_kinds', true);
     for (const k of Object.keys(args)) {
       const takes = args.op === 'assets' ? ['op', 'query', 'kind', 'size_m', 'license', 'limit'] : ['op', 'library', 'id', 'pack', 'asset'];
       if (args[k] !== null && args[k] !== undefined && !takes.includes(k)) throw refuse('unlisted_field', `/params/arguments/${k}`, `Leave out ${k}: ${String(args.op)} takes only ${takes.slice(1).join(', ')}.`, k);
@@ -505,8 +506,8 @@ export class HubCanvas {
     if (held) return held;
     const game = await this.gameAssets({ document: params.document });
     if (game.refused) return game.refused;
-    const packs = this.options.libraries()!.packs.all();
-    const rendered = await renderStill(game.call.document, params.still, this.options.root.evidence, packs);
+    const store = this.options.libraries()!.packs;
+    const rendered = await renderStill(game.call.document, params.still, this.options.root.evidence, store.all(), store.checks);
     const hash = (rendered.snapshots as Obj[] | undefined)?.[0]?.sha256;
     if (rendered.outcome !== 'presented' || typeof hash !== 'string') return { status: 'BLOCKED', cause: `No still could be drawn: ${JSON.stringify(rendered)}` };
     // The canvas store's bytes are rehashed before they leave the hub; neither an input path nor an output path

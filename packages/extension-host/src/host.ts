@@ -44,7 +44,7 @@ import { canonicalize, checkManifest, extensionApi, frozenDigests, hubSlots, reg
 import { contentFree, toJson, ulid, type Connection, type Event, type EventInput, type Receipt, type RecordStore } from '@deepbuild/record';
 import type { LeaseKind, LeaseResult, LeaseTable } from '@deepbuild/leases';
 import type { Runner } from '@deepbuild/runner';
-import { badDeadline, checkHost, type Host as RunHost, type Supervisor } from '@deepbuild/supervisor';
+import { badDeadline, checkHost, type Host as RunHost, type Supervisor, type Used } from '@deepbuild/supervisor';
 import { API, extensionSide, peer } from '../runtime/deep.mjs';
 import { cycleThrough, dependents, graph, refusal, resolve, servedAt, type Piece, type UseRow } from './compose.js';
 import { packageDigest } from './digest.js';
@@ -70,7 +70,7 @@ export type { NoticeRow } from './sends.js';
 import { WorkSources, type Added, type DeliveryRow, type WorkEvent, type WorkKitFixture, type WorkPage, type WorkResult, type WorkTask } from './work.js';
 import { AnswerTooLarge, declareSource, handleOf, nodeFetch, nodeHttp, osSecrets, Sources, HostSources, type HttpClient, type KeyTest, type Polled, type Reading, type Recording, type SecretStore, type SourceRead, type StreamRead } from './sources.js';
 import { TERMINAL_PLANTS, TERMINAL_PROTOCOL, Terminals, type OpenSpec, type TerminalPlant, type TerminalTab } from './terminals.js';
-import { shellRefusal, type ShellInput } from './shell-plays.js';
+import { levelTracks, shellRefusal, type ShellInput } from './shell-plays.js';
 import type { ProjectTrust } from './trust.js';
 import type { ActionCall, ActionListing, ActionResult, Conformance, ExtensionHost, HookReply, HookRequest, InstallFrom, Load, Loaded, PackageTests, Refused, RunningEnvironment, RuntimeEnvironment } from './host-api.js';
 export type { ActionCall, ActionListing, ActionResult, ActionTarget, Conformance, ExtensionHost, HookReply, HookRequest, InstallFrom, Load, Loaded, PackageTests, Refused, RunningEnvironment, RuntimeEnvironment } from './host-api.js';
@@ -448,8 +448,8 @@ class Host implements ExtensionHost {
   jobParams(kind: string, value: unknown): Record<string, JsonValue> {
     return this.jobTools.jobParams(kind, value);
   }
-  async runJobTool(tool: string, kind: string, params: Record<string, JsonValue>, inputs: JobBytes, call?: Omit<JobCall, 'provider'>, stop?: AbortSignal, watch?: (counter: JobCounter) => void): Promise<Record<string, Uint8Array>> {
-    return this.jobTools.runJobTool(tool, kind, params, inputs, call, stop, watch);
+  async runJobTool(tool: string, kind: string, params: Record<string, JsonValue>, inputs: JobBytes, call?: Omit<JobCall, 'provider'>, stop?: AbortSignal, watch?: (counter: JobCounter) => void, usage?: (used: Used) => void): Promise<Record<string, Uint8Array>> {
+    return this.jobTools.runJobTool(tool, kind, params, inputs, call, stop, watch, usage);
   }
   async jobHostReport(tool: string, kind: string): Promise<{ weights: Weight[]; capabilities: string[] }> {
     return this.jobTools.jobHostReport(tool, kind);
@@ -1824,7 +1824,7 @@ class Host implements ExtensionHost {
         // #556: an array recorded only at the steps it changed is read as surely as one read at every step.
         const values = [reply.values, reply.changes].some((r) => isPlain(r) && Object.values(r).some((v) => Array.isArray(v) && v.length > 0));
         running.played.push({ seed: seed as number, bot: r.bot === undefined ? undefined : canonical(botOf(r.bot)), track: String(reply.track), values, ...(off ? { off: off.row as number } : {}), ...startedAt(r, reply) });
-        if (Array.isArray(reply.entries)) running.tracks.add(canonical(reply.entries));
+        for (const t of [reply.entries, ...levelTracks(reply)]) if (Array.isArray(t)) running.tracks.add(canonical(t));
         // #1048: a probe's track for each copy that trapped or broke a range, the run's recorded entries and what it
         // put, which the check plays again in a fresh replica.
         if (Array.isArray(reply.tests)) for (const t of reply.tests as { track?: unknown }[]) if (Array.isArray(t?.track)) running.tracks.add(canonical(t.track));
@@ -2442,7 +2442,7 @@ class Host implements ExtensionHost {
     return (of[key] ??= this.options.plant === 'hands-one-writable-event' ? made() : frozen(made()));
   }
   /**
-   * What a passed run of a check whose input gives a seed lacks (Check input: plug-in reads, #184): each run its input
+   * What a passed run of a check whose input gives a seed lacks (Check input: extension reads, #184): each run its input
    * asks (each bot's run i, at hash(seed, i)) played, its track's hash in the evidence and values read, and testsRun
    * counting them all; each lack names the run and its seed, and (#1047) the step of a run that started elsewhere.
    */
@@ -2997,7 +2997,7 @@ class Host implements ExtensionHost {
       if (!isCheckResult(result)) return nothing('failed', `${ext.entry.id}'s ${kind} returned no check result as check.kind@1 defines one`);
       // A passed run rests on the tests it counted: passed with none counted ran nothing it can vouch for.
       if (result.outcome === 'passed' && result.testsRun === 0) return nothing('ran_nothing', `${ext.entry.id}'s ${kind} reported passed without its results: it counted no test`);
-      // A pass built on canvas reads holds only with their content keys as its evidence (Check input: plug-in reads).
+      // A pass built on canvas reads holds only with their content keys as its evidence (Check input: extension reads).
       const missing = read.filter((k) => !result.evidence.includes(k));
       if (result.outcome === 'passed' && missing.length) return nothing('failed', `${ext.entry.id}'s ${kind} reported passed without the content keys its deep.canvas.read calls returned as evidence (${missing.length} missing, first ${missing[0]})`);
       const unplayed = result.outcome === 'passed' ? this.unplayed(ext, result) : [];
@@ -3099,6 +3099,11 @@ class Host implements ExtensionHost {
     return { address: `127.0.0.1:${(server.address() as AddressInfo).port}` };
   }
   private async serve(ext: Ext, chosen: Set<string>, req: IncomingMessage, res: ServerResponse): Promise<void> {
+    if (req.headers.origin !== undefined || req.headers['sec-fetch-site'] !== undefined || req.headers.host !== `127.0.0.1:${req.socket.localPort}`) {
+      req.resume();
+      res.writeHead(403).end();
+      return;
+    }
     const path = (req.url ?? '/').split('?')[0]!;
     const route = `${req.method} ${path}`;
     if (!chosen.has(route) || !ext.ask || (await this.revoked(ext))) {

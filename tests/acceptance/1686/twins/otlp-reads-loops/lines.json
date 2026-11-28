@@ -1,0 +1,12 @@
+{
+  "packages/otlp/src/index.ts": [
+    {
+      "find": [
+        "}>('claude-code.facts.json');"
+      ],
+      "wrong": [
+        "}>('loops.facts.json');"
+      ]
+    }
+  ]
+}

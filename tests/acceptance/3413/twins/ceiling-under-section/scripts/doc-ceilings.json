@@ -1,0 +1,20 @@
+{
+  "docs/canvas-primitives.md#export": 18962,
+  "docs/canvas-primitives.md#one-word-per-idea": 40707,
+  "docs/canvas-primitives.md#registries-and-closed-lists": 19174,
+  "docs/canvas-primitives.md#the-event-catalogue": 16644,
+  "docs/canvas-primitives.md#whats-decided-and-what-would-reopen-it": 25420,
+  "docs/technical-design.md#an-agent-says-its-done": 21561,
+  "docs/technical-design.md#an-ask-and-your-answer-getting-back": 17454,
+  "docs/technical-design.md#decided": 64936,
+  "docs/technical-design.md#extension-api-typescript-in-process": 44530,
+  "docs/technical-design.md#films-and-figures-on-the-canvas": 23859,
+  "docs/technical-design.md#first-party-extensions-that-ship-on-by-default": 47727,
+  "docs/technical-design.md#how-it-installs": 29212,
+  "docs/technical-design.md#how-runs-become-one-of-five-verdicts": 35923,
+  "docs/technical-design.md#how-we-know-version-0-works": 48619,
+  "docs/technical-design.md#scenes-physics-and-the-canvas-core": 20222,
+  "docs/technical-design.md#socket-roles-and-contract-versions": 19807,
+  "docs/technical-design.md#the-canvas-core": 20529,
+  "docs/technical-design.md#threats-and-what-stops-each-one": 22643
+}

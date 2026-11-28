@@ -1,0 +1,15 @@
+{
+  "crates/deep-hook/src/actions.rs": [
+    {
+      "find": [
+        "        let mut lines = Lines {",
+        "            reader: io::stdin().lock(),"
+      ],
+      "wrong": [
+        "        let _ballast = std::hint::black_box(vec![1u8; 8 << 20]);",
+        "        let mut lines = Lines {",
+        "            reader: io::stdin().lock(),"
+      ]
+    }
+  ]
+}

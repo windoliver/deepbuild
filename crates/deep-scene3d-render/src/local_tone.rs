@@ -241,7 +241,13 @@ impl Toner {
         });
     }
 
-    fn sized(&self, device: &Device, size: [u32; 2], source: &wgpu::TextureView) -> Sized {
+    fn sized(
+        &self,
+        device: &Device,
+        size: [u32; 2],
+        source: &wgpu::TextureView,
+        into: &wgpu::TextureView,
+    ) -> Sized {
         let d = &device.device;
         let usage = wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING;
         let cells = |size: [u32; 2]| {
@@ -302,11 +308,6 @@ impl Toner {
         let through = bind(2, &[params.clone(), bound(3, &level), bound(6, &grid)]);
         let across = [at[0].div_ceil(4), at[1].div_ceil(4), deep.div_ceil(4)];
         steps.push((2, through, across));
-        let usage = wgpu::TextureUsages::RENDER_ATTACHMENT
-            | wgpu::TextureUsages::TEXTURE_BINDING
-            | wgpu::TextureUsages::COPY_SRC;
-        let resolved = texture2d(d, "scene3d.local_tone resolved", size, LINEAR, usage)
-            .create_view(&Default::default());
         let apply = bind(3, &[params, bound(1, source), between, bound(7, &grid)]);
         Sized {
             size,
@@ -314,24 +315,23 @@ impl Toner {
             source: source.clone(),
             steps,
             apply,
-            resolved,
+            resolved: into.clone(),
         }
     }
 
-    /// The local tone map over `source` at `size`, and the resolved image the output reads.
     pub fn job(
         &mut self,
         device: &Device,
         size: [u32; 2],
         source: &wgpu::TextureView,
+        into: &(wgpu::Texture, wgpu::TextureView),
         profiler: &Option<crate::Profiler>,
     ) -> (Job, wgpu::TextureView) {
-        let keep = self
-            .sized
-            .as_ref()
-            .is_some_and(|s| s.size == size && s.levels == self.levels && &s.source == source);
+        let keep = self.sized.as_ref().is_some_and(|s| {
+            s.size == size && s.levels == self.levels && &s.source == source && s.resolved == into.1
+        });
         if !keep {
-            self.sized = Some(self.sized(device, size, source));
+            self.sized = Some(self.sized(device, size, source, &into.1));
         }
         let s = self.sized.as_ref().expect("sized above");
         let (pipes, steps) = (self.steps.clone(), s.steps.clone());

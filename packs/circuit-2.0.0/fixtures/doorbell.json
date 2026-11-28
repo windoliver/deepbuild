@@ -1,0 +1,169 @@
+{
+  "name": "doorbell",
+  "item": {
+    "kind": "logic@1",
+    "params": {
+      "program": "229420585482ea25ae9697957f05b8e031d0d52cea5264b525203a98483afba4",
+      "step_rate": 1000,
+      "writes": {
+        "v": {
+          "type": "f64",
+          "count": 4
+        },
+        "i_rms": {
+          "type": "f64",
+          "count": 3
+        },
+        "i": {
+          "type": "f64",
+          "count": 3
+        },
+        "p": {
+          "type": "f64",
+          "count": 3
+        },
+        "r": {
+          "type": "f64",
+          "count": 3
+        },
+        "on": {
+          "type": "i32",
+          "count": 3
+        },
+        "energy": {
+          "type": "f64",
+          "count": 3
+        },
+        "kwh": {
+          "type": "f64",
+          "count": 3
+        },
+        "drift": {
+          "type": "f64",
+          "count": 3
+        },
+        "drift_x": {
+          "type": "f64",
+          "count": 3
+        },
+        "heat": {
+          "type": "f64",
+          "count": 3
+        },
+        "residual": {
+          "type": "f64",
+          "count": 3
+        },
+        "i2_rms": {
+          "type": "f64",
+          "count": 3
+        },
+        "i2": {
+          "type": "f64",
+          "count": 3
+        }
+      },
+      "circuit": {
+        "nodes": [
+          "neutral",
+          "live",
+          "low_a",
+          "low_b"
+        ],
+        "parts": [
+          {
+            "id": "mains",
+            "kind": "source_ac",
+            "from": "neutral",
+            "to": "live",
+            "v_rms": 230,
+            "f": 50
+          },
+          {
+            "id": "transformer",
+            "kind": "transformer",
+            "primary": [
+              "live",
+              "neutral"
+            ],
+            "secondary": [
+              "low_a",
+              "low_b"
+            ],
+            "turns": [
+              115,
+              6
+            ]
+          },
+          {
+            "id": "bell",
+            "kind": "load",
+            "from": "low_a",
+            "to": "low_b",
+            "p_rated": 6,
+            "v_rated": 12
+          }
+        ]
+      },
+      "budget": {
+        "fuel": 10000000
+      }
+    }
+  },
+  "track": [],
+  "steps": 6,
+  "expect": {
+    "arrays": {
+      "0": {
+        "i_rms": [
+          0.02608695652173913,
+          0.02608695652173913,
+          0.5
+        ],
+        "i2_rms": [
+          0,
+          0.5,
+          0
+        ],
+        "p": [
+          6,
+          0,
+          6
+        ],
+        "r": [
+          0,
+          0,
+          24
+        ],
+        "on": [
+          1,
+          1,
+          1
+        ]
+      },
+      "5": {
+        "v": [
+          0,
+          325.2691193458119,
+          0,
+          -16.970562748477143
+        ],
+        "i": [
+          0.03689252771408074,
+          0.03689252771408074,
+          0.7071067811865476
+        ],
+        "i2": [
+          0,
+          -0.7071067811865476,
+          0
+        ]
+      }
+    },
+    "tolerance": {
+      "abs": 1e-12,
+      "rel": 1e-9
+    }
+  },
+  "answer": "The secondary gives 230 × 6 ÷ 115 = 12 V rms into the bell, 12² ÷ 6 = 24 Ω: 0.5 A. The primary carries 0.5 × 6 ÷ 115 = 0.026087 A, so the source gives 230 × 0.026087 = 6 W, the bell takes 6 W and the transformer none. At step 5, a quarter of a 50 Hz cycle, every wave is at its crest: the live 230√2 V, low_b −12√2 V (low_a is the secondary's lowest node, which nothing joins to node 0, held at 0 V), the primary and the source 0.026087√2 A, the bell 0.5√2 A, and the secondary −0.5√2 A from low_a to low_b through the winding, which gives the power."
+}

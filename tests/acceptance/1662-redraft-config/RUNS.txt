@@ -1,0 +1,79 @@
+#1662 AC1 redraft (config) runs, by the redraft job, 2026-11-28 04:31 UTC (2026-11-27 local), macOS (Darwin 27.2.0)
+arm64, Node v24.22.0, vitest 5.0.5. 1-minute load 128 (the machine is shared). Checkout: <checkout>, whose
+tests/acceptance/1662/, crates/, Cargo.*, .cargo/ and vendor/ are origin/main 0beb4a141. <tmp> is os.tmpdir().
+Home paths redacted.
+
+1. node node_modules/typescript/bin/tsc -p tests/acceptance/1662-redraft-config/tsconfig.json
+   exit 0, no output.
+
+2. node scripts/comment-ratchet.mjs 2>&1 | grep 1662
+   no line (no file of this folder or of tests/acceptance/1662/ is named). The script's own exit is 1 for files outside
+   this folder (scripts/repo-rules.mjs, scripts/search-reading.mjs, ...), not this job's.
+
+3. node node_modules/vitest/vitest.mjs run --root tests/acceptance/1662-redraft-config --no-file-parallelism
+   Test Files 1 failed (1); Tests 1 failed | 2 passed (3); 7.07 s.
+
+   v #1662.0b9026c1 the tree of this checkout names deep-app and no plant-* feature of it   (passes)
+   x #1662.0b9026c1 (wrong program) the merge base's manifests, where deep-replica's dependency turns plant-row on,
+     fail the judge naming plant-row (redraft config)   2881 ms
+     AssertionError: the judge must fail on the merge base, or it proves nothing: expected 'BLOCKED: cargo tree
+     --locked --worksp…' to match /turns on deep-app's "plant-row"/
+     Received: "BLOCKED: cargo tree --locked --workspace -e normal,build,features -i deep-app --offline failed
+     (exit 101): error: failed to download `accesskit_macos v0.26.3`
+       Caused by:
+         attempting to make an HTTP request, but --offline was specified"
+   v #1662.0b9026c1 the judge, on written trees: a plant-* feature fails named, a tree of other features holds
+     (passes)
+
+   Reading: the layout at <tmp>/deepbuild-acceptance-1662/c950fe146768 got past the resolution the base run failed
+   at (no "failed to select a version for crypto-bigint", no <checkout>/vendor path): cargo resolved the pinned
+   Cargo.lock and stopped at fetching package sources. This Mac's cargo cache lacks the .crate archives of 32 of the
+   pinned lock's registry packages (a scan of the lock against <home>/.cargo/registry/cache: accesskit_macos-0.26.3,
+   cranelift-*-0.136.2, crypto-bigint-0.7.5, ctutils-0.4.3, gpui-pre-macos-0.3.9, pkcs1-0.8.0-rc.4,
+   pulley-*-49.0.2, rsa-0.10.0-rc.18, rustix-1.1.5, rustls-webpki-0.103.15, spki-0.8.0, tokio-1.54.0,
+   wasmtime*-49.0.2, zstd-0.13.3, zstd-safe-7.3.0; their unpacked sources are under registry/src, but cargo
+   --offline reads the archives). So this run is BLOCKED by the machine's cache, the outcome the frozen
+   featureTree gives a tree it can't read, never a pass; it is not yet the proof the test is for.
+
+4. Hand runs of the issue's command on the same pinned files (cargo tree --locked --workspace -e
+   normal,build,features -i deep-app --offline), to show the layout is what changed:
+   - in <tmp>/deepbuild-acceptance-1662/c950fe146768 (the redraft's layout): exit 101, "failed to download
+     `accesskit_macos v0.26.3` ... --offline was specified" (as in 3).
+   - the same files copied to <checkout>/target/acceptance-1662-redraft-control/c950fe146768 (the original's kind of
+     place, under the checkout; removed after): exit 101, the base run's failure: "failed to select a version for
+     `crypto-bigint`", its chain through `llrt_crypto v0.9.0-beta (<checkout>/vendor/llrt_crypto)` to
+     `deep-gpu-layer v0.0.0 (<checkout>/target/acceptance-1662-redraft-control/c950fe146768/crates/deep-gpu-layer)`.
+
+Run 3 did not reach the wrong-program test's assertion: it needs the pinned lock's crate archives in the cargo cache
+(REDRAFT.md, Run). This job made no network fetch; run 5 below follows the coordinator's one fetch.
+
+5. After the cache was warmed (2026-11-28 04:34 UTC, 1-minute load 48): the coordinator ran `cargo fetch --locked`
+   once in <tmp>/deepbuild-acceptance-1662/c950fe146768 (exit 0), with network, outside the test; nothing else changed
+   (no test code). Then, by this job:
+   node node_modules/vitest/vitest.mjs run --root tests/acceptance/1662-redraft-config --no-file-parallelism --reporter=verbose
+   Test Files 1 passed (1); Tests 3 passed (3); 9.39 s; exit 0.
+     v #1662.0b9026c1 the tree of this checkout names deep-app and no plant-* feature of it   4958 ms
+     v #1662.0b9026c1 (wrong program) the merge base's manifests, where deep-replica's dependency turns plant-row on,
+       fail the judge naming plant-row (redraft config)   3974 ms
+     v #1662.0b9026c1 the judge, on written trees: a plant-* feature fails named, a tree of other features holds   2 ms
+
+   The message the wrong-program test catches, printed by a one-off node script in the scratch temp dir (not in this
+   folder) calling the same helpers, failureOf(async () => judgeTree(await featureTree(baseManifestsApart()))):
+     the workspace's feature tree turns on deep-app's "plant-row": └── deep-app feature "plant-row"  <- └──
+     deep-replica v0.0.0 (<tmp>/deepbuild-acceptance-1662/c950fe146768/crates/deep-replica) (*)
+   It names `turns on deep-app's "plant-row"` and `<- … deep-replica`, the pinned layout's crate: the judge fails on
+   the merge base for the criterion's reason.
+
+6. After the review round (REDRAFT.md, Change after hand-in): base-apart.ts now makes a private mkdtemp layout per
+   call under the real path of os.tmpdir() and removes it when the test finishes. The old shared layout
+   <tmp>/deepbuild-acceptance-1662/ was removed first. 2026-11-28 04:58 UTC, 1-minute load 70.
+   node node_modules/typescript/bin/tsc -p tests/acceptance/1662-redraft-config/tsconfig.json   exit 0, no output.
+   node scripts/comment-ratchet.mjs 2>&1 | grep 1662   no line.
+   node node_modules/vitest/vitest.mjs run --root tests/acceptance/1662-redraft-config --no-file-parallelism --reporter=verbose
+   Test Files 1 passed (1); Tests 3 passed (3); 9.47 s; exit 0.
+     v #1662.0b9026c1 the tree of this checkout names deep-app and no plant-* feature of it   4576 ms
+     v #1662.0b9026c1 (wrong program) the merge base's manifests, where deep-replica's dependency turns plant-row on,
+       fail the judge naming plant-row (redraft config)   4493 ms
+     v #1662.0b9026c1 the judge, on written trees: a plant-* feature fails named, a tree of other features holds   2 ms
+   The wrong-program test's two assertions (turns on deep-app's "plant-row"; <- … deep-replica) held on the fresh
+   layout. Afterwards `ls -d <tmp>/deepbuild-acceptance-1662*` finds nothing: the layout was removed.

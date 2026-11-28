@@ -1,0 +1,47 @@
+[
+  {
+    "group": null,
+    "fields": {
+      "title": "County employment",
+      "publisher": "Tarn Vale Census Office",
+      "edition": "2019",
+      "license": "CC-BY-4.0",
+      "credit": "The county returns of Tarn Vale",
+      "url": "https://127.0.0.1:59371/fixture/tables1/a-counties.csv",
+      "fetched": "1795832867290",
+      "sha256": "dedd545c812edc4936cda2bb619a696880d994026b272755df917627b00c4622",
+      "bytes": "42",
+      "used_by": "1"
+    }
+  },
+  {
+    "group": null,
+    "fields": {
+      "title": "County to metro area crosswalk",
+      "publisher": "Tarn Vale Mapping Board",
+      "edition": "2020",
+      "license": "CC0-1.0",
+      "credit": "–",
+      "url": "https://127.0.0.1:59371/fixture/tables1/b-crosswalk.csv",
+      "fetched": "1795832868135",
+      "sha256": "e6f20c1ae8aa0c5397f3ef7581b984dfad06b3cfd03dd1c6cc7d20cf182b83f1",
+      "bytes": "78",
+      "used_by": "1"
+    }
+  },
+  {
+    "group": null,
+    "fields": {
+      "title": "Metro area population",
+      "publisher": "Tarn Vale Residents Register",
+      "edition": "2022",
+      "license": "CC0-1.0",
+      "credit": "–",
+      "url": "https://127.0.0.1:59371/fixture/tables1/c-population.csv",
+      "fetched": "1795832869027",
+      "sha256": "ed4e2cf0b9710f7a7393fb2f900252c8cfab991fc1df5f3bdc729691ca9654c6",
+      "bytes": "29",
+      "used_by": "1"
+    }
+  }
+]

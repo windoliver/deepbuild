@@ -3,6 +3,7 @@ use crate::states::{keys_unchanged, taken_for_creates};
 pub use paths::paths_of;
 use paths::{merge_paths, written_paths};
 
+mod history;
 mod paths;
 
 impl Hub<'_> {
@@ -1243,78 +1244,6 @@ impl Hub<'_> {
             self.take_lost(doc, &w, &mut reply);
         }
         Value::Object(reply)
-    }
-
-    /// `history`: every revision that changed the item, in order.
-    pub fn history(&self, doc: &str, item: &str) -> Value {
-        let rows: Vec<Value> = self
-            .shared
-            .get(doc)
-            .into_iter()
-            .flat_map(|s| s.revs.iter())
-            .filter(|r| r.changed.contains(item))
-            .map(|r| {
-                let writer = r.writer.as_ref().map(Writer::to_json);
-                json!({"rev": r.rev, "patch": r.patch, "writer": writer, "reason": r.reason})
-            })
-            .collect();
-        json!({"history": rows})
-    }
-
-    /// `by_writer`: each layer's writer, the items it holds now and the patches its writer
-    /// applied, in order.
-    pub fn by_writer(&self, doc: &str) -> Value {
-        let (Some(k), Some(shared)) = (self.shown(doc), self.shared.get(doc)) else {
-            return json!({"writers": []});
-        };
-        let (shown, _) = shared.at(k);
-        let mut rows = Vec::new();
-        for (layer, entry) in shown["layers"].as_object().into_iter().flatten() {
-            let Some(writer) = entry["writer"].as_str().and_then(writer_of_text) else {
-                continue;
-            };
-            let mut items: Vec<&String> = shown["items"]
-                .as_object()
-                .into_iter()
-                .flatten()
-                .filter(|(_, i)| i["layer"].as_str() == Some(layer.as_str()))
-                .map(|(id, _)| id)
-                .collect();
-            items.sort();
-            let patches: Vec<&String> = shared.revs[..=k]
-                .iter()
-                .filter(|r| r.writer.as_ref() == Some(&writer))
-                .filter_map(|r| r.patch.as_ref())
-                .collect();
-            rows.push(json!({"writer": writer.to_json(), "layer": layer, "items": items, "patches": patches}));
-        }
-        json!({"writers": rows})
-    }
-
-    /// `revisions` of a shared document: every committed revision, the newest current. A view of
-    /// the record has none: it's rebuilt from projections as of an event (Revision).
-    pub fn shared_revisions(&self, doc: &str) -> Value {
-        let shared = &self.shared[doc];
-        if shared.doc.get("source").is_some() {
-            return json!({"revisions": []});
-        }
-        let last = shared.current().rev;
-        let rows: Vec<Value> = shared
-            .revs
-            .iter()
-            .enumerate()
-            .map(|(k, r)| {
-                json!({
-                    "rev": r.rev,
-                    "base_rev": r.base_rev,
-                    "writer": r.writer.as_ref().map(Writer::to_json),
-                    "hash": shared.hash(k, &self.startup.sealed),
-                    "state": if r.rev == last { "current" } else { "superseded" },
-                    "patches": r.patch.iter().collect::<Vec<_>>(),
-                })
-            })
-            .collect();
-        json!({"revisions": rows})
     }
 
     /// Runs the scenario's calls, one reply each in call order. On the clock, calls arrive at

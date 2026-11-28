@@ -1,0 +1,87 @@
+{
+  "benchmarks/budgets.json": [
+    {
+      "find": [
+        "      \"initialReason\": \"Issue #2332: first reading from main 9f93f1e7bbd7974eeda9f2e98c47851e07ad9bff on Mac17,10, Node 24.22.2, 2026-11-15: 5,004,036,860 hub-only instructions from process start to the core-ready stdout line, on a fresh home with the shipped guards. This command prints that live-process counter before shutdown; the perf lane also counts the whole command and its children. Acceptance compares 20 alternated pairs for at least 25% fewer startup instructions, no increase in the first SessionStart, prompt or PreToolUse, and no higher idle RSS. Wall time under this machine's load is a reading, not a passing budget.\",",
+        "      \"criteria\": [",
+        "        \"#3438.ac71a3bd\"",
+        "      ]"
+      ],
+      "wrong": [
+        "      \"initialReason\": \"Issue #2332: first reading from main 9f93f1e7bbd7974eeda9f2e98c47851e07ad9bff on Mac17,10, Node 24.22.2, 2026-11-15: 5,004,036,860 hub-only instructions from process start to the core-ready stdout line, on a fresh home with the shipped guards. This command prints that live-process counter before shutdown; the perf lane also counts the whole command and its children. Acceptance compares 20 alternated pairs for at least 25% fewer startup instructions, no increase in the first SessionStart, prompt or PreToolUse, and no higher idle RSS. Wall time under this machine's load is a reading, not a passing budget.\""
+      ]
+    },
+    {
+      "find": [
+        "      \"initialReason\": \"Issue #16 first measurement: the merge base has no hub. One process spawns `deep hub run` on a temp home and waits for its socket's hello, then stops it, so p50 includes Node's start twice; the issue's 500 ms cold start stays in tests/acceptance/16/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task.\",",
+        "      \"criteria\": [",
+        "        \"#3438.ac71a3bd\"",
+        "      ]"
+      ],
+      "wrong": [
+        "      \"initialReason\": \"Issue #16 first measurement: the merge base has no hub. One process spawns `deep hub run` on a temp home and waits for its socket's hello, then stops it, so p50 includes Node's start twice; the issue's 500 ms cold start stays in tests/acceptance/16/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task.\""
+      ]
+    },
+    {
+      "find": [
+        "      \"initialReason\": \"Issue #16 first measurement: the merge base has no hub. One process starts the hub on a temp home and leaves it idle for seven seconds, reading its CPU and resident memory; the issue's 0.5% idle CPU and 150 MB with 30 days of history stay in tests/acceptance/16/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task.\",",
+        "      \"criteria\": [",
+        "        \"#2646.0e7e5ac3\",",
+        "        \"#3548.4bf12cec\",",
+        "        \"#3438.ac71a3bd\""
+      ],
+      "wrong": [
+        "      \"initialReason\": \"Issue #16 first measurement: the merge base has no hub. One process starts the hub on a temp home and leaves it idle for seven seconds, reading its CPU and resident memory; the issue's 0.5% idle CPU and 150 MB with 30 days of history stay in tests/acceptance/16/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task.\",",
+        "      \"criteria\": [",
+        "        \"#2646.0e7e5ac3\",",
+        "        \"#3548.4bf12cec\""
+      ]
+    },
+    {
+      "find": [
+        "      \"initialReason\": \"Issue #34 first measurement: the merge base's hub has no App API stream with start IDs. One process starts the hub on a temp home, subscribes as the app and sends 1,000 PreToolUse requests, timing each from its write to the app's frame for its event; the issue's 50 ms p95 stays in tests/acceptance/34/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task.\",",
+        "      \"criteria\": [",
+        "        \"#3438.ac71a3bd\"",
+        "      ]"
+      ],
+      "wrong": [
+        "      \"initialReason\": \"Issue #34 first measurement: the merge base's hub has no App API stream with start IDs. One process starts the hub on a temp home, subscribes as the app and sends 1,000 PreToolUse requests, timing each from its write to the app's frame for its event; the issue's 50 ms p95 stays in tests/acceptance/34/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task.\""
+      ]
+    },
+    {
+      "find": [
+        "      \"initialReason\": \"Issue #34 first measurement: the merge base's events.read carries no start ID. One process seeds 30 days of history, about 3,000 events a day, through the record, starts the hub on it and pages the whole log as the app through events.read, so p50 includes the seeding and Node's start; the issue's 300 ms stays in tests/acceptance/34/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task.\",",
+        "      \"criteria\": [",
+        "        \"#2646.0e7e5ac3\",",
+        "        \"#3438.ac71a3bd\""
+      ],
+      "wrong": [
+        "      \"initialReason\": \"Issue #34 first measurement: the merge base's events.read carries no start ID. One process seeds 30 days of history, about 3,000 events a day, through the record, starts the hub on it and pages the whole log as the app through events.read, so p50 includes the seeding and Node's start; the issue's 300 ms stays in tests/acceptance/34/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task.\",",
+        "      \"criteria\": [",
+        "        \"#2646.0e7e5ac3\""
+      ]
+    },
+    {
+      "find": [
+        "      \"initialReason\": \"Issue #303 first measurement: the merge base's prompt hook opens no ask-task and has no task for it. One process starts the hub on a temp home and sends 1,000 UserPromptSubmit requests, each a new prompt that asks for a change, one connection each as deep-hook makes them, after 20 to warm up, then stops it; the issue's under 5 ms added to the prompt hook against the merge base stays in tests/acceptance/303/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task.\",",
+        "      \"criteria\": [",
+        "        \"#3438.ac71a3bd\"",
+        "      ]"
+      ],
+      "wrong": [
+        "      \"initialReason\": \"Issue #303 first measurement: the merge base's prompt hook opens no ask-task and has no task for it. One process starts the hub on a temp home and sends 1,000 UserPromptSubmit requests, each a new prompt that asks for a change, one connection each as deep-hook makes them, after 20 to warm up, then stops it; the issue's under 5 ms added to the prompt hook against the merge base stays in tests/acceptance/303/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task.\""
+      ]
+    },
+    {
+      "find": [
+        "      \"initialReason\": \"Issue #340 first measurement: after a compaction the SessionStart hook sends the open asks' requirement IDs again. One process starts the hub on a temp home, starts a session, and sends 1,000 SessionStart requests with source compact, one connection each as deep-hook makes them, after 20 to warm up, then stops it; the issue's under 10 ms at p95 on top of process start stays in tests/acceptance/340/flow/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task.\",",
+        "      \"criteria\": [",
+        "        \"#3438.ac71a3bd\"",
+        "      ]"
+      ],
+      "wrong": [
+        "      \"initialReason\": \"Issue #340 first measurement: after a compaction the SessionStart hook sends the open asks' requirement IDs again. One process starts the hub on a temp home, starts a session, and sends 1,000 SessionStart requests with source compact, one connection each as deep-hook makes them, after 20 to warm up, then stops it; the issue's under 10 ms at p95 on top of process start stays in tests/acceptance/340/flow/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task.\""
+      ]
+    }
+  ]
+}

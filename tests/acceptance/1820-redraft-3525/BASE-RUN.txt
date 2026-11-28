@@ -1,0 +1,162 @@
+# NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/1820-redraft-3525/ --testTimeout=600000 --no-file-parallelism
+# base b134dd38f + d9b9015ff (tests only); Node 24.22.0; target/debug/deep-hook built, deep-show NOT built (disk: build nothing)
+# Thu Nov 26 23:20:25 PST 2026
+# 23:20  up 2 days, 17:09, 2 users, load averages: 279.51 277.69 202.92
+# /dev/disk3s5   460Gi   387Gi    38Gi    91%    6.3M  403M    2%   /System/Vol...
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/festive-dijkstra-c49494
+
+ ❯ tests/acceptance/1820-redraft-3525/export-redraft/export.test.ts (4 tests | 4 skipped) 14372ms
+ ❯ tests/acceptance/1820-redraft-3525/fetch.test.ts (2 tests | 2 skipped) 11494ms
+ ❯ tests/acceptance/1820-redraft-3525/scope/resume.test.ts (3 tests | 3 skipped) 14954ms
+ ❯ tests/acceptance/1820-redraft-3525/scope/reuse.test.ts (2 tests | 2 skipped) 13978ms
+ ❯ tests/acceptance/1820-redraft-3525/scope/license-file.test.ts (4 tests | 4 skipped) 15035ms
+ ❯ tests/acceptance/1820-redraft-3525/offline.test.ts (3 tests | 3 skipped) 27103ms
+ ❯ tests/acceptance/1820-redraft-3525/disk.test.ts (1 test | 1 skipped) 17799ms
+ ❯ tests/acceptance/1820-redraft-3525/license.test.ts (4 tests | 4 skipped) 10916ms
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1820-redraft-3525/disk.test.ts [ tests/acceptance/1820-redraft-3525/disk.test.ts ]
+Error: BLOCKED: deep install of a pack folder with url-listed assets did not install it: exit 3, Source: /private/tmp/dh1731-W1vRAD/pack-a
+  acme/sounds@1.0.0, digest e6d341665a789652eddb29879c3c74096b82a859149f93263e3801868e1ab8d3
+  Assets fetch only on first use after an authority ask or your standing rule.
+ No canvas core is built under ~/private/deepbuild-core/.claude/worktrees/festive-dijkstra-c49494/target; run cargo build --bin deep-show first.
+
+ ❯ readyWorld tests/acceptance/1820/helpers.ts:58:18
+     56|   const w = await packWorld();
+     57|   const bad = w.installs.find((r) => r.code !== 0);
+     58|   if (bad) throw Error(`BLOCKED: deep install of a pack folder with ur…
+       |                  ^
+     59|   return w;
+     60| }
+ ❯ tests/acceptance/1820-redraft-3525/disk.test.ts:8:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  tests/acceptance/1820-redraft-3525/fetch.test.ts [ tests/acceptance/1820-redraft-3525/fetch.test.ts ]
+Error: BLOCKED: deep install of a pack folder with url-listed assets did not install it: exit 3, Source: /private/tmp/dh1731-bM1P4c/pack-a
+  acme/sounds@1.0.0, digest 5b98d911f730eceebb21dc1ec067e767f0777dd2c5481a7a6bc098c243cb488b
+  Assets fetch only on first use after an authority ask or your standing rule.
+ No canvas core is built under ~/private/deepbuild-core/.claude/worktrees/festive-dijkstra-c49494/target; run cargo build --bin deep-show first.
+
+ ❯ readyWorld tests/acceptance/1820/helpers.ts:58:18
+     56|   const w = await packWorld();
+     57|   const bad = w.installs.find((r) => r.code !== 0);
+     58|   if (bad) throw Error(`BLOCKED: deep install of a pack folder with ur…
+       |                  ^
+     59|   return w;
+     60| }
+ ❯ tests/acceptance/1820-redraft-3525/fetch.test.ts:10:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  tests/acceptance/1820-redraft-3525/license.test.ts [ tests/acceptance/1820-redraft-3525/license.test.ts ]
+Error: BLOCKED: deep install of a pack folder with url-listed assets did not install it: exit 3, Source: /private/tmp/dh1731-ROBfb4/pack-a
+  acme/sounds@1.0.0, digest 8297578a74b291e8423d04d4eeafe945eb88f3a15f0ffe7aa0a738067c7b7a64
+  Assets fetch only on first use after an authority ask or your standing rule.
+ No canvas core is built under ~/private/deepbuild-core/.claude/worktrees/festive-dijkstra-c49494/target; run cargo build --bin deep-show first.
+
+ ❯ readyWorld tests/acceptance/1820/helpers.ts:58:18
+     56|   const w = await packWorld();
+     57|   const bad = w.installs.find((r) => r.code !== 0);
+     58|   if (bad) throw Error(`BLOCKED: deep install of a pack folder with ur…
+       |                  ^
+     59|   return w;
+     60| }
+ ❯ tests/acceptance/1820-redraft-3525/license.test.ts:8:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  tests/acceptance/1820-redraft-3525/offline.test.ts [ tests/acceptance/1820-redraft-3525/offline.test.ts ]
+Error: BLOCKED: deep install of a pack folder with url-listed assets did not install it: exit 3, Source: /private/tmp/dh1731-1liUmx/pack-a
+  acme/sounds@1.0.0, digest d2bbcd4520c42fc166b35883f33d265e4dc3afe62a8fc02907417ecac7b28be9
+  Assets fetch only on first use after an authority ask or your standing rule.
+ No canvas core is built under ~/private/deepbuild-core/.claude/worktrees/festive-dijkstra-c49494/target; run cargo build --bin deep-show first.
+
+ ❯ readyWorld tests/acceptance/1820/helpers.ts:58:18
+     56|   const w = await packWorld();
+     57|   const bad = w.installs.find((r) => r.code !== 0);
+     58|   if (bad) throw Error(`BLOCKED: deep install of a pack folder with ur…
+       |                  ^
+     59|   return w;
+     60| }
+ ❯ tests/acceptance/1820-redraft-3525/offline.test.ts:9:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+ FAIL  tests/acceptance/1820-redraft-3525/scope/license-file.test.ts [ tests/acceptance/1820-redraft-3525/scope/license-file.test.ts ]
+Error: BLOCKED: deep install of a url-listed pack did not install it (no such route at base): exit 3, Source: /private/tmp/dh1731-Q0dxiH/files
+  acme/files@1.0.0, digest f0c67694fef7de0c3eb4917faf359380cc96d77884d144b715e12d19eea9b70e
+  Assets fetch only on first use after an authority ask or your standing rule.
+ No canvas core is built under ~/private/deepbuild-core/.claude/worktrees/festive-dijkstra-c49494/target; run cargo build --bin deep-show first.
+
+ ❯ installOrBlock tests/acceptance/1820/scope/world.ts:110:27
+    108| export async function installOrBlock(w: World, dir: string): Promise<v…
+    109|   const r = await install(w, dir);
+    110|   if (r.code !== 0) throw Error(`BLOCKED: deep install of a url-listed…
+       |                           ^
+    111| }
+    112|
+ ❯ tests/acceptance/1820-redraft-3525/scope/license-file.test.ts:21:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/8]⎯
+
+ FAIL  tests/acceptance/1820-redraft-3525/scope/resume.test.ts [ tests/acceptance/1820-redraft-3525/scope/resume.test.ts ]
+Error: BLOCKED: deep install of a url-listed pack did not install it (no such route at base): exit 3, Source: /private/tmp/dh1731-WRaZls/big
+  acme/big@1.0.0, digest bb54e3d3a6d78dfc4de5a707a2a37d1177453d3002065afe907948f84bce0b2e
+  Assets fetch only on first use after an authority ask or your standing rule.
+ No canvas core is built under ~/private/deepbuild-core/.claude/worktrees/festive-dijkstra-c49494/target; run cargo build --bin deep-show first.
+
+ ❯ installOrBlock tests/acceptance/1820/scope/world.ts:110:27
+    108| export async function installOrBlock(w: World, dir: string): Promise<v…
+    109|   const r = await install(w, dir);
+    110|   if (r.code !== 0) throw Error(`BLOCKED: deep install of a url-listed…
+       |                           ^
+    111| }
+    112|
+ ❯ tests/acceptance/1820-redraft-3525/scope/resume.test.ts:23:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/8]⎯
+
+ FAIL  tests/acceptance/1820-redraft-3525/scope/reuse.test.ts [ tests/acceptance/1820-redraft-3525/scope/reuse.test.ts ]
+Error: BLOCKED: deep install of a url-listed pack did not install it (no such route at base): exit 3, Source: /private/tmp/dh1731-Ikjq4M/p1
+  acme/reuse@1.0.0, digest 45e3b39420e1b7b98b803cf32ee8e1e434da0b7e897656173eea42cdfd007a16
+  Assets fetch only on first use after an authority ask or your standing rule.
+ No canvas core is built under ~/private/deepbuild-core/.claude/worktrees/festive-dijkstra-c49494/target; run cargo build --bin deep-show first.
+
+ ❯ installOrBlock tests/acceptance/1820/scope/world.ts:110:27
+    108| export async function installOrBlock(w: World, dir: string): Promise<v…
+    109|   const r = await install(w, dir);
+    110|   if (r.code !== 0) throw Error(`BLOCKED: deep install of a url-listed…
+       |                           ^
+    111| }
+    112|
+ ❯ tests/acceptance/1820-redraft-3525/scope/reuse.test.ts:22:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/8]⎯
+
+ FAIL  tests/acceptance/1820-redraft-3525/export-redraft/export.test.ts [ tests/acceptance/1820-redraft-3525/export-redraft/export.test.ts ]
+Error: BLOCKED: deep install of a url-listed pack did not install it (no such route at base): exit 3, Source: /private/tmp/dh1731-gJxQRI/pix1
+  acme/pix@1.0.0, digest cff2d1472460f43ffd4a16deaafeb1dd8f1e64e28e4bd6ac82833860119ec1cc
+  Assets fetch only on first use after an authority ask or your standing rule.
+ No canvas core is built under ~/private/deepbuild-core/.claude/worktrees/festive-dijkstra-c49494/target; run cargo build --bin deep-show first.
+
+ ❯ installOrBlock tests/acceptance/1820/scope/world.ts:110:27
+    108| export async function installOrBlock(w: World, dir: string): Promise<v…
+    109|   const r = await install(w, dir);
+    110|   if (r.code !== 0) throw Error(`BLOCKED: deep install of a url-listed…
+       |                           ^
+    111| }
+    112|
+ ❯ tests/acceptance/1820-redraft-3525/export-redraft/export.test.ts:35:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/8]⎯
+
+
+ Test Files  8 failed (8)
+      Tests  23 skipped (23)
+   Start at  23:20:29
+   Duration  132.49s (tests 98%, import 2%, transform 1%)
+
+

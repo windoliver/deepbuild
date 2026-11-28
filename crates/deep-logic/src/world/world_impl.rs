@@ -5,12 +5,16 @@ mod loads;
 impl World {
     /// A fresh instance of `item` running `bytes`. #2662: its own program is compiled once, for
     /// every world of the piece; other bytes (a counted rewrite) are compiled for this runner.
-    pub(super) fn runner(item: &Item, bytes: &[u8]) -> Result<Runner, Failed> {
+    pub(super) fn runner(item: &Item, bytes: &[u8], planted: &Planted) -> Result<Runner, Failed> {
         #[cfg(not(target_arch = "wasm32"))]
         let made = if std::ptr::eq(bytes, item.bytes.as_slice()) {
+            let compile = match planted.item_compiles_own_program {
+                true => Program::new,
+                false => Program::kept,
+            };
             let compiled = match item.compiled.get() {
                 Some(p) => Ok(p.clone()),
-                None => Program::new(bytes, None, Faults::default(), true).inspect(|p| {
+                None => compile(bytes, None, Faults::default(), true).inspect(|p| {
                     let _ = item.compiled.set(p.clone());
                 }),
             };
@@ -20,7 +24,10 @@ impl World {
         };
         // The web player's engine keeps each program it compiled by its bytes.
         #[cfg(target_arch = "wasm32")]
-        let made = Runner::new(bytes, Faults::default(), true);
+        let made = {
+            let _ = planted;
+            Runner::new(bytes, Faults::default(), true)
+        };
         made.map_err(
             |e| json!({"ok": false, "code": "instantiate_failed", "item": item.id, "what": e}),
         )
@@ -39,12 +46,19 @@ impl World {
         for e in track.get(REWIND).into_iter().flatten() {
             rewind::fits(&piece, e)?;
         }
-        let mut lives = Vec::new();
+        let mut lives: Vec<Live> = Vec::new();
         for (i, item) in piece.items.iter().enumerate() {
             let bytes = counted
                 .filter(|(c, _)| *c == i)
                 .map_or(item.bytes.as_slice(), |(_, b)| b);
-            let mut runner = World::runner(item, bytes)?;
+            let mut runner = World::runner(item, bytes, &planted)?;
+            #[cfg(not(target_arch = "wasm32"))]
+            if let Some(j) = piece.items[..i]
+                .iter()
+                .position(|e| planted.items_share_instance && e.bytes == bytes)
+            {
+                runner = World::on_instance_of(&lives[j].runner);
+            }
             let names = Rc::new(names(bytes));
             let mut failed = false;
             // The data assets, copied once before the start function: then they're memory.
@@ -738,10 +752,30 @@ impl World {
                         }
                         v => Some(v.clone()),
                     };
-                    let list: Vec<(&Entry, Given)> = taken[e.name.as_str()]
+                    let fallback;
+                    let mut list: Vec<(&Entry, Given)> = taken[e.name.as_str()]
                         .iter()
                         .filter_map(|x| Some((x, read(x)?)))
                         .collect();
+                    if k == 0 && list.is_empty() {
+                        if let Some((_, d)) = item
+                            .settings
+                            .iter()
+                            .find(|(n, _)| crate::piece::setting_read(n) == e.name)
+                        {
+                            fallback = Entry {
+                                t: 0,
+                                seq: 0,
+                                control: e.name.clone(),
+                                value: Given::Number(*d),
+                                writer: String::new(),
+                                player: 1,
+                                as_of: None,
+                                arrived: 0,
+                            };
+                            list.push((&fallback, Given::Number(*d)));
+                        }
+                    }
                     let stride = (e.size as usize - 8) / PER_STEP;
                     region[at..at + 4].copy_from_slice(&(list.len() as u32).to_le_bytes());
                     for (j, (x, value)) in list.iter().enumerate() {
@@ -1029,7 +1063,7 @@ impl World {
                 continue;
             }
             if l.spare.is_none() && !self.planted.preview_writes_item_memory {
-                match World::runner(item, &item.bytes) {
+                match World::runner(item, &item.bytes, &self.planted) {
                     Ok(r) => l.spare = Some(r),
                     Err(e) => {
                         traps.push(e);
@@ -1378,7 +1412,7 @@ impl World {
             let b = item.asset_bytes();
             memory[item.assets_at as usize..][..b.len()].copy_from_slice(&b);
         }
-        let mut live = World::load(bytes, item, &memory, &s.globals)?;
+        let mut live = World::load(bytes, item, &memory, &s.globals, &self.planted)?;
         live.rerun = true;
         live.next = s.step;
         live.ran = s.ran;
