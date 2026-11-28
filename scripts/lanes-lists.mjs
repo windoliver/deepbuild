@@ -887,6 +887,9 @@ timed.push('tests/acceptance/2750/budgets.test.ts');
 Object.assign(redrafted, { 'tests/acceptance/3461/once.test.ts': 'tests/acceptance/3461-redraft-once/' });
 byHand.push('tests/acceptance/3461/once.test.ts');
 
+Object.assign(redrafted, { 'tests/acceptance/3461/table.test.ts': 'tests/acceptance/3461-redraft-1814/', 'tests/acceptance/1812/hub-down.test.ts': 'tests/acceptance/1812-redraft-1814/', 'tests/acceptance/1812/not-set-up.test.ts': 'tests/acceptance/1812-redraft-1814/' });
+byHand.push('tests/acceptance/3461/table.test.ts', 'tests/acceptance/1812/hub-down.test.ts', 'tests/acceptance/1812/not-set-up.test.ts');
+
 timed.push('tests/acceptance/3467/players.test.ts');
 
 Object.assign(redrafted, Object.fromEntries([['1113', 'cli'], ['3238', 'serial'], ['3238', 'no-grant'], ['3240', 'line'], ['3334', 'stall'], ['3334', 'far-stalled'], ['3567', 'grant'], ['2820', 'failures']]
