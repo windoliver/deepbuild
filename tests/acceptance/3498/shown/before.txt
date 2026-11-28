@@ -1,0 +1,7 @@
+BLOCKED  waits for you: its verdict names no evidence
+flagged  its turn ended failed, with no claim (for a reason its agent didn't give)
+sent back  its checks sent its claim back, round 1 of 3
+stale  its verdict is on a commit that has moved since
+says done  it says done, and its checks have given no verdict yet
+PASS  its claim passed its checks
+unpushed  unpushed: 2 commits on no remote branch. Push the branch, or say why it stays here. · its turn stopped

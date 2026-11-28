@@ -1,0 +1,18 @@
+{
+  "packages/conformance/src/gate-play.ts": [
+    {
+      "find": [
+        "import { readFacts } from '@deepbuild/adapters';"
+      ],
+      "wrong": []
+    },
+    {
+      "find": [
+        "const COVERED = readFacts<{ versions: string[] }>('claude-code.facts.json').versions.at(-1)!;"
+      ],
+      "wrong": [
+        "const COVERED = (JSON.parse(readFileSync(join(REPO, 'adapters/claude-code.facts.json'), 'utf8')) as { versions: string[] }).versions.at(-1)!;"
+      ]
+    }
+  ]
+}

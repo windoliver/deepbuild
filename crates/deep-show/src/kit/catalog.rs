@@ -46,7 +46,7 @@ pub fn core_fixtures() -> Vec<Entry> {
                 document,
                 record: None,
                 sidecar: json!({
-                    "checks": [{"kind": "document.validate"}],
+                    "checks": f.get("checks").cloned().unwrap_or_else(|| json!([{"kind": "document.validate"}])),
                     "oracles": ["analytic"],
                     "codes": f.get("codes")?.clone(),
                 }),

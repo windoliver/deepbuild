@@ -266,7 +266,7 @@ impl Hub<'_> {
                 | Call::Revisions(_)
                 | Call::Kinds(_)
                 | Call::Packs
-                | Call::PieceChecks
+                | Call::Count(_)
         );
         if reads {
             return;
