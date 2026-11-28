@@ -1,0 +1,122 @@
+Base run of tests/acceptance/3689 at c942af834 (main, no implementation of #3689)
+
+Command, from the checkout's root, in a memory-capped systemd user unit (MemoryMax=24G, MemoryHigh=22G,
+OOMPolicy=continue), detached, output to a file:
+
+  node --test --test-reporter=spec 'tests/acceptance/3689/*.test.mjs'
+
+Date: 2026-11-27T13:03:51Z. Load at start: 55.64 51.09 79.64 on 20 cores (no test here is timed).
+Node v24.22.0. The checkout had no node_modules; the lane imports typescript, so typescript 5.9.3 (the lock's version)
+was linked in alone for the run and removed afterwards.
+Exit code: 1. Tests 13, pass 10, fail 3.
+
+Per test:
+
+FAIL  #3689.4455e965 a whole-file twin ... is laid, and the before lane proves the test on it
+      The issue's reason: the lane refuses the twin sum-adds-one, reading "FAIL before: ...: its planted wrong
+      program sum-adds-one replaces files under the test paths or node_modules (tests/tools/sum.mjs)", so the test is
+      not proven.
+FAIL  #3689.4455e965 a lines.json twin ... is laid, and the before lane proves the test on it
+      The same refusal for product-adds (tests/tools/product.mjs).
+FAIL  #3689.4455e965 a before run whose only twins replace spawned test-path code passes as a whole
+      The run exits 1 on those two FAIL lines.
+PASS  #3689.273a215f a tagged test whose fix lives in a spawned code file ..., with no twin, still reads passed on the merge base
+PASS  #3689.273a215f a change that updates a spawned tool and the golden beside it ... reads passed on the merge base
+      Regression protection: the base already lays every file under the test paths the change holds on the merge base.
+PASS  #3689.13ba22c1 (all eight: test file, imported helper, imported through a helper, __fixtures__ code,
+      tests/acceptance/ code, shell script, node_modules, mixed twin)
+      Regression protection: the base refuses every twin that names a file under the test paths or node_modules, and
+      its refusal line already lists those files. The naming part of criterion 2 is therefore not a failure at the
+      base; it fails on a lane that drops the file list (see README, Wrong programs).
+
+Output of the failing tests (home folder written as ~):
+
+✖ failing tests:
+
+test at tests/acceptance/3689/admitted.test.mjs:59:1
+✖ #3689.4455e965 a whole-file twin of a code file under the test paths that the tagged test spawns but does not import is laid, and the before lane proves the test on it (2147.751828ms)
+  AssertionError [ERR_ASSERTION]: tests/acceptance/9689/tools.test.mjs › #9689.00f39106 two and three sum to five is not proven
+  exit 1
+  stdout:
+  | FAIL before: tests/acceptance/9689/tools.test.mjs › #9689.00f39106 two and three sum to five: its planted wrong program sum-adds-one replaces files under the test paths or node_modules (tests/tools/sum.mjs)
+  |   Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+  | FAIL before: tests/acceptance/9689/tools.test.mjs › #9689.613dcf39 four times five is twenty: its planted wrong program product-adds replaces files under the test paths or node_modules (tests/tools/product.mjs)
+  |   Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+  | proof: wall time 1.4 s
+  | 
+  stderr:
+  | 
+      at provenOn (file://~/deepbuild/.claude/worktrees/before-lane-test-path/tests/acceptance/3689/helpers.mjs:87:36)
+      at TestContext.<anonymous> (file://~/deepbuild/.claude/worktrees/before-lane-test-path/tests/acceptance/3689/admitted.test.mjs:62:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'FAIL before: tests/acceptance/9689/tools.test.mjs › #9689.00f39106 two and three sum to five: its planted wrong program sum-adds-one replaces files under the test paths or node_modules (tests/tools/sum.mjs)',
+    expected: /^PASS before: /,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3689/admitted.test.mjs:65:1
+✖ #3689.4455e965 a lines.json twin of a code file under the test paths that the tagged test spawns but does not import is laid, and the before lane proves the test on it (0.277072ms)
+  AssertionError [ERR_ASSERTION]: tests/acceptance/9689/tools.test.mjs › #9689.613dcf39 four times five is twenty is not proven
+  exit 1
+  stdout:
+  | FAIL before: tests/acceptance/9689/tools.test.mjs › #9689.00f39106 two and three sum to five: its planted wrong program sum-adds-one replaces files under the test paths or node_modules (tests/tools/sum.mjs)
+  |   Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+  | FAIL before: tests/acceptance/9689/tools.test.mjs › #9689.613dcf39 four times five is twenty: its planted wrong program product-adds replaces files under the test paths or node_modules (tests/tools/product.mjs)
+  |   Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+  | proof: wall time 1.4 s
+  | 
+  stderr:
+  | 
+      at provenOn (file://~/deepbuild/.claude/worktrees/before-lane-test-path/tests/acceptance/3689/helpers.mjs:87:36)
+      at TestContext.<anonymous> (file://~/deepbuild/.claude/worktrees/before-lane-test-path/tests/acceptance/3689/admitted.test.mjs:68:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'FAIL before: tests/acceptance/9689/tools.test.mjs › #9689.613dcf39 four times five is twenty: its planted wrong program product-adds replaces files under the test paths or node_modules (tests/tools/product.mjs)',
+    expected: /^PASS before: /,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3689/admitted.test.mjs:71:1
+✖ #3689.4455e965 a before run whose only twins replace spawned test-path code passes as a whole (0.381537ms)
+  AssertionError [ERR_ASSERTION]: the before lane failed a run whose every tagged test failed on its admissible twin
+  exit 1
+  stdout:
+  | FAIL before: tests/acceptance/9689/tools.test.mjs › #9689.00f39106 two and three sum to five: its planted wrong program sum-adds-one replaces files under the test paths or node_modules (tests/tools/sum.mjs)
+  |   Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+  | FAIL before: tests/acceptance/9689/tools.test.mjs › #9689.613dcf39 four times five is twenty: its planted wrong program product-adds replaces files under the test paths or node_modules (tests/tools/product.mjs)
+  |   Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+  | proof: wall time 1.4 s
+  | 
+  stderr:
+  | 
+  
+  1 !== 0
+  
+      at TestContext.<anonymous> (file://~/deepbuild/.claude/worktrees/before-lane-test-path/tests/acceptance/3689/admitted.test.mjs:74:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+exit 1
