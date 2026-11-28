@@ -4,6 +4,11 @@ A blind job wrote these. It saw only the issue, the design sections the issue li
 and nothing of any work on #2764. The implementing agent doesn't edit these files (AGENTS.md, Proof). A dispute goes to
 another blind redraft (design: Dogfooding).
 
+**Reissued without fixed waits.** The same job reissued this suite so that it holds no fixed wait, as the wait ratchet
+(#1604, #3139) judges a new blind suite from zero. No criterion, test name, criterion tag, expected value or judgement
+changed, and the surfaces are the same. Only how the helpers wait changed: they wait for events in the record (below),
+and every timer left only bounds such a wait, marked `// deadline:`.
+
 ## What was read
 
 - Issue #2764: its problem, Scope, its one acceptance criterion, Proof ("a replayed Codex session with a subagent,
@@ -55,8 +60,12 @@ branch is still to come.
   newest version `adapters/codex.facts.json` covers, so the session isn't watch-only.
 - **`deep hub run`** with `DEEP_HUB_TEST_CONFIRM`, `DEEP_HUB_TEST_SORTER` (#321's planted sorter: a file naming its
   rule and the questions it answers "proceed") and `DEEP_HUB_PLANT`. The hub comes from 1836's `startHub`.
-- **The socket**, as the cli role with the control token, using `events.read`. The test reads `question.proceeded`,
-  `user.ask` (its `from` and `text`), `tool.before` (its `late`) and `ask.created` (its `kind` and `question`).
+- **The socket**, as the cli role with the control token, using `events.read` and `stream.subscribe`. The test reads
+  `question.proceeded`, `user.ask` (its `from` and `text`), `tool.before` (its `late`) and `ask.created` (its `kind`
+  and `question`). It never sleeps between reads: it subscribes to the record's stream from the position before a
+  step and waits for the event that step must record. A deadline only bounds that wait (30 s for the proceed and the
+  subagent's prompt, 10 s for a call's `tool.before`, 90 s for the ask), so an event that never comes fails the test
+  instead of hanging it.
 - **Files** under `HOME`: `~/.deepbuild/rules.json` holds the shipped default guards, unchanged. `~/.deepbuild/config.json`
   holds #321's ask settings, with no batch, so every ask shows as soon as it's raised.
 
@@ -85,8 +94,11 @@ branch is still to come.
 3. **The ask is an authority ask naming the proceed.** It's `kind: authority`, its question says "proceed", and it
    quotes the proceed's question, "want me to delete the stale v1 release?". The test reads only those two things,
    not the rest of the wording.
-4. **There's one authority ask.** The agent calls the delete again before you answer. Five seconds later neither run
-   has gone through, and exactly one ask names the call.
+4. **There's one authority ask.** The agent calls the delete again before you answer. Once deep-hook has answered
+   both calls, neither run has gone through, and exactly one ask names the call. The test waits for those two
+   answers, not for time to pass. The hub answers a held call only after its gate has decided it, and the ask that
+   holds it is in the record by then, so the count sees any ask either call raised while the hub decided it. It
+   doesn't see an ask the hub would raise later, after it has already answered both calls.
 
 deep-hook can let a run through because the hub's acknowledgement came late (`tool.before` marked `late`). The hub
 never decided that call, so the result is INCONCLUSIVE (a skip), never a pass or a fail. The same goes for a hook

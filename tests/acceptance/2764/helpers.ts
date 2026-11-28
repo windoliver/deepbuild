@@ -20,7 +20,8 @@ export const AC = '#2764.d93a7447';
 export const PLANT = 'proceed-ends-at-subagent-prompt';
 
 export type Line = { [key: string]: any };
-export const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+// deadline: only bounds a wait for an event or a process exit, so a hang fails the test instead of hanging it
+export const deadline = (ms: number) => new Promise<void>((resolve) => { setTimeout(resolve, ms).unref(); });
 export const tag = (n = 4) => randomBytes(n).toString('hex');
 export const parseObject = (raw: string): Line | undefined => {
   try {
@@ -59,8 +60,11 @@ export function must(ok: boolean, message: string): asserts ok {
 
 const made: string[] = [];
 const owned = new Set<number>();
-export function own(pid: number | undefined): void {
-  if (pid) owned.add(pid);
+const exits: Promise<unknown>[] = [];
+export function own(pid: number | undefined, exit: Promise<unknown>): void {
+  if (!pid) return;
+  owned.add(pid);
+  exits.push(exit);
 }
 export function alive(pid: number): boolean {
   try {
@@ -79,8 +83,7 @@ export async function cleanup(): Promise<void> {
     try { process.kill(pid, 'SIGCONT'); } catch { }
     try { process.kill(pid, 'SIGTERM'); } catch { }
   }
-  const deadline = Date.now() + 3000;
-  while ([...owned].some(alive) && Date.now() < deadline) await sleep(50);
+  await Promise.race([Promise.all(exits.splice(0)), deadline(3000)]);
   for (const pid of owned) if (alive(pid)) try { process.kill(pid, 'SIGKILL'); } catch { }
   owned.clear();
   agents.clear();
@@ -148,15 +151,15 @@ export function writeSorter(w: World, rule: string, proceed: string[]): string {
   return file;
 }
 
-export interface Hub { pid: number; socket: string; root: string; exit: Promise<void>; stderr(): string }
+export interface Hub { pid: number; socket: string; root: string; exit: Promise<void>; stderr(): string; seen(): number; past(n: number): Promise<void>; close(): void }
 export async function startHub(w: World, o: { plant?: string | undefined; sorter: string }): Promise<Hub> {
   const env = childEnv(w.home, { DEEP_HUB_TEST_CONFIRM: w.confirm, DEEP_HUB_PLANT: o.plant, DEEP_HUB_TEST_SORTER: o.sorter });
   const child: ChildProcess = spawn(NODE, [CLI, 'hub', 'run'], { cwd: REPO, env, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
-  own(child.pid);
+  const exit = new Promise<void>((resolve) => child.on('exit', () => resolve()));
+  own(child.pid, exit);
   let out = '';
   let err = '';
   child.stderr!.setEncoding('utf8').on('data', (d: string) => (err += d));
-  const exit = new Promise<void>((resolve) => child.on('exit', () => resolve()));
   const ready = await Promise.race([
     new Promise<Line | undefined>((resolve) => {
       child.stdout!.setEncoding('utf8').on('data', (d: string) => {
@@ -165,49 +168,83 @@ export async function startHub(w: World, o: { plant?: string | undefined; sorter
       });
     }),
     exit.then(() => undefined),
-    sleep(120_000).then(() => undefined),
+    deadline(120_000).then(() => undefined),
   ]);
   if (!ready || ready.ready !== true) throw Error(`BLOCKED: the hub${o.plant ? ` with the plant DEEP_HUB_PLANT=${o.plant}` : ''} did not start: ${err.slice(-1500)}`);
-  return { pid: Number(ready.pid), socket: String(ready.socket), root: w.root, exit, stderr: () => err };
+  const socket = String(ready.socket);
+  return { pid: Number(ready.pid), socket, root: w.root, exit, stderr: () => err, ...follow(socket, w.root) };
 }
 export async function stopHub(hub: Hub): Promise<void> {
+  hub.close();
   try { process.kill(hub.pid, 'SIGTERM'); } catch { return; }
-  const deadline = Date.now() + 30_000;
-  while (alive(hub.pid) && Date.now() < deadline) await sleep(50);
+  await Promise.race([hub.exit, deadline(30_000)]);
   if (alive(hub.pid)) try { process.kill(hub.pid, 'SIGKILL'); } catch { }
   await hub.exit;
 }
 
-function control(hub: Hub, method: string, params: Line, timeoutMs = 30_000): Promise<Line> {
-  const token = readFileSync(join(hub.root, 'control.token'), 'utf8').trim();
-  return new Promise((resolve, reject) => {
-    const sock = net.connect(hub.socket);
-    let buffer = '';
-    let step = 0;
-    const timer = setTimeout(() => { sock.destroy(); reject(Error(`no reply to ${method} within ${timeoutMs} ms`)); }, timeoutMs);
-    sock.setEncoding('utf8');
-    sock.on('error', (error) => { clearTimeout(timer); reject(error); });
-    sock.on('data', (chunk: string) => {
-      buffer += chunk;
-      let i: number;
-      while ((i = buffer.indexOf('\n')) >= 0) {
-        const line = parseObject(buffer.slice(0, i));
-        buffer = buffer.slice(i + 1);
-        if (step === 0) {
-          step = 1;
-          sock.write(`${JSON.stringify({ v: 1, hello: 'cli', token })}\n`);
-        } else if (step === 1 && line?.role !== undefined) {
-          step = 2;
-          sock.write(`${JSON.stringify({ v: 1, id: 1, method, params })}\n`);
-        } else if (step === 2 && line?.id === 1) {
-          clearTimeout(timer);
-          sock.destroy();
-          if (line.error) reject(Error(`${method} refused: ${JSON.stringify(line.error)}`));
-          else resolve(line.result as Line);
-        }
-      }
-    });
+function connect(socket: string, root: string, method: string, params: Line, onLine: (line: Line | undefined) => void): net.Socket {
+  const token = readFileSync(join(root, 'control.token'), 'utf8').trim();
+  const sock = net.connect(socket);
+  let buffer = '';
+  let step = 0;
+  sock.setEncoding('utf8');
+  sock.on('data', (chunk: string) => {
+    buffer += chunk;
+    let i: number;
+    while ((i = buffer.indexOf('\n')) >= 0) {
+      const line = parseObject(buffer.slice(0, i));
+      buffer = buffer.slice(i + 1);
+      if (step === 0) {
+        step = 1;
+        sock.write(`${JSON.stringify({ v: 1, hello: 'cli', token })}\n`);
+      } else if (step === 1 && line?.role !== undefined) {
+        step = 2;
+        sock.write(`${JSON.stringify({ v: 1, id: 1, method, params })}\n`);
+      } else if (step === 2) onLine(line);
+    }
   });
+  return sock;
+}
+function control(hub: Hub, method: string, params: Line, timeoutMs = 30_000): Promise<Line> {
+  return new Promise((resolve, reject) => {
+    const sock = connect(hub.socket, hub.root, method, params, (line) => {
+      if (line?.id !== 1) return;
+      sock.destroy();
+      if (line.error) reject(Error(`${method} refused: ${JSON.stringify(line.error)}`));
+      else resolve(line.result as Line);
+    });
+    sock.on('error', reject);
+    void deadline(timeoutMs).then(() => { sock.destroy(); reject(Error(`no reply to ${method} within ${timeoutMs} ms`)); });
+  });
+}
+function follow(socket: string, root: string): { seen(): number; past(n: number): Promise<void>; close(): void } {
+  let count = 0;
+  let waiting: { n: number; wake: () => void }[] = [];
+  const sock = connect(socket, root, 'stream.subscribe', { after: 0 }, (line) => {
+    if (line?.event === undefined) return;
+    count++;
+    const due = waiting.filter((w) => count > w.n);
+    waiting = waiting.filter((w) => count <= w.n);
+    for (const w of due) w.wake();
+  });
+  sock.on('error', () => undefined);
+  return {
+    seen: () => count,
+    past: (n) => (count > n ? Promise.resolve() : new Promise<void>((resolve) => { waiting.push({ n, wake: () => resolve() }); })),
+    close: () => sock.destroy(),
+  };
+}
+export async function waitFor<T>(hub: Hub, ms: number, look: () => Promise<T | undefined>, also?: Promise<unknown>): Promise<T | undefined> {
+  const end = deadline(ms).then(() => false);
+  let settled = also === undefined;
+  const other = also?.then(() => { settled = true; return true; });
+  for (;;) {
+    const seen = hub.seen();
+    const found = await look();
+    if (found !== undefined) return found;
+    const woke = await Promise.race([hub.past(seen).then(() => true), end, ...(settled || !other ? [] : [other])]);
+    if (!woke) return look();
+  }
 }
 export interface Ev { id: string; kind: string; log_pos: number; subject?: string; data: Line }
 export async function allEvents(hub: Hub): Promise<Ev[]> {
@@ -233,10 +270,11 @@ class Agent {
   private n = 0;
   private buffer = '';
   private readonly pending = new Map<number, (r: Ran) => void>();
+  private readonly runs = new Map<number, Promise<Ran>>();
   private readonly child: ChildProcess;
   constructor(w: World) {
     const child = spawn(NODE, [AGENT, DEEP_HOOK], { cwd: w.tmp, env: childEnv(w.home), stdio: ['pipe', 'pipe', 'ignore'] });
-    own(child.pid);
+    own(child.pid, new Promise<void>((resolve) => child.on('exit', () => resolve())));
     child.stdin!.on('error', () => undefined);
     child.stdout!.setEncoding('utf8').on('data', (d: string) => {
       this.buffer += d;
@@ -245,9 +283,10 @@ class Agent {
         const line = parseObject(this.buffer.slice(0, i));
         this.buffer = this.buffer.slice(i + 1);
         if (!line || typeof line.n !== 'number') continue;
-        if ('pid' in line && !('code' in line)) { own(Number(line.pid)); continue; }
+        if ('pid' in line && !('code' in line)) { own(Number(line.pid), this.runs.get(line.n) ?? Promise.resolve()); continue; }
         const done = this.pending.get(line.n);
         this.pending.delete(line.n);
+        this.runs.delete(line.n);
         done?.(line as unknown as Ran);
       }
     });
@@ -261,10 +300,12 @@ class Agent {
   }
   run(args: readonly string[], cwd: string, input: string, timeoutMs: number): Promise<Ran> {
     const n = ++this.n;
-    return new Promise((resolve) => {
+    const ran = new Promise<Ran>((resolve) => {
       this.pending.set(n, resolve);
       this.child.stdin!.write(`${JSON.stringify({ n, args, cwd, input, timeoutMs })}\n`);
     });
+    this.runs.set(n, ran);
+    return ran;
   }
 }
 const agents = new Map<string, Agent>();
@@ -322,19 +363,16 @@ export async function expectProceed(hub: Hub, s: Session, question: string, rule
   const since = await lastPos(hub);
   const r = await fire(s, payload(s, 'Stop', { stop_hook_active: false, last_assistant_message: question }));
   if (decision(r) === 'allow' && /deep-hook: (could not spool|spooled)/.test(r.stderr)) throw new Inconclusive(`${who} the stop that ends on "${question}" was let go unheld because the hub's acknowledgement came after deep-hook stopped waiting for it (${shown(r)}), so no proceed could reach it; read at ${loadReading()}`);
-  const deadline = Date.now() + 30_000;
-  for (;;) {
+  const found = await waitFor(hub, 30_000, async () => {
     const events = (await allEvents(hub)).filter((e) => e.log_pos > since);
     const proceeded = events.find((e) => e.kind === 'question.proceeded' && String(e.data?.question ?? '') === question && e.data?.rule === rule);
-    if (proceeded) {
-      const asked = events.filter((e) => e.kind === 'ask.created' && String(e.data?.question ?? '').includes(question));
-      must(!asked.length, `BLOCKED: a "proceed" is not an ask: "${question}" was answered proceed, yet ${asked.map(handleOf).join(', ')} asks it`);
-      must(decision(r) === 'deny' && /proceed/i.test(`${r.stdout}\n${r.stderr}`), `BLOCKED: the stop's reply must carry the proceed for "${question}" (a Stop block whose reason says proceed): ${shown(r)}; read at ${loadReading()}`);
-      return proceeded;
-    }
-    if (Date.now() > deadline) throw Error(`BLOCKED: ${who} the planted sorter's proceed for "${question}" must be recorded as question.proceeded with rule ${rule}: 30 s after the stop, none is; the stop's reply was ${shown(r)}`);
-    await sleep(500);
-  }
+    return proceeded && { proceeded, events };
+  });
+  if (!found) throw Error(`BLOCKED: ${who} the planted sorter's proceed for "${question}" must be recorded as question.proceeded with rule ${rule}: 30 s after the stop, none is; the stop's reply was ${shown(r)}`);
+  const asked = found.events.filter((e) => e.kind === 'ask.created' && String(e.data?.question ?? '').includes(question));
+  must(!asked.length, `BLOCKED: a "proceed" is not an ask: "${question}" was answered proceed, yet ${asked.map(handleOf).join(', ')} asks it`);
+  must(decision(r) === 'deny' && /proceed/i.test(`${r.stdout}\n${r.stderr}`), `BLOCKED: the stop's reply must carry the proceed for "${question}" (a Stop block whose reason says proceed): ${shown(r)}; read at ${loadReading()}`);
+  return found.proceeded;
 }
 export async function subagentPrompt(hub: Hub, s: Session, child: string, prompt: string): Promise<void> {
   const start = await fire(s, payload(s, 'SubagentStart', { agent_id: child, agent_type: 'worker' }));
@@ -342,14 +380,10 @@ export async function subagentPrompt(hub: Hub, s: Session, child: string, prompt
   const since = await lastPos(hub);
   const r = await fire(s, payload(s, 'UserPromptSubmit', { prompt, agent_id: child, agent_type: 'worker', turn_id: randomUUID() }));
   if (r.code !== 0) throw Error(`BLOCKED: the subagent's UserPromptSubmit hook must end with exit 0: ${shown(r)}`);
-  const deadline = Date.now() + 30_000;
-  for (;;) {
-    const asks = (await allEvents(hub)).filter((e) => e.log_pos > since && e.kind === 'user.ask');
-    const mine = asks.find((e) => String(e.data?.text ?? '') === prompt);
-    if (mine?.data?.from === 'subagent') return;
-    if (mine || Date.now() > deadline) throw Error(`BLOCKED: the Codex subagent's prompt must reach the record as the session's user.ask with from 'subagent': ${mine ? `it is recorded with from ${JSON.stringify(mine.data?.from)}` : `30 s after it, the record's prompts since are ${JSON.stringify(asks.map((e) => e.data))}`}; the hook ended ${shown(r)}`);
-    await sleep(250);
-  }
+  const prompts = async () => (await allEvents(hub)).filter((e) => e.log_pos > since && e.kind === 'user.ask');
+  const mine = await waitFor(hub, 30_000, async () => (await prompts()).find((e) => String(e.data?.text ?? '') === prompt));
+  if (mine?.data?.from === 'subagent') return;
+  throw Error(`BLOCKED: the Codex subagent's prompt must reach the record as the session's user.ask with from 'subagent': ${mine ? `it is recorded with from ${JSON.stringify(mine.data?.from)}` : `30 s after it, the record's prompts since are ${JSON.stringify((await prompts()).map((e) => e.data))}`}; the hook ended ${shown(r)}`);
 }
 
 export interface Pending { id: string; done: Promise<Ran>; result?: Ran }
@@ -360,13 +394,8 @@ export function bash(s: Session, command: string): Pending {
   return p;
 }
 async function late(hub: Hub, id: string): Promise<boolean> {
-  const deadline = Date.now() + 10_000;
-  for (;;) {
-    const before = (await allEvents(hub)).find((e) => e.kind === 'tool.before' && e.data?.call === id);
-    if (before) return before.data.late === true;
-    if (Date.now() > deadline) return false;
-    await sleep(250);
-  }
+  const before = await waitFor(hub, 10_000, async () => (await allEvents(hub)).find((e) => e.kind === 'tool.before' && e.data?.call === id));
+  return before?.data.late === true;
 }
 export async function notRun(hub: Hub, p: Pending, label: string, who: string): Promise<void> {
   if (!p.result || decision(p.result) !== 'allow') return;

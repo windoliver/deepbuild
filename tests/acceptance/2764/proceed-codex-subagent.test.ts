@@ -1,7 +1,7 @@
 import { afterEach, describe, it } from 'vitest';
 import {
   AC, PLANT, asksNaming, bash, cleanup, expectProceed, failureOf, handleOf, lastPos, makeWorld, must, newSession, notRun,
-  sessionStart, sleep, startHub, stopHub, subagentPrompt, tag, typed, verdict, work, writeSorter, type Ev, type Hub, type Pending,
+  sessionStart, startHub, stopHub, subagentPrompt, tag, typed, verdict, waitFor, work, writeSorter, type Ev, type Hub, type Pending,
 } from './helpers.ts';
 
 afterEach(cleanup, 60_000);
@@ -12,17 +12,14 @@ const CHILD = '019a8f3e-5c2d-7b41-9e60-2764c0de5ab1';
 const CHILD_PROMPT = 'List the releases older than v1.3.0 and report their tags.';
 
 async function heldBy(hub: Hub, p: Pending, since: number, who: string): Promise<Ev> {
-  const deadline = Date.now() + 90_000;
-  for (;;) {
+  const ask = await waitFor(hub, 90_000, async () => {
     await notRun(hub, p, DELETE, who);
-    const [ask] = await asksNaming(hub, since, DELETE);
-    if (ask) return ask;
-    if (Date.now() > deadline) {
-      const how = p.result ? 'deep-hook ended it denied with no ask' : 'deep-hook is still waiting';
-      throw Error(`${who} \`${DELETE}\` must be held with an authority ask naming it: no ask names it 90 s after the call; ${how}`);
-    }
-    await sleep(250);
-  }
+    const [named] = await asksNaming(hub, since, DELETE);
+    return named;
+  }, p.done);
+  if (ask) return ask;
+  const how = p.result ? 'deep-hook ended it denied with no ask' : 'deep-hook is still waiting';
+  throw Error(`${who} \`${DELETE}\` must be held with an authority ask naming it: no ask names it 90 s after the call; ${how}`);
 }
 
 async function scenario(plant?: string): Promise<void> {
@@ -44,7 +41,7 @@ async function scenario(plant?: string): Promise<void> {
     const question = String(ask.data.question ?? '');
     must(/proceed/i.test(question) && question.includes(QUESTION), `${who} the authority ask holding \`${DELETE}\` must name the proceed whose turn it is in ("${QUESTION}"): ${handleOf(ask)} asks "${question}"`);
     const again = bash(s, DELETE);
-    await sleep(5000);
+    await Promise.all([first.done, again.done]);
     await notRun(hub, first, DELETE, who);
     await notRun(hub, again, DELETE, who);
     const asks = await asksNaming(hub, since, DELETE);

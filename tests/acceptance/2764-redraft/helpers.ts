@@ -1,10 +1,11 @@
 
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import net from 'node:net';
 import { dirname, join } from 'node:path';
 import {
   AGENT, DEEP_HOOK, DEFAULT_RULES, Inconclusive, NODE, REPO, allEvents, asksNaming, childEnv, cleanup as cleanup1836,
-  decision, handleOf, lastPos, loadReading, own, parseObject, shown, sleep, startHub, stopHub, tag,
+  decision, handleOf, lastPos, loadReading, own, parseObject, shown, startHub, stopHub, tag,
   type Ev, type Hub, type Line, type Ran, type World,
 } from '../1836/helpers.ts';
 
@@ -106,6 +107,80 @@ function rollout(file: string): (type: string, payload: Line) => void {
   writeFileSync(file, '');
   return (type, payload) => writeFileSync(file, `${JSON.stringify({ timestamp: new Date().toISOString(), ordinal: ordinal++, type, payload })}\n`, { flag: 'a' });
 }
+interface Waiter { match: (e: Ev) => boolean; done: (e: Ev | undefined) => void; fail: (error: Error) => void }
+class Watch {
+  private readonly events: Ev[] = [];
+  private readonly waiting = new Set<Waiter>();
+  private broken: Error | undefined;
+  private closed = false;
+  private readonly sock: net.Socket;
+  private constructor(sock: net.Socket) {
+    this.sock = sock;
+  }
+  static open(hub: Hub, after: number): Promise<Watch> {
+    const token = readFileSync(join(hub.root, 'control.token'), 'utf8').trim();
+    const sock = net.connect(hub.socket);
+    const watch = new Watch(sock);
+    return new Promise((resolve, reject) => {
+      let buffer = '';
+      let step = 0;
+      const end = (error: Error) => { reject(error); watch.end(error); };
+      sock.setEncoding('utf8');
+      sock.on('error', (error) => end(Error(`BLOCKED: the hub's event stream failed: ${error.message}`)));
+      sock.on('close', () => end(Error('BLOCKED: the hub\'s event stream closed')));
+      sock.on('data', (chunk: string) => {
+        buffer += chunk;
+        let i: number;
+        while ((i = buffer.indexOf('\n')) >= 0) {
+          const line = parseObject(buffer.slice(0, i));
+          buffer = buffer.slice(i + 1);
+          if (step === 0) {
+            step = 1;
+            sock.write(`${JSON.stringify({ v: 1, hello: 'cli', token })}\n`);
+          } else if (step === 1 && line?.role !== undefined) {
+            step = 2;
+            sock.write(`${JSON.stringify({ v: 1, id: 'watch', method: 'stream.subscribe', params: { after } })}\n`);
+          } else if (line?.id === 'watch') {
+            if (line.event) watch.add(line.event as Ev);
+            else if (line.error) end(Error(`BLOCKED: the hub's event stream refused or cut this reader: ${JSON.stringify(line.error)}`));
+            else resolve(watch);
+          }
+        }
+      });
+    });
+  }
+  until(match: (e: Ev) => boolean, ms: number): Promise<Ev | undefined> {
+    const seen = this.events.find(match);
+    if (seen) return Promise.resolve(seen);
+    if (this.broken) return Promise.reject(this.broken);
+    if (this.closed) return Promise.resolve(undefined);
+    return new Promise((resolve, reject) => {
+      const waiter: Waiter = {
+        match,
+        done: (e) => { clearTimeout(timer); this.waiting.delete(waiter); resolve(e); },
+        fail: (error) => { clearTimeout(timer); this.waiting.delete(waiter); reject(error); },
+      };
+      // deadline: bounds the wait for the record's event, so an event that never comes fails the test instead of hanging it
+      const timer = setTimeout(() => waiter.done(undefined), ms);
+      this.waiting.add(waiter);
+    });
+  }
+  close(): void {
+    this.closed = true;
+    for (const waiter of [...this.waiting]) waiter.done(undefined);
+    this.sock.destroy();
+  }
+  private add(e: Ev): void {
+    this.events.push(e);
+    for (const waiter of [...this.waiting]) if (waiter.match(e)) waiter.done(e);
+  }
+  private end(error: Error): void {
+    if (this.closed || this.broken) return;
+    this.broken = error;
+    for (const waiter of [...this.waiting]) waiter.fail(error);
+  }
+}
+
 const spoiled = (event: string, ran: Ran): void => {
   if (/spooled \S+, but its sync didn't finish/.test(ran.stderr)) throw new Inconclusive(`deep-hook couldn't hand Codex's ${event} to the hub within its budget (${ran.stderr.trim()}), ${loadReading()}`);
 };
@@ -160,19 +235,17 @@ export class CodexSession {
   }
   async proceedAt(hub: Hub, question: string, rule: string): Promise<void> {
     const since = await lastPos(hub);
-    this.line('response_item', { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: question }] });
-    const r = await this.hook('Stop', { stop_hook_active: false, last_assistant_message: question });
-    const deadline = Date.now() + 30_000;
-    for (;;) {
-      const events = (await allEvents(hub)).filter((e) => e.log_pos > since);
-      if (events.some((e) => e.kind === 'question.proceeded' && String(e.data?.question ?? '') === question && e.data?.rule === rule)) {
-        if (decision(r) !== 'deny' || !/proceed/i.test(`${r.stdout}\n${r.stderr}`)) throw Error(`BLOCKED: the Codex stop's reply must carry the proceed for "${question}" (a Stop block whose reason says proceed): ${shown(r)}; read at ${loadReading()}`);
-        const asked = events.filter((e) => e.kind === 'ask.created' && String(e.data?.question ?? '').includes(question));
-        if (asked.length) throw Error(`BLOCKED: a "proceed" is not an ask: "${question}" was answered proceed, yet ${asked.map(handleOf).join(', ')} asks it`);
-        return;
-      }
-      if (Date.now() > deadline) throw Error(`BLOCKED: the planted sorter's proceed for "${question}" must be recorded as question.proceeded with rule ${rule}: 30 s after the Codex stop, none is; the stop's reply was ${shown(r)}`);
-      await sleep(500);
+    const watch = await Watch.open(hub, since);
+    try {
+      this.line('response_item', { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: question }] });
+      const r = await this.hook('Stop', { stop_hook_active: false, last_assistant_message: question });
+      const proceeded = await watch.until((e) => e.kind === 'question.proceeded' && String(e.data?.question ?? '') === question && e.data?.rule === rule, 30_000);
+      if (!proceeded) throw Error(`BLOCKED: the planted sorter's proceed for "${question}" must be recorded as question.proceeded with rule ${rule}: 30 s after the Codex stop, none is; the stop's reply was ${shown(r)}`);
+      if (decision(r) !== 'deny' || !/proceed/i.test(`${r.stdout}\n${r.stderr}`)) throw Error(`BLOCKED: the Codex stop's reply must carry the proceed for "${question}" (a Stop block whose reason says proceed): ${shown(r)}; read at ${loadReading()}`);
+      const asked = (await allEvents(hub)).filter((e) => e.log_pos > since && e.kind === 'ask.created' && String(e.data?.question ?? '').includes(question));
+      if (asked.length) throw Error(`BLOCKED: a "proceed" is not an ask: "${question}" was answered proceed, yet ${asked.map(handleOf).join(', ')} asks it`);
+    } finally {
+      watch.close();
     }
   }
   async subagentPrompt(hub: Hub, prompt: string): Promise<void> {
@@ -193,14 +266,15 @@ export class CodexSession {
     this.line('response_item', { type: 'function_call_output', call_id: p.id, output: response });
     await this.hook('PostToolUse', { tool_name: 'spawn_agent', tool_input: spawnInput, tool_use_id: p.id, tool_response: response });
     const since = await lastPos(hub);
-    const submitted = await this.hook('UserPromptSubmit', { turn_id: childTurn, agent_id: child, agent_type: 'default', prompt }, childRollout);
-    if (submitted.code !== 0) throw Error(`BLOCKED: the Codex subagent's UserPromptSubmit hook must end with exit 0: ${shown(submitted)}`);
-    const deadline = Date.now() + 30_000;
-    for (;;) {
+    const watch = await Watch.open(hub, since);
+    try {
+      const submitted = await this.hook('UserPromptSubmit', { turn_id: childTurn, agent_id: child, agent_type: 'default', prompt }, childRollout);
+      if (submitted.code !== 0) throw Error(`BLOCKED: the Codex subagent's UserPromptSubmit hook must end with exit 0: ${shown(submitted)}`);
+      if (await watch.until((e) => e.kind === 'user.ask' && e.data?.from === 'subagent' && String(e.data?.text ?? '') === prompt, 30_000)) return;
       const asks = (await allEvents(hub)).filter((e) => e.log_pos > since && e.kind === 'user.ask');
-      if (asks.some((e) => e.data?.from === 'subagent' && String(e.data?.text ?? '') === prompt)) return;
-      if (Date.now() > deadline) throw Error(`BLOCKED: the Codex subagent's prompt must reach the record as the session's user.ask from 'subagent': 30 s after it, the record's prompts since are ${JSON.stringify(asks.map((e) => e.data))}; the hook ended ${shown(submitted)}`);
-      await sleep(250);
+      throw Error(`BLOCKED: the Codex subagent's prompt must reach the record as the session's user.ask from 'subagent': 30 s after it, the record's prompts since are ${JSON.stringify(asks.map((e) => e.data))}; the hook ended ${shown(submitted)}`);
+    } finally {
+      watch.close();
     }
   }
   shell(command: string): Pending {
@@ -213,18 +287,13 @@ export class CodexSession {
 }
 export interface Pending { id: string; done: Promise<Ran>; result?: Ran }
 
-async function late(hub: Hub, id: string): Promise<boolean> {
-  const deadline = Date.now() + 10_000;
-  for (;;) {
-    const before = (await allEvents(hub)).find((e) => e.kind === 'tool.before' && e.data?.call === id);
-    if (before) return before.data.late === true;
-    if (Date.now() > deadline) return false;
-    await sleep(250);
-  }
+async function late(watch: Watch, id: string): Promise<boolean> {
+  const before = await watch.until((e) => e.kind === 'tool.before' && e.data?.call === id, 10_000);
+  return before?.data.late === true;
 }
-async function ranThrough(hub: Hub, p: Pending): Promise<string | undefined> {
+async function ranThrough(watch: Watch, p: Pending): Promise<string | undefined> {
   if (!p.result || decision(p.result) !== 'allow') return undefined;
-  if (await late(hub, p.id)) throw new Inconclusive(`\`${DELETE}\` was let through because the hub's acknowledgement came after deep-hook's budget (${shown(p.result)}), so the hub never decided it; read at ${loadReading()}`);
+  if (await late(watch, p.id)) throw new Inconclusive(`\`${DELETE}\` was let through because the hub's acknowledgement came after deep-hook's budget (${shown(p.result)}), so the hub never decided it; read at ${loadReading()}`);
   return `\`${DELETE}\` ran in the turn the proceed started, after the Codex subagent's prompt, with no authority ask: deep-hook allowed it at PreToolUse with nothing held (${shown(p.result)})`;
 }
 
@@ -246,20 +315,24 @@ export async function replay(plant?: string): Promise<Seen> {
     await s.proceedAt(hub, QUESTION, rule);
     await s.subagentPrompt(hub, CHILD_PROMPT);
     const since = await lastPos(hub);
-    const first = s.shell(DELETE);
-    const deadline = Date.now() + 90_000;
-    for (;;) {
-      const ran = await ranThrough(hub, first);
+    const watch = await Watch.open(hub, since);
+    try {
+      const first = s.shell(DELETE);
+      const held = watch.until((e) => e.kind === 'ask.created' && String(e.data?.question ?? '').includes(DELETE), 90_000);
+      held.catch(() => undefined);
+      await Promise.race([first.done, held]);
+      const ran = await ranThrough(watch, first);
       if (ran) return { ran, asks: await asksNaming(hub, since, DELETE), retried: false };
+      await held;
       const asks = await asksNaming(hub, since, DELETE);
-      if (asks.length) break;
-      if (Date.now() > deadline) return { asks, retried: false };
-      await sleep(250);
+      if (!asks.length) return { asks, retried: false };
+      const again = s.shell(DELETE);
+      await Promise.all([first.done, again.done]);
+      const ranAfter = (await ranThrough(watch, first)) ?? (await ranThrough(watch, again));
+      return { ...(ranAfter ? { ran: ranAfter } : {}), asks: await asksNaming(hub, since, DELETE), retried: true };
+    } finally {
+      watch.close();
     }
-    const again = s.shell(DELETE);
-    await sleep(5000);
-    const ran = (await ranThrough(hub, first)) ?? (await ranThrough(hub, again));
-    return { ...(ran ? { ran } : {}), asks: await asksNaming(hub, since, DELETE), retried: true };
   } finally {
     await stopHub(hub);
   }

@@ -4,6 +4,11 @@ Written blind by a job that saw only the issue, the design and the base commit, 
 implementing agent doesn't edit these files (AGENTS.md, Proof); a dispute goes to a blind redraft of this job (design:
 Dogfooding).
 
+This is a reissue of that suite with no fixed waits, as the wait ratchet (#1604, #3139) judges a new blind suite's files
+from zero: each wait is now for the event it needs, and a timer only bounds one. The criterion, the test names, the
+criterion tag, the expected values and the judges are unchanged, and so is each test's failure at the base (What the
+base does). `BASE-FAILURE.txt` is the run recorded on the first issue; its line numbers are that issue's.
+
 What was read:
 
 - Issue #2764: its problem, Scope, the one acceptance criterion (`#2764.d93a7447`), Proof and Depends on (#321, #1836).
@@ -30,7 +35,7 @@ node node_modules/vitest/vitest.mjs run --root tests/acceptance/2764 --no-file-p
 node node_modules/typescript/bin/tsc -p tests/acceptance/2764/tsconfig.json
 ```
 
-About 10 s on a correct hub; a failing one waits up to 90 s for an ask. No network, no model, no `codex` binary. Each
+About 5 s on a correct hub; a failing one waits up to 90 s for an ask. No network, no model, no `codex` binary. Each
 test's folders are under `/tmp/dh2764-*`, with `HOME` set to `<tmp>/h` for every process it starts; every process is
 stopped by its PID (`helpers.ts`, `cleanup`, `stopHub`), never by name or port. Each test starts its own hub, so the
 folder runs one file at a time.
@@ -39,7 +44,17 @@ On a loaded machine deep-hook can give up on the hub's acknowledgement (its 50 m
 through that way (`tool.before` marked `late`), or the proceed's stop let go unheld that way (its stderr says deep-hook
 spooled it), is INCONCLUSIVE, a skip, never a pass or a fail.
 
-## The surface used
+## Waits
+
+Every wait is for an event. The hub's record is followed on one more cli connection, `stream.subscribe` from log_pos 0:
+each frame wakes the test, which then reads `events.read` again for the row it waits on (the proceed's
+`question.proceeded`, the subagent's `user.ask`, a call's `tool.before`, the ask naming the delete). A wait on a
+deep-hook run also wakes when that run ends; processes are waited on by their exit. Timers only bound these waits, each
+marked `// deadline:`, so a hang fails instead of hanging: the hub's start (120 s), a socket call's reply (30 s), the
+proceed and the subagent's prompt reaching the record (30 s each), a call's `tool.before` (10 s), the ask holding the
+delete (90 s), the hub's stop (30 s) and the processes' exit at cleanup (3 s); the stand-in agent kills a deep-hook run
+past its timeout (150 s).
+
 
 - **deep-hook** (`target/debug/deep-hook`), run as Codex runs our hook entry, `deep-hook codex <event>` with the
   payload on stdin, as a child of one long-lived stand-in process per session (`fixtures/agent.mjs`, copied from
@@ -70,8 +85,11 @@ The criterion, as asserted:
    `gh release delete v1.2.0 --yes`.
 2. That ask is `kind: authority`, and its question names the proceed: it says "proceed" and quotes the proceed's
    question, "want me to clean up the old releases?".
-3. "One authority ask": the agent calls the delete again before you answer; 5 s later neither run has gone through,
-   and exactly one ask names the delete.
+3. "One authority ask": the agent calls the delete again before you answer; once deep-hook has the hub's reply to both
+   calls, neither run has gone through, and exactly one ask names the delete. Waiting for both replies proves the hub
+   has decided the second call, and raised whatever ask it raises for it, before the asks are counted, since the hub
+   raises an ask before the deny that names it. It doesn't see an ask the hub would raise for the call only after
+   replying to it; the first issue's 5 s wait saw such an ask only if it came within those 5 s.
 
 ## The delete call chosen, and why
 

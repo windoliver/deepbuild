@@ -17,6 +17,7 @@ createInterface({ input: process.stdin }).on('line', (raw) => {
   let timedOut = false;
   child.stdout.setEncoding('utf8').on('data', (d) => (stdout += d));
   child.stderr.setEncoding('utf8').on('data', (d) => (stderr += d));
+  // deadline: only bounds a hook run, so a deep-hook that never ends reports timedOut instead of hanging the session
   const timer = setTimeout(() => { timedOut = true; child.kill('SIGKILL'); }, c.timeoutMs ?? 60_000);
   const done = (code, signal, extra = '') => {
     clearTimeout(timer);
