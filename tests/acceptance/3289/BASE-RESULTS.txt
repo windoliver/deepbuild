@@ -1,0 +1,38 @@
+# #3289 acceptance suite, run on the base
+
+Base: 254bdc87c (origin/main, "Merge pull request #3751"), a fresh clone of github.com/windoliver/deepbuild at
+~/mac-runs/3289-suite, Node v24.22.0, macOS. Setup: npm ci, npm run build --workspaces (no cargo build: on the base
+every test stops at its first assertion, before the lane, which builds deep-hook itself, is started).
+
+## Type-check
+
+$ npx tsc --noEmit -p tests/acceptance/3289
+exit 0
+
+## The suite
+
+$ node scripts/throttle.mjs test --wait 720 -- node node_modules/vitest/vitest.mjs run tests/acceptance/3289/lane.test.ts --no-file-parallelism --reporter=verbose
+vm.loadavg before: { 37.29 45.70 55.72 }   after: { 39.45 39.43 47.60 }
+exit 1; Test Files 1 failed (1); Tests 5 failed (5); tests' own time under 1 s (the rest was the wait for the test grant)
+
+Each test failed with an AssertionError thrown by the expect in lane.test.ts's expectRedraft (line 75), a file under
+the test paths: a failure at its assertion as the lane reads one (atAssertion), not BLOCKED or INCONCLUSIVE. First lines:
+
+  AssertionError: #3289 no blind redraft of AC2 replaces tests/acceptance/25/routes/wake.test.ts: tests/acceptance/25/routes/wake.test.ts is still run by the lanes (scripts/lanes.mjs byHand doesn't list it), so no redraft runs in its place; no test file the lanes run in tests/acceptance/25/live-redraft/ carries the redrafted AC2 test's tag #25.ee0f30b0: expected [ …(2) ] to deeply equal []
+  AssertionError: #3289 no blind redraft of AC3 replaces tests/acceptance/25/routes/session-end.test.ts: tests/acceptance/25/routes/session-end.test.ts is still run by the lanes (scripts/lanes.mjs byHand doesn't list it), so no redraft runs in its place; no test file the lanes run in tests/acceptance/25/live-redraft/ carries the redrafted AC3 test's tag #25.008fdf08: expected [ …(2) ] to deeply equal []
+  AssertionError: #3289 no blind redraft of AC5 replaces tests/acceptance/25/fallbacks/flags.test.ts: tests/acceptance/25/fallbacks/flags.test.ts is still run by the lanes (scripts/lanes.mjs byHand doesn't list it), so no redraft runs in its place; no test file the lanes run in tests/acceptance/25/live-redraft/ carries the redrafted AC5 test's tag #25.c5d6abef: expected [ …(2) ] to deeply equal []
+  AssertionError: #3289 no blind redraft of AC5 replaces tests/acceptance/25/fallbacks/flags.test.ts: tests/acceptance/25/fallbacks/flags.test.ts is still run by the lanes (scripts/lanes.mjs byHand doesn't list it), so no redraft runs in its place; no test file the lanes run in tests/acceptance/25/live-redraft/ carries the redrafted AC5 test's tag #25.c5d6abef: expected [ …(2) ] to deeply equal []
+  AssertionError: #3289 no blind redraft of AC2 replaces tests/acceptance/25/routes/wake.test.ts: tests/acceptance/25/routes/wake.test.ts is still run by the lanes (scripts/lanes.mjs byHand doesn't list it), so no redraft runs in its place; no test file the lanes run in tests/acceptance/25/live-redraft/ carries the redrafted AC2 test's tag #25.ee0f30b0: expected [ …(2) ] to deeply equal []
+
+(each in order: #3289.4d4ebb87, #3289.0057f123, #3289.4932b560, #3289.1de37162, #3289.24701d6f; the last stops at AC2,
+the first of the three redrafts it needs)
+
+The expected reason: the base holds no blind redraft of #25's wake, session-end and flags tests. scripts/lanes.mjs
+`redrafted` names no folder in their place and `byHand` still leaves each first draft in the lanes; the only redraft
+folder of suite 25, live-redraft/, holds one file, which the lanes run by hand. "expected [ …(2) ]" is those two
+problems. The base is this suite's wrong program; no twin of its own is needed.
+
+## Not run
+
+The lane run itself (run-lane.mjs: prepareRuns and before over a redraft, on main and on each twin) never starts on the
+base, so it was not exercised; it runs once a redraft lands.

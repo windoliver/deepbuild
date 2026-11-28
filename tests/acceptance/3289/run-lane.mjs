@@ -1,0 +1,49 @@
+// #3289's lane runner, started by lane.test.ts as a process of its own: the checkout's before lane
+// (scripts/proof-runs.mjs, `prepareRuns` then `before`) over the test files given, as a change that adds them to the
+// checkout's HEAD. The merge base is that HEAD, so "on main" is the checkout's own code; each twin the files' criteria
+// name in their suite's twins.json is laid alone over a copy of it, as the lane lays one. Writes what the lane read to
+// the JSON file given: each tagged test's result on main (the change), on the merge base and on each twin, the lane's
+// own `failure` readings (`atAssertion`, `cause`), and the lines `before` printed.
+//
+//   node run-lane.mjs <checkout root> <out.json> <test file> ...
+import { execFileSync } from 'node:child_process';
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+const [root, out, ...files] = process.argv.slice(2);
+const lines = [];
+let summary;
+const entries = (map) => Object.fromEntries(map ?? []);
+try {
+  const { prepareRuns, before, removeTemporaries } = await import(pathToFileURL(join(root, 'scripts/proof-runs.mjs')).href);
+  try {
+    const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
+    // The change adds the files: each is new, so every test in it counts as the change's own.
+    const change = { root, base: head, head, commits: [], whole: files.map((path) => ({ path, status: 'A', hunks: [] })) };
+    const runs = prepareRuns({ root, change, issue: null });
+    before(runs, new Map(), (state, lane, detail) => lines.push(`${state} ${lane}: ${detail}`), (line) => lines.push(line));
+    summary = {
+      files: runs.files, byHand: runs.byHand, unrun: runs.unrun ?? [],
+      base: { blocked: runs.base.blocked ?? null, unrunnable: entries(runs.base.unrunnable), fileErrors: entries(runs.base.fileErrors) },
+      head: { unrunnable: entries(runs.head.unrunnable), fileErrors: entries(runs.head.fileErrors) },
+      tests: runs.tests.map((test) => ({
+        key: test.key, path: test.path, name: test.name, tags: test.tags, status: test.status, failure: test.failure, twinsError: test.twinsError ?? null,
+        base: runs.base.results.get(test.key) ?? null,
+        twins: (test.twins ?? []).map(({ tag, twin, key }) => {
+          const laid = runs.twins.get(key);
+          return {
+            tag, twin, key, ran: Boolean(laid), stale: laid?.stale ?? null, refused: laid?.refused ?? null,
+            unrunnable: laid?.unrunnable.get(test.path) ?? null, fileError: laid?.fileErrors.get(test.path) ?? null, result: laid?.results.get(test.key) ?? null,
+          };
+        }),
+      })),
+    };
+  } finally {
+    const left = removeTemporaries();
+    if (left) lines.push(`cleanup: ${left}`);
+  }
+} catch (error) {
+  summary = { error: String(error?.stack ?? error) };
+}
+writeFileSync(out, JSON.stringify({ ...summary, lines }, null, 2));
