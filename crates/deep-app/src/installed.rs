@@ -15,14 +15,15 @@ use crate::commands::{entries, Entry, Open, Palette, View};
 use crate::copy;
 use crate::views;
 
-/// The pages ⌘K always lists, which View lists too (#1462): Home, Needs you, Agents and Rules, then each view you
-/// installed in the `sidebar` area as a page by its name (#1461); and the preferences it opens the box for (#1998).
+/// The pages ⌘K always lists, which View lists too (#1462): Home, Needs you, Agents, Rules and Decided, then each
+/// view you installed in the `sidebar` area as a page by its name (#1461); and the preferences it opens the box for.
 pub fn shipped_pages() -> Vec<Entry> {
     let shipped = [
         (copy::text("installed.home"), "home"),
         (copy::text("installed.needs_you"), "needs-you"),
         (copy::text("installed.agents"), "agents"),
         (copy::text("installed.rules"), "rules"),
+        (copy::text("installed.decided"), "decided"),
     ]
     .map(|(name, page)| (name.to_owned(), Address::page(page)));
     let installed = views::page_names().into_iter().filter_map(|name| {

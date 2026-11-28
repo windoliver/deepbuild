@@ -95,6 +95,7 @@ thread_local! {
     static KEY_AT: RefCell<Option<String>> = const { RefCell::new(None) };
     /// You moved the keyboard off the card (Esc, F6, ⌘K, ⌘N): it no longer takes it back each frame (#1462).
     static LET_GO: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static KEPT: RefCell<Option<String>> = const { RefCell::new(None) };
 }
 
 /// The card stops keeping the keyboard: you moved it elsewhere, with the ask left open and its words kept.
@@ -124,9 +125,38 @@ pub fn focus_id(window: &Window) -> Option<String> {
 
 /// ⌘Z: the shown card's Undo while it is live (#1807), a press like any other.
 pub fn undo(window: &mut Window, cx: &mut App) {
-    let _ = window;
-    if let Some((_, shown)) = SHOWN.with(|cell| cell.borrow().clone()) {
-        shown.update(cx, |card, cx| card.press_key(Target::Undo, cx));
+    if let Some(card) = shown()
+        .map(|(_, card)| card)
+        .filter(|card| undo_live(card, cx))
+    {
+        card.update(cx, |card, cx| card.press_key(Target::Undo, cx));
+        return;
+    }
+    let now = crate::views::now();
+    let last = crate::list::read_now(now)
+        .0
+        .iter()
+        .filter(|ask| ask.status == "answered")
+        .max_by_key(|ask| ask.applies)
+        .map(|ask| ask.handle.clone());
+    if let Some(ask) = last {
+        undo_ask(&ask, window, cx);
+    }
+}
+
+fn undo_live(card: &Entity<Card>, cx: &App) -> bool {
+    card.read(cx)
+        .controller
+        .as_ref()
+        .is_some_and(Controller::undo_live)
+}
+
+pub fn undo_ask(ask: &str, window: &mut Window, cx: &mut App) {
+    if crate::open::open(&crate::address::Address::ask(ask), window, cx).is_err() {
+        return;
+    }
+    if let Some(card) = showing(cx).filter(|card| undo_live(card, cx)) {
+        card.update(cx, |card, cx| card.press_key(Target::Undo, cx));
     }
 }
 
@@ -351,6 +381,7 @@ pub fn focused(window: &Window) -> bool {
 /// The ask's page lets its card go: it's the page's content, never a prompt to dismiss (#1461).
 fn leave(_: &mut App) {
     SHOWN.with(|cell| cell.borrow_mut().take());
+    KEPT.with(|k| k.borrow_mut().take());
 }
 
 /// Time passed: the shown card arms once its interval ran, and leaves when its ask closed anywhere.
@@ -379,12 +410,36 @@ pub fn tick(now: u64, cx: &mut App) {
         .controller
         .as_ref()
         .is_some_and(Controller::counting_down);
-    if !open && !counting {
-        // Answered here or anywhere: while its page shows, the next ask's page opens, and no row moves (#1461).
+    if !open && crate::plain::planted("last-receipt-jumps-away") {
         leave(cx);
+        crate::open::next(cx);
+        return;
+    }
+    if !open && !counting {
         let showing = crate::open::current(cx).is_some_and(|a| {
             a.place == crate::address::Place::Ask && format!("ask:{}", a.id) == ask
         });
+        let receipt = shown
+            .read(cx)
+            .controller
+            .as_ref()
+            .is_some_and(Controller::has_receipt);
+        let kept = KEPT.with(|k| k.borrow().as_deref() == Some(ask.as_str()));
+        let last = !matches!(
+            crate::open::opening(),
+            Some(crate::address::Address {
+                place: crate::address::Place::Ask,
+                ..
+            })
+        );
+        if showing && receipt && (kept || last) {
+            if !kept {
+                KEPT.with(|k| *k.borrow_mut() = Some(ask.clone()));
+                crate::open::focus_list(cx);
+            }
+            return;
+        }
+        leave(cx);
         if showing {
             crate::open::next(cx);
         }

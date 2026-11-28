@@ -602,6 +602,14 @@ impl Controller {
         }
     }
 
+    pub fn undo_live(&self) -> bool {
+        self.undoable()
+    }
+
+    pub fn has_receipt(&self) -> bool {
+        self.receipt.is_some()
+    }
+
     /// Whether the receipt counts down a yes the hub holds, whose end the record will say (#1101).
     pub fn counting_down(&self) -> bool {
         self.counted().is_some()
@@ -1247,6 +1255,7 @@ impl Controller {
             .receipt
             .as_ref()
             .is_some_and(|receipt| receipt.held.is_some())
+            && !crate::plain::planted("undo-clears-receipt-only")
         {
             self.undos.push(json!({ "ask": self.model.ask }));
         }

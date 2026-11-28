@@ -735,6 +735,10 @@
     "text": "智能体",
     "source": "279b44d2ab4b40c0fc132f8f3051293544cca91de9c8aa14f2cd29adb132b0ee"
   },
+  "installed.decided": {
+    "text": "已决定",
+    "source": "30ba702eee51c2a58e8237ce27c7d2caa308ce1341c50226149c40b1ea79d5df"
+  },
   "installed.didnt_load": {
     "text": "{0} 没有加载：{1}",
     "source": "a51bb66702a87d5cc165147e29fb7c247c19fe8e262f3d0fefe0e6b8e74a6773"
@@ -1679,6 +1683,18 @@
   "views.close": {
     "text": "关闭",
     "source": "7d9eb7acb13e24625c404401d8e88b2350e32162455885f18276cf802f7701ed"
+  },
+  "views.decided": {
+    "text": "已决定",
+    "source": "30ba702eee51c2a58e8237ce27c7d2caa308ce1341c50226149c40b1ea79d5df"
+  },
+  "views.decided_empty": {
+    "text": "你回答的、采用默认值的以及替你决定的请求，一经决定就会显示在这里。",
+    "source": "682f9d125e9efc00c129e2541bb221947ed5f665004fd73c734e6400be6597c5"
+  },
+  "views.decided_row": {
+    "text": "{0} · {1} · {2}",
+    "source": "21ca73aa725638b8e9e359e1cf712f748b68d6ed9e42c7de1ff2ee6f45cd65d2"
   },
   "views.enforced_by": {
     "text": "执行方",

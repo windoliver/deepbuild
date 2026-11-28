@@ -24,7 +24,6 @@ pub struct Ask {
     pub question: String,
     /// Its kind in a plain word, such as Approval or Pick one.
     pub kind: String,
-    /// How it waits: `open`, `folded`, `later` or `held`.
     pub status: String,
     /// When its default applies, in ms.
     pub applies: Option<u64>,
@@ -157,6 +156,7 @@ pub enum Time {
     Since(u64),
     /// When an ask's default applies.
     At(u64),
+    Left(u64),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -249,9 +249,27 @@ pub fn build(asks: &[Ask], sessions: &[Session]) -> Vec<Item> {
     items.push(Item::Heading {
         id: HEADING.to_owned(),
         title: copy::text("list.needs_you").to_owned(),
-        count: Some(asks.len()),
+        count: Some(waiting(asks)),
     });
     for ask in asks {
+        if ask.status == "answered" {
+            items.push(Item::Row(Box::new(Row {
+                id: ask.handle.clone(),
+                address: Address::ask(&ask.handle),
+                title: ask.question.clone(),
+                word: ask.kind.clone(),
+                value: "answered".to_owned(),
+                entry: "needs_you",
+                time: ask.applies.map(Time::Left),
+                loud: false,
+                left: true,
+                why: String::new(),
+                doing: None,
+                hooks: (0, None),
+                flag: None,
+            })));
+            continue;
+        }
         let waits = match ask.status.as_str() {
             // #1461's planted list tells them apart by ink alone, as the base drew them.
             _ if crate::plain::planted("wait-by-ink") => None,
@@ -280,6 +298,23 @@ pub fn build(asks: &[Ask], sessions: &[Session]) -> Vec<Item> {
                 && ask.status != "folded"
                 && ask.status != "later"
                 && ask.status != "held",
+            left: false,
+            why: String::new(),
+            doing: None,
+            hooks: (0, None),
+            flag: None,
+        })));
+    }
+    if crate::plain::planted("decided-row-in-list") {
+        items.push(Item::Row(Box::new(Row {
+            id: "page:decided".to_owned(),
+            address: Address::page("decided"),
+            title: "Decided".to_owned(), // copy-exception: planted wrong program
+            word: String::new(),
+            value: "idle".to_owned(),
+            entry: "idle",
+            time: None,
+            loud: false,
             left: false,
             why: String::new(),
             doing: None,
@@ -343,9 +378,13 @@ pub fn build(asks: &[Ask], sessions: &[Session]) -> Vec<Item> {
     items
 }
 
+pub fn waiting(asks: &[Ask]) -> usize {
+    asks.iter().filter(|ask| ask.status != "answered").count()
+}
+
 /// What the window opens on: the first open ask, else the project whose sessions changed last.
 pub fn opens_on(asks: &[Ask], sessions: &[Session]) -> Option<Address> {
-    if let Some(ask) = asks.first() {
+    if let Some(ask) = asks.iter().find(|ask| ask.status != "answered") {
         return Some(Address::ask(&ask.handle));
     }
     sessions
@@ -464,6 +503,7 @@ pub fn read(view: &crate::record::View, now: u64) -> (Vec<Ask>, Vec<Session>) {
             .collect();
         // An ask put off with Later goes below the others until it comes back (#1462).
         asks.sort_by_key(|ask| ask.status == "later");
+        with_receipts(view, &mut asks, now);
         // A running job's row (#1925) is drawn under the sessions, not as one.
         let sessions = rows
             .iter()
@@ -528,6 +568,7 @@ pub fn read(view: &crate::record::View, now: u64) -> (Vec<Ask>, Vec<Session>) {
         .map(|row| ask(text(row, "ask"), &text(row, "question")))
         .collect();
     asks.sort_by_key(|ask| ask.status == "later");
+    with_receipts(view, &mut asks, now);
     let sessions = table
         .every_session()
         .into_iter()
@@ -549,6 +590,80 @@ pub fn read(view: &crate::record::View, now: u64) -> (Vec<Ask>, Vec<Session>) {
         })
         .collect();
     (asks, sessions)
+}
+
+fn with_receipts(view: &crate::record::View, asks: &mut Vec<Ask>, now: u64) {
+    if crate::plain::planted("settled-row-under-needs-you") {
+        let events: Vec<serde_json::Value> = view.events.iter().cloned().collect();
+        if let Some(settled) = crate::decided::read(&events).into_iter().next() {
+            asks.push(Ask {
+                handle: settled.handle,
+                question: settled.question,
+                kind: String::new(),
+                status: "open".to_owned(),
+                applies: None,
+            });
+        }
+    }
+    let mut holds: Vec<(&str, Option<u64>)> = Vec::new();
+    for event in view.events.iter().filter(|e| e["writer"] == "core") {
+        let Some(handle) = event["subject"].as_str() else {
+            continue;
+        };
+        let until = match event["kind"].as_str() {
+            Some("approval.held") => event["data"]["until"].as_u64(),
+            Some("approval.started" | "approval.withdrawn") => None,
+            _ => continue,
+        };
+        holds.retain(|(held, _)| *held != handle);
+        holds.push((handle, until));
+    }
+    let table = view.table();
+    let order = |handle: &str| {
+        view.inbox
+            .iter()
+            .position(|row| row["ask"] == handle)
+            .unwrap_or(usize::MAX)
+    };
+    for (handle, until) in holds {
+        let Some(until) = until.filter(|_| !table.is_open(handle)) else {
+            continue;
+        };
+        let left = until.saturating_sub(now);
+        let dropped = crate::plain::planted("answered-row-leaves-at-2s")
+            && left + 2_000 <= crate::kinds::HOLD_MS;
+        if dropped || asks.iter().any(|a| a.handle == handle) {
+            continue;
+        }
+        crate::states::changes_after(left % 1000 + 1);
+        let question = view
+            .inbox
+            .iter()
+            .find(|row| row["ask"] == handle)
+            .and_then(|row| row["question"].as_str())
+            .or_else(|| {
+                view.events
+                    .iter()
+                    .find(|e| e["kind"] == "ask.created" && crate::states::handle(e) == handle)
+                    .and_then(|e| e["data"]["question"].as_str())
+            })
+            .unwrap_or_default();
+        let at = order(handle);
+        let place = asks
+            .iter()
+            .position(|ask| ask.status == "later" || order(&ask.handle) > at)
+            .unwrap_or(asks.len());
+        asks.insert(
+            place,
+            Ask {
+                handle: handle.to_owned(),
+                question: crate::question::visible(question),
+                kind: copy::count("question.starts_in", left.div_ceil(1000), &[]),
+                status: "answered".to_owned(),
+                applies: Some(until),
+            },
+        );
+    }
 }
 
 /// The list as it's drawn, and what the one rule for when rows move remembers.

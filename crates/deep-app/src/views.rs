@@ -44,6 +44,7 @@ pub const WELCOME: &str = "deepbuild/welcome";
 pub const AGENTS: &str = "deepbuild/agents";
 /// The rules page (#344): every rule you wrote, with its file, scope, size and what enforces it.
 pub const RULES: &str = "deepbuild/rules";
+pub const DECIDED: &str = "deepbuild/decided";
 
 /// The shipped views a replica snapshots, by the ids the record uses.
 pub const SHIPPED_VIEWS: [&str; 3] = ["needs-you", "sidebar", "session"];
@@ -105,10 +106,11 @@ pub enum Kind {
     Welcome,
     Agents,
     Rules,
+    Decided,
 }
 
 impl Kind {
-    pub const ALL: [Kind; 8] = [
+    pub const ALL: [Kind; 9] = [
         Kind::Sidebar,
         Kind::Home,
         Kind::NeedsYou,
@@ -117,6 +119,7 @@ impl Kind {
         Kind::Welcome,
         Kind::Agents,
         Kind::Rules,
+        Kind::Decided,
     ];
 
     pub fn name(self) -> &'static str {
@@ -129,6 +132,7 @@ impl Kind {
             Kind::Welcome => WELCOME,
             Kind::Agents => AGENTS,
             Kind::Rules => RULES,
+            Kind::Decided => DECIDED,
         }
     }
 }
@@ -1862,6 +1866,37 @@ pub(crate) fn control(
     }
 }
 
+fn decided_page(now: u64, chrome: &chrome::Chrome) -> Div {
+    let settled = crate::decided::read(&crate::record::history());
+    let content = div().flex().flex_col().gap(sizes().space(0));
+    if settled.is_empty() {
+        return content.child(
+            label("decided-empty", copy::text("views.decided_empty"))
+                .text_color(chrome.ink_secondary),
+        );
+    }
+    content.children(settled.into_iter().map(|settled| {
+        let outcome = crate::codes::outcome(settled.outcome, settled.outcome);
+        let when = settled
+            .at
+            .map(|at| states::moment(at, now))
+            .unwrap_or_default();
+        let said = copy::fill("views.decided_row", &[&settled.question, &outcome, &when]);
+        let address = Address::ask(&settled.handle);
+        control(
+            ElementId::Name(
+                format!("decided-row:{}", settled.handle.trim_start_matches("ask:")).into(),
+            ),
+            Control::Plain,
+            said,
+            chrome,
+        )
+        .on_click(move |_, window, cx| {
+            crate::open::open(&address, window, cx).ok();
+        })
+    }))
+}
+
 /// What a view draws from the one record reader, read in its borrow so no event is copied to draw a frame, and only
 /// what that view shows: its open asks, its sessions with their task's title and state, and the deadlines of the
 /// first session's asks.
@@ -2005,7 +2040,12 @@ fn read(view: &crate::record::View, kind: Kind, opened: Option<&str>) -> Record 
                 table.state(&session),
             )]
         }
-        Kind::Home | Kind::NeedsYou | Kind::Welcome | Kind::Agents | Kind::Rules => Vec::new(),
+        Kind::Home
+        | Kind::NeedsYou
+        | Kind::Welcome
+        | Kind::Agents
+        | Kind::Rules
+        | Kind::Decided => Vec::new(),
     };
     let deadlines = match (kind, sessions.first()) {
         (Kind::Session, Some((first, ..))) => {
@@ -2494,8 +2534,9 @@ impl Render for Shipped {
                     }
                 }
                 let line = match empty {
-                    crate::empties::Empty::Nothing if !asks.is_empty() => {
-                        label("home-needs-you", asks_need_you(asks.len())).into_any_element()
+                    crate::empties::Empty::Nothing if crate::list::waiting(asks) > 0 => {
+                        label("home-needs-you", asks_need_you(crate::list::waiting(asks)))
+                            .into_any_element()
                     }
                     _ => {
                         let nothing = asks_need_you(0);
@@ -2554,7 +2595,7 @@ impl Render for Shipped {
                 page.p(s.space(1))
                     .overflow_y_scroll()
                     .child(needs_you_heading(
-                        asks.len(),
+                        crate::list::waiting(&asks),
                         empty,
                         now,
                         self.popped,
@@ -3053,6 +3094,17 @@ impl Render for Shipped {
                     Some("rules".into()),
                     Some(crate::find::titled(heading, chrome, window, cx)),
                     content,
+                    true,
+                ))
+            }
+            Kind::Decided => {
+                let heading =
+                    page_title(title("decided-title", copy::text("views.decided")), chrome)
+                        .aria_label(copy::text("views.decided"));
+                page.child(in_lane(
+                    Some("decided".into()),
+                    Some(crate::find::titled(heading, chrome, window, cx)),
+                    decided_page(now, chrome),
                     true,
                 ))
             }
