@@ -955,9 +955,9 @@ for (const name of ['bound', 'granted']) {
   byHand.push(`tests/acceptance/3588/${name}.test.mjs`);
 }
 
-for (const name of ['turn', 'window', 'compiles']) {
-  redrafted[`tests/acceptance/3549/${name}.test.mjs`] = 'tests/acceptance/3549-redraft-3660/';
-  byHand.push(`tests/acceptance/3549/${name}.test.mjs`);
+for (const path of ['3549/turn', '3549/window', '3549/compiles', '3549-redraft-3694/window'].map((name) => `tests/acceptance/${name}.test.mjs`)) {
+  redrafted[path] = 'tests/acceptance/3549-redraft-3660/';
+  if (!byHand.includes(path)) byHand.push(path);
 }
 
 for (const entry of laneFolders.filter((folder) => !unread.includes(folder))) {
