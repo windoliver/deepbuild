@@ -251,6 +251,6 @@ export async function guardCommand(args: readonly string[], setUp: () => Promise
   if (stopped) return stopped;
   const result = await callAsYou('guard.add', { guards });
   if (typeof result === 'number') return result;
-  process.stdout.write(`Added ${(result.names as string[]).join(', ')} to your rules\n`);
+  process.stdout.write(`Added ${(result.names as string[]).join(', ')} to your guard entries\n`);
   return 0;
 }

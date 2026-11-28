@@ -467,7 +467,7 @@ export class SessionMemory {
     return { decision: `removed “${rule.text}” from ${rule.file}` };
   }
 
-  /** `deep session rules <id>`: the set a session was given, whether a newer one is in force since, and the set a regression in it is credited to. */
+  /** `deep rules session <id>`: the set a session was given, whether a newer one is in force since, and the set a regression in it is credited to. */
   async sessionRules(params: Obj): Promise<Obj> {
     const session = String(params.session ?? '');
     const set = await setOf(this.options.services.raw, session);

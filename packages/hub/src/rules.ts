@@ -462,8 +462,8 @@ export async function setOf(raw: Raw, session: string): Promise<{ pos: number; r
   return row ? { pos: Number(row.pos), rules: JSON.parse(row.rules) as string[] } : undefined;
 }
 
-const USAGE = 'Usage: deep rules sync\n       deep rules reach --repo <folder> --scope <glob> [--json]\n       deep rules credit <rule handle> [--json]\n       deep session rules <session> [--json]';
-/** `deep rules ...` and `deep session rules ...`: exit 0 done, 1 refused, 2 a usage error, 3 not decided. */
+const USAGE = 'Usage: deep rules sync\n       deep rules reach --repo <folder> --scope <glob> [--json]\n       deep rules credit <rule handle> [--json]\n       deep rules session <session> [--json]';
+/** `deep rules ...`, `deep session rules ...` its old name (#1814): exit 0 done, 1 refused, 2 a usage error, 3 not decided. */
 export async function rulesCommand(args: readonly string[]): Promise<number> {
   const json = args.includes('--json');
   const rest = args.filter((a) => a !== '--json');

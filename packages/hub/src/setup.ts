@@ -173,7 +173,7 @@ async function install(cli: string, quiet = false): Promise<Said> {
     tell(`deep setup: ${why}\n`);
     return said(stopped(root, 1, why, 'Set up again once that is fixed.', done));
   }
-  if (!quiet) console.log(`Its hooks and status line forwarder are in ${settingsFile}, beside yours; its MCP server in ${userFile}; its skill at ${skillDir()}; its safety rules at ${join(root, 'rules.json')}.`);
+  if (!quiet) console.log(`Its hooks and status line forwarder are in ${settingsFile}, beside yours; its MCP server in ${userFile}; its skill at ${skillDir()}; its guard entries at ${join(root, 'rules.json')}.`);
   // Only a relation that doesn't hold needs you; deep doctor lists them all.
   if (!quiet) for (const r of relations(root)) if (!r.holds) console.log(`BROKEN ${r.text}`);
   const started = await startHub({ cli, quiet: true });

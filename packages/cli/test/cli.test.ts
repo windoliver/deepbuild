@@ -171,7 +171,7 @@ describe('deep <command> --help', () => {
   }, 70_000);
 
   // The usage a command prints for arguments it can't read is the one that is right; its help names every flag in it.
-  it.each([['start'], ['rules'], ['session', 'rules'], ['show'], ['read'], ['find'], ['hub']])('deep %s --help names every flag the command says it takes', (command, ...rest) => {
+  it.each([['start'], ['rules'], ['show'], ['read'], ['find'], ['hub']])('deep %s --help names every flag the command says it takes', (command, ...rest) => {
     const { home, env } = fresh();
     try {
       const own = spawnSync(process.execPath, [cli, command, ...rest], { encoding: 'utf8', env, cwd: home, timeout: 60_000 });
