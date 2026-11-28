@@ -233,6 +233,7 @@ pub(crate) mod tests {
 
     /// A piped job for frames `first..first + n` of a `size` square at 24 a second, standard
     /// quality, as NV12 for a 4:2:0 codec and BGRA otherwise; `png` names `export.png`.
+    #[cfg(target_os = "macos")]
     pub(crate) fn piped_job(codec: &str, out: &str, size: u32, first: u64, n: u64) -> Value {
         let (op, format) = match codec {
             "png" => ("export.png", "bgra"),
@@ -246,6 +247,7 @@ pub(crate) mod tests {
 
     /// A piped export run in this process: `job`, then frames `first..` (each with its key
     /// flag), then the end when `end`, all written ahead as a parent writes them; every reply.
+    #[cfg(target_os = "macos")]
     pub(crate) fn piped(
         job: &Value,
         frames: &[(Vec<u8>, bool)],

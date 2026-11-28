@@ -52,6 +52,7 @@ pub fn i420(planes: &[u8], w: usize, h: usize, rotation: u16) -> Cow<'_, [u8]> {
 
 /// NV12 planes (Y, then Cb and Cr interleaved) of a `w` × `h` frame, `w` and `h` even, turned;
 /// unturned, the same buffer, so a live frame is never copied for nothing.
+#[cfg(target_os = "macos")]
 pub fn nv12(planes: Vec<u8>, w: usize, h: usize, rotation: u16) -> Vec<u8> {
     if rotation == 0 || planes.len() < w * h * 3 / 2 {
         return planes;

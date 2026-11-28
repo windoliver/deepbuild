@@ -140,6 +140,7 @@ pub fn timescale(p: u32, q: u32) -> (u32, u32) {
 }
 
 /// #157: `timescale`, or the planted muxers' 600 or 1000 with the nearest whole tick per frame.
+#[cfg(any(target_os = "macos", test))]
 pub(crate) fn planted_timescale(p: u32, q: u32, planted: &Planted) -> (u32, u32) {
     let fixed = [
         ("muxer_timescale_600", 600u64),
