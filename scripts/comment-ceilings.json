@@ -156,7 +156,7 @@
   "crates/deep-app/src/open.rs": 97,
   "crates/deep-app/src/panel_check.rs": 47,
   "crates/deep-app/src/panel_keys.rs": 32,
-  "crates/deep-app/src/panel_module.rs": 40,
+  "crates/deep-app/src/panel_module.rs": 37,
   "crates/deep-app/src/panel_rules.rs": 32,
   "crates/deep-app/src/panel_tree.rs": 17,
   "crates/deep-app/src/panel_values.rs": 25,

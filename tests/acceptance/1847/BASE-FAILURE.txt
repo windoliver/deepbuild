@@ -1,0 +1,62 @@
+# #1847 acceptance suite run at the base 58b4a8cb (main), Linux arm64, 2026-11-22:
+#   cargo build --locked -p deep-panel-host && cargo test --locked -p deep-replica --test acceptance_1847
+# (cargo's compile lines and the workspace's warnings left out; home paths redacted to ~)
+     Running ../../tests/acceptance/1847/imports.rs (target/debug/deps/acceptance_1847-bc712c2aa6032028)
+
+running 10 tests
+TU: error: ../src/freedreno/vulkan/tu_knl.cc:387: failed to open device /dev/dri/renderD128 (VK_ERROR_INCOMPATIBLE_DRIVER)
+test #1847.675d2963 each planted panel is refused at pack check, naming the file and the line ... FAILED
+
+---- #1847.675d2963 each planted panel is refused at pack check, naming the file and the line ----
+dynamic-template: the pack check admitted it, though reach.js:4 imports a module not named by one plain string
+dynamic-computed: the pack check admitted it, though reach.js:6 imports a module not named by one plain string
+require-computed: the pack check admitted it, though reach.js:5 imports a module not named by one plain string
+
+test #1847.675d2963 each planted panel is refused at load, naming the file and the line ... FAILED
+
+---- #1847.675d2963 each planted panel is refused at load, naming the file and the line ----
+dynamic-template: the load admitted it, though reach.js:4 imports a module not named by one plain string
+dynamic-computed: the load admitted it, though reach.js:6 imports a module not named by one plain string
+require-computed: the load admitted it, though reach.js:5 imports a module not named by one plain string
+
+test #1847.675d2963 (owner's audit comment) a static toolkit import after a regex literal holding a quote is refused at pack check, naming the module, file and line ... FAILED
+
+---- #1847.675d2963 (owner's audit comment) a static toolkit import after a regex literal holding a quote is refused at pack check, naming the module, file and line ----
+regex-quote: the pack check admitted it, though reach.js:3 imports a module not named by one plain string
+
+test #1847.675d2963 (owner's audit comment) a static toolkit import after a regex literal holding a quote is refused at load, naming the module, file and line ... FAILED
+
+---- #1847.675d2963 (owner's audit comment) a static toolkit import after a regex literal holding a quote is refused at load, naming the module, file and line ----
+regex-quote: the load admitted it, though reach.js:3 imports a module not named by one plain string
+
+test #1847.675d2963 (owner's audit comment) the comment's own line is refused by the check as the same import alone is ... FAILED
+
+---- #1847.675d2963 (owner's audit comment) the comment's own line is refused by the check as the same import alone is ----
+the comment's line: the check admitted it, though main.js:1 imports a module not named by one plain string
+  source: "const q = /\"/; import { Chart } from \"gpui-kit\";\n"
+the comment's line on line 2: the check admitted it, though main.js:2 imports a module not named by one plain string
+  source: "const before = 1;\nconst q = /\"/; import { Chart } from \"gpui-kit\";\n"
+
+test #1847.675d2963 property: a generated panel with one import not named by one plain string, at a random line, is refused naming its file and line ... FAILED
+
+---- #1847.675d2963 property: a generated panel with one import not named by one plain string, at a random line, is refused naming its file and line ----
+seed 18475000, a dynamic import of the toolkit in a template literal on line 5: a generated panel: the check admitted it, though gen.js:5 imports a module not named by one plain string
+--- src/gen.js ---
+const later_0 = () => import('./side.js');
+import "./side.js";
+const nested_2 = `outer ${`inner ${"x"}`}`;
+const later_3 = () => import('./side.js');
+const m_5 = await import(`gpui-kit`);
+const required_4 = () => require("./side.js");
+
+test #1847.fc64718b a panel importing only @deepbuild/panel and its own files by plain strings passes the pack check ... ok
+test #1847.fc64718b a panel importing only @deepbuild/panel and its own files by plain strings loads unchanged ... ok
+test #1847.fc64718b every shipped panel still passes the pack check and loads ... ok
+test #1847.fc64718b property: a generated panel whose every import is one plain string passes the check ... ok
+test result: FAILED. 4 passed; 6 failed
+
+error: test failed, to rerun pass `-p deep-replica --test acceptance_1847`
+
+Caused by:
+  process didn't exit successfully: `~/deepbuild/.claude/worktrees/issue-1847-panel-imports-7157fd/target/debug/deps/acceptance_1847-bc712c2aa6032028` (exit status: 1)
+EXIT 1
