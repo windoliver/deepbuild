@@ -49,8 +49,8 @@ here.
 
 ## What the base does
 
-Read at `a7ae0e804`. The hub's and the canvas core's side of it was also seen on runs (`BASE-FAILURE.txt` says
-which); the app's side was read only, since its window could not draw when this job ran:
+Read at `a7ae0e804`, and seen on the base's run (`BASE-FAILURE.txt`). The reason the panel paints is read from
+`lacks`, since the base's report doesn't say it:
 
 - **The view refuses a document whole.** `lacks` gives `module_missing: <module>` for any required module but
   `scene3d`, `motion` and `effects`, `module_missing: marks2d` for a 2D item, and `feature_absent: <what>` for
@@ -299,9 +299,9 @@ is a pass.
 - The machine's GPU lease (`~/.cache/deepbuild-gpu/lease`) held by another live process for ten minutes: `BLOCKED`.
   Each test of criteria 2 to 6 holds the file while it draws and lets it go after.
 - Where the app's window draws no frame with nothing to show (no display, a locked screen, a sleeping display, a
-  hidden window, no Metal device): criteria 2 to 7, `BLOCKED`, after the 90 s that short run is given. This is what
-  the base's run read (Base, below). A run that ends without a report is followed by that short run again: still
-  drawing, the test fails; no longer drawing, `BLOCKED`.
+  hidden window, no Metal device): criteria 2 to 7, `BLOCKED`, after the 90 s that short run is given. This job's
+  first turn at the base read so, with the screen locked. A run that ends without a report is followed by that short
+  run again: still drawing, the test fails; no longer drawing, `BLOCKED`.
 - AC5, either test: a window that drew fewer than 60 frames in the 4 s the pause is judged over, `INCONCLUSIVE`.
 - A render-back snapshot that is blank or black: `BLOCKED` (a failed assertion whose message starts so).
 - No built CLI, a `deep-show` or `deep-hook` built outside the checkout's `target/`, a hub that doesn't start or
@@ -321,9 +321,18 @@ is a pass.
 
 ## Base
 
-`BASE-FAILURE.txt` says what each file read at the base, `a7ae0e804`. In short: `ac1` ran and fails at its
-assertions; the six files that open the app's window read `BLOCKED`, every test of them: the window drew no frame
-while this Mac's screen was locked and its display asleep, so no frame of the real app was judged at the base. What each is written to read
-there is given from the base's code, not from a run. The suite's own logic was run once against a throwaway
-stand-in for the app, with a real hub and a real canvas core; that shows the tests pass and fail where they are
-written to, and says nothing of the base's app.
+`BASE-FAILURE.txt` holds each file's run at the base, `a7ae0e804`. In short: all 13 tests fail there, each at an
+assertion of its own. `ac1` finds no check and no count. The castle, the look document, the shots document and the
+text document paint no GPU-layer slot. The sliding box's view drew 90 frames while the session was paused. The frame
+on screen after the drag is the frame before it. The record holds no `layer.refused`. A first turn of the six files
+that open the app's window read `BLOCKED`, every test, while this Mac's screen was locked; the reading is the second
+turn's, with the screen unlocked.
+
+Two things the base's run showed beyond the failures. The base's slot already holds render-back's frame of a plain
+document, by pixel hash (`ac6`'s proof line, before the drag), so the equality criteria 2, 3, 5 and 6 ask for is one
+the two paths reach on this machine. And no file took two minutes at a load of 62 to 167, so `lane.json` names no
+slow file.
+
+The suite's own logic was also run once against a throwaway stand-in for the app, with a real hub and a real canvas
+core: 10 of 11 tests passed on a stand-in that does what the criteria ask, the eleventh being AC7's, which no
+stand-in can pass without the hub's side. That says nothing of the app.

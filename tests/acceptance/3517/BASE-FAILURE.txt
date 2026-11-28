@@ -1,26 +1,22 @@
 #3517's suite at the base, a7ae0e804 ("Merge pull request #3696 …", origin/main), on this job's Mac (Mac17,10, Apple
-M5 Max, 18 cores, macOS), November 27, 2026, 19:34 to 21:10 EST. One-minute load 15 to 36. Every cargo build and
-every test run below went through scripts/lease, under a build grant of the machine's throttle; the type-check ran
-bare.
+M5 Max, 18 cores, macOS), November 27, 2026, 19:34 to 22:18 EST. Every cargo build and every test run below went
+through scripts/lease, under a build grant of the machine's throttle; the type-check ran bare.
 
 ## In short
 
-  ac1-view-count.test.ts        ran     2 tests, 2 FAIL at their assertions: the base has no check and no count
-  ac2-castle.test.ts            BLOCKED 1 test skipped: the app's window drew no frame
-  ac3-look-shots.test.ts        BLOCKED 4 tests skipped: the same
-  ac4-text-over-box.test.ts     BLOCKED 1 test skipped: the same
-  ac5-session-time.test.ts      BLOCKED 2 tests skipped: the same
-  ac6-drag-turns.test.ts        BLOCKED 1 test skipped: the same
-  ac7-refusal-recorded.test.ts  BLOCKED 2 tests skipped: the same
+Every file was run at the base, and every test fails there at an assertion of its own: 13 tests, 13 FAIL.
 
-This Mac's screen was locked and its display asleep at each of this job's three readings, 20:35, 20:54 and 21:05 EST
-(ioreg: CGSSessionScreenIsLocked true; system_profiler: Display Asleep: Yes). `deep-app --canvas` with nothing to
-show printed no report, and nothing on stderr, in the 90 s each file gives it, so every test that opens the app's
-window skipped BLOCKED before it showed anything. The locked screen is the likely cause, since a hidden window gets
-no frame; no other cause was ruled out. No frame of the real app was judged at the base, by any file. Nothing below
-says otherwise.
+  ac1-view-count.test.ts        2 FAIL  the base has no check and no count
+  ac2-castle.test.ts            1 FAIL  no frame painted a GPU-layer slot for the castle's layer
+  ac3-look-shots.test.ts        4 FAIL  neither document is painted from a slot; the plant names select nothing
+  ac4-text-over-box.test.ts     1 FAIL  no frame painted a GPU-layer slot for the layer
+  ac5-session-time.test.ts      2 FAIL  the view drew 90 frames while the session was paused
+  ac6-drag-turns.test.ts        1 FAIL  the frame on screen after the drag is the frame before it
+  ac7-refusal-recorded.test.ts  2 FAIL  the record holds no layer.refused
 
-The six files want one run each on this Mac with the screen unlocked. That run is not made here.
+The six files that open the app's window were run twice. The first turn (20:54 to 21:04 EST) read BLOCKED, every
+test: this Mac's screen was locked and its display asleep, and the app's window drew no frame. The second turn (22:09
+to 22:17 EST, the screen unlocked, one-minute load 62 to 167 on 18 cores) is the base's reading, below.
 
 ## The builds
 
@@ -58,35 +54,115 @@ The six files want one run each on this Mac with the screen unlocked. That run i
 The base has no scripts/view-count.mjs, so node exits 1 before any count; the second test's first assertion (exit 1)
 holds by that accident and it fails at the next, which asks for the planted document's line.
 
-## The six files that open the app's window, run once each (20:54 to 21:04 EST)
+## The six files that open the app's window, at the base (22:09 to 22:17 EST)
 
   $ scripts/lease node node_modules/vitest/vitest.mjs run --root tests/acceptance/3517 --no-file-parallelism \
-      --silent=false --reporter=verbose <file>          # one grant, the six files in turn; screen locked: true
+      --silent=false --reporter=verbose <file>          # one grant, the six files in turn; screen locked: false
+
+ac7-refusal-recorded.test.ts (load 167; exit 1 in 82 s)
+
+   PROOF #3517 AC7 layer "you-231b11069cb5" of doc:01JB3517D00000000000000007: the panel painted the report gives no
+     reasons; the record holds []
+   × AC7 #3517.514071e2 a document that requires physics, followed from the hub by the app's panel … 50214ms
+     AssertionError: expected [ Array(1) ] to deeply equal []
+     + "layer \"you-231b11069cb5\" of doc:01JB3517D00000000000000007: the panel painted the report gives no reasons
+        in its place and the record holds no layer.refused event for it; the record's kinds: agent.reach,
+        evidence.stored, doc.patched"
+      ❯ ac7-refusal-recorded.test.ts:57
+   × AC7 #3517.514071e2 planted paints_reason_records_nothing … 22133ms
+     AssertionError: the planted app paints the reason in the layer's place (frames[].reasons): expected 'the report
+     gives no reasons' to be '"module_missing: physics"'
+      ❯ ac7-refusal-recorded.test.ts:64
+   Tests  2 failed (2)
+
+ac6-drag-turns.test.ts (load 100; exit 1 in 49 s)
+
+   PROOF #3517 AC6 before the drag the frame on screen is da3c8473…47ff, after it da3c8473…47ff; render-back draws
+     da3c8473…47ff from the document's camera and e837f228…f0c9 from the turned pose
+   × AC6 #3517.1933faf6 a sideways drag of 120 px turns your view 30° … 38409ms
+     AssertionError: the drag changes the frame on screen: after it the slot holds another frame than before it
+     (da3c84732be203350ebc1f2810d2292d902cdfcaaaa58406a7d63f3dbef347ff): expected 'da3c8473…' not to be 'da3c8473…'
+   Tests  1 failed (1)
+
+   Every assertion before that one held at the base: the hub's replies say the camera turned 30°, and the
+   revisions, the track's hash and the golden are as they were. And the base's slot already holds render-back's
+   frame of this plain document from its own camera, by pixel hash: the equality criteria 2, 3, 5 and 6 ask for is
+   one the two paths reach on this machine.
+
+ac5-session-time.test.ts (load 119; exit 1 in 55 s)
+
+   PROOF #3517 AC5 the app, paused: 105 window frames showed 91 view frames, evaluated at a time the report doesn't
+     give (slots[].t)
+   PROOF #3517 AC5 the app, after the seek: the frame on screen fd0bdff7…6dce, evaluated at a time the report doesn't
+     give (slots[].t); render-back's at 10 s f5c3272e…eae0
+   × AC5 #3517.5a0bce0e a sliding box paused at 3 s … 29979ms
+     AssertionError: expected [ …(4) ] to deeply equal []
+     + "with the session paused at 2116800000 flicks (3.000 s) the view drew 90 frames while the window drew 105
+        (5000 to 9000 ms of the run): frame_seq 116 to 206"
+     + "with the session paused at 2116800000 flicks (3.000 s) the frames on screen were evaluated at a time the
+        report doesn't give (slots[].t)"
+     + "after the seek the session's time is 7056000000 flicks (10.000 s) and the frame on screen was evaluated at a
+        time the report doesn't give (slots[].t)"
+     + "after the seek to 10 s the frame on screen (pixel hash fd0bdff7…6dce) is not render-back's frame at 10 s
+        (f5c3272e…eae0): 7342 of 691200 pixels differ, by up to 168 codes"
+   × AC5 #3517.5a0bce0e planted keeps_own_clock … 15596ms
+     AssertionError: the planted view says the time on its own clock that its frame on screen was evaluated at
+     (slots[].t); the check found: with the session paused at 2116800000 flicks (3.000 s) the view drew 83 frames
+     while the window drew 106 …: expected null not to be null
+   Tests  2 failed (2)
+
+ac4-text-over-box.test.ts (load 89; exit 1 in 33 s)
+
+   × AC4 #3517.a6d46379 the document's layer is painted from a GPU-layer slot … 28017ms
+     AssertionError: of the window's 209 frames, those that painted a GPU-layer slot for the layer
+     "you-231b11069cb5"; in the layer's place the panel painted the report gives no reasons: expected 0 to be greater
+     than 0
+   Tests  1 failed (1)
+
+   The assertion before it held: render-back's frame holds the text.
+
+ac3-look-shots.test.ts (load 62; exit 1 in 82 s)
+
+   × AC3 #3517.234b03aa a document with look is painted … 38835ms
+     + "`look`: the document with look is not painted from a GPU-layer slot; in its layer's place the panel painted
+        the report gives no reasons"
+   × AC3 #3517.234b03aa planted draws_in_default_look … 10635ms
+     AssertionError: the planted view paints a frame, and it is not render-back's: `look`: the document with look is
+     not painted from a GPU-layer slot; …: expected [ 'unpainted' ] to deeply equal [ 'differs' ]
+   × AC3 #3517.234b03aa a document with shots is painted … 12918ms
+     + "`shots`: the document with shots is not painted from a GPU-layer slot; in its layer's place the panel painted
+        the report gives no reasons"
+   × AC3 #3517.234b03aa planted draws_at_first_camera … 11585ms
+     AssertionError: the planted view paints a frame, and it is not render-back's: `shots`: …: expected
+     [ 'unpainted' ] to deeply equal [ 'differs' ]
+   Tests  4 failed (4)
+
+ac2-castle.test.ts (load 116; exit 1 in 94 s)
+
+   × AC2 #3517.1021b920 the castle, shown through the hub and paused at 6 s … 84929ms
+     AssertionError: of the window's 419 frames, those that painted a GPU-layer slot for the castle's layer
+     "you-231b11069cb5"; in the layer's place the panel painted the report gives no reasons: expected 0 to be greater
+     than 0
+   Tests  1 failed (1)
+
+What the panel painted in a refused layer's place is not in the base's report, which has no `reasons`: each message
+says "the report gives no reasons". The base's `lacks` gives the text: `module_missing: building` for the castle
+(criterion 2's own words), `feature_absent: look`, `feature_absent: shots`, `module_missing: marks2d` and
+`module_missing: physics`. A planted name selects nothing at the base, so a planted test reads the base itself.
+
+No file took two minutes, at a load of 62 to 167, so `lane.json` names no slow file.
+
+## The first turn, with the screen locked (20:54 to 21:04 EST): BLOCKED
+
+  screen locked: true (ioreg: CGSSessionScreenIsLocked; system_profiler: Display Asleep: Yes)
 
    ↓ ac7-refusal-recorded.test.ts > … a document that requires physics, followed from the hub … 90014ms
        [BLOCKED: the app's window drew no frame with nothing to show (no display, a locked screen, a hidden window or
         no Metal device): it printed no report within 90 s: ]
-   ↓ ac7-refusal-recorded.test.ts > … planted paints_reason_records_nothing … 0ms [BLOCKED: the same]
-        Tests  2 skipped (2)                                                          exit 0 in 91 s
-   ↓ ac6-drag-turns.test.ts > … a sideways drag of 120 px turns your view 30° … 90175ms [BLOCKED: the same]
-        Tests  1 skipped (1)                                                          exit 0 in 92 s
-   ↓ ac5-session-time.test.ts > … a sliding box paused at 3 s … 90159ms [BLOCKED: the same]
-   ↓ ac5-session-time.test.ts > … planted keeps_own_clock … 0ms [BLOCKED: the same]
-        Tests  2 skipped (2)                                                          exit 0 in 91 s
-   ↓ ac4-text-over-box.test.ts > … the document's layer is painted from a slot … 90158ms [BLOCKED: the same]
-        Tests  1 skipped (1)                                                          exit 0 in 91 s
-   ↓ ac3-look-shots.test.ts > … a document with look is painted … 90184ms [BLOCKED: the same]
-   ↓ ac3-look-shots.test.ts > … planted draws_in_default_look … 1ms [BLOCKED: the same]
-   ↓ ac3-look-shots.test.ts > … a document with shots is painted … 0ms [BLOCKED: the same]
-   ↓ ac3-look-shots.test.ts > … planted draws_at_first_camera … 0ms [BLOCKED: the same]
-        Tests  4 skipped (4)                                                          exit 0 in 92 s
-   ↓ ac2-castle.test.ts > … the castle, shown through the hub and paused at 6 s … 94178ms [BLOCKED: the same]
-        Tests  1 skipped (1)                                                          exit 0 in 95 s
+   and the same note on each of the other ten tests; each file exit 0 in 91 to 95 s, every test skipped.
 
-A file whose tests all skip exits 0. That is not a pass: each note starts BLOCKED.
-
-An earlier turn of two of them (ac6, ac5, 20:33 EST, the default reporter) read the same: every test skipped, 92 s
-each. That turn was stopped by this job before the other four started, to find out why.
+A file whose tests all skip exits 0. That is not a pass: each note starts BLOCKED. An earlier turn of two of them
+(ac6, ac5, 20:33 EST, the default reporter) read the same and was stopped by this job to find out why.
 
 ## What the base's canvas core answers, seen on a run (20:33 EST)
 
@@ -142,22 +218,5 @@ real binary was put back after and is the one the runs above used. The script is
   leaves it out", "FAIL view count: counted 8, the file says 7"].
 
 Two bugs of this suite's own were found that way and fixed before the runs above: the hub needs deep-hook built
-under target/ and stopped at its start without it, and AC7's tests opened no short window first.
-
-## What each file is written to read at the base (not observed: the window never drew)
-
-From the base's code (README: What the base does). The first failing assertion is the one named.
-
-  ac2  `lacks` refuses the castle for `building`, so no frame paints a slot: "of the window's frames, those that
-       painted a GPU-layer slot for the castle's layer": expected 0 to be greater than 0. The base's report has no
-       `reasons`, so the message says "the report gives no reasons"; the panel paints `module_missing: building`.
-  ac3  the same assertion's sentence, per document: `feature_absent: look` and `feature_absent: shots` are painted
-       and no slot is. The planted names select nothing at the base, so the planted tests read the same.
-  ac4  the same assertion: `module_missing: marks2d` is painted and no slot is.
-  ac5  the sliding box is drawn at the base, on the view's own clock: "with the session paused … the view drew N
-       frames", N about one a window frame. The planted name selects nothing; its test fails at "the planted view
-       says the time on its own clock" (no `t` in the report).
-  ac6  the document is drawn at the base and the replies reach nothing: "the drag changes the frame on screen".
-       Whether the base's slot holds render-back's bytes for this plain document, by pixel hash, would have been
-       read here (the test prints both hashes); it was not.
-  ac7  the reason is painted and nothing is recorded: "the record holds no layer.refused event for it".
+under target/ and stopped at its start without it, and AC7's tests opened no short window first. The stand-in's
+base turn and the real base's (above) fail at the same assertions.
