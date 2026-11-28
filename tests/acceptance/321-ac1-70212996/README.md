@@ -1,164 +1,83 @@
-# Acceptance test for #321, criterion 1: a "proceed" never covers a call that needs authority
+# Acceptance tests for #321, criterion 1: a "proceed" never covers a push
 
-Written first, blind, by a job that never saw an implementation of #321 or #1101. The implementing agent doesn't
-edit these files (AGENTS.md, Proof); a dispute goes to a blind redraft of this job.
+Written first, blind, from issue #321 (its first acceptance criterion; Scope and the other criteria read only to keep their scope out), issue #1101 for the hold a yes starts (read for context only: a 10 s hold, a try during it refused, the step run once it ends), `technical-design.md` (Hook protocol; An ask, and your answer getting back; Before each command; Questions at the stop, with `question.proceeded`; Extension API, for what a sorter is), the repo's lint rules for new blind suites, and the base commit `debda22a`, whose hub, deep-hook, asks core, `deep inbox` and the suites of #18, #24, #25, #34, #304, #318, #319 and #320 set the surfaces and shape used here. Nothing else was read. The implementing agent doesn't edit these files (AGENTS.md, Proof); a dispute goes to a blind redraft by this job.
 
-## The criterion
+| ID | Criterion |
+|---|---|
+| `#321.70212996` | A planted sorter answers "want me to push to main?" with "proceed": the proceed is recorded with its rule, and in the turn it starts the agent's `git push origin main` is held at PreToolUse with an authority ask naming the push, which waits for your answer; your yes starts the push's hold (#1101), a try during the hold is refused, and the push runs once the hold ends; after the same sorter's "proceed" for "want me to run the tests?", `npm test` runs with no ask. A core that lets a "proceed" cover the calls of the turn it starts lets the push through and fails this test, naming the call |
 
-`#321.70212996` (the first 8 hex digits of the SHA-256 of its text):
-
-> A planted sorter answers "want me to push to main?" with "proceed": the proceed is recorded with its rule, and in
-> the turn it starts the agent's `git push origin main` is held at PreToolUse with an authority ask naming the push,
-> which waits for your answer; your yes starts the push's hold (#1101), a try during the hold is refused, and the
-> push runs once the hold ends; after the same sorter's "proceed" for "want me to run the tests?", `npm test` runs
-> with no ask. A core that lets a "proceed" cover the calls of the turn it starts lets the push through and fails
-> this test, naming the call
-
-This folder covers this criterion only. #321's other four criteria (the MCP server updates and the 1-day deadline)
-are not here.
-
-## What was read
-
-- Issue #321's text (Scope, the five criteria, Proof, Depends on), and issue #1101's text for the hold only (its
-  Scope and criteria: the 10 s hold, a try or Undo inside it, the hold kept by the hub).
-- `docs/technical-design.md` as given to this job: Questions at the stop (the sort, "proceed", `question.proceeded`,
-  "A 'proceed' never covers a call that needs authority"), A question holds the send-back (a proceed rides in the
-  stop's one reply), An ask, and your answer getting back (Every ask ends, Where they reach you, Delivery), Before
-  each command, Hook protocol (deep-hook and the hub), Plans before acting (The step drawn from the call, A hold
-  before what can't be undone), and Dogfooding for the blind-test rule.
-- The base commit `debda22a` (the only commit given): `AGENTS.md`; `packages/hub/src/server.ts` (how a hook is
-  acknowledged, held and answered: `reply`, `holdFor`, `coreReply`; the `ask.answer` method and its roles),
-  `core.ts` (`hookReply`, the stop hold, `trusted`, `answer`), `plant.ts` (`DEEP_HUB_PLANT`), `confirm.ts` and the
-  `DEEP_HUB_TEST_*` settings, `claude-settings.ts` (the stop-hold relation), `setup.ts` (`installRules`),
-  `inbox.ts`; `packages/asks/src/index.ts` (an approval binds to the plan's digest and a click token);
-  `crates/deep-hook/default-rules.json`; and the suites of #18 (`mapping/`), #24, #25 (`routes/`), #304, #318,
-  #319 and #320 for their conventions. `helpers.ts` adapts #18 mapping's helpers (same repo, same license).
-
-Nothing outside these inputs was read. No sample implementation was written or run, so the passing side of the
-test and the wrong program's failure are unverified until the implementation exists.
+The ID is the first 8 hex digits of SHA-256 of the criterion's text, trimmed, whitespace collapsed, the leading `- [ ] ` dropped (the command in `tests/acceptance/48/README.md`).
 
 ## Run
 
-From the checkout's root, with the repo's Node (`.node-version`, 24.22.0), git, npm and the Rust toolchain:
-
 ```sh
-npm ci
-npm run build --workspaces                                  # the hub and the deep CLI the test starts
-CARGO_BUILD_JOBS=1 RUSTC_WRAPPER= cargo build --locked -q -p deep-hook
-npx vitest run --root tests/acceptance/321-ac1-70212996 --no-file-parallelism
-node node_modules/typescript/bin/tsc -p tests/acceptance/321-ac1-70212996/tsconfig.json
+npm ci                                   # once, if node_modules is missing
+npm run build --workspaces               # the tests run the built CLI, packages/cli/dist/main.js, and the hub it starts
+cargo build -p deep-hook                 # the tests run target/debug/deep-hook as Claude Code's hook entries run it
+npx vitest run tests/acceptance/321      # from the checkout's root
+npx tsc -p tests/acceptance/321          # type-check the tests
 ```
 
-- Each file runs `cargo build --locked -q -p deep-hook` once (a no-op when it's built) and starts its own
-  `deep hub run`. `--no-file-parallelism` keeps the two files from building deep-hook side by side.
-- Each run makes its folders under `/tmp/dh321-*` (a Unix socket path must fit in 104 bytes on macOS) and runs every
-  process with `HOME` there, so nothing touches the real `~/.deepbuild`, `~/.claude` or the network. The git origin
-  is a bare repository in the same folder. Every process the test starts is stopped by PID after each test, never by
-  name or port. A child never inherits this process's agent markers, billing keys, `GIT_*`, `npm_*` or `DEEP_*`.
-- The scenario waits on the wall clock: 3 s with the ask open, then the 10 s hold, so a passing run takes about
-  20 s plus the hub's start; each test's timeout is 10 minutes, for a loaded machine.
+The suite sits at `tests/acceptance/321/` (its `tsconfig.json` extends the root's from there). It finds the checkout by walking up to the folder holding `crates/deep-hook/Cargo.toml`. It builds nothing: a missing CLI or deep-hook, or a deep-hook older than its sources, stops the run with `BLOCKED`, never a pass. `lane.json` runs it alone: it runs the deep-hook binary and starts a hub per test. Node 24, `git` and `npm` on `PATH`; no network.
 
-## The test world
+Each test makes its folders under `/tmp/d321-*` (a socket path must fit in 104 bytes on macOS) and runs every child with `HOME` there, so the hub's root is `<home>/.deepbuild` and nothing touches your real home, `~/.claude` or `~/.deepbuild`. A child never inherits this process's `DEEP_*`, `GIT_*`, `npm_*`, `XDG_*`, `CLAUDE*`, `ANTHROPIC_*`, `CODEX*`, `CURSOR*`, `GROK*` or `NODE_OPTIONS` variables or billing keys (`childEnv`). Every process the tests start is stopped by its PID (`cleanup`): the hub by SIGTERM, then SIGKILL; the agent stand-in by closing its stdin, which ends its own children by their PIDs, then SIGKILL of it and each child it reported.
 
-What a person's setup leaves that the hub and deep-hook read, written by the test (`helpers.ts`, `makeHome`),
-since `deep setup` itself is #18's and #19's and would also write Claude Code's settings, which the test doesn't
-need (it runs deep-hook as Claude Code's hook entry runs it):
+## How waiting works
 
-- `<home>/.deepbuild/rules.json`: `crates/deep-hook/default-rules.json` copied in, as setup's `installRules` and
-  #304's and #316's suites do;
-- `<home>/.deepbuild/config.json`: your ask settings as setup drafts them (#319's `asks` block: authority `1d`,
-  default `no`, fallback `change-owner`, fold 5, no batches, so an ask shows at once);
-- `DEEP_HUB_TEST_CONFIRM` naming a file that says `confirmed`, the base's stand-in for the OS confirming you (#24),
-  so your answer on the CLI's trusted path counts;
-- the repo `shop`: a worktree on `main` with one commit, its origin a bare repository, a README with a typo and an
-  `npm test` that passes.
+No test waits for time to pass. Each wait is for an event, and one helper, `within` (`helpers.ts`), bounds it with a deadline so a hang fails naming what never came; that timer is the suite's one timer, marked `// deadline:`. The events waited on:
 
-## The contract
+- the hub's ready line on its stdout;
+- the record's events as the hub streams them (`stream.subscribe` on a `cli` connection, frames `{"v":1,"id":…,"event":…}`): `question.proceeded`, and the `ask.created` naming the push;
+- each deep-hook process's exit, reported by the agent stand-in, and with it deep-hook's reply;
+- each command's exit (`deep inbox`, `deep inbox answer`, `git push`, `npm test`).
 
-One Claude Code session, its hooks run through `deep-hook claude-code <Event>` with Claude Code's payloads and
-environment and a transcript where Claude Code keeps it; the record and the inbox read through the hub's socket as
-the `cli` role (`events.read`, `inbox.read`); your answer sent there as `ask.answer`.
+The 10 s hold your yes starts is the product's timing, not the test's: the test never measures it. It reads the hold from order alone: a try sent right after your yes is answered (refused) while the first try is still held, and the first try's hook is then awaited until the hub lets it through. Nothing is asserted on a clock.
 
-1. You ask for a fix. The agent's Edit and `git commit` run (each PreToolUse lets it through), and the turn's Stop
-   ends on "I fixed the typo and committed it. Want me to push to main?".
-2. **The proceed.** The Stop's reply keeps the agent working: deep-hook exits 0 with `{"decision": "block",
-   "reason": …}` whose reason says proceed (design: "A Stop hold returns `decision: block` with the answer"; "A
-   'proceed' also rides in the stop's one reply"). The record gains a `question.proceeded` in the session whose
-   `data.question` holds "want me to push to main?" (any case) and whose `data.rule` is the planted sorter's rule.
-3. **Held at PreToolUse.** With no prompt between (the turn the proceed started), the agent's PreToolUse for Bash
-   `git push origin main` doesn't let the call through, and the record gains an `ask.created` of kind `authority`
-   in the session whose data, or the `plan.proposed` for it, holds the text `git push origin main`. The test
-   doesn't require deep-hook to keep waiting or to deny at once: either is "held", as long as the call doesn't run.
-4. **Waits for your answer.** 3 s later the push still hasn't been let through, origin's `main` is unchanged,
-   `inbox.read` lists the ask with `status` not `closed` and `outcome` `unanswered`, and no event closes it.
-5. **Your yes.** `ask.answer` over a `cli` connection with the control token: `{ask, option: <the ask's option
-   whose decision is allow>, token: "click-321", plan_hash: <the plan.proposed hash, when the ask has a plan>}`.
-   It must reply with a `result`.
-6. **The hold.** Right after, a second PreToolUse for the same push (a try) must be refused, and no push may be
-   let through, nor reach origin, before 10 s after the moment the test sent its yes.
-7. **The push runs once the hold ends.** Either the held PreToolUse of step 3 is let through then (at or after
-   those 10 s), or, if it was refused, a try started a second after the hold ends is let through. The agent's tool
-   then runs `git push origin main`, and origin's `main` is the fix.
-8. **The tests.** The next Stop ends on "Pushed main to origin. Want me to run the tests?": the same reply and a
-   second `question.proceeded` with the same rule. The PreToolUse for Bash `npm test` lets it through, the tool runs
-   it (it passes), and 2 s later the session has no `ask.created` since that proceed.
+## The surfaces
 
-"Let through" is what Claude Code does with the hook's output: a call doesn't run when deep-hook exits 2, or prints
-a `permissionDecision` of `deny` or `ask`, or `decision: block`, or `continue: false`; any other output, an exit 1
-included, lets it run (`helpers.ts`, `letThrough`).
+The tests import no hub, CLI or asks module. They reach the code only through:
 
-**The wrong program** (`wrong.test.ts`): the same scenario against `DEEP_HUB_PLANT=proceed-covers-turn` must fail,
-and its failure message must contain `` `git push origin main` was let through at PreToolUse ``, the message the
-scenario gives when the push gets through in the proceed's turn. The hub's own start failure never names the call,
-so a plant the hub doesn't know can't pass this test.
+- **`deep hub run`** (`packages/cli/dist/main.js`), started with `HOME` set, its ready line on stdout, as #16's and #304's suites start it;
+- **deep-hook** (`target/debug/deep-hook claude-code <event>`), the payload on stdin, run by an agent stand-in (`fixtures/agent.mjs`) so the hub sees a hook's parent as the agent process, as #24's stand-in does; the same stand-in runs the agent's shell commands (`git commit`, `git push origin main`, `npm test`) through `/bin/sh` in the session's worktree;
+- **the hub's socket** as the `cli` role with the control token: `stream.subscribe` and `events.read`;
+- **`deep inbox`** and **`deep inbox answer <ask> <option>`** (#24), run from the test process, outside the agent's process tree, with the OS confirmation stubbed by `DEEP_HUB_TEST_CONFIRM` (#24's seam) saying `confirmed`;
+- **`<home>/.deepbuild/rules.json`**, a verbatim copy of `crates/deep-hook/default-rules.json` as the checkout holds it, so whatever entries the guard engine ships (#304) are the session's rules;
+- **a real git repository**: a bare `origin` and a worktree on `main` with one commit pushed; the agent's commit is the one the push carries. "The push runs" means origin's `main` becomes the agent's commit.
 
-## What the implementer adds (test-only settings)
+### What the base lacks, and the surfaces these tests define for it
 
-- **`DEEP_HUB_TEST_SORTER=<rule name>`**, in the environment of `deep hub run`, read like the hub's other
-  `DEEP_HUB_TEST_*` settings and set only by tests: when it is set, the hub sorts every question an agent ends its
-  turn with as one to proceed on ("proceed", the planted sorter), whatever the question says, and records each such
-  proceed as `question.proceeded` with `data.question` the question and `data.rule` the value of this setting. The
-  test sets it to `planted-proceed-every-question`. Why a setting of its own rather than a plant: the wrong-program
-  test needs the planted sorter and a planted core together, and `DEEP_HUB_PLANT` names one program. Why every
-  question: the criterion's sorter answers "proceed" to both questions, and the point is that the core holds the
-  push whatever the sorter said.
-- **`proceed-covers-turn`**, a name in `packages/hub/src/plant.ts`'s `Plant` type and `PLANTS` list, selected with
-  `DEEP_HUB_PLANT`: the core lets every call in the turn a "proceed" started through without the authority check, as
-  if the proceed covered them.
+The base has no question sort (#84) and no "proceed": a Stop gets no reply unless an answer is on its way. So these tests name the smallest surfaces they need, from the design:
 
-## Choices the inputs don't fix
+- **`DEEP_HUB_TEST_SORTER=<absolute path of a JSON file>`**, on `deep hub run`, like the base's other `DEEP_HUB_TEST_*` settings: the planted sorter. While it's set, the hub's sort of a question a stop ends on is replaced by the file's answer, read at each stop: `{"answer": "proceed", "rule": "planted-sorter-proceeds-on-every-question"}` answers every question "proceed" under that rule. The design says a "proceed" is the stop's reply that sends the agent on ("the agent keeps working"), so the Stop's reply is Claude Code's `{"decision": "block", "reason": …}` (or exit 2) whose text says `proceed`. Each proceed is recorded as the design names it: an event of kind **`question.proceeded`** whose data holds the question and the rule (the tests read both as text in the event's data; field names are the implementer's).
+- **`DEEP_HUB_PLANT=proceed-covers-turn`**: the wrong program the criterion names, added to the hub's plant list as #304's and #24's were. It is the real core with one part wrong: in the turn a "proceed" starts, it lets every call through without the authority hold.
+- **The push's ask** is an `ask.created` of kind `authority`, whose data names the push: it holds `git push origin main`, or both the words `push` and `main`. Its yes is its option with `decision: "allow"` (#318's options), answered with `deep inbox answer`.
 
-- **The question's source.** The question at the stop is the Stop payload's `last_assistant_message` and the
-  transcript's last assistant text, both "… Want me to push to main?".
-- **The recorded proceed.** Event kind `question.proceeded` (the design's name), in the session, with fields
-  `question` and `rule`; the design says "recorded with the question and the rule that sorted it" but names no
-  fields. The question is matched case-insensitively as a substring, so the hub may keep the whole last message.
-- **How the proceed reaches the agent.** The Stop reply's `decision: block` with a reason containing "proceed".
-- **"The turn it starts"** is the calls after that Stop with no UserPromptSubmit between.
-- **"Held at PreToolUse"**: the call doesn't run until the hold ends; whether deep-hook waits on an acknowledged hold
-  or the hub refuses each try with the ask named is the implementer's. "Waits for your answer" is checked for 3 s
-  (not a number the inputs fix; long enough to see the ask stays open, short against the 60 s hook limit).
-- **"Naming the push"**: the command text `git push origin main` in the `ask.created` data or its `plan.proposed`.
-- **Your yes.** The design's trusted paths are the card (a paired device's signature, which the base's tests can't
-  make) and `deep inbox answer` (which at the base sends only `{ask, option}`, while the asks core binds an approval
-  to the plan's digest and a click token). So the test sends `ask.answer` on the socket as the `cli` role, the method
-  `deep inbox answer` calls, with the OS confirmation stubbed `confirmed`, the allow option, the plan's digest when
-  there is a plan, and the click token `click-321`.
-- **The hold's length** is #1101's and the design's 10 s, measured from when the test sends the yes, on the wall
-  clock (#1101's own tests use a virtual clock; the hub's `DEEP_HUB_TEST_CLOCK` sets only its start). Nothing is
-  asserted tighter than "not before 10 s": the push may run any time after, within the hook's own limit.
-- **"A try during the hold"** is a new PreToolUse for the same command right after the yes; if the machine is so
-  loaded that it starts after the hold ended, the test fails BLOCKED rather than judge it.
-- **"Runs with no ask"** for `npm test`: let through, and no `ask.created` in the session in the 2 s after it ran.
-- **What runs the calls.** The test stands in for Claude Code's tools: it edits the README, commits, pushes and runs
-  `npm test` itself, each only once deep-hook let the call through, and reports each with PostToolUse.
+Nothing else is needed: no other option, flag or export.
+
+## Readings where the criterion leaves a choice
+
+- **"Held at PreToolUse … which waits for your answer"** reads as the hook protocol's hold: the hub acknowledges the push's PreToolUse with a `hold_until_ms` and gives no reply while the ask is open, so deep-hook's process for that call is still running when the ask shows in `deep inbox`, and the same call goes on with the hub's allow once the hold ends ("the push runs once the hold ends"). A core that ends the call with a denial before your answer fails, naming the call. The whole wait (the ask raised, your answer, the 10 s hold) fits in Claude Code's default 60 s PreToolUse timeout (`hookTimeouts.defaultMs` in the facts), with no settings written.
+- **"A try during the hold"** is a second PreToolUse of the same `git push origin main` in the same session, sent as soon as `deep inbox answer` has exited 0. It must be denied (exit 2, `deny` or `block`), and the first try must still be held when that denial comes; a first try let through at your yes fails as "started at your yes, before its hold ended".
+- **The push let through by the hub, not by deep-hook's hub-away path**: a first try deep-hook let through because the hub didn't acknowledge it in time, or whose acknowledged hold ran out with no reply, is spooled under `<home>/.deepbuild/spool`. Before the answer that makes the run `BLOCKED` (it says nothing about the core); after the hold it fails, since the hub never let the push through.
+- **"The turn it starts"**: Claude Code continues the same turn after a Stop hook's block, so the push's PreToolUse follows the first Stop with no prompt between, and the second Stop (ending on "want me to run the tests?") carries `stop_hook_active: true`.
+- **"`npm test` runs with no ask"**: its PreToolUse is let through, no `ask.created` is appended after the second `question.proceeded`, it runs (the fixture's `test` script writes `tests-ran.txt`), and `deep inbox` lists no open ask afterwards.
+- **The session** is a Claude Code session on the newest version `adapters/claude-code.facts.json` lists (its transcript entries name it), so its holds aren't watch-only. Before the question, the agent edits the README and commits it, so the stop did work.
+
+## Criteria, tests and wrong programs
+
+| ID | Tests | Wrong program it fails on | On the base (expected, not run) |
+|---|---|---|---|
+| `#321.70212996` | `held-push.test.ts`: the scenario; `wrong-core.test.ts`: the plant | `proceed-covers-turn`: the scenario fails naming `git push origin main`, and origin's `main` holds the pushed commit | `held-push` fails at the first Stop: no "proceed" reaches the agent (the base replies to no Stop with nothing on its way). `wrong-core` fails: the base's hub refuses `DEEP_HUB_PLANT=proceed-covers-turn` and doesn't start (`BLOCKED`) |
+
+The wrong-program test runs the same scenario (`scenario.ts`) on the planted hub and expects it to fail, not as `BLOCKED`, with a message that names the call, after the agent's push reached origin.
+
+These tests have not been run: the machine was under a build hold when they were written.
 
 ## Files
 
-- `helpers.ts`: temp homes and the test world, processes stopped by PID, the hub as a process, the socket, the
-  made-up session, the `shop` repo and its origin, `letThrough`, `failureOf`.
-- `scenario.ts`: the criterion's scenario, shared by both tests.
-- `proceed.test.ts`: the scenario against the hub as it is.
-- `wrong.test.ts`: the scenario against `DEEP_HUB_PLANT=proceed-covers-turn`.
-- `tsconfig.json`: type-checks the suite under the root's strict options with `allowImportingTsExtensions`.
-- `BASE-FAILURE.txt`: the run at the base.
+- `helpers.ts`: constants (the ID, the call, the questions, the sorter's rule, the plant's name), `within`, temp folders and cleanup, the child environment, the hub, the `cli` connection with its stream, `deep` commands, the git repository, the agent stand-in and its session (hook payloads and transcript entries shaped as Claude Code's), and the readings of deep-hook's replies.
+- `scenario.ts`: the world (home, rules, planted sorter, confirmation stub, repository, hub, stream, agent) and the scenario, each step failing with a message that names what went wrong.
+- `held-push.test.ts`: the scenario on the real hub.
+- `wrong-core.test.ts`: the scenario on `DEEP_HUB_PLANT=proceed-covers-turn`.
+- `fixtures/agent.mjs`: the agent stand-in: runs deep-hook and shell commands as its children, one JSON line in and out per command.
+- `tsconfig.json`, `lane.json`.

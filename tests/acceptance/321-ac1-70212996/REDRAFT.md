@@ -70,3 +70,22 @@ All runs are on the Spark at main `dc8625b09`.
 
 Since main's hold already refuses a try during the hold and lets the push run after it, #3062's change isn't needed
 for this criterion.
+
+## The redraft of `#321.70212996` (2026-11-28)
+
+The lint lane's wait ratchet (`scripts/wait-ratchet.mjs`) judges a suite's own files from zero in the change that
+adds it. The first draft of this criterion held 11 fixed waits: `sleep(…)` and timers in `helpers.ts` and
+`scenario.ts`. Nobody edits a blind draft, so the top coordinator ruled (2026-11-28) a blind redraft, with no
+ceiling entry.
+
+- **How it was made:** a blind job in a folder holding only the base `debda22a`, fetched alone by SHA. Its inputs
+  were #321's text with the criterion, #1101's text for the hold, the design as of `dc8625b09`, and the lint rules a
+  new suite meets (`docs/evidence/321-ac1/draft-70212996-1/redraft-lint-rules.md`): no fixed wait, a timer that only
+  bounds a wait carries `// deadline: <why>`, no other comment lines, no file over 1500 lines.
+- **What it wasn't given:** the first draft, its failures, this file, or any implementation.
+- **What it wrote:** `held-push.test.ts` (the scenario), `wrong-core.test.ts` (the wrong program),
+  `scenario.ts`, `helpers.ts`, `fixtures/agent.mjs`, `tsconfig.json`, `README.md` and `lane.json`, byte for byte. The
+  first draft's `BASE-FAILURE.txt` moved to `docs/evidence/321-ac1/draft-70212996-1/`.
+- **Checked before it landed, without edits:** the wait and comment ratchets find nothing in this folder, `tsc -p`
+  passes, and `scripts/repo-rules.mjs` passes. Nothing has run yet: builds were on hold.
+- **The rule:** by Dogfooding, each test is redrafted at most once, so this draft stands.
