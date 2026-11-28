@@ -1,0 +1,12 @@
+{
+  "scripts/search-reading.mjs": [
+    {
+      "find": [
+        "const foundBy = (hits, claim) => hits.includes(claim);"
+      ],
+      "wrong": [
+        "const foundBy = (hits, claim) => hits.length > 0;"
+      ]
+    }
+  ]
+}
