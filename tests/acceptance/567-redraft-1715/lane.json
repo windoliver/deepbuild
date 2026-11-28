@@ -1,0 +1,1 @@
+{ "alone": true, "why": "starts hubs and builds deep-hook with cargo, as #567's fast tests do" }
