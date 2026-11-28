@@ -692,7 +692,7 @@ A view is built as of an event (`source.as_of: ev:<ulid>`) and appends live, so 
 | Status source | `verdict \| run \| ask` | status bindings |
 | Status state | `pass \| fail \| invalid \| blocked \| inconclusive \| running \| needs_you \| stale \| idle` | the look's status map |
 
-The tech design's core row lists five ask kinds and its asks table six; this keeps six, with `definition`.
+The tech design's Ask, in [The contract](./technical-design.md#prim-kernel), lists the same six, with `definition`.
 
 <a id="runtime"></a>
 
