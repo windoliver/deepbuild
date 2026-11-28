@@ -1,5 +1,5 @@
 // The per-machine throttle table (docs/parallel-proof.md, section 6): a host-local lock table under the user's
-// ~/.deepbuild/throttle/, whatever HOME says, that grants build, bay pair, test and timed by class, so a neighbour's build never runs
+// ~/.deepbuild/throttle/, whatever HOME says, that grants build, bay pair, test, timed and watch by class, so a neighbour's build never runs
 // while a budget is timed. `throttle.mjs <class> [--wait <min> | --stall <min>] -- <command>` acquires, runs, releases and exits
 // with the child's status, or ends a command held past its `--hold` bound while another request waits; acquire and release serve the scripts that hold a grant themselves. `throttle.mjs window`
 // asks for a budget window (section 12a): once one is due, a timed grant that waits for every slot to empty, around budget-window.mjs.
@@ -17,7 +17,9 @@ import { fileURLToPath } from 'node:url';
 // The Mac has one bay pair; the Spark, Linux, has the cores for more. test's and build's numbers are ceilings: a grant
 // past the class's first starts only while the machine's readings leave room (roomForTest), and the pool bounds what
 // the admitted builds and runs run at once (#3221, #3549).
-const LIMITS = process.platform === 'darwin' ? { build: 4, 'bay-pair': 1, test: 2, timed: 1 } : { build: 6, 'bay-pair': 3, test: 6, timed: 1 };
+// watch is the main watch's tick's own slot (#1333): the builds and tests asked under it pass through, so they never
+// wait in line behind the machine's, and a second tick waits for the first.
+const LIMITS = process.platform === 'darwin' ? { build: 4, 'bay-pair': 1, test: 2, timed: 1, watch: 1 } : { build: 6, 'bay-pair': 3, test: 6, timed: 1, watch: 1 };
 const CLASSES = Object.keys(LIMITS);
 const POLL_MS = 200;
 // A CLI grant's default bound, in minutes: the longest full run seen on the Spark was about 9 hours.
@@ -342,6 +344,7 @@ function grantable(table, procs, request, seen) {
   if (request.class !== 'timed') {
     if (!request.nested && draining) return false;
     if (request.class === 'bay-pair') return held < LIMITS['bay-pair'];
+    if (request.class === 'watch') return held < LIMITS.watch;
     // A build under no grant is admitted as a run is, without the load (#3549). Only the request first in line under
     // its ceiling comes this far, so a line of builds, each looking five times a second, doesn't read the machine.
     if (request.class === 'build') return roomForTest(slots, readings(), Date.now(), true, LIMITS.build);
