@@ -1,0 +1,57 @@
+#1814 acceptance tests on the merge base, 9bbe0f24c (main, 2026-11-27), macOS, Node 24.22.0, built with
+npm run build --workspaces and cargo build --locked -q -p deep-hook. One-minute load about 21 at the end of the run.
+
+  NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1814 --no-file-parallelism
+
+ Test Files  7 failed (7)
+      Tests  11 failed (11)
+   Duration  36.48s
+
+Each test failed at its assertion, for the missing behavior; none was BLOCKED and none failed on a harness error.
+tsc -p tests/acceptance/1814/tsconfig.json --noEmit: no errors.
+
+AC1 #1814.45eb7060 (start-here.test.ts)
+  x lists five lines: deep --help exits 0 and prints "Start here:" with 15 usage lines (setup, two status lines,
+    four inbox lines, doctor, off | on, install, three memory lines, secret, update --check). The check names 15 lines
+    not 5, and each of the 10 lines that is none of the five (status --why, inbox answer, inbox undo, inbox save,
+    install, memory, memory keep | remove, memory overrule, secret, update --check).
+  x a planted sixth line fails the same check: fails at its first assertion, that the check passes on the real
+    deep --help before it is held to the plant (the same 15 lines). The plant itself was never reached.
+
+AC2 #1814.6dca6b93 (confirms.test.ts)
+  x "once the OS confirms you" shows 15 times in deep --help (setup, inbox answer, inbox undo, inbox save, off | on,
+    install, memory keep | remove, memory overrule, person, library, pack, job, restore, hub use, guard add), not at
+    most once.
+
+AC3 #1814.93b182f5 (undo.test.ts)
+  x deep inbox undo <ask> on the defaulted ask exits 0 and appends default.undone, session.state and two row.set
+    (the control held). deep undo <ask> exits 2: stderr "Name the staging by its handle, staged:<id>." (the base's
+    deep undo takes only staged: and sync: handles), so it appends nothing.
+
+AC4 #1814.eb65b1b5 (guard-entries.test.ts)
+  x deep guard add (exit 0) prints "Added t-1814 to your rules": no "guard entries", and "rules" for them. deep setup
+    (exit 0, hub up) prints "... its safety rules at /tmp/.../h/.deepbuild/rules.json." and no "guard entries".
+  x a planted "your rules": fails at its first assertion, that scripts/command-lint.mjs passes on the unplanted copy:
+    /tmp/dh1814-*/c/scripts/command-lint.mjs is missing (exit null).
+
+AC5 #1814.df823cc0 (waiter.test.ts)
+  x the control held (deep zqxjvk exits 2: Unsupported command "zqxjvk". Run deep --help for available commands.).
+    deep waiter exits 0, prints nothing: the base dispatches it to waiterCommand, which reads no session on stdin and
+    returns 0.
+
+AC6 #1814.593c3f14 (count.test.ts)
+  x the count's check over this checkout: scripts/command-lint.mjs is missing (exit null), so nothing holds the count
+    and the lint lane runs no such check.
+  x a planted new top-level command: fails at its first assertion, the lint passing on the unplanted copy (the script
+    is missing there too).
+
+AC7 #1814.e1bf7588 (design-row.test.ts)
+  x docs/technical-design.md:515 names 17 words that aren't commands of deep --help's first two groups: env, explain,
+    export, extend, find, hub, kinds, lease, map, mcp, mcp-exec, read, report, run, show, spec, try. None is missing.
+  x a row naming a command that doesn't exist: fails at its first assertion, the lint passing on the unplanted copy
+    (scripts/command-lint.mjs is missing).
+
+Checked outside the suite (scratch tests, not kept): the AC3 comparison passes when both worlds run deep inbox undo
+(so it doesn't fail on run-to-run noise: zero-padded millisecond times in a row's order are read as placeholders),
+and the AC6 and AC7 plants land in a scratch copy (deep --help of the copy's built CLI lists deep sweep; the copy's
+command row holds sweep).

@@ -1,0 +1,98 @@
+# 1812-redraft-1814 on the base 9bbe0f24c (dist built from it), macOS darwin-arm64, Node v24.22.0, 2026-11-28 (UTC)
+# command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1812-redraft-1814 --no-file-parallelism --reporter=verbose
+# load and start: 23:08  up 3 days, 16:57, 2 users, load averages: 11.48 29.61 63.10 2026-11-28T07:08:14Z
+
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/issue-1814-help-five-commands-85910c/tests/acceptance/1812-redraft-1814
+
+ ✓ not-set-up.test.ts > #1812.5a83f2e0 the same table in a home that isn't set up (redraft 1814) > #1812.5a83f2e0 each command outside the first-run list names deep setup as the fix, never deep hub start (redraft 1814) 14905ms
+ ✓ hub-down.test.ts > #1812.e264e123 every command that calls the hub, in a home whose hub isn't answering (redraft 1814) > #1812.e264e123 each prints the one sentence with its fix, deep hub start, exits 3, and prints no errno and no path twice (redraft 1814) 8223ms
+
+ Test Files  2 passed (2)
+      Tests  2 passed (2)
+   Start at  23:08:15
+   Duration  23.89s (tests 100%)
+
+vitest exit 0
+
+
+# Plant checks (REDRAFT.md, How each table was shown to fail). Each ran a scratch copy of this folder's test file(s), byte for byte,
+# under plant-check/ here (removed after), whose helpers.ts re-exported ./helpers.ts but ran deep through a front end in
+# <scratch> that registers a Node load hook replacing one line of the built dist file as it loads, and nothing on disk.
+# Assertion lines are cut at 300 characters; <scratch> is this job's scratch folder.
+
+
+## Check 1, front end with no plant
+      Tests  2 passed (2)
+
+
+## Check 2, plant raw-socket-error (failure() hands back the socket error's own words for an unanswered call; the twin raw-socket-error)
+     × #1812.5a83f2e0 each command outside the first-run list names deep setup as the fix, never deep hub start (redraft 1814) 14259ms
+     × #1812.e264e123 each prints the one sentence with its fix, deep hub start, exits 3, and prints no errno and no path twice (redraft 1814) 11859ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: 55 of the 57 commands that call the hub don't print the one sentence with its fix and exit 3, or print an errno or a path twice:
+AssertionError: 1 of the 41 commands, each in a home nobody set up, don't print the one sentence with deep setup as its fix and exit 3, or print an errno, a path twice or deep hub start:
+      Tests  2 failed (2)
+  deep inbox answer prints no line saying the hub isn't answering; deep inbox answer prints an errno, ENOENT; deep inbox answer prints "/private/tmp/dh1812-ixPALM/h/.deepbuild/hub.sock" twice. It printed: exit 3, stdout "", stderr "can't reach the hub at /private/tmp/dh1812-ixPALM/h/.deepbuild/hub.soc
+  deep inbox undo prints no line saying the hub isn't answering; deep inbox undo prints an errno, ENOENT; deep inbox undo prints "/private/tmp/dh1812-ixPALM/h/.deepbuild/hub.sock" twice. It printed: exit 3, stdout "", stderr "can't reach the hub at /private/tmp/dh1812-ixPALM/h/.deepbuild/hub.sock: con
+  deep inbox save prints no line saying the hub isn't answering; deep inbox save prints an errno, ENOENT; deep inbox save prints "/private/tmp/dh1812-ixPALM/h/.deepbuild/hub.sock" twice. It printed: exit 3, stdout "", stderr "can't reach the hub at /private/tmp/dh1812-ixPALM/h/.deepbuild/hub.sock: con
+  deep off prints no line saying the hub isn't answering; deep off prints an errno, ENOENT; deep off prints "/private/tmp/dh1812-ixPALM/h/.deepbuild/hub.sock" twice. It printed: exit 3, stdout "", stderr "can't reach the hub at /private/tmp/dh1812-ixPALM/h/.deepbuild/hub.sock: connect ENOENT /private/
+  deep on prints no line saying the hub isn't answering; deep on prints an errno, ENOENT; deep on prints "/private/tmp/dh1812-ixPALM/h/.deepbuild/hub.sock" twice. It printed: exit 3, stdout "", stderr "can't reach the hub at /private/tmp/dh1812-ixPALM/h/.deepbuild/hub.sock: connect ENOENT /private/tmp
+  deep install prints no line saying the hub isn't answering; deep install prints an errno, ENOENT; deep install prints "/private/tmp/dh1812-ixPALM/h/.deepbuild/hub.sock" twice. It printed: exit 3, stdout "Source: /private/tmp/dh1812-ixPALM/pkg\n  dh1812.fixture@0.0.1, digest undefined, unsigned\nPerm
+
+
+## Check 3, plant inbox-raw-socket-error (deep inbox, hub down, prints the raw socket error instead of the database list; the twin inbox-raw-socket-error), hub-down only (-t e264e123)
+     × #1812.e264e123 each prints the one sentence with its fix, deep hub start, exits 3, and prints no errno and no path twice (redraft 1814) 14842ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: 1 of the 57 commands that call the hub don't print the one sentence with its fix and exit 3, or print an errno or a path twice:
+      Tests  1 failed | 1 skipped (2)
+  deep inbox prints no line saying the hub isn't answering; deep inbox prints an errno, ENOENT; deep inbox prints "/private/tmp/dh1812-7sIfVS/h/.deepbuild/hub.sock" twice. It printed: exit 3, stdout "", stderr "can't reach the hub at /private/tmp/dh1812-7sIfVS/h/.deepbuild/hub.sock: connect ENOENT /pr
+  
+  - Expected
+  + Received
+  
+  - []
+
+
+## Check 4, plant hub-start-fix (a home nobody set up is told deep hub start; the twin hub-start-fix)
+     × #1812.5a83f2e0 each command outside the first-run list names deep setup as the fix, never deep hub start (redraft 1814) 15820ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: 41 of the 41 commands, each in a home nobody set up, don't print the one sentence with deep setup as its fix and exit 3, or print an errno, a path twice or deep hub start:
+      Tests  1 failed | 1 passed (2)
+  deep fix's sentence doesn't name the fix, deep setup: "The hub isn't answering; start it with deep hub start."; deep fix's sentence names deep hub start, not the one fix deep setup: "The hub isn't answering; start it with deep hub start."; deep fix names deep hub start in a home that isn't set up. I
+  deep start approve's sentence doesn't name the fix, deep setup: "The hub isn't answering; start it with deep hub start."; deep start approve's sentence names deep hub start, not the one fix deep setup: "The hub isn't answering; start it with deep hub start."; deep start approve names deep hub start 
+  deep start's sentence doesn't name the fix, deep setup: "The hub isn't answering; start it with deep hub start."; deep start's sentence names deep hub start, not the one fix deep setup: "The hub isn't answering; start it with deep hub start."; deep start names deep hub start in a home that isn't set
+  deep race's sentence doesn't name the fix, deep setup: "The hub isn't answering; start it with deep hub start."; deep race's sentence names deep hub start, not the one fix deep setup: "The hub isn't answering; start it with deep hub start."; deep race names deep hub start in a home that isn't set up
+  deep land's sentence doesn't name the fix, deep setup: "The hub isn't answering; start it with deep hub start."; deep land's sentence names deep hub start, not the one fix deep setup: "The hub isn't answering; start it with deep hub start."; deep land names deep hub start in a home that isn't set up
+  deep work's sentence doesn't name the fix, deep setup: "The hub isn't answering; start it with deep hub start."; deep work's sentence names deep hub start, not the one fix deep setup: "The hub isn't answering; start it with deep hub start."; deep work names deep hub start in a home that isn't set up
+
+
+## Check 5, a #1814-shaped help, no plant. Here the shim also replaced table() with the same code reading <scratch>/help-1814.txt
+## (the base's help with deep session rules renamed deep rules session, deep inbox undo and deep memory overrule removed,
+## and marks before deep install and deep hub use and after deep install and deep person revoke), and ran deep rules session
+## as the base's deep session rules, standing in for #1814's renamed command
+      Tests  2 passed (2)
+
+
+## Check 6, the same #1814-shaped help and shim with plant hub-start-fix
+     × #1812.5a83f2e0 each command outside the first-run list names deep setup as the fix, never deep hub start (redraft 1814) 15499ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: 41 of the 41 commands, each in a home nobody set up, don't print the one sentence with deep setup as its fix and exit 3, or print an errno, a path twice or deep hub start:
+      Tests  1 failed | 1 passed (2)
+  deep fix's sentence doesn't name the fix, deep setup: "The hub isn't answering; start it with deep hub start."; deep fix's sentence names deep hub start, not the one fix deep setup: "The hub isn't answering; start it with deep hub start."; deep fix names deep hub start in a home that isn't set up. I
+  deep start approve's sentence doesn't name the fix, deep setup: "The hub isn't answering; start it with deep hub start."; deep start approve's sentence names deep hub start, not the one fix deep setup: "The hub isn't answering; start it with deep hub start."; deep start approve names deep hub start 
+  deep start's sentence doesn't name the fix, deep setup: "The hub isn't answering; start it with deep hub start."; deep start's sentence names deep hub start, not the one fix deep setup: "The hub isn't answering; start it with deep hub start."; deep start names deep hub start in a home that isn't set
+  deep race's sentence doesn't name the fix, deep setup: "The hub isn't answering; start it with deep hub start."; deep race's sentence names deep hub start, not the one fix deep setup: "The hub isn't answering; start it with deep hub start."; deep race names deep hub start in a home that isn't set up
+  deep land's sentence doesn't name the fix, deep setup: "The hub isn't answering; start it with deep hub start."; deep land's sentence names deep hub start, not the one fix deep setup: "The hub isn't answering; start it with deep hub start."; deep land names deep hub start in a home that isn't set up
+  deep work's sentence doesn't name the fix, deep setup: "The hub isn't answering; start it with deep hub start."; deep work's sentence names deep hub start, not the one fix deep setup: "The hub isn't answering; start it with deep hub start."; deep work names deep hub start in a home that isn't set up
+
+  ...
+  deep rules session's sentence doesn't name the fix, deep setup: "The hub isn't answering; start it with deep hub start."; deep rules session's sentence names deep hub start, not the one fix deep setup: "The hub isn't answering; start it with deep hub start."; deep rules session names deep hub start 
+
+## Check 7, the frozen tests/acceptance/1812 hub-down and not-set-up on the base, for comparison
+     × #1812.e264e123 each prints the one sentence with its fix, deep hub start, exits 3, and prints no errno and no path twice 3581ms
+     × #1812.5a83f2e0 each command outside the first-run list names deep setup as the fix, never deep hub start 381ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+Error: BLOCKED: deep --help lists deep host add, which this table neither runs nor leaves out by name
+Error: BLOCKED: deep --help lists deep host add, which this table neither runs nor leaves out by name
+      Tests  2 failed (2)

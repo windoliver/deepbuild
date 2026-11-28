@@ -1,0 +1,76 @@
+# 3461-redraft-1814 on the base 9bbe0f24c (dist built from it), macOS darwin-arm64, Node v24.22.0, 2026-11-28 (UTC)
+# command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/3461-redraft-1814 --no-file-parallelism --reporter=verbose
+# load at start: 12.58 46.16 77.80, 2026-11-28T07:04:17Z
+
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/issue-1814-help-five-commands-85910c/tests/acceptance/3461-redraft-1814
+
+ ✓ table.test.ts > #3461.b4a5c8f4 every command deep --help lists, given a flag its usage shows once twice (two values, or one value repeated), prints its usage, exits 2 and prints nothing on stdout (redraft 1814) 6908ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  23:04:17
+   Duration  7.13s (tests 99%, transform 1%)
+
+
+
+# Plant checks (REDRAFT.md, How each table was shown to fail). Each ran a scratch copy of this folder's test file(s), byte for byte,
+# under plant-check/ here (removed after), whose helpers.ts re-exported ./helpers.ts but ran deep through a front end in
+# <scratch> that registers a Node load hook replacing one line of the built dist file as it loads, and nothing on disk.
+# Assertion lines are cut at 300 characters; <scratch> is this job's scratch folder.
+
+
+## Check 1, front end with no plant (proves the front end alone changes nothing)
+      Tests  1 passed (1)
+
+
+## Check 2, plant first-wins-reader (a repeated flag takes its first value; the twin first-wins-reader)
+   × #3461.b4a5c8f4 every command deep --help lists, given a flag its usage shows once twice (two values, or one value repeated), prints its usage, exits 2 and prints nothing on stdout (redraft 1814) 16309ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: 88 of 88 rows (commands and flags) took a repeated flag:
+      Tests  1 failed (1)
+  deep hub status --root (two values): exits 3, not 2; prints no usage of deep hub: deep hub status --root <tmp>/devhub --root <tmp>/devhub-2: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+  deep hub status --root (one value repeated): exits 3, not 2; prints no usage of deep hub: deep hub status --root <tmp>/devhub --root <tmp>/devhub: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+  deep hub stop --root (two values): exits 3, not 2; prints no usage of deep hub: deep hub stop --root <tmp>/devhub --root <tmp>/devhub-2: exit 3, stdout "", stderr "deep hub stop: no hub could be stopped at unix:<tmp>/devhub/hub.sock: ENOENT: no such file or directory, open '<tmp>/devhub/control.toke
+  deep hub stop --root (one value repeated): exits 3, not 2; prints no usage of deep hub: deep hub stop --root <tmp>/devhub --root <tmp>/devhub: exit 3, stdout "", stderr "deep hub stop: no hub could be stopped at unix:<tmp>/devhub/hub.sock: ENOENT: no such file or directory, open '<tmp>/devhub/contro
+  deep hub use --root (two values): exits 3, not 2; prints no usage of deep hub: deep hub use --root <tmp>/devhub --root <tmp>/devhub-2: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+  deep hub use --root (one value repeated): exits 3, not 2; prints no usage of deep hub: deep hub use --root <tmp>/devhub --root <tmp>/devhub: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+
+
+## Check 3, plant last-wins-reader (a repeated flag takes its last value; the twin last-wins-reader)
+   × #3461.b4a5c8f4 every command deep --help lists, given a flag its usage shows once twice (two values, or one value repeated), prints its usage, exits 2 and prints nothing on stdout (redraft 1814) 16924ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: 86 of 88 rows (commands and flags) took a repeated flag:
+      Tests  1 failed (1)
+  deep hub status --root (two values): exits 3, not 2; prints no usage of deep hub: deep hub status --root <tmp>/devhub --root <tmp>/devhub-2: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+  deep hub status --root (one value repeated): exits 3, not 2; prints no usage of deep hub: deep hub status --root <tmp>/devhub --root <tmp>/devhub: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+  deep hub stop --root (two values): exits 3, not 2; prints no usage of deep hub: deep hub stop --root <tmp>/devhub --root <tmp>/devhub-2: exit 3, stdout "", stderr "deep hub stop: no hub could be stopped at unix:<tmp>/devhub-2/hub.sock: ENOENT: no such file or directory, open '<tmp>/devhub-2/control.
+  deep hub stop --root (one value repeated): exits 3, not 2; prints no usage of deep hub: deep hub stop --root <tmp>/devhub --root <tmp>/devhub: exit 3, stdout "", stderr "deep hub stop: no hub could be stopped at unix:<tmp>/devhub/hub.sock: ENOENT: no such file or directory, open '<tmp>/devhub/contro
+  deep hub use --root (two values): exits 3, not 2; prints no usage of deep hub: deep hub use --root <tmp>/devhub --root <tmp>/devhub-2: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+  deep hub use --root (one value repeated): exits 3, not 2; prints no usage of deep hub: deep hub use --root <tmp>/devhub --root <tmp>/devhub: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+
+
+## Check 4, a #1814-shaped help, no plant. Here the shim also replaced help() to return <scratch>/help-1814.txt (the base's
+## help with deep session rules renamed deep rules session, deep inbox undo and deep memory overrule removed, and marks
+## before deep install and deep hub use and after deep install and deep person revoke)
+      Tests  1 passed (1)
+
+
+## Check 5, the same #1814-shaped help and shim with plant last-wins-reader
+   × #3461.b4a5c8f4 every command deep --help lists, given a flag its usage shows once twice (two values, or one value repeated), prints its usage, exits 2 and prints nothing on stdout (redraft 1814) 15672ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: 86 of 88 rows (commands and flags) took a repeated flag:
+      Tests  1 failed (1)
+  deep hub status --root (two values): exits 3, not 2; prints no usage of deep hub: deep hub status --root <tmp>/devhub --root <tmp>/devhub-2: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+  deep hub status --root (one value repeated): exits 3, not 2; prints no usage of deep hub: deep hub status --root <tmp>/devhub --root <tmp>/devhub: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+  deep hub stop --root (two values): exits 3, not 2; prints no usage of deep hub: deep hub stop --root <tmp>/devhub --root <tmp>/devhub-2: exit 3, stdout "", stderr "deep hub stop: no hub could be stopped at unix:<tmp>/devhub-2/hub.sock: ENOENT: no such file or directory, open '<tmp>/devhub-2/control.
+  deep hub stop --root (one value repeated): exits 3, not 2; prints no usage of deep hub: deep hub stop --root <tmp>/devhub --root <tmp>/devhub: exit 3, stdout "", stderr "deep hub stop: no hub could be stopped at unix:<tmp>/devhub/hub.sock: ENOENT: no such file or directory, open '<tmp>/devhub/contro
+  deep hub use --root (two values): exits 3, not 2; prints no usage of deep hub: deep hub use --root <tmp>/devhub --root <tmp>/devhub-2: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+  deep hub use --root (one value repeated): exits 3, not 2; prints no usage of deep hub: deep hub use --root <tmp>/devhub --root <tmp>/devhub: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+
+  ...
+  deep hub use --root (two values): exits 3, not 2; prints no usage of deep hub: deep hub use --root <tmp>/devhub --root <tmp>/devhub-2: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+  deep person invite --address (two values): exits 3, not 2; prints no usage of deep person: deep person invite login1 --address 127.0.0.1:9 --address 127.0.0.1:10: exit 3, stdout "", stderr "The hub isn't answering; start it with deep hub start.\n"
+
+## Check 6, the frozen tests/acceptance/3461/table.test.ts on the base, for comparison
+      Tests  1 passed (1)
