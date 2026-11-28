@@ -1,0 +1,12 @@
+{
+  "scripts/canvas-skill.mjs": [
+    {
+      "find": [
+        "    CRAFT_LINE,"
+      ],
+      "wrong": [
+        "    `${CRAFT_LINE} Read it first.`,"
+      ]
+    }
+  ]
+}

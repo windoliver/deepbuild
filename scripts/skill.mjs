@@ -146,6 +146,8 @@ const naming = (rows, tool) => rows.filter((r) => r.mcp.includes(`\`${tool}\``))
 const CRAFT = JSON.parse(readFileSync(join(ROOT, 'crates/deep-canvas/src/craft.json'), 'utf8'));
 /** The installed guide that states each craft@1 check (#2697), as the gallery index names it. */
 const CRAFT_GUIDE = 'craft';
+/** The one line both skills give craft checks (#3519); scripts/canvas-skill.mjs imports it, so the two can't drift. */
+export const CRAFT_LINE = `A film's brief names the craft checks it wants, which hold it to the brief's thresholds and never pass it on their own; before its first render, read each one's description, thresholds and fix in the guide \`${CRAFT_GUIDE}\` with deep_kinds.`;
 
 /** The craft guide: each craft@1 check in its own words, read with deep_kinds by a session that works on a film. */
 function craftGuide() {
@@ -194,7 +196,7 @@ export function generate(rows = blocks()) {
     'Start from a piece recipe, or from a kind deep_kinds lists. Check the document with deep_show before you render it. Then render small and read its issues. Fix by patch, changing one item at a time, and render in full only once the numbers pass; judge by numbers, never by eye. When no kind or field does what the piece needs, raise an open item with deep_open_item naming the missing kind or field, instead of approximating it. When a logic step needs more fuel than its step ceiling, which deep_kinds lists by step rate, budget class and host, split the work across steps and keep the progress in memory. For a formula, run the typeset job with deep_job: it turns LaTeX or Typst into an SVG with one id per term, which a vector@1 item imports, so a step moves the terms two formulas share; never set a formula as text.',
     '',
     // craft@1's checks (#409) are a guide (#2697): a session that makes no film never loads them.
-    `A film's brief names the craft checks it wants, which hold it to the brief's thresholds and never pass it on their own; before its first render, read each one's description, thresholds and fix in the guide \`${CRAFT_GUIDE}\` with deep_kinds.`,
+    CRAFT_LINE,
     '',
   ].join('\n');
   return { descriptions, skill, guide: craftGuide(), instructions: instructions(used) };
