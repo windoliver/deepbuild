@@ -94,6 +94,8 @@ fn revision(doc: &str, rev: u64, rect: [f32; 4], picture: String) -> Presented {
             id: "box".to_owned(),
             value: json!({"kind": "rect"}),
             rect: [rect[0] + 8., rect[1] + 8., 64., 64.],
+            rows: Vec::new(),
+            source_lines: Vec::new(),
         }],
     }
 }
