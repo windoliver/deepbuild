@@ -55,12 +55,12 @@ export function roomForTest(held, readings, now = Date.now(), run = false, ceili
 let listed = null;
 function processes({ fresh = false } = {}) {
   if (!fresh && listed && performance.now() - listed.at < 2_000) return listed.procs;
-  const listing = spawnSync('ps', ['-A', '-o', 'pid=,ppid=,lstart='], { encoding: 'utf8', maxBuffer: 1 << 26, env: { ...process.env, TZ: 'UTC', LC_ALL: 'C' } });
+  const listing = spawnSync('ps', ['-A', '-o', 'pid=,ppid=,stat=,lstart='], { encoding: 'utf8', maxBuffer: 1 << 26, env: { ...process.env, TZ: 'UTC', LC_ALL: 'C' } });
   if (listing.status !== 0) throw Error(`ps failed: ${listing.stderr.trim()}`);
   const table = new Map();
   for (const line of listing.stdout.split('\n')) {
-    const [, pid, ppid, start] = line.match(/^\s*(\d+)\s+(\d+)\s+(.+?)\s*$/) ?? [];
-    if (pid) table.set(Number(pid), { ppid: Number(ppid), start });
+    const [, pid, ppid, stat, start] = line.match(/^\s*(\d+)\s+(\d+)\s+(\S+)\s+(.+?)\s*$/) ?? [];
+    if (pid) table.set(Number(pid), { ppid: Number(ppid), start, exited: stat.startsWith('Z') });
   }
   listed = { procs: table, at: performance.now() };
   return table;
@@ -81,7 +81,7 @@ const gone = (pid) => {
 };
 // A process ps listed is alive while its start is the one recorded; one it missed started since, and is alive while
 // its number is.
-const alive = (procs, { pid, start }) => (procs.has(pid) ? procs.get(pid).start === start : !gone(pid));
+const alive = (procs, { pid, start }) => (procs.has(pid) ? procs.get(pid).start === start && !procs.get(pid).exited : !gone(pid));
 // Gone only by a fresh listing: in an older one, a number since taken by a new process reads as another's.
 const ended = (entry) => !alive(processes(), entry) && !alive(processes({ fresh: true }), entry);
 /** This process and its ancestors, nearest first: what a DEEP_THROTTLE or DEEP_PERF_LOCK holder is verified against. */
