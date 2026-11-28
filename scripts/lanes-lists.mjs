@@ -942,6 +942,9 @@ for (const [folder, originals] of Object.entries(redrafts3525)) {
 // The redrafted budget files time the six-stem render, as #154's and #154-redraft's do.
 timed.push('tests/acceptance/154-redraft-3525/budgets.test.ts', 'tests/acceptance/154-redraft-3525b/budgets.test.ts');
 
+Object.assign(redrafted, { 'tests/acceptance/2665/lowering.test.mjs': 'tests/acceptance/2665-redraft-3537/' });
+byHand.push('tests/acceptance/2665/lowering.test.mjs');
+
 for (const entry of laneFolders.filter((folder) => !unread.includes(folder))) {
   let text = '';
   try { text = readFileSync(join(root, entry, 'lane.json'), 'utf8'); } catch {}
