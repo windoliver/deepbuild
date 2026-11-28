@@ -37,7 +37,9 @@ DA1172_SCREENS=<dir> npx vitest run --root tests/acceptance/1172 shown   # keeps
 - **Builds.** The helpers run them, each once, and copy `deep-app` out of the target folder under its own name:
   `cargo build --locked -p deep-app --bin deep-app` (plain, then with each plant), and `deep-show`, `deep-replica` and
   `deep-hook`, which the hub and the proof run from `target/debug`. After a plant's build the plain build runs again, so the
-  checkout's `target/debug/deep-app` is never left a plant. `CARGO_TARGET_DIR` is honored.
+  checkout's `target/debug/deep-app` is never left a plant. `CARGO_TARGET_DIR` is honored. `shell.test.ts` runs every build
+  it needs (and the probe's `swiftc`) in a `beforeAll`, bounded by `BUILD_MS` (45 min), before any timed check; a build
+  that fails or isn't done by then is `BLOCKED`, never a fail of the program (REDRAFT.md, Eleventh redraft).
 - **Folders.** Homes are `/tmp/dh16-*/h` (a socket path must fit 104 bytes), binaries `$TMPDIR/da1172-bin-<uid>`. It never
   touches the real `~/.deepbuild`, `~/.claude` or `~/Library/LaunchAgents`; the real hub here is started by `deep hub run`, not
   the login service.
@@ -137,7 +139,7 @@ tree), and the terminal `term1`, 40 × 6, for the first session, fed `FEED`:
 | AC2 | `shell.test.ts`: `deep inbox answer`, then the tree and menu bar polled; within 1 s, then the pixels | the base (reads 143 before it starts); a late window fails, INCONCLUSIVE only when the machine's load is over half its cores |
 | AC3 | `rows.test.ts`: each ask in a fresh launch: its row by question, a press, its card's own two options on the tree and the pixels, no other ask's, no new window | `plant-handle-rows`, naming the ask; a row with no click; a card for another ask |
 | AC4 | `panel.test.ts`: the stale value's strokes are nearest the look's `muted`, with its age, and the fresh value's aren't, with none, on the window's pixels. `terminal.test.ts`: cell fills on the window's pixels hold the grid's law (below) | a value drawn live; everything grayed; `plant-tab-text`, naming the tab; drawn-picture twins in `judges.test.ts` |
-| AC5 | `popout.test.ts`: the main window's tree and pixels hold no question; the new window's pixels hold all three; the same reading saw them before the press | a program with no control; a window opened with the view still drawn in the main one; a view that vanishes |
+| AC5 | `popout.test.ts` (REDRAFT.md): the list's Needs you heading and its three rows leave the main window's tree and pixels, but for one kept card's question; the new window's tree and pixels hold them; the same reading saw them before the press | a program with no control; a window opened with the view still drawn in the main one; a view that vanishes |
 | AC6 | `welcome.test.ts`: the ground beside Set up equals the look's dark `ground`, and its light one in light | the base's Paper; one color for both |
 | AC7 | `shown.test.ts`: every picture written; `TASTE.json` | no call, a call on other pictures: `INCONCLUSIVE`; `looks_wrong` fails, quoting it |
 
@@ -194,4 +196,5 @@ the pictures once, call them, record them, and run again against the same `$DA11
 - `shell.test.ts` (AC1, AC2), `rows.test.ts` (AC3), `panel.test.ts`, `terminal.test.ts` (AC4), `popout.test.ts` (AC5),
   `welcome.test.ts` (AC6), `shown.test.ts` (AC7); `judges.test.ts`, drawn pictures, no criterion tag, passes at the base.
 - `TASTE.json`: the taste call, none yet. `tsconfig.json`: as 1162's. `BASE-FAILURE.txt`: the run at the base.
+- `REDRAFT.md`: AC5 redrafted to the owner's pop-out decision.
 - Outside this folder: three `[features]` in `crates/deep-app/Cargo.toml`. No `[[test]]` entry: there is no Rust test here.

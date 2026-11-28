@@ -1,0 +1,701 @@
+# #1172 AC5: blind redraft
+
+Redrafted blind at origin/main 678622403 from the issue, its comments, `docs/technical-design.md` and this folder only.
+Second redraft (2026-11-22), of the first one at 7c8d9a28d, for two disputes a review raised against it.
+Third redraft (2026-11-23), of the second at a6bcb6351, for a dispute from a Mac run (below, Third redraft).
+Fourth redraft (2026-11-23), of the third at 0560a1718, for a dispute from a Mac run on AC1's and AC2's row count (below, Fourth redraft).
+Fifth redraft (2026-11-24), of the fourth at c6bdfac2f, for a review's dispute that AC5's after-reading could see nothing (below, Fifth redraft).
+Sixth redraft (2026-11-25), of the fifth at 766efa508, for a dispute from a Mac run on AC2's answered row (below, Sixth redraft).
+Seventh redraft (2026-11-25), of the sixth at 3e7cd3fea, for a review's dispute that a right page fails the sixth (below, Seventh redraft).
+Eighth redraft (2026-11-25), of the seventh at 78c912ece, for a review's dispute on the word's case (below, Eighth redraft).
+Ninth redraft (2026-11-25), of the eighth at fa5de8990, for a Mac run's dispute that rows keeping their time draw no title (below, Ninth redraft).
+Tenth redraft (2026-11-26), of the ninth at fa32fd1e4 (branch head ae5550efd), for a Mac run's dispute that OCR read nothing from a correct frame (below, Tenth redraft).
+
+## Why
+
+The owner decided AC5 on the issue (comment 7071196851, 2026-11-21):
+
+> after Needs you pops out, the main window's page keeps the selected ask's card. The criterion is judged on the list's
+> Needs you heading and ask rows leaving the main window and showing in the new window.
+
+The original `popout.test.ts` wanted no question anywhere on the main window's tree or pixels after the press, which the
+kept card contradicts. The first redraft fixed that, and the review found two faults in it:
+
+1. **Cut-short questions passed.** A row counted as drawn when its question's first 10 letters and digits were on the
+   pixels. No source lets a row draw its question cut short: AC3 reads "Each Needs you row shows its ask's question", and
+   the decision says nothing of it. Now presence (before the press, and in the popped window) needs one pixel line holding
+   the whole question, read with `reads` from `helpers.ts`, as `shellFailures` already reads AC1's rows.
+2. **A row that stayed could pass.** "Fewer nodes holding the question than before" let a program that closes an open card
+   but keeps the row drop 2 → 1 and pass. Now the test fixes which card is open, and measures what the card adds:
+   - At launch it reads the list and picks an ask with none of its options on the main tree (the selected ask), so its
+     count of nodes holding its question is its rows' alone.
+   - It presses that ask's row, as AC3 does ("a click on it presents that ask's question card in the window"), checks that
+     its card is open and no other ask's is, and reads again. The difference is the card's share of the question.
+   - After the pop-out, the selected ask may hold at most its card's share, and only while its card is still open; every
+     other ask, and the selected one once its card is gone, may hold nothing. So a row that stays fails, whatever card is
+     open.
+
+   A card is told by its own options, both as `AXButton`s: README, Pinned item 2 ("the presented card's option rows as
+   `#327` draws them: `AXButton`s whose names hold the option's label") and AC3's judge in `rows.test.ts`, which reads a
+   card by its options "since the question alone is already on the row under it". No source gives a row a mark a card's
+   question node can't also have (both are named with the question, README item 2 and AC3), so the test tells them apart
+   by count against a known state, not by node. Making the start hold no card at all was the other choice; it was not
+   taken because the decision speaks of a selected ask's card, so a right program may keep one open, and the test would
+   then have nothing to say about the card the decision names.
+
+## What each expectation comes from
+
+| Expectation in `popout.test.ts` | From |
+|---|---|
+| At launch the main window has one window, a node named `Needs you`, that heading on its pixels, a node holding each ask's question, and one pixel line holding each whole question | Decision: "judged on the list's Needs you heading and ask rows"; AC3 "Each Needs you row shows its ask's question"; README item 2 (a row's name holds its question); the guard that a reading that sees nothing can't pass |
+| One ask has none of its options on the main tree at launch, or the run is `BLOCKED` | Needed to read a row apart from a card (dispute 2); invariant 2: an unreadable start never passes |
+| A press on that ask's row opens its card (both options `AXButton`s, both on the pixels) and no other ask's card, in the same window, and leaves the list whole | AC3 ("a click on it presents that ask's question card in the window"); README item 2; `rows.test.ts`'s card judge; the decision's "selected ask" |
+| The press on `Pop out Needs you` is a person's press (`AXPress`) | AC5 "a view pops out"; design: a pop-out needs a gesture serial (canvas-primitives, Window); README item 2 and dispute 2 |
+| A second window opens | AC5 "pops out to its own window" |
+| After it, the main window has fewer `Needs you` heading nodes and heading lines than before | Decision: the heading leaves the main window |
+| After it, the selected ask holds on the main tree at most its card's share of nodes, and on the pixels at most its card's share of lines starting its question, while its card is open; else none | Decision: the rows leave, the selected ask's card stays; dispute 2 |
+| After it, every other ask holds no node with its question and draws no line starting it on the main window | Decision: the rows leave; only the selected ask has a card (checked before the press) |
+| The new window's tree and pixels hold the heading and every row, each whole question on one pixel line | Decision: "showing in the new window"; AC3's wording; the guard that a view that merely disappears must fail |
+
+**Which wrong programs fail now.** A row kept with its card closed: the card's options are gone, so the ask may hold
+nothing, and the row's node fails. A row kept with the card open: the row's node is over the card's share. A row drawn
+cut short before or after the pop-out: no line holds its whole question. A view that vanishes: the popped window lacks it.
+A window opened with the view still in the main one: the heading and rows stay.
+
+Removed: the first redraft's "a row is drawn when its first 10 letters and digits are"; "fewer nodes than before" for
+each ask; "at most one ask's question on the main tree", now implied by the per-ask rule. Kept: leaving is judged on the
+pixels by a question's first 10 letters and digits (any line holding them counts as still drawn), stricter than the
+whole question. Changed earlier and kept: the main window is the one window before the press, matched to the tree by
+frame, instead of the window holding a node named `Sessions` (#1348 renamed that heading `Tasks` in `helpers.ts`).
+
+## Left as it was (second redraft)
+
+`shellFailures` in `helpers.ts` reads each ask's whole question off the window's pixels for AC1 and AC2, as this test
+now does. No other test or helper changed. The third redraft changed this; see below.
+
+## Not settled by the issue or the decision
+
+1. Whether the card keeps the same share of its question after the pop-out. The test lets the card hold as many nodes and
+   lines with its question as it did before; a program that drops one of the card's and keeps the row at the same total
+   would pass. No source fixes how many times a card names its question.
+2. Whether a card may be open at launch. Allowed, if at least one ask has none of its card open; if every ask's is, the
+   run is `BLOCKED`, never a pass.
+3. Whether something else in the main window, such as a sidebar entry, may also be named or drawn `Needs you`. The test
+   wants fewer such nodes and lines after the press, not none.
+4. Which pixels a heading is: an OCR line reading `Needs you`, optionally followed by a count.
+5. Whether the kept card must stay. The decision says the page keeps it, and judges AC5 on the heading and rows only, so
+   the test allows a card that stays and one that closes; a closed card leaves its ask nothing on the main window.
+6. Settled by the third redraft: a row's title may be cut by an ellipsis on the pixels (below). Still assumed: a row draws
+   on one pixel line, so a row that wraps its question fails.
+
+## Third redraft (2026-11-23)
+
+### The dispute
+
+A Mac run at the fix's head reached `popout.test.ts` step 1 and failed there: the reading wanted one OCR line holding each
+ask's whole question in the main window, and the list drew `Which header co... How it looks`, `Which font for th... How it
+looks` and `Which layout for... How it looks`: each title cut by an ellipsis, then the ask's state word. The dispute
+measured the fixture's text in the look's body font (Inter, 13 px): the questions are 244.6, 211.6 and 199.1 px regular
+(249.2, 216.7, 203.9 semibold), and `How it looks` 75.5 px. The list is the look's `shell.sidebar`, 260 px (the suite's
+own `world.json` puts the session page at x = 260), and its row has padding, a mark and the gap after it before the title
+(the row of #1461, as the dispute gives it: 8 px each side, a 16 px mark and 8 px after it), so a title has at most about
+220 px even with no state word or time. The first question can't sit whole on one line of the list under the design, so
+item 6 below (an assumption the second redraft named) was wrong, and the reading demanded what the design forbids.
+
+### What changed
+
+| Change | Source |
+|---|---|
+| A row is drawn on the pixels when one line holds its whole question, **or** its question's start, at least its first 10 letters and digits (`ROW_START`), followed on that line by an ellipsis (`…`, or two or more dots as OCR reads one). `drawsRow` in `helpers.ts`; it replaces `reads(lines, question)` for rows only | Design, Needs-you view, "One list and one page": "A row is one line with fixed slots (mark, title, then state word and time at the right edge)" and "Text cut from the screen stays in the accessible name"; the look: `shell.sidebar` 260, `type.body` 13 px, `fonts.body` Inter; canvas-primitives, Text: `overflow: mask \| ellipsis = ellipsis`; the row of #1461 as the dispute quotes it (a title past the row's width ends in an ellipsis) |
+| The floor of 10 letters and digits is `popout.test.ts`'s old `START`, now one constant for both presence and leaving | The second redraft's leaving reading: a line holding a question's first 10 letters and digits counts as still drawn. With one floor, a row seen at launch is one the leaving reading can see; a lower floor would let a row kept cut shorter than 10 pass the leaving reading. 10 is within what the dispute's run drew (13, 14 and 14) |
+| `popout.test.ts`: at launch, before the pop-out and in the popped window, each row is judged with `drawsRow` (`Seen.drawn`, was `whole`) | As above |
+| AC1, AC2: `shell.test.ts` calls a new `shellFailuresCut`, `shellFailures` with one change: a wanted row is drawn when `drawsRow`, an unwanted one (AC2's answered ask) when neither its whole question nor a cut row of it is on a line. `shellFailures` itself is left as it was | As above. In scope: the dispute names it, it is this blind job's helper, and the same measurement (same fixture, list and reference window) shows it demands the same forbidden whole line, so a right program fails AC1 at its first reading |
+| `judges.test.ts`: `drawsRow` on read lines, no app: passes the whole question, the dispute's own reading and a `…` cut; fails a handle, the ask's kind alone, another ask's cut question, a title clipped with no ellipsis, a cut under 10 letters and digits, and an ellipsis after text that isn't the question's start | AGENTS.md, Proof: a judge must fail a wrong program; this one runs anywhere, so the judge's own errors don't wait for the Mac |
+
+Unchanged and still strict: on the tree every row is a node named with its **whole** question (README item 2; AC3; the
+design's "Text cut from the screen stays in the accessible name"); the heading; which card is open; the card's share; the
+leaving reading (no line holding a question's first 10 letters and digits beyond the card's share); the popped window's
+tree and pixels.
+
+### Which wrong programs fail
+
+- A row kept beside an open card: its tree node is over the card's share (unchanged).
+- A row kept with the card closed: the ask may hold nothing; its node and its cut line, which holds the first 10 letters
+  and digits, both fail (unchanged; the floor is now shared, so the row seen at launch is the one looked for after).
+- A view that vanishes: the popped window has no heading, no row nodes and no drawn rows.
+- A view left in the main window with a second window opened: the heading and rows stay.
+- A row that shows the ask's handle, its kind alone, another ask's question or text that isn't its question's start: no
+  line draws it, and no node is named with its question (`judges.test.ts` pins the pixel half without the Mac).
+- A row whose question is cut with no ellipsis, or cut before its first 10 letters and digits: fails the pixel reading.
+
+### Still not settled
+
+1. The floor of 10 letters and digits. No source gives a least visible title; a right program whose state word and time
+   leave a title under 10 letters and digits at 260 px would fail. The dispute's run drew 13 to 14.
+2. That OCR reads the ellipsis: as `…` or as two or more dots. A right row whose ellipsis OCR drops fails, and says so with
+   the lines it read.
+3. A row drawn on one line: a wrapped title still fails (item 6 above).
+4. AC1's other readings in `shellFailuresCut` (copied from `shellFailures`) were not revisited: only the row's pixels were
+   in dispute.
+
+### The guard's constraint
+
+A first build of this redraft (af769a051, never pushed) changed a line of `shellFailures` in `helpers.ts`. The guard failed
+it: other issues' tests read `helpers.ts`, and a looser tolerance lands only as a new case beside the old. So `helpers.ts`
+now changes by added lines only: `ROW_START`, `drawsRow` and `shellFailuresCut` are appended, and no existing line,
+`shellFailures` included, changes. `shell.test.ts`, which only #1172's tests read, switches its calls to
+`shellFailuresCut`. `shellFailuresCut` copies `shellFailures` instead of calling into it, because the row reading sits
+inside its loop. The copy is the cost of changing no existing line.
+
+## Not run
+
+The Mac tests need the Mac (Accessibility, Screen Recording, the real `deep-app`); they were typechecked only
+(`npx tsc -p tests/acceptance/1172/tsconfig.json`, clean). `judges.test.ts` ran here (16 passed), after
+`node packages/evidence/build-patterns.mjs`, which writes the `dist/patterns.json` the suite's imports need.
+
+## Fourth redraft (2026-11-23)
+
+Redrafted blind at 0560a1718 from the issue, its comments, `docs/technical-design.md` and this folder only; no
+implementation code and no PR was read.
+
+### The dispute
+
+A Mac run at e1468a920 with this folder at 0560a1718 failed AC1's main test and AC2 (before its answer) on `Needs you should
+show 1 row for ask:… ("Which header colour on the login page?"); it has 2`. The run's own probe, 15 s after launch, read
+one window: three sidebar rows, each an `AXButton` named with its question and holding it, its kind and its time; and on
+the session page an `AXGroup` named `armed` holding the first ask's kind, its question, `Blue header` and `Green header` as
+`AXButton`s, its default and "Answering saves it for this task". The other two asks appeared only in their rows. So the 2
+is the first ask's row plus its open card's question. `shellFailures` and `shellFailuresCut` count every outermost node
+holding a question across the window and want exactly 1, so a card on the page counts as a second row.
+
+The design puts that card there: Needs-you view, "One list and one page": "The page shows what's selected: an ask's
+question card, …" and "The window opens on the first open ask". The owner decision of 2026-11-21 (above) says the main
+window's page keeps the selected ask's card. So a right program fails the third redraft's AC1 reading at launch.
+
+### What changed
+
+| Change | Source |
+|---|---|
+| A node holding an ask's question is that ask's card's when the nearest node at or above it holding both the ask's options as `AXButton`s holds no other ask's question (`askNodes`). Every other such node is a row | A card is told by its two options as `AXButton`s: README, Pinned item 2; AC3's judge in `rows.test.ts`; `cardOpen` in `popout.test.ts`. "Holds no other ask's question" keeps the list itself, which holds every row, from reading as a card: the design's card is on the page, apart from the list ("One list and one page") |
+| A wanted ask has exactly 1 row outside its card. Its card is not counted (`askRowFailures`) | AC1 "Needs you with 3 rows"; design: "a row per open ask"; the decision's kept card |
+| While a wanted ask's options are on the tree as `AXButton`s, at least one node holding its question must sit in its card, or the reading fails as unable to tell row from card | Invariant 2: a reading that can't tell a row from a card never passes. Without it, a card laid flat beside the list with its row gone would read as the one row |
+| An unwanted ask (AC2's answered one) has no row **and no card** on the tree | AC2: "makes the window … read 2"; design, "An item leaves Needs you only on your answer" and "an answer clears it everywhere" (States people see); invariant 4, "never the same question twice": an answered ask's card still offering its options would put the question to you again. The design's receipt is "the answered card's receipt" (Asks), for an answer made on the card; here the answer comes from `deep inbox answer`, which the design gives no receipt in the window |
+| `shellFailuresCard` in `helpers.ts`: `shellFailuresCut` with its per-ask tree count replaced by `askRowFailures`. Everything else, the pixel reading (`drawsRow`) and the menu bar's reading included, is `shellFailuresCut`'s own, unchanged | The dispute is the tree's row count only; the menu reading is a separate finding still being diagnosed and is left as it was |
+| `shell.test.ts` calls `shellFailuresCard` where it called `shellFailuresCut` (AC1's main test, its spike plant, its proof test's settle, AC2 before and after the answer) | As the third redraft did |
+| `judges.test.ts`: 12 cases of `askRowFailures` on built trees, no app | AGENTS.md, Proof: a judge must fail a wrong program; these run anywhere |
+
+AC2's timing loop is unchanged: it stops the clock when the menu bar reads 2 and no node holds the answered ask's
+question. That matches the rule above, that an answered ask keeps neither row nor card.
+
+### Which wrong programs fail (pinned in `judges.test.ts`)
+
+Controls that pass: the disputed launch reading (three rows and the first ask's card, which the old reading counted 2);
+three rows and no card; after the first ask is answered, two rows and the next ask's card; a card named with its question
+that holds its options.
+
+Wrong programs that fail, naming the ask:
+- two rows for one ask beside its card;
+- a wanted ask whose card stays but whose row is gone (0 rows outside its card);
+- a "card" whose options are `AXStaticText`, not buttons: no card, so its question counts as a second row;
+- a group holding the question and no options: no card, a second row;
+- a card's question and options laid flat beside the list with the ask's row gone: the row can't be told from the card;
+- an answered ask whose row stays;
+- an answered ask whose card stays with its options, its row gone;
+- a "card" that also holds another ask's question: not apart from the list, so a second row.
+
+### Still not settled
+
+1. **An answered ask's card.** The rule wants none on the tree. A right program that keeps a receipt naming the answered
+   question on the page would fail AC2. The design gives a receipt to an answer made on the card, and is silent on an
+   answer made elsewhere while the card shows; this redraft took the strict reading from AC2's "read 2", invariant 4 and
+   "an answer clears it everywhere". The pixel reading agrees: `drawsRow` reads the whole question on a receipt's line, so
+   a kept receipt fails there too.
+2. **A row holding both its options as `AXButton`s** (row controls that "show on hover and selection and stay in the
+   tree", design) would read as a card, leaving its ask 0 rows. No source gives a row its options; the probe's rows hold
+   none. A false failure, never a false pass.
+3. **A flat tree.** A card whose question and options are not under a node of their own, apart from the list, fails
+   (as unable to tell row from card). The probe's card is its own `AXGroup`.
+4. **The pixels.** With a card open, the card's line holds the whole question, so `drawsRow` passes a wanted ask on the
+   pixels whether or not its row is drawn. The tree reading still fails a missing row; the pixels alone don't. Telling a
+   row's line from a card's on the pixels would need frames matched between the tree and the capture, which no source
+   pins. Left as the third redraft had it.
+5. **The menu bar's `[]`.** Not revisited (the dispute's separate finding).
+
+### The guard's constraint
+
+As in the third redraft: `helpers.ts` changes by added lines only. `askNodes`, `askRowFailures` and `shellFailuresCard`
+(with two private helpers) are appended after `shellFailuresCut`; no existing line, `shellFailures` and `shellFailuresCut`
+included, changes. `shellFailuresCard` copies `shellFailuresCut` instead of calling it, since the row count sits inside its
+loop. `shell.test.ts`, which only #1172's tests read, switches its calls.
+
+### Run here (Linux, no Mac)
+
+`node node_modules/vitest/vitest.mjs run --root tests/acceptance/1172 judges`: 1 file, 28 passed (16 before, 12 new).
+`npx tsc -p tests/acceptance/1172/tsconfig.json`: clean. The Mac tests (`shell.test.ts` AC1, AC2) were not run.
+
+## Fifth redraft (2026-11-24)
+
+Redrafted blind at c6bdfac2f from the issue, its comments, `docs/technical-design.md` and this folder only; no
+implementation code and no PR was read.
+
+### The dispute
+
+An independent review of the fourth redraft: in `popout.test.ts`, step 3's reading of the main window after the pop-out
+checked only absences, fewer `Needs you` heading nodes and lines than before, and each ask's question at or under its
+card's share. Nothing required that the reading saw the main window at all. So a program whose main window goes blank on
+pop-out passed AC5, and so did one capture or tree read taken mid-relayout that came back empty, since `settled` stops at
+the first passing reading. That breaks invariant 2: a reading that sees nothing never passes. The original blind test
+located the main window by a node it still required (`Sessions`); the second redraft matched the window by frame instead,
+and the anchor went with it.
+
+### What changed
+
+| Change | Source |
+|---|---|
+| `keeps` in `popout.test.ts`: for each fixture session, the main window's tree holds an `AXButton` whose name holds its task's title, and one pixel line holds that title | Design, Needs-you view, "One list and one page": the list holds the Needs you heading and its rows, "then a heading per project with its session rows"; only Needs you pops out (AC5, the decision: the criterion is "the list's Needs you heading and ask rows leaving"). README, Pinned item 2: "each sidebar row an `AXButton` (role `Button`) whose name holds its task's title"; AC1 reads the same rows (`shellFailuresCard`). The titles (`Cart totals`, `Release notes`) are short enough to sit whole on a row, unlike the questions (third redraft) |
+| Step 3's reading (`left`) starts from `keeps`, so it fails unless it sees the session rows on the tree and the pixels | Invariant 2; the dispute |
+| Step 2's reading (`unready`) also requires `keeps`, so the before and after readings require the same thing | "The same reading saw them before the press" (README, AC5 row): a right program that fails `keeps` fails before the pop-out, not as a pop-out fault |
+
+No helper changed: `keeps` is local to `popout.test.ts` and uses `helpers.ts`'s existing `nodes`, `reads`, `sees` and type
+`FixtureSession`. No judge case was added: `keeps` reads an app, and the dispute's wrong input (an empty tree, no OCR lines)
+fails it on its face, one failure per session per surface.
+
+### Which wrong programs now fail
+
+- A main window that goes blank, or loses the list, on pop-out: no session row on the tree or the pixels.
+- A transient empty reading (empty tree or no OCR lines) after the pop-out: it fails, so `settled` keeps reading until a
+  reading that sees the session rows also shows the heading and rows gone.
+- A pop-out that takes the whole list, session rows included, out of the main window.
+
+A right program still passes: the decision lets the selected ask's card stay, which `keeps` doesn't read, and the session
+rows stay in the list.
+
+### Not settled
+
+1. **The `Tasks` heading.** AC1's helpers require a node named `Tasks` (#1348's rename, second redraft); `keeps` does not,
+   since the design names only "a heading per project", and the session rows already anchor the reading.
+2. **Folded sessions.** The design folds quiet sessions into one row per project. The fixture's sessions both hold open asks,
+   and AC1 already wants both as rows; a right program that folds them once their asks leave Needs you would fail `keeps`.
+   No source says popping the view out makes a session quiet.
+3. **The page.** The kept card is still not required (item 5 above); the anchor is the list's session rows, not the page.
+
+### Run here (Linux, no Mac)
+
+`npx vitest run tests/acceptance/1172/judges.test.ts`: 1 file, 28 passed (unchanged). `npx tsc -p
+tests/acceptance/1172/tsconfig.json --noEmit`: clean. `node scripts/repo-rules.mjs`: exit 0. `popout.test.ts` was not run
+(it needs the Mac).
+
+## Sixth redraft (2026-11-25)
+
+Redrafted blind at 766efa508 from #1172 and its comments, `docs/technical-design.md`, #1461's and #1807's issue text and
+this folder only; no implementation code and no PR was read.
+
+### The dispute
+
+A Mac run (main 1b4929ae7 with this folder at 766efa508, 2026-11-25) passed AC1 and failed AC2 after the answer, with the
+menu bar already reading 2: `Needs you should show 0 rows for ask:… ("Which header colour on the login page?"); it has 1`,
+and the pixels still drew a line holding the question followed by `Answered "Blue header" at 12:12 from deep inbox. Nothing
+is left to answe…`. The disputing party says the program keeps a row that left the list in its slot, drawn answered, until
+2 s after the person has also left the list, and attributes the rule to #1461. AC2's reading (fourth redraft) wanted the
+answered ask to hold no node and no line at all, and its timing loop stopped the clock only then.
+
+### Ruling: A, the expectation was wrong for this state
+
+The design's "One list and one page" (Keymap, placement, window) names the window #1461 built, and #1461's scope says
+"Suites that pin the old shape go through their blind redraft". #1461 settles exactly this state:
+
+- "A row that left its state keeps its slot while the pointer is over the list or focus is in it, and for 2 s after both
+  have left." (When rows move, one rule)
+- Its AC: "With focus in the list, an ask answered from `deep` keeps its row in place, drawn answered, until focus and
+  pointer have been out of the list for 2 s." AC2 answers through `deep inbox answer`.
+- "A new state shows in place at once: its mark, its word and the count never wait." So the window reads 2 at once
+  through the count and the row's word, while the row keeps its slot.
+
+#1807 (open) agrees: "An answered ask's row keeps its place, drawn answered … Its state word is the receipt
+("Answered", …) … The one count drops at the answer." The design's "a row per open ask", "An item leaves Needs you only on
+your answer" and "an answer clears it everywhere" say the ask stops counting and stops needing you; #1461 is the later,
+more specific word on how its row leaves. So AC2 (#1172's "the window … read 2") is read as: two open rows and the count
+2, and the answered ask at most kept as one row drawn answered, offering nothing.
+
+The test can't hold the list unattended to wait out the hold: no source names a surface that moves focus and the pointer
+out of the list without also selecting something, so that branch was not taken.
+
+### What changed
+
+| Change | Source |
+|---|---|
+| `answeredRowFailures` (tree, one answered ask): at most one row outside a card; that row reads answered (a node at or under it whose name matches `answered`, not `not answered`); no card, and its two options nowhere on the tree as `AXButton`s | #1461 "keeps its slot", "drawn answered"; #1807's state word "Answered"; invariant 4 (the question never put to you again); the card told by its options, as before |
+| `askRowFailuresAnswered`: `askRowFailures`' wanted branch, unchanged, for the open asks; `answeredRowFailures` for the rest | As above |
+| `answeredLineFailures` (pixels): at most one line draws the answered ask's row (`drawsRow`), and that line reads answered | As above; one row is one line (design) |
+| `shellFailuresAnswered`: `shellFailuresCard` with those two in place of wanting the answered ask gone; everything else, the count and the menu bar included, is its own | The dispute is the answered row only |
+| `shell.test.ts` AC2: the timing loop stops the clock when the menu bar reads 2 and `answeredRowFailures` is empty; the after-reading calls `shellFailuresAnswered`. AC2's reading before the answer, and AC1, still call `shellFailuresCard` | #1461 "its mark, its word and the count never wait", so the 1 s still holds for the row's word |
+| `judges.test.ts`: 10 cases (5 controls, 7 wrong inputs across them) | AGENTS.md, Proof |
+
+`helpers.ts` changes by added lines only, as before; `shellFailuresAnswered` copies `shellFailuresCard` for the same reason
+`shellFailuresCard` copied `shellFailuresCut`.
+
+### Which wrong programs fail (pinned in `judges.test.ts`)
+
+Controls that pass: the answered row kept, drawn answered, beside the two open rows and the next card; the answered row
+gone; the disputed Mac run's pixel line; a cut row with `Answered` on its line.
+
+Wrong programs that fail: the answered ask kept as a still-open row (its kind word, no `Answered`), on the tree and on the
+pixels; a row that reads "Not answered"; two kept rows for the answered ask; its card still offering its options with its
+row drawn answered; the answered question on two lines; a wanted ask's row gone beside a kept answered row.
+
+### Still not settled
+
+1. **The row must go eventually.** The test doesn't hold the list unattended, so a program that keeps the answered row
+   forever, drawn answered, passes AC2. #1461's own AC ("until focus and pointer have been out of the list for 2 s") is
+   where that is judged.
+2. **A kept row plus a page receipt.** At most one node and one line may hold the answered question. #1807 (open) keeps a
+   receipt on the page only after the last ask, which AC2's state isn't, so a right program has one; a program drawing
+   both would fail, naming the count.
+3. **What "drawn answered" reads.** The word `answered` anywhere in the row's nodes or line. #1461 gives no word; #1807
+   gives "Answered" among others ("Starts in 8 s", "Allowed · ran"), which apply to holds and approvals, not to AC2's
+   pick-one ask. A right row worded otherwise fails, naming what it holds.
+4. **The menu bar's reading.** Not revisited.
+
+### Run here (Linux, no Mac)
+
+`npx vitest run --root tests/acceptance/1172 judges`: 1 file, 38 passed (28 before, 10 new). `npx tsc -p
+tests/acceptance/1172/tsconfig.json --noEmit`: clean. `shell.test.ts` AC2 was not run (it needs the Mac).
+
+## Seventh redraft (2026-11-25)
+
+Redrafted blind on 311cd158b (the sixth, 3e7cd3fea, with main merged) from the same sources as the sixth; no
+implementation code and no PR was read.
+
+### The dispute
+
+An independent review of the sixth: the disputed Mac line, the whole question then `Answered "Blue header" at 12:12 from
+deep inbox. Nothing is left to answe…`, is the page, the answered ask's closed card, not the list row; on the Mac a list
+row OCRs cut with its state word (`• Which header co... How it looks`, third redraft). A closed card has no option
+`AXButton`s, so `askNodes` counts its question as a row. A right program that keeps the list row drawn answered (#1461)
+while the page shows the closed card has 2 nodes and 2 lines, and fails the sixth's judges; its timing loop never stops.
+The sixth's "Still not settled 2" assumed only one of the two shows, which the capture contradicts: the page drew the
+receipt with two asks still open. The review also found the word match too loose ("not yet answered", "isn't answered",
+"to be answered", "Not  answered" read as answered).
+
+### Ruling: the page may say the ask was answered
+
+- Design, Keymap, placement, window, Address: "an address that no longer resolves says what it was and what became of
+  it". The page was on `ask/<id>` (the window "opens on the first open ask", and AC2 answers that ask); after an answer
+  from elsewhere the page may stay there and say the ask was answered.
+- #1807 (open): "The page moves to the next ask at once, except while a hold counts down on the card you just answered";
+  this speaks of an answer made on the card. #1461's "Answering an ask selects the next one" likewise. Neither says an
+  answer from `deep` moves the page, and #1461's "Nothing moves under the pointer" and the design's "opens and never
+  answers" leave selection to the person. So the closed card on the page is allowed, not required; the page may also
+  move on.
+- The list row: #1461 as in the sixth ("keeps its slot", "drawn answered").
+
+So the answered ask may hold at most one node in the list and one on the page, each reading answered, and nothing that
+offers its options.
+
+### Telling the list from the page
+
+The design's window "has two regions", the list and the page, and #1461 puts "the list on the left … and the page on the
+right". README item 2 makes each session row an `AXButton` whose name holds its task's title; those rows are the list's.
+So `listEdge` is the session rows' right edge on the tree (screen points), and a node whose frame's centre is left of it is
+the list's; on the pixels the edge is mapped into the capture by the main window's frame (`probe windows` and the probe's
+tree share screen points; the capture is the window at its backing scale). No session row: `can't tell the list from the
+page`, a failure, never a pass (invariant 2).
+
+### What changed
+
+| Change | Source |
+|---|---|
+| `ANSWERED_WORD`: the state word `Answered`, capitalised, not after `not`, `n't`, `yet`, `be` or `never` and any spaces; `unanswered` has no word start | #1807 "Its state word is the receipt ("Answered", …)"; the Mac capture's `Answered "Blue header"`; the review's examples |
+| `answeredFailures` (tree): at most one node holding the question in the list and at most one on the page; each reads `Answered` in it or in the nearest nodes above it that hold no other ask's question (the closed card's question and its receipt sit side by side; the list stops the climb); the ask's two options nowhere as `AXButton`s | Above; invariant 4 |
+| `answeredListLineFailures` (pixels): of the lines left of the list's edge, at most one draws the answered row (`drawsRow`), and it reads `Answered`. Page lines are left to the tree: a closed card may draw its question and its receipt on separate lines | Above; the design's row is one line |
+| `askRowFailuresKept`, `shellFailuresKept`: as the sixth's `askRowFailuresAnswered` and `shellFailuresAnswered`, with these judges. `shell.test.ts` AC2's timing loop and after-reading call them | As the sixth |
+| The sixth's `answeredRowFailures`, `askRowFailuresAnswered`, `answeredLineFailures`, `shellFailuresAnswered` and their 10 judge cases are removed: nothing calls them now. Against main, `helpers.ts` still changes by added lines only | AGENTS.md: delete additions left without a caller |
+| `judges.test.ts`: 18 cases | AGENTS.md, Proof |
+
+### Which wrong programs fail (pinned in `judges.test.ts`)
+
+Controls that pass: the list row drawn answered plus the page's closed card saying it was answered (the review's right
+program); the page alone saying so; neither; on the pixels, the cut row drawn answered beside the page's receipt line.
+
+Wrong programs that fail: a still-open list row (its kind word), even beside a page that says answered, on the tree and on
+the pixels; two list rows drawn answered; the card still offering its options on the page; the page showing the question
+with no word of the answer; a row reading `Unanswered`, `Not answered`, `Not  Answered`, `not yet Answered`,
+`isn't Answered`, `to be Answered` or `never Answered`; a list line reading `Not answered`; two list lines; a tree with no
+session row (can't tell list from page).
+
+### Still not settled
+
+1. **The row must go eventually** (sixth, item 1): still judged only by #1461's own AC.
+2. **The list's edge.** Read from the session rows' frames; a program whose session rows don't span the list, or whose
+   page starts left of their right edge, could misplace a node. OCR merging a list line with a page line on the same
+   baseline would put the merged line by its centre; Vision reads the two regions apart in the third redraft's captures.
+3. **What the page says.** Only that something near the question reads `Answered`. #1807's other receipts ("Starts in
+   8 s", "Allowed · ran") are for holds and approvals, not AC2's pick-one ask.
+4. **The menu bar's reading.** Not revisited.
+
+### Run here (Linux, no Mac)
+
+`npx vitest run --root tests/acceptance/1172 judges`: 1 file, 46 passed (28 from before the sixth, 18 new). `npx tsc -p
+tests/acceptance/1172/tsconfig.json --noEmit`: clean. `shell.test.ts` AC2 was not run (it needs the Mac).
+
+## Eighth redraft (2026-11-25)
+
+Redrafted blind on 78c912ece from the same sources; no implementation code and no PR was read.
+
+### The dispute
+
+A review of the seventh: `ANSWERED_WORD` matched only a capital `Answered`. The capital in the Mac capture is the page's
+receipt sentence (`Answered "Blue header" at 12:12 …`); the disputing party says the kept list row's state word is lower
+case, `answered`. A right row would read as still open, the timing loop would never stop, and AC2 would fail.
+
+### Ruling
+
+Upheld. #1461, the governing source, says only "drawn answered" and gives no case; #1807, which spells "Answered", is
+open and names the receipt, not a fixed spelling. So the case was the seventh's own addition, unsupported.
+
+### What changed
+
+| Change | Source |
+|---|---|
+| `ANSWERED_WORD` matches `answered` in any case; the negation guard stays (`not`, `n't`, `yet`, `be`, `never`, then any spaces, any case), and `unanswered` still has no word start | #1461 "drawn answered" |
+| `judges.test.ts`: a control, a list row whose state word is a lower-case `answered` beside the page's closed card, on the tree and on the pixels; the wrong-word cases add `unanswered`, `not yet answered`, `isn't answered`, `to be answered` in lower case; the pixel case also fails `unanswered` and `not yet answered` | AGENTS.md, Proof |
+
+Every other expectation and wrong program of the seventh stands.
+
+### Still not settled
+
+1. As the seventh, items 1 to 4.
+2. **A flat row.** If a row's question and its state word were sibling nodes directly under the list, the climb for the
+   word stops at the list (it holds other asks' questions) and the row reads as open. The probe's rows are `AXButton`s
+   holding both (fourth redraft), and no source lays a row out flat, so this was left.
+
+### Run here (Linux, no Mac)
+
+`npx vitest run --root tests/acceptance/1172 judges`: 1 file, 51 passed (46 before, 5 new). `npx tsc -p tests/acceptance/1172/tsconfig.json
+--noEmit`: clean. `shell.test.ts` AC2 was not run (it needs the Mac).
+
+## Ninth redraft (2026-11-25)
+
+Redrafted blind on fa5de8990 from #1172, the design, README, this folder and the text of #3282, #1808 and #1461; no
+implementation code and no PR was read.
+
+### The dispute
+
+Mac run R4b at fa5de8990 (main 02ee0dff4, which holds #3282's fix): AC1's main test timed out at 480 s, its mutant failed
+the same way, and AC2's precondition failed: `the window's pixels lack ask:…'s row with its question, whole or cut by an
+ellipsis after its first 10 letters and digits: they read ["Needs you","... How it looks tomorrow 16:49","• ... How it
+looks tomorrow 16:49",…]`. The rows are drawn; each title is cut to its ellipsis because the row now keeps its time.
+
+### Ruling: a row's title may be cut to nothing; the pixels count rows, the tree names them
+
+- #1808: "A title that doesn't fit its slot ends in an ellipsis at a whole character … The whole title is the row's
+  accessible name"; its 12-character floor ("At a 260-wide list every state word leaves at least 12 characters of title").
+- #3282, owner decision of 2026-11-19: "An ask row's time beats #1808's 12-character title floor; session rows keep 12";
+  its review: "Today's words leave about 50 px at 260". The R4b capture shows that leaves no title character at all.
+- So the third redraft's floor (`ROW_START`, 10 letters and digits, its "Still not settled 1") demands what the owner gave
+  away. And the fixture's three questions all start "Which", so a few characters couldn't tell asks apart anyway.
+
+Which ask a row belongs to is the tree's job (README item 2: each row one node whose name holds its whole question;
+#1808: the whole title is the accessible name), as AC1 to AC5 already judge it there. The pixels prove the rows are drawn,
+by count, in the list's region.
+
+### What changed
+
+| Change | Source |
+|---|---|
+| `askRowLine`: a line draws an ask row when it holds a fixture ask's whole question, or an ellipsis whose text before it (letters and digits only, so a mark is ignored) starts a question, any length including none, followed by some letter or digit (the right slots) | #1808's ellipsis; #3282; the design's row: "mark, title, then state word and time at the right edge" |
+| `listEdgePx`, `askRowLines`: only lines left of the list's edge count (the seventh's `listEdge` mapped into the capture by the window's frame); a window with no session row, the popped view, is all list | Design's two regions; #1461 "the list on the left"; the page's card draws its question whole and must not count |
+| `rowLineFailures`: exactly one open row line per wanted ask (zero lines fail), and at most one line reading answered per answered ask | AC1 "Needs you with 3 rows", AC2 "read 2", #1461's kept row; invariant 2 |
+| `shellFailuresDrawn`: `shellFailuresCard`'s checks with the seventh's tree judge (`askRowFailuresKept`) and this pixel count. `shell.test.ts`: AC1's main, spike and proof tests and AC2 before and after the answer all call it | As above |
+| `popout.test.ts`: `Seen.drawn` (per-ask `drawsRow`) becomes `rowLines`; `lacks` wants one row line per ask in the list's region (main window at launch and before the press; the whole popped window); after the pop-out the main window's list must draw none. The per-ask `starts` and card-share checks stay | As above; the owner decision of 2026-11-21 (the card stays on the page, outside the list) |
+| The seventh's `answeredListLineFailures` and `shellFailuresKept` are removed (no caller); their judge cases now read through `rowLineFailures`. Against main, `helpers.ts` still only adds lines; `drawsRow`, `ROW_START` and the older judges stay for other readers | AGENTS.md |
+| `judges.test.ts`: 19 new cases (51 before, 70 now), the R4b lines as controls | AGENTS.md, Proof |
+
+### Which wrong programs fail
+
+On the pixels: nothing seen; a row missing from the list (2 of 3); handle rows (`ask:01MC… How it looks`: not a
+question's start); a kind or time with no ellipsis; an ellipsis with nothing after it; a title clipped with no ellipsis;
+an ellipsis after text that isn't a question's start; rows drawn only right of the list's edge; AC2's answered row still
+drawn open (3 open, not 2), or reading "Not answered", "unanswered", "not yet answered"; two answered lines; AC5's main
+window still drawing a row in its list.
+
+Now resting on the tree alone: a row drawing another ask's question, or the right row under the wrong ask (the pixels
+can't tell "Which…" rows apart); which ask an answered line belongs to.
+
+### Still not settled
+
+1. **OCR splitting a row.** A row read as two lines (`…` alone, then `How it looks tomorrow 16:49`) counts as none and
+   fails. R4b read each row as one line.
+2. **The list's edge** (seventh, item 2), and the popped window counted whole: a popped view that also drew a card would
+   count its question line.
+3. **AC1's 480 s timeout.** The judge's `settled` gives up after 12 s, so the timeout isn't the pixel reading's; not
+   diagnosed here.
+4. Earlier items: the row leaving eventually (#1461), the page's wording, the menu bar.
+
+### Run here (Linux, no Mac)
+
+`npx vitest run --root tests/acceptance/1172 judges`: 1 file, 70 passed. `npx tsc -p tests/acceptance/1172/tsconfig.json
+--noEmit`: clean. `shell.test.ts` and `popout.test.ts` were not run (they need the Mac).
+
+### Hardening (2026-11-25, on b7983949a)
+
+A review found nothing blocking and asked for one hardening:
+
+- **A mark OCR'd as a letter.** OCR may read a row's mark as `o`, `e`, `0`, `·` or `°`. `askRowLine` now drops one leading
+  token of a single character followed by a space before checking that the text before the ellipsis starts a question, so
+  `o ... How it looks tomorrow 16:49` and `· … How it looks` count. A cut session row, `Release no… Working`, still
+  doesn't (its first token is a word, and `releaseno` starts no question). Judge cases pin both, and the R4b reading with
+  each mark read as a letter (76 judges pass).
+- **Not done: an OCR-split row.** Joining a lone `…` line with the next line at the same left edge would need the kind
+  words, which no source lists for the fixture, and line adjacency OCR doesn't promise. Left as item 1 above.
+- **Still not settled:** a `… 2 more` line (a fold or overflow) would count as a row: no source names such a line, so
+  there is nothing to exclude it by. Beside all its rows it fails by count (a false failure); in place of a missing
+  row it would make the count on the pixels, and only the tree's row count (one node per wanted ask) would catch it. Multi-character mark junk such as `0O0 D` before an ellipsis isn't dropped and fails the row.
+- **`shellFailuresCard`** (fourth redraft) now has no caller in this folder; it stays because `helpers.ts` changes by added
+  lines only (other issues' tests read it). The same holds for `shellFailures`, `shellFailuresCut`, `drawsRow` and
+  `ROW_START` where unused here.
+
+## Tenth redraft (2026-11-26)
+
+Redrafted blind at ae5550efd from #1172 and its comments, the design, AGENTS.md and this folder, with the Mac runner's
+OCR experiment (`target/mac/1172-pack-check/ae5550efd/R5e-ocr/`, text results only); no implementation code was read.
+
+### The dispute
+
+Mac run R5e (3 runs at ae5550efd, AC2, uncovered window, a right program): `shell-3.png`, the precondition, OCRs 17 to 18
+lines and passes; `shell-2.png`, after the answer, OCRs 0 lines in all 3 runs, and AC2 failed on "… all read []". The
+runner viewed `shell-2.png`: it draws `Needs you 2`, two open rows `… How it looks tomorrow 14:29` and a banner across the
+top, the answered ask's question then `Answered "Blue header" at 14:30 from deep inbox. Nothing is left to answer.` The
+experiment, shell-2 / shell-3: the probe's `.accurate` request 0 / 17; `.fast` 12 / 17 (but `.fast` reads rows as
+`How it looks`, dropping the ellipsis); en-US only, another loader, revisions 1 to 3, 1512 wide: 0 on shell-2; the left
+520 px alone, `.accurate`: 10 / 10, with `Needs you`, `2` and the rows; the top 140 px cut off: 10 lines with both rows;
+`perform()` threw nothing. So Vision's `.accurate` silently drops the whole frame when the long banner shares a band with
+the clipped header, and the test took that empty reading as "no rows drawn".
+
+### Ruling
+
+The ninth redraft counted from an OCR reading it never checked was a reading. Invariant 2: "Nothing missing or unrun
+passes", so an empty reading is missing evidence, never 0 rows, and a right program must not fail on it either. The count
+already comes from the list's region only (ninth redraft), so reading that region alone is no new assumption, and R5e
+shows it reads the frame Vision dropped.
+
+### What changed
+
+| Change | Source |
+|---|---|
+| `probe.swift`: `ocr-in <png> <accurate\|fast> <x> <y> <w> <h>`, the same request on that rectangle alone, boxes in the whole picture's pixels. `ocr` is unchanged | R5e: the left 520 px read 10 / 10 |
+| `shellFailuresRead` (`shellFailuresDrawn`'s checks): the list's rows are counted from `ocrIn(.accurate)` of the list's region, `[0, 0, listEdgePx, height]`, so a row anywhere in the list, top to bottom, is read; `.fast` is never used to count (it drops ellipses). The spike and the window's count text come from the whole capture, `.accurate`, then `.fast` if that reads nothing | R5e; the ninth's list region |
+| `unreadable`: a region OCR read no line from that isn't one blank fill (`blankIn`, every other pixel within 12 of the first) gives an `UNREADABLE:` failure, never a count; a blank fill reads as nothing drawn and fails by count as before | Invariant 2 |
+| `unlessUnreadable` in `shell.test.ts` (AC1's tests, AC2 before and after): when every failure is `UNREADABLE`, the run is INCONCLUSIVE with the reasons; any other failure beside it still fails | Invariant 2: INCONCLUSIVE, never PASS |
+| `judges.test.ts`: 9 cases (85 pass) | AGENTS.md, Proof |
+
+### How the wrong programs still fail
+
+- **Twin A** (the answered ask still drawn open): the tree fails it (`answeredFailures`: "still reads as open in the
+  list") whatever the pixels read, so it is a FAIL, never INCONCLUSIVE; and where the list region reads, it counts 3 open
+  rows, not 2.
+- **The blank-main twin:** no `Tasks` node and no session row, so the tree fails and the list can't be found on the
+  pixels: a FAIL. A list region that is one blank fill reads as no rows and fails by count, not as unreadable.
+- Every earlier wrong program is judged by the same counts and tree.
+
+### Still not settled
+
+1. **`probe ocr-in` is unrun.** It needs the Mac (Vision, swiftc); typechecked only on the TypeScript side.
+2. **AC5.** `popout.test.ts` still reads whole captures with `ocr`; a banner beside its list could drop a frame there too.
+   Not disputed, so not changed.
+3. **`blankIn`'s step.** Every other pixel; a 1 px stroke on odd pixels only would read as blank.
+4. **The whole-capture read.** If both levels read nothing while the list region reads, the run is INCONCLUSIVE, since
+   the spike and count text then went unread.
+5. Earlier items stand.
+
+### Run here (Linux, no Mac)
+
+`npx vitest run --root tests/acceptance/1172 judges`: 1 file, 85 passed. `npx tsc -p tests/acceptance/1172/tsconfig.json
+--noEmit`: clean. `shell.test.ts` and `probe ocr-in` were not run (they need the Mac).
+
+## Eleventh redraft (2026-11-27)
+
+Redrafted blind at e2fbca67e from #1172 and its comments, the design, AGENTS.md, GLOSSARY.md and this folder, with the Mac
+runner's text records of R7t (`target/mac/1172-pack-check/e2fbca67e/R7t/`: `ac1-2.txt` to `ac1-4.txt`, `exits.txt`,
+`pics/*/index.txt`) and the coordinator's timings from R7; no implementation code was read and no picture was viewed.
+
+### The dispute
+
+1. **A dropped ellipsis.** R7t, a right program at e2fbca67e: AC1 passed in two clean runs (ac1-2, ac1-4) and failed in
+   ac1-3: `the list's pixels draw 2 open ask row(s), not 3`, its list region reading `How it looks tomorrow 19:53` for one
+   row and `... How it looks tomorrow 19:53` for the other two. The same capture (`dh16-NphLG7-shell-3.png`) read offline:
+   whole `.accurate`, all three rows `• ... How it looks tomorrow 19:53`; `.accurate` on the left 520 px, all three with
+   the ellipsis; `.fast`, all three with none. Whether a row counts hung on Vision keeping one small glyph, which varies with
+   the crop.
+2. **Builds inside the timed checks.** In a fresh checkout the first test that needs a binary built it (`appBinary`'s
+   cargo, `supportBinaries`, the probe's `swiftc`) inside its own 8-minute timeout. At load about 60: R7 ac1-1's first
+   window came 18 min after vitest started, R7t ac1-1's 12 min (AC1 timed out at 480 s; the spike test took 310 s, mostly
+   its plant's build), and R7t's twin A clone timed out at 480 s with no window ever drawn. With builds cached, test 1 took
+   about 43 s. A slow build read as the program's FAIL, and the twin's "fail" was never the criterion's judgement.
+
+### Ruling
+
+1. Upheld. A row OCR read with its ellipsis was drawn: an ellipsis no program drew is not something `.accurate` invents,
+   while a drawn one is something it drops (ac1-3, and `.fast` always). So the count is the greatest number of open rows any
+   `.accurate` reading of the capture holds, the list region's and the whole window's (the tenth redraft already makes both
+   readings; R5e showed the whole one can drop a frame the region one keeps, R7t the reverse for one glyph). The ellipsis
+   stays required for a line to count: the design's row is "mark, title, then state word and time at the right edge", and
+   #1808 cuts a title that doesn't fit with an ellipsis, so a row of kind and time alone is still a wrong program (ninth
+   redraft). Counting by the row's slots without the ellipsis was rejected for that reason: it would pass that program.
+   Where no reading holds enough rows but one reading's lines that read exactly an open row's right slots with no ellipsis
+   (bare lines) make up the shortfall, the reading can't tell a dropped glyph from a row drawn without one: `UNREADABLE`,
+   so INCONCLUSIVE, never PASS. Too many rows fails in any reading, counting bare lines too.
+2. Upheld. Invariant 2: a build that didn't finish judged nothing. Builds now run before the timed checks, in `shell.test.ts`'s
+   `beforeAll`, under their own bound; a build that fails or isn't done by then is `BLOCKED`, never FAIL or PASS. The bound,
+   45 min, is the slowest observed first build (18 min) with room for load, inside AGENTS.md's hour for testing a change.
+
+### What changed
+
+| Change | Source |
+|---|---|
+| `rowReading`: one reading's open rows, rows reading answered, and bare lines (left of the list's edge, not a row, and reading exactly an open row's text after its ellipsis, a one-character mark token dropped) | R7t ac1-3; the design's row; #1808 |
+| `rowReadingsFailures`: `rowLineFailures` over several readings. Open rows: the greatest count; more than wanted in any reading, or rows and bare lines together more than wanted, fails; fewer fails unless one reading's bare lines make up the shortfall exactly, which is `UNREADABLE`; answered rows: the greatest count, more than `kept` fails | Above; invariant 2 |
+| `listLines`: a reading's lines whose box ends left of the list's edge | Review of 77597bdc5: Vision may merge a list line with the page's whole question into one box whose centre is left of the edge |
+| `shellFailuresBest`: `shellFailuresRead`'s checks, the rows counted by `rowReadingsFailures` over the list region's `.accurate` reading and the whole window's `.accurate` reading cut to `listLines`, each used where it read a line left of the list's edge; neither, and the region not blank, is `UNREADABLE`. `.fast` still never counts. `shell.test.ts`'s AC1 and AC2 calls use it | Above; tenth redraft |
+| `within(work, ms, what)`: `work`, or `BLOCKED` when it fails or runs past `ms`; a `BLOCKED` inside it is said once | Invariant 2 |
+| `within`'s timer carries `// deadline: <why>`: it only bounds the build, so it is no fixed wait and the file stays at its ceiling of 5 | `scripts/wait-ratchet.mjs` (the lint lane at 9395c78a9: 6 over 5) |
+| `BUILD_MS` (45 min) and `prebuilt(plants)`, under `within`: the probe built and its permissions checked first, and only then the plain app, the plants and the support binaries, so no cargo starts where the probe is `BLOCKED` (another OS, or a missing permission on macOS). `shell.test.ts`: `beforeAll(() => prebuilt(['plant-spike-window']), BUILD_MS + 1 min)` | R7, R7t timings |
+| README, Builds: one sentence on the `beforeAll` | As above |
+| `judges.test.ts`: 17 cases (102 pass). Against main, `helpers.ts` changes by added lines only; `shellFailuresRead` and `rowLineFailures` stay for other readers | AGENTS.md |
+
+### How the wrong programs still fail
+
+- **Twin A** (AC2, the answered ask drawn open): the tree fails it (`answeredFailures`) whatever the pixels read; on the
+  pixels any reading with 3 open rows fails, and a reading with 2 open rows and one bare line now fails too (3, not 2,
+  "1 of them with no ellipsis"), where the tenth redraft would have counted 2.
+- **The planted spike window:** named from the tree and the whole reading as before, and its plant is now built in the
+  `beforeAll`, so its test judges a window, not a build.
+- **The blank-main twin:** no `Tasks` node and no session row, so the tree fails and no edge is found: a FAIL. A blank list
+  region with no reading counts 0 rows and fails.
+- **The ninth redraft's wrong programs:** a row missing (2 of 3 in every reading, no bare line), handle rows, rows of kind
+  and time with no ellipsis (0 open rows, so no bare line can exist), rows only right of the edge, two answered rows, and an
+  extra titleless row beside the three all fail, pinned in `judges.test.ts`. A page line reading a row's kind and time right
+  of the edge is not a bare line. A 2-of-3 program whose whole reading merged a list line with the page's whole question
+  (one box from the list to the page, centre left of the edge) still fails: the whole reading counts only lines ending left
+  of the edge.
+- **A build that never finishes** (the twin's clone): `BLOCKED`, said as such; the twin then proves nothing until rerun with
+  its build done, which the runner must count as unrun, not as the twin failing.
+
+### Still not settled
+
+1. **A program that draws one row without its ellipsis and the rest with it, every time,** reads INCONCLUSIVE, never FAIL,
+   since one reading can't tell that from a dropped glyph. If every reading of every retry within `settled` drops the same
+   glyph on a right program, that is INCONCLUSIVE too.
+2. **A build that outlives `BUILD_MS`** is left running (its `execFile` child isn't stopped by the bound); it finishes or
+   ends with the run. Other files in this folder still build inside their first test; only AC1 and AC2 were disputed.
+3. **`BLOCKED` in a `beforeAll`** fails the file's tests with that message and exits 1; the runner reads the `BLOCKED:` text,
+   as it already must for the permission checks.
+4. Earlier items stand (tenth, 1 to 4).
+
+### Run here (Linux, no Mac)
+
+`npx vitest run --root tests/acceptance/1172 judges`: 1 file, 102 passed (85 before, 17 new); one new judge first failed on
+`within` wrapping its own timeout as "failed", fixed in `within`. Amended after a review of 77597bdc5: `listLines` for
+the whole reading, and `prebuilt` builds the probe before starting cargo. `npx tsc -p tests/acceptance/1172/tsconfig.json
+--noEmit`: clean. `shell.test.ts`, `prebuilt` and `shellFailuresBest` were not run (they need the Mac). `packages/evidence/dist/patterns.json`
+was built in this worktree (`node build-patterns.mjs`, ignored by git) so the judges could load.

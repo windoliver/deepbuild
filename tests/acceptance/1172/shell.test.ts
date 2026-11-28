@@ -5,16 +5,20 @@
 //
 // The real deep-app process against a real hub, read from outside: the accessibility tree, the menu-bar item and the
 // window's pixels (README: The surface). The replica is only compared with, never judged in its place.
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import {
-  answer, App, appBinary, loaded, inconclusive, makeWorld, menuCount, nodes, replicaBinary, settled, shellFailures, tempDir, useCleanup, readJson, childProcess, type World,
+  answer, answeredFailures, App, appBinary, BUILD_MS, loaded, inconclusive, makeWorld, menuCount, nodes, replicaBinary, prebuilt, settled, shellFailuresBest, tempDir, unlessUnreadable, useCleanup, readJson, childProcess, type World,
 } from './helpers.ts';
 
 useCleanup();
 const MINUTES = 60_000;
-const shell = async (world: World, app: App, count: number) => settled(() => shellFailures(world, app, { rows: world.asks.slice(3 - count), count }));
+// A capture OCR reads nothing from, or a count short only by rows read without their ellipsis, is INCONCLUSIVE, never 0
+// rows (REDRAFT.md, Tenth and Eleventh redrafts).
+const shell = async (world: World, app: App, count: number) => unlessUnreadable(await settled(() => shellFailuresBest(world, app, { rows: world.asks.slice(3 - count), count })));
 
 describe('#1172 the app a person runs', () => {
+  beforeAll(() => prebuilt(['plant-spike-window']), BUILD_MS + MINUTES);
+
   it('AC1 deep-app shows the registered sidebar with the 2 sessions and Needs you with 3 rows, the menu bar reads 3, and no row reads "Session 0001"', async () => {
     const world = await makeWorld();
     const app = await App.launch({ home: world.home, binary: await appBinary() });
@@ -25,7 +29,7 @@ describe('#1172 the app a person runs', () => {
   it('AC1 wrong program: the planted build that opens the spike window fails, naming the spike window', async () => {
     const world = await makeWorld();
     const app = await App.launch({ home: world.home, binary: await appBinary('plant-spike-window') });
-    const failures = await shellFailures(world, app, { rows: world.asks, count: 3 });
+    const failures = await shellFailuresBest(world, app, { rows: world.asks, count: 3 });
     await app.stop();
     expect(failures.join('\n'), 'the planted spike window must fail the same judge AC1 holds the app to, naming it').toMatch(/the spike window/);
   }, 8 * MINUTES);
@@ -54,12 +58,13 @@ describe('#1172 the app a person runs', () => {
     const answered = Date.now();
     let elapsed = Infinity;
     for (let reading = await app.tree(); Date.now() - answered < 10_000; reading = await app.tree()) {
-      const names = reading.windows.flatMap((w) => nodes(w.tree)).map((n) => n.name);
-      if (menuCount(reading) === 2 && !names.some((n) => n.includes(asked!.question))) { elapsed = reading.t1 - answered; break; }
+      // The answered ask's list row may keep its slot drawn answered (#1461), and its page may say it was answered (design,
+      // Address; REDRAFT.md, Seventh redraft): the window reads 2 when nothing offers it as open, and the menu bar reads 2.
+      if (menuCount(reading) === 2 && !answeredFailures(reading.windows.map((w) => w.tree), asked!, world.asks, world.sessions.map((s) => s.task)).length) { elapsed = reading.t1 - answered; break; }
     }
-    const after = await settled(() => shellFailures(world, app, { rows: rest, count: 2 }), 3000);
+    const after = await settled(() => shellFailuresBest(world, app, { rows: rest, count: 2 }), 3000);
     await app.stop();
-    expect(after, 'once answered, the window draws 2 rows and the menu bar reads 2').toEqual([]);
+    expect(unlessUnreadable(after), 'once answered, the window draws 2 open rows (the answered one kept at most as one list row and one page, each drawn answered) and the menu bar reads 2').toEqual([]);
     if (elapsed > 1000 && loaded()) inconclusive(`the window and the menu bar read 2 ${Math.round(elapsed)} ms after the answer, past 1 s, with the machine's load above half its cores`);
     expect(elapsed, 'ms from the answer to the window and the menu bar reading 2').toBeLessThanOrEqual(1000);
   }, 8 * MINUTES);

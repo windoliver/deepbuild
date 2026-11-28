@@ -485,3 +485,470 @@ export async function captureMenu(tree: Tree, path: string): Promise<void> {
   const box = tree.menuFrames[0] ?? blocked('the app has no menu-bar item to capture');
   await run('/usr/sbin/screencapture', ['-x', `-R${box.map(Math.round).join(',')}`, path]);
 }
+
+// ---- A list row on the pixels (REDRAFT.md, Third redraft). Added beside the judges above, which stay as they were:
+// other issues' tests read this file, so a changed reading lands only as a new one.
+
+/** Letters and digits of a question's start that a list row cut short must still draw, and whose drawing counts as the row drawn. */
+export const ROW_START = 10;
+/**
+ * A list row draws its ask's question: one pixel line holds the whole question, or its start, at least ROW_START letters
+ * and digits, cut there by an ellipsis. The design's row is one line of fixed slots (mark, title, then state word and time
+ * at the right edge), and "text cut from the screen stays in the accessible name", so a title past the row's width ends in
+ * an ellipsis and only the tree holds it whole.
+ */
+export function drawsRow(lines: readonly Line[], question: string): boolean {
+  if (reads(lines, question)) return true;
+  const q = squash(question);
+  return lines.some((l) => [...l.text.matchAll(/…|\.{2,}/g)].some((m) => {
+    const before = squash(l.text.slice(0, m.index));
+    for (let k = q.length - 1; k >= ROW_START; k--) if (before.endsWith(q.slice(0, k))) return true;
+    return false;
+  }));
+}
+
+/**
+ * `shellFailures`, with each Needs you row judged on the pixels by `drawsRow` instead of its whole question on one line:
+ * a wanted row is drawn whole or cut by an ellipsis, an unwanted one neither. Everything else is `shellFailures`' own.
+ */
+export async function shellFailuresCut(world: World, app: App, want: { rows: readonly Ask[]; count: number }): Promise<string[]> {
+  const out: string[] = [];
+  const tree = await app.tree();
+  const main = tree.windows.flatMap((w) => nodes(w.tree));
+  const named = main.filter((n) => n.name);
+  const lines = await ocr(await app.capture(`shell-${want.count}`));
+  const spike = [...named.map((n) => n.name), ...lines.map((l) => l.text)].find((text) => /\bSession \d{4}\b|waiting on you/.test(text));
+  if (spike) out.push(`the window is the spike window: it draws "${spike}"`);
+  if (!named.some((n) => n.name === 'Tasks')) out.push(`the window has no registered sidebar: no node is named "Tasks"; its names are ${JSON.stringify(named.map((n) => n.name).slice(0, 20))}`);
+  for (const s of world.sessions) {
+    const rows = named.filter((n) => n.role === 'AXButton' && n.name.includes(s.task));
+    if (rows.length !== 1) out.push(`the sidebar should show session "${s.task}" once, as a row; it has ${rows.length}`);
+  }
+  if (!named.some((n) => n.name === 'Needs you')) out.push('the window has no Needs you view: no node is named "Needs you"');
+  for (const ask of world.asks) {
+    const rows = tree.windows.flatMap((w) => outermost(w.tree, ask.question));
+    const wanted = want.rows.includes(ask) ? 1 : 0;
+    if (rows.length !== wanted) out.push(`Needs you should show ${wanted} row for ${ask.handle} ("${ask.question}"); it has ${rows.length}`);
+    if (drawsRow(lines, ask.question) !== (wanted === 1)) out.push(`the window's pixels ${wanted ? 'lack' : 'still draw'} ${ask.handle}'s row with its question, whole or cut by an ellipsis after its first ${ROW_START} letters and digits: they read ${sees(lines)}`);
+  }
+  const counted = lines.flatMap((l) => [...l.text.matchAll(/\b(\d+)\s+asks?\s+needs?\s+you\b/gi)]).map((m) => Number(m[1]));
+  for (const n of counted) if (n !== want.count) out.push(`the window's count reads ${n}, not ${want.count}`);
+  const menu = menuCount(tree);
+  if (menu !== want.count) out.push(`the menu bar reads ${JSON.stringify(tree.menu)}, not ${want.count}`);
+  return out;
+}
+
+// ---- A Needs you row told apart from an open card (REDRAFT.md, Fourth redraft). Added beside the judges above, which
+// stay as they were: other issues' tests read this file, so a changed reading lands only as a new one.
+
+const holdsText = (node: Node, text: string): boolean => nodes(node).some((n) => n.name.includes(text));
+/** Both the ask's options are `AXButton`s at or under `node`: a presented card, as AC3's judge and popout.test.ts read one. */
+const holdsOptions = (node: Node, ask: Ask): boolean => [ask.option.label, ask.other].every((label) => nodes(node).some((n) => n.role === 'AXButton' && n.name.includes(label)));
+
+/**
+ * The outermost nodes holding the ask's question, split into its card's and its rows. A node is the card's when the
+ * nearest node at or above it that holds both the ask's options as `AXButton`s holds no other ask's question: the card,
+ * apart from the list. Every other such node is a row.
+ */
+export function askNodes(root: Node, ask: Ask, asks: readonly Ask[]): { rows: Node[]; card: Node[] } {
+  const out = { rows: [] as Node[], card: [] as Node[] };
+  const walk = (node: Node, up: readonly Node[]): void => {
+    if (node.name.includes(ask.question)) {
+      const box = [...up, node].reverse().find((a) => holdsOptions(a, ask));
+      const card = box !== undefined && !asks.some((o) => o !== ask && holdsText(box, o.question));
+      (card ? out.card : out.rows).push(node);
+      return;
+    }
+    for (const c of node.children) walk(c, [...up, node]);
+  };
+  walk(root, []);
+  return out;
+}
+
+/**
+ * Each failure of Needs you's rows on the tree, over every window's root: a wanted ask has exactly one row outside its
+ * card, and while its options are on the tree a node holding its question sits in that card, so the two are told
+ * apart; an unwanted ask (AC2's answered one) has no row and no card.
+ */
+export function askRowFailures(windows: readonly Node[], asks: readonly Ask[], wanted: readonly Ask[]): string[] {
+  const out: string[] = [];
+  for (const ask of asks) {
+    const split = windows.map((w) => askNodes(w, ask, asks));
+    const rows = split.flatMap((s) => s.rows).length;
+    const card = split.flatMap((s) => s.card).length;
+    if (wanted.includes(ask)) {
+      if (rows !== 1) out.push(`Needs you should show 1 row for ${ask.handle} ("${ask.question}") outside its card; it has ${rows}`);
+      else if (!card && windows.some((w) => holdsOptions(w, ask))) out.push(`${ask.handle}'s options are on the tree, but no node holding its question sits in a card apart from the list, so its row can't be told from its card`);
+    } else {
+      if (rows) out.push(`Needs you should show 0 rows for ${ask.handle} ("${ask.question}"); it has ${rows}`);
+      if (card) out.push(`the window still shows ${ask.handle}'s card ("${ask.question}") after it left Needs you`);
+    }
+  }
+  return out;
+}
+
+/**
+ * `shellFailuresCut`, with each ask's rows on the tree judged by `askRowFailures` instead of every outermost node
+ * holding its question: an open card's question isn't a row. Everything else is `shellFailuresCut`'s own.
+ */
+export async function shellFailuresCard(world: World, app: App, want: { rows: readonly Ask[]; count: number }): Promise<string[]> {
+  const out: string[] = [];
+  const tree = await app.tree();
+  const main = tree.windows.flatMap((w) => nodes(w.tree));
+  const named = main.filter((n) => n.name);
+  const lines = await ocr(await app.capture(`shell-${want.count}`));
+  const spike = [...named.map((n) => n.name), ...lines.map((l) => l.text)].find((text) => /\bSession \d{4}\b|waiting on you/.test(text));
+  if (spike) out.push(`the window is the spike window: it draws "${spike}"`);
+  if (!named.some((n) => n.name === 'Tasks')) out.push(`the window has no registered sidebar: no node is named "Tasks"; its names are ${JSON.stringify(named.map((n) => n.name).slice(0, 20))}`);
+  for (const s of world.sessions) {
+    const rows = named.filter((n) => n.role === 'AXButton' && n.name.includes(s.task));
+    if (rows.length !== 1) out.push(`the sidebar should show session "${s.task}" once, as a row; it has ${rows.length}`);
+  }
+  if (!named.some((n) => n.name === 'Needs you')) out.push('the window has no Needs you view: no node is named "Needs you"');
+  out.push(...askRowFailures(tree.windows.map((w) => w.tree), world.asks, want.rows));
+  for (const ask of world.asks) {
+    const wanted = want.rows.includes(ask);
+    if (drawsRow(lines, ask.question) !== wanted) out.push(`the window's pixels ${wanted ? 'lack' : 'still draw'} ${ask.handle}'s row with its question, whole or cut by an ellipsis after its first ${ROW_START} letters and digits: they read ${sees(lines)}`);
+  }
+  const counted = lines.flatMap((l) => [...l.text.matchAll(/\b(\d+)\s+asks?\s+needs?\s+you\b/gi)]).map((m) => Number(m[1]));
+  for (const n of counted) if (n !== want.count) out.push(`the window's count reads ${n}, not ${want.count}`);
+  const menu = menuCount(tree);
+  if (menu !== want.count) out.push(`the menu bar reads ${JSON.stringify(tree.menu)}, not ${want.count}`);
+  return out;
+}
+
+// ---- An answered ask: its list row kept drawn answered, and its page saying what became of it (REDRAFT.md, Seventh
+// redraft). Added beside the judges above, which stay as they were.
+
+/** The word "answered" in any case (#1461 "drawn answered" gives none), not negated: "Not answered", "not yet answered", "isn't answered", "unanswered" don't read. */
+const ANSWERED_WORD = /(?<!(?:\b(?:not|yet|be|never)|n't)\s+)\banswered\b/i;
+const center = (n: Node): number => (n.frame[0] ?? 0) + (n.frame[2] ?? 0) / 2;
+
+/**
+ * The list's right edge on the tree, in screen points: the right edge of the session rows (README item 2: each an `AXButton`
+ * whose name holds its task's title). The design's window has two regions, the list and the page, and #1461 puts the list
+ * on the left and the page on the right, so a node whose centre is left of this edge is the list's. `null` if no session row.
+ */
+export function listEdge(windows: readonly Node[], tasks: readonly string[]): number | null {
+  const rows = windows.flatMap(nodes).filter((n) => n.role === 'AXButton' && tasks.some((t) => n.name.includes(t)) && n.frame.length === 4);
+  return rows.length ? Math.max(...rows.map((n) => n.frame[0]! + n.frame[2]!)) : null;
+}
+
+/**
+ * Each failure of an answered ask on the tree. #1461: its list row "keeps its slot", "drawn answered". The design's
+ * Address: "an address that no longer resolves says what it was and what became of it", so the page that showed its card
+ * may keep showing the ask, answered. So: at most one node holding its question in the list and at most one on the page,
+ * each reading "Answered" in it or in the nearest nodes above it that hold no other ask's question; no card, and its two
+ * options nowhere on the tree as `AXButton`s (invariant 4).
+ */
+export function answeredFailures(windows: readonly Node[], ask: Ask, asks: readonly Ask[], tasks: readonly string[]): string[] {
+  const edge = listEdge(windows, tasks);
+  if (edge === null) return [`can't tell the list from the page: no session row ${JSON.stringify(tasks)} is on the tree`];
+  const out: string[] = [];
+  const found: { node: Node; answered: boolean }[] = [];
+  const walk = (node: Node, up: readonly Node[]): void => {
+    if (node.name.includes(ask.question)) {
+      const near = [node, ...[...up].reverse()];
+      const stop = near.findIndex((a) => asks.some((o) => o !== ask && holdsText(a, o.question)));
+      found.push({ node, answered: near.slice(0, stop < 0 ? near.length : stop).some((a) => nodes(a).some((n) => ANSWERED_WORD.test(n.name))) });
+      return;
+    }
+    for (const c of node.children) walk(c, [...up, node]);
+  };
+  for (const w of windows) walk(w, []);
+  for (const [where, inList] of [['list', true], ['page', false]] as const) {
+    const here = found.filter((f) => (center(f.node) < edge) === inList);
+    if (here.length > 1) out.push(`answered ${ask.handle} ("${ask.question}") may keep at most 1 node in the ${where}, drawn answered; it has ${here.length}`);
+    for (const f of here) if (!f.answered) out.push(`answered ${ask.handle} ("${ask.question}") still reads as open in the ${where}: nothing at it reads "Answered"; it holds ${JSON.stringify(nodes(f.node).map((n) => n.name).filter(Boolean))}`);
+  }
+  if (windows.some((w) => holdsOptions(w, ask))) out.push(`the window still offers answered ${ask.handle}'s options ("${ask.question}")`);
+  return out;
+}
+
+/** `askRowFailures` for the wanted asks; every other ask (AC2's answered one) is judged by `answeredFailures`. */
+export function askRowFailuresKept(windows: readonly Node[], asks: readonly Ask[], wanted: readonly Ask[], tasks: readonly string[]): string[] {
+  const out: string[] = [];
+  for (const ask of asks) {
+    if (!wanted.includes(ask)) { out.push(...answeredFailures(windows, ask, asks, tasks)); continue; }
+    const split = windows.map((w) => askNodes(w, ask, asks));
+    const rows = split.flatMap((s) => s.rows).length;
+    const card = split.flatMap((s) => s.card).length;
+    if (rows !== 1) out.push(`Needs you should show 1 row for ${ask.handle} ("${ask.question}") outside its card; it has ${rows}`);
+    else if (!card && windows.some((w) => holdsOptions(w, ask))) out.push(`${ask.handle}'s options are on the tree, but no node holding its question sits in a card apart from the list, so its row can't be told from its card`);
+  }
+  return out;
+}
+
+// ---- A Needs you row on the pixels once its time is kept (REDRAFT.md, Ninth redraft). Added beside the judges above,
+// which stay as they were.
+
+/**
+ * One OCR line draws an ask row: it holds a fixture ask's whole question, or an ellipsis that ends a question's start
+ * (any length, none at all included; a mark before it is not a letter or digit) and is followed by the row's right slots
+ * (some letter or digit after it). #1808: "A title that doesn't fit its slot ends in an ellipsis at a whole character";
+ * #3282 (owner, 2026-11-19): "An ask row's time beats #1808's 12-character title floor", leaving "about 50 px at 260",
+ * so a right row may draw no title character at all. Which ask a row is, the tree says (README item 2).
+ */
+export function askRowLine(text: string, asks: readonly Ask[]): boolean {
+  if (asks.some((a) => squash(text).includes(squash(a.question)))) return true;
+  return [...text.matchAll(/…|\.{2,}/g)].some((m) => {
+    // The row's mark may come through OCR as one character ("o", "e", "0", "·", "°"), a token of its own before the title.
+    const before = squash(text.slice(0, m.index).replace(/^\s*\S\s+/, ''));
+    return squash(text.slice(m.index! + m[0].length)).length > 0 && asks.some((a) => squash(a.question).startsWith(before));
+  });
+}
+
+/** The list's right edge in a capture's pixels, from `listEdge` and the window's frame; `null` with no session row. */
+export function listEdgePx(roots: readonly Node[], tasks: readonly string[], frame: readonly number[], pictureWidth: number): number | null {
+  const edge = listEdge(roots, tasks);
+  return edge === null || !frame[2] ? null : (edge - frame[0]!) * pictureWidth / frame[2];
+}
+
+/** The lines left of `edgePx` (every line when `null`: a window that is all list) that draw an ask row (`askRowLine`). */
+export const askRowLines = (lines: readonly Line[], asks: readonly Ask[], edgePx: number | null): Line[] =>
+  lines.filter((l) => (edgePx === null || (l.box[0] ?? 0) + (l.box[2] ?? 0) / 2 < edgePx) && askRowLine(l.text, asks));
+
+/**
+ * The list's ask rows on the pixels, counted: exactly `open` rows that don't read answered (one per wanted ask; none seen
+ * fails), and at most `kept` that read answered (#1461's kept row, one per answered ask).
+ */
+export function rowLineFailures(lines: readonly Line[], asks: readonly Ask[], edgePx: number | null, want: { open: number; kept: number }): string[] {
+  const rows = askRowLines(lines, asks, edgePx);
+  const kept = rows.filter((l) => ANSWERED_WORD.test(l.text));
+  const open = rows.filter((l) => !ANSWERED_WORD.test(l.text));
+  const out: string[] = [];
+  if (open.length !== want.open) out.push(`the list's pixels draw ${open.length} open ask row(s), not ${want.open}: of its lines, these draw a row ${sees(open)}; all read ${sees(lines)}`);
+  if (kept.length > want.kept) out.push(`the list's pixels draw ${kept.length} answered ask row(s), more than ${want.kept}: ${sees(kept)}`);
+  return out;
+}
+
+/**
+ * `shellFailuresCard`, with the tree judged by `askRowFailuresKept` (an answered ask may keep a list row and a page,
+ * each drawn answered) and the rows on the pixels counted by `rowLineFailures` in the list's region instead of each ask's
+ * title read by `drawsRow`. The count and the menu bar are judged as there.
+ */
+export async function shellFailuresDrawn(world: World, app: App, want: { rows: readonly Ask[]; count: number }): Promise<string[]> {
+  const out: string[] = [];
+  const tree = await app.tree();
+  const main = tree.windows.flatMap((w) => nodes(w.tree));
+  const named = main.filter((n) => n.name);
+  const win = await app.mainWindow();
+  const picture = await app.capture(`shell-${want.count}`, win);
+  const lines = await ocr(picture);
+  const spike = [...named.map((n) => n.name), ...lines.map((l) => l.text)].find((text) => /\bSession \d{4}\b|waiting on you/.test(text));
+  if (spike) out.push(`the window is the spike window: it draws "${spike}"`);
+  if (!named.some((n) => n.name === 'Tasks')) out.push(`the window has no registered sidebar: no node is named "Tasks"; its names are ${JSON.stringify(named.map((n) => n.name).slice(0, 20))}`);
+  for (const s of world.sessions) {
+    const rows = named.filter((n) => n.role === 'AXButton' && n.name.includes(s.task));
+    if (rows.length !== 1) out.push(`the sidebar should show session "${s.task}" once, as a row; it has ${rows.length}`);
+  }
+  if (!named.some((n) => n.name === 'Needs you')) out.push('the window has no Needs you view: no node is named "Needs you"');
+  const roots = tree.windows.map((w) => w.tree);
+  const tasks = world.sessions.map((s) => s.task);
+  out.push(...askRowFailuresKept(roots, world.asks, want.rows, tasks));
+  const px = listEdgePx(roots, tasks, win.frame, picture.width);
+  if (px === null) out.push(`can't find the list on the pixels: no session row ${JSON.stringify(tasks)} is on the tree`);
+  else out.push(...rowLineFailures(lines, world.asks, px, { open: want.rows.length, kept: world.asks.length - want.rows.length }));
+  const counted = lines.flatMap((l) => [...l.text.matchAll(/\b(\d+)\s+asks?\s+needs?\s+you\b/gi)]).map((m) => Number(m[1]));
+  for (const n of counted) if (n !== want.count) out.push(`the window's count reads ${n}, not ${want.count}`);
+  const menu = menuCount(tree);
+  if (menu !== want.count) out.push(`the menu bar reads ${JSON.stringify(tree.menu)}, not ${want.count}`);
+  return out;
+}
+
+// ---- A capture OCR reads nothing from is unreadable, never a reading of 0 (REDRAFT.md, Tenth redraft). Added beside the
+// judges above, which stay as they were.
+
+/** The prefix of a failure that says a capture couldn't be read: the run is INCONCLUSIVE on it, never PASS, never 0 rows. */
+export const UNREADABLE = 'UNREADABLE: ';
+/** OCR of one rectangle of the picture alone (`probe ocr-in`), boxes in the whole picture's pixels. */
+export const ocrIn = async (picture: Picture, level: 'accurate' | 'fast', rect: readonly number[]): Promise<Line[]> =>
+  probe('ocr-in', picture.path, level, ...rect.map((v) => String(Math.round(v))));
+
+/** Every other pixel of the rectangle, both ways (dense enough to land on a 2 px stroke), is within 12 of the first: one fill. */
+export function blankIn(picture: Picture, rect: readonly number[]): boolean {
+  const [x0, y0, w, h] = rect.map(Math.floor) as [number, number, number, number];
+  const first = picture.at(x0, y0);
+  for (let y = y0; y < y0 + h; y += 2) for (let x = x0; x < x0 + w; x += 2) if (distance(picture.at(x, y), first) > 12) return false;
+  return true;
+}
+
+/**
+ * Whether a reading is missing evidence: OCR returned no line from a region that isn't one blank fill. Invariant 2: an
+ * empty reading is never a reading of nothing drawn, so it can't count 0 rows; a blank fill can.
+ */
+export const unreadable = (lines: readonly Line[], blank: boolean, where: string): string | null =>
+  lines.length || blank ? null : `${UNREADABLE}OCR read no line from ${where}, which isn't blank, so its pixels can't be judged`;
+
+/**
+ * `shellFailuresDrawn`, with the pixels read two ways. The list's rows are counted from OCR of the list's region alone
+ * (`ocrIn`, `.accurate`): R5e showed Vision drop a whole correct frame when a long line spans the page beside the list,
+ * and read the left 520 px of the same frame whole. The window's own text (the spike, the count) is read from the whole
+ * capture, `.accurate` and then `.fast` when that reads nothing. A region read as nothing that isn't blank is `UNREADABLE`,
+ * never 0 rows. Everything else is `shellFailuresDrawn`'s own.
+ */
+export async function shellFailuresRead(world: World, app: App, want: { rows: readonly Ask[]; count: number }): Promise<string[]> {
+  const out: string[] = [];
+  const tree = await app.tree();
+  const main = tree.windows.flatMap((w) => nodes(w.tree));
+  const named = main.filter((n) => n.name);
+  const win = await app.mainWindow();
+  const picture = await app.capture(`shell-${want.count}`, win);
+  const whole = [0, 0, picture.width, picture.height];
+  let lines = await ocr(picture);
+  if (!lines.length) lines = await ocrIn(picture, 'fast', whole);
+  const lost = unreadable(lines, blankIn(picture, whole), 'the whole window');
+  if (lost) out.push(lost);
+  const spike = [...named.map((n) => n.name), ...lines.map((l) => l.text)].find((text) => /\bSession \d{4}\b|waiting on you/.test(text));
+  if (spike) out.push(`the window is the spike window: it draws "${spike}"`);
+  if (!named.some((n) => n.name === 'Tasks')) out.push(`the window has no registered sidebar: no node is named "Tasks"; its names are ${JSON.stringify(named.map((n) => n.name).slice(0, 20))}`);
+  for (const s of world.sessions) {
+    const rows = named.filter((n) => n.role === 'AXButton' && n.name.includes(s.task));
+    if (rows.length !== 1) out.push(`the sidebar should show session "${s.task}" once, as a row; it has ${rows.length}`);
+  }
+  if (!named.some((n) => n.name === 'Needs you')) out.push('the window has no Needs you view: no node is named "Needs you"');
+  const roots = tree.windows.map((w) => w.tree);
+  const tasks = world.sessions.map((s) => s.task);
+  out.push(...askRowFailuresKept(roots, world.asks, want.rows, tasks));
+  const px = listEdgePx(roots, tasks, win.frame, picture.width);
+  if (px === null) out.push(`can't find the list on the pixels: no session row ${JSON.stringify(tasks)} is on the tree`);
+  else {
+    const region = [0, 0, Math.min(Math.ceil(px), picture.width), picture.height];
+    const listed = await ocrIn(picture, 'accurate', region);
+    const gone = unreadable(listed, blankIn(picture, region), `the list's region (${JSON.stringify(region)})`);
+    if (gone) out.push(gone);
+    else out.push(...rowLineFailures(listed, world.asks, px, { open: want.rows.length, kept: world.asks.length - want.rows.length }));
+  }
+  const counted = lines.flatMap((l) => [...l.text.matchAll(/\b(\d+)\s+asks?\s+needs?\s+you\b/gi)]).map((m) => Number(m[1]));
+  for (const n of counted) if (n !== want.count) out.push(`the window's count reads ${n}, not ${want.count}`);
+  const menu = menuCount(tree);
+  if (menu !== want.count) out.push(`the menu bar reads ${JSON.stringify(tree.menu)}, not ${want.count}`);
+  return out;
+}
+
+/** The failures, unless every one is `UNREADABLE`: then the run is INCONCLUSIVE with their reasons, never PASS. */
+export function unlessUnreadable(failures: readonly string[]): readonly string[] {
+  if (failures.length && failures.every((f) => f.startsWith(UNREADABLE))) inconclusive(failures.join('; '));
+  return failures;
+}
+
+// ---- A row whose ellipsis OCR dropped, and builds before the timed checks (REDRAFT.md, Eleventh redraft). Added beside
+// the judges above, which stay as they were.
+
+const leftOf = (l: Line, edgePx: number | null): boolean => edgePx === null || (l.box[0] ?? 0) + (l.box[2] ?? 0) / 2 < edgePx;
+const slotsAfterEllipsis = (text: string): string | null => {
+  const m = [...text.matchAll(/…|\.{2,}/g)].at(-1);
+  return m ? squash(text.slice(m.index! + m[0].length)) || null : null;
+};
+
+/** The lines whose box ends left of `edgePx`: a whole-window reading's list lines, never a list line OCR merged with the page's. */
+export const listLines = (lines: readonly Line[], edgePx: number): Line[] => lines.filter((l) => (l.box[0] ?? 0) + (l.box[2] ?? 0) <= edgePx);
+
+/**
+ * One OCR reading of the list: its open rows (`askRowLine`, not reading answered), its rows reading answered, and its bare
+ * lines, which read exactly an open row's right slots (kind and time) with no ellipsis before them: the row a right program
+ * drew whose small ellipsis glyph OCR dropped (R7t ac1-3), or a row drawn with no title and no ellipsis. A bare line alone
+ * never counts as a row; it only says a count short by it can't be decided.
+ */
+export function rowReading(lines: readonly Line[], asks: readonly Ask[], edgePx: number | null): { open: Line[]; kept: Line[]; bare: Line[] } {
+  const rows = askRowLines(lines, asks, edgePx);
+  const open = rows.filter((l) => !ANSWERED_WORD.test(l.text));
+  const slots = new Set(open.map((l) => slotsAfterEllipsis(l.text)).filter((s) => s !== null));
+  const bare = lines.filter((l) => leftOf(l, edgePx) && !rows.includes(l) && slots.has(squash(l.text.replace(/^\s*\S\s+/, ''))));
+  return { open, kept: rows.filter((l) => ANSWERED_WORD.test(l.text)), bare };
+}
+
+/**
+ * `rowLineFailures` over several readings of the same capture (`.accurate` of the list's region and of the whole window).
+ * A row OCR read with its ellipsis is drawn, so the count is the greatest number of open rows any reading holds. More
+ * than `open` in any reading, or more rows and bare lines together, fails; so does more than `kept` answered rows. Fewer
+ * fails, unless some reading's bare lines make up the shortfall exactly: then whether those lines lost their ellipsis to
+ * OCR or were drawn without one can't be told, and the result is `UNREADABLE` (INCONCLUSIVE), never a pass.
+ */
+export function rowReadingsFailures(readings: readonly (readonly Line[])[], asks: readonly Ask[], edgePx: number | null, want: { open: number; kept: number }): string[] {
+  const read = (readings.length ? readings : [[]]).map((lines) => ({ lines, ...rowReading(lines, asks, edgePx) }));
+  const best = read.reduce((a, b) => (b.open.length > a.open.length ? b : a));
+  const most = read.reduce((a, b) => (b.open.length + b.bare.length > a.open.length + a.bare.length ? b : a));
+  const kept = read.reduce((a, b) => (b.kept.length > a.kept.length ? b : a));
+  const out: string[] = [];
+  if (best.open.length > want.open) out.push(`the list's pixels draw ${best.open.length} open ask row(s), not ${want.open}: of its lines, these draw a row ${sees(best.open)}; all read ${sees(best.lines)}`);
+  else if (most.open.length + most.bare.length > want.open) out.push(`the list's pixels draw ${most.open.length + most.bare.length} open ask row(s), not ${want.open}, ${most.bare.length} of them with no ellipsis: ${sees([...most.open, ...most.bare])}; all read ${sees(most.lines)}`);
+  else if (best.open.length < want.open) {
+    const short = read.find((r) => r.open.length + r.bare.length === want.open);
+    if (short) out.push(`${UNREADABLE}the list's pixels draw at most ${best.open.length} open ask row(s) with their ellipsis, not ${want.open}; one reading adds ${short.bare.length} line(s) reading only a row's kind and time ${sees(short.bare)}, and whether OCR dropped their ellipsis or the row was drawn without one can't be told; all read ${sees(short.lines)}`);
+    else out.push(`the list's pixels draw ${best.open.length} open ask row(s), not ${want.open}: of its lines, these draw a row ${sees(best.open)}; all read ${sees(best.lines)}`);
+  }
+  if (kept.kept.length > want.kept) out.push(`the list's pixels draw ${kept.kept.length} answered ask row(s), more than ${want.kept}: ${sees(kept.kept)}`);
+  return out;
+}
+
+/**
+ * `shellFailuresRead`, with the list's rows counted by `rowReadingsFailures` over the list region's `.accurate` reading and
+ * the whole window's `.accurate` reading (only its lines ending left of the list's edge, `listLines`), each where it read
+ * a line left of the list's edge. R7t ac1-3: the region read
+ * dropped one row's ellipsis that the whole read kept. No such reading of a region that isn't blank is `UNREADABLE`.
+ * Everything else is `shellFailuresRead`'s own.
+ */
+export async function shellFailuresBest(world: World, app: App, want: { rows: readonly Ask[]; count: number }): Promise<string[]> {
+  const out: string[] = [];
+  const tree = await app.tree();
+  const main = tree.windows.flatMap((w) => nodes(w.tree));
+  const named = main.filter((n) => n.name);
+  const win = await app.mainWindow();
+  const picture = await app.capture(`shell-${want.count}`, win);
+  const whole = [0, 0, picture.width, picture.height];
+  const accurate = await ocr(picture);
+  const lines = accurate.length ? accurate : await ocrIn(picture, 'fast', whole);
+  const lost = unreadable(lines, blankIn(picture, whole), 'the whole window');
+  if (lost) out.push(lost);
+  const spike = [...named.map((n) => n.name), ...lines.map((l) => l.text)].find((text) => /\bSession \d{4}\b|waiting on you/.test(text));
+  if (spike) out.push(`the window is the spike window: it draws "${spike}"`);
+  if (!named.some((n) => n.name === 'Tasks')) out.push(`the window has no registered sidebar: no node is named "Tasks"; its names are ${JSON.stringify(named.map((n) => n.name).slice(0, 20))}`);
+  for (const s of world.sessions) {
+    const rows = named.filter((n) => n.role === 'AXButton' && n.name.includes(s.task));
+    if (rows.length !== 1) out.push(`the sidebar should show session "${s.task}" once, as a row; it has ${rows.length}`);
+  }
+  if (!named.some((n) => n.name === 'Needs you')) out.push('the window has no Needs you view: no node is named "Needs you"');
+  const roots = tree.windows.map((w) => w.tree);
+  const tasks = world.sessions.map((s) => s.task);
+  out.push(...askRowFailuresKept(roots, world.asks, want.rows, tasks));
+  const px = listEdgePx(roots, tasks, win.frame, picture.width);
+  if (px === null) out.push(`can't find the list on the pixels: no session row ${JSON.stringify(tasks)} is on the tree`);
+  else {
+    const region = [0, 0, Math.min(Math.ceil(px), picture.width), picture.height];
+    const readings = [await ocrIn(picture, 'accurate', region), listLines(accurate, px)].filter((r) => r.some((l) => leftOf(l, px)));
+    const gone = readings.length ? null : unreadable([], blankIn(picture, region), `the list's region (${JSON.stringify(region)}), by either reading`);
+    if (gone) out.push(gone);
+    else out.push(...rowReadingsFailures(readings, world.asks, px, { open: want.rows.length, kept: world.asks.length - want.rows.length }));
+  }
+  const counted = lines.flatMap((l) => [...l.text.matchAll(/\b(\d+)\s+asks?\s+needs?\s+you\b/gi)]).map((m) => Number(m[1]));
+  for (const n of counted) if (n !== want.count) out.push(`the window's count reads ${n}, not ${want.count}`);
+  const menu = menuCount(tree);
+  if (menu !== want.count) out.push(`the menu bar reads ${JSON.stringify(tree.menu)}, not ${want.count}`);
+  return out;
+}
+
+/** How long a fresh checkout's builds may take before any timed check: R7 and R7t's first builds took 12 to 18 min at load 60. */
+export const BUILD_MS = 45 * 60_000;
+
+/** `work`, or `BLOCKED` when it fails or isn't done within `ms`: nothing was judged, so it is never a FAIL or a PASS. */
+export async function within<T>(work: Promise<T>, ms: number, what: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  // deadline: only turns a build that never finishes into BLOCKED, naming it; nothing waits on it to pass
+  const late = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(Error(`BLOCKED: ${what} didn't finish within ${Math.round(ms / 60_000)} min`)), ms); });
+  try {
+    return await Promise.race([work, late]);
+  } catch (e) {
+    const why = (e as Error).message;
+    return blocked(`${why.startsWith('BLOCKED: ') ? why.slice('BLOCKED: '.length) : `${what} failed: ${why.slice(0, 800)}`}; it ran before any check, so nothing was judged`);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Every binary a file's checks launch, built by `within`: the probe first, and only once it is built and permitted the app, `plants` and the hub's support binaries. */
+export const prebuilt = (plants: readonly Plant[], ms = BUILD_MS): Promise<unknown> =>
+  within((async () => {
+    await probeBinary();
+    await Promise.all([appBinary(), ...plants.map((p) => appBinary(p)), supportBinaries()]);
+  })(), ms, 'building the probe, then the app, its plants and the support binaries');
