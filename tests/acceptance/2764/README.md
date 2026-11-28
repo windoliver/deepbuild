@@ -55,6 +55,7 @@ proceed and the subagent's prompt reaching the record (30 s each), a call's `too
 delete (90 s), the hub's stop (30 s) and the processes' exit at cleanup (3 s); the stand-in agent kills a deep-hook run
 past its timeout (150 s).
 
+## The surface used
 
 - **deep-hook** (`target/debug/deep-hook`), run as Codex runs our hook entry, `deep-hook codex <event>` with the
   payload on stdin, as a child of one long-lived stand-in process per session (`fixtures/agent.mjs`, copied from
