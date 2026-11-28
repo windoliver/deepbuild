@@ -174,6 +174,25 @@ pub struct Shared {
     pub samples: u32,
     /// The next frame's HDR surface, when the view presents one (#177).
     pub hdr: Option<HdrFrame>,
+    /// What the driver set up before a renderer built on its first frame existed (#3370): that
+    /// build applies each, in order.
+    pub setup: Vec<Setup>,
+}
+
+/// A change to the renderer, kept until the renderer exists (#3370).
+pub type Setup = Box<dyn FnOnce(&mut Renderer, &Device) + Send>;
+
+impl Shared {
+    /// Applies `f` to the renderer, building it first, except that a renderer built on its first
+    /// frame (the planted `compiles_on_first_frame`) gets `f` when that frame builds it.
+    pub fn setup(&mut self, device: &Device, f: impl FnOnce(&mut Renderer, &Device) + Send + 'static) {
+        if self.renderer.is_none() && self.planted.builds_on_first_frame {
+            self.setup.push(Box::new(f));
+            return;
+        }
+        let planted = self.planted;
+        f(self.renderer.get_or_insert_with(|| Renderer::new(device, planted)), device);
+    }
 }
 
 /// A live frame's HDR surface (#177): the texture it writes and the display's headroom then.
@@ -199,6 +218,7 @@ impl Module3 {
             clouds: Default::default(),
             samples: if planted.single_sample { 1 } else { MSAA },
             hdr: None,
+            setup: Vec::new(),
         }));
         (
             Module3 {
@@ -337,7 +357,11 @@ impl RenderModule for Module3 {
         };
         // The planted renderer compiles everything it draws with here, in the frame.
         if s.renderer.is_none() && s.planted.builds_on_first_frame {
-            s.renderer = Some(Renderer::sampled(device, s.planted, s.samples));
+            let mut built = Renderer::sampled(device, s.planted, s.samples);
+            for f in std::mem::take(&mut s.setup) {
+                f(&mut built, device);
+            }
+            s.renderer = Some(built);
         }
         let Shared {
             renderer,
