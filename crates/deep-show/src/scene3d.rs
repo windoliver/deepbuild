@@ -4,6 +4,7 @@
 //! through the post stage `deep-gpu`'s view draws it through (#1719). The device opens on the
 //! first 3D revision drawn and stays for the run.
 
+pub(crate) mod finite;
 pub(crate) mod look;
 
 use std::sync::{Arc, Mutex};
@@ -266,6 +267,8 @@ pub struct Gpu3 {
     printer: Option<deep_scene3d_render::print::Printer>,
     /// render.exposure's reduction, built on first use and kept (#2513).
     reducer: Option<Arc<Reducer>>,
+    counter: Option<Arc<deep_scene3d_render::exposure::finite::Counter>>,
+    pub(crate) settled: Option<Result<Value, Value>>,
     /// The build's outline sources and module fills (#226), and the planted module program.
     outlines: Vec<deep_canvas::registry::SealedOutline>,
     fills: Vec<deep_canvas::contributed::Sealed>,
@@ -317,6 +320,8 @@ impl Gpu3 {
             labels: Labels::new(),
             printer: None,
             reducer: None,
+            counter: None,
+            settled: None,
             outlines: sealed.outlines.clone(),
             fills: sealed.fills.clone(),
             planted,
@@ -438,6 +443,59 @@ impl Gpu3 {
                 None
             },
         })
+    }
+
+    pub fn finite(
+        &mut self,
+        last_writer: Option<u32>,
+    ) -> Option<deep_scene3d_render::exposure::finite::Found> {
+        let device = &self.device;
+        let counter = self
+            .counter
+            .get_or_insert_with(|| Arc::new(deep_scene3d_render::exposure::finite::Counter::new(device)))
+            .clone();
+        let (image, ids, size) = self.renderer.light_source()?;
+        counter.count(&self.device, image, ids, size, last_writer)
+    }
+
+    #[cfg(feature = "test-export-guards")]
+    pub fn plant_nan(&self, rects: &[[u32; 4]]) {
+        let Some((image, _, size)) = self.renderer.light_source() else {
+            return;
+        };
+        let texture = image.texture();
+        let writable = texture.usage().contains(wgpu::TextureUsages::COPY_DST);
+        if !writable || texture.format() != wgpu::TextureFormat::Rgba16Float {
+            return;
+        }
+        let nan = 0x7e00u16.to_le_bytes();
+        for &[x, y, w, h] in rects {
+            let (x1, y1) = ((x + w).min(size[0]), (y + h).min(size[1]));
+            if x >= x1 || y >= y1 {
+                continue;
+            }
+            let (w, h) = (x1 - x, y1 - y);
+            let texels: Vec<u8> = nan.iter().copied().cycle().take((w * h * 8) as usize).collect();
+            self.device.queue.write_texture(
+                wgpu::TexelCopyTextureInfo {
+                    texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d { x, y, z: 0 },
+                    aspect: wgpu::TextureAspect::All,
+                },
+                &texels,
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(w * 8),
+                    rows_per_image: None,
+                },
+                wgpu::Extent3d {
+                    width: w,
+                    height: h,
+                    depth_or_array_layers: 1,
+                },
+            );
+        }
     }
 
     fn reducer(&mut self) -> Arc<Reducer> {

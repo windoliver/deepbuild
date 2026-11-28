@@ -1,0 +1,8 @@
+[
+  {"operator": "grid.ground@1", "reason": "Its ray from the camera multiplies the camera's matrices, which no range bounds, so a product can pass f32's range.", "owner": "deep-canvas-effects", "ends": "2027-05-31"},
+  {"operator": "shadow.resolve@1", "reason": "It reprojects through the camera's matrices, which no range bounds, so a product can pass f32's range.", "owner": "deep-canvas-effects", "ends": "2027-05-31"},
+  {"operator": "particles.sparks@1", "reason": "Its motion divides by params whose ranges reach 0 and normalizes a velocity that can be zero.", "owner": "deep-canvas-effects", "ends": "2027-05-31"},
+  {"operator": "wave_field@1", "reason": "It projects through the camera's matrices, which no range bounds, so a product can pass f32's range.", "owner": "deep-canvas-effects", "ends": "2027-05-31"},
+  {"operator": "arc@1", "reason": "It multiplies the camera's matrices, which no range bounds, by params up to 1e9.", "owner": "deep-canvas-effects", "ends": "2027-05-31"},
+  {"operator": "points.video@1", "reason": "Its depth unprojection takes dot products with an inverse matrix no range bounds.", "owner": "deep-canvas-effects", "ends": "2027-05-31"}
+]

@@ -727,7 +727,7 @@ fn build(def: &Def, plan: &Plan, end: &End) -> Option<(Value, Data)> {
         }
     };
     let mut op_json = json!({
-        "id": format!("ref-{op}"), "kind": plan.kind.name(), "origin": "composed",
+        "id": format!("ref-{op}"), "kind": plan.kind.name(), "origin": "shipped",
         "about": format!("{} over seeded inputs, for its CPU reference.", def.name),
         "inputs": g.inputs, "steps": g.steps, "outputs": outputs,
         "cost": {"ns_per_px": 1.0e9}, "resolution": "full",

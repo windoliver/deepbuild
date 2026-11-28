@@ -718,10 +718,12 @@ pub enum Body {
 
 mod bands;
 mod call;
+mod pack_order;
 mod planted;
 mod presented;
 mod revise;
 pub use call::*;
+use pack_order::required_first;
 use planted::read_programs;
 pub(crate) use planted::{clock_noise, export_noise};
 pub(crate) use presented::only_layer;
@@ -2224,6 +2226,7 @@ impl<'a> Hub<'a> {
         let mut snapshot_taken = !wants_pixels;
         let drawn3d = self.pending3d.take();
         let light = self.pending_light.take();
+        let finite = self.take_settled();
         let three = drawn3d.is_some();
         if !visible {
             reply.insert("outcome".into(), json!("not_presented"));
@@ -2260,6 +2263,9 @@ impl<'a> Hub<'a> {
                             }
                             return Value::Object(reply);
                         }
+                    }
+                    if let (true, Some(Err(issue))) = (three, &finite) {
+                        return self.refused_frame(issue, show, reply);
                     }
                     let pixels = match drawn3d {
                         Some(drawn3d) => drawn3d.ok().map(|(mut rgba, size, mut shown)| {
@@ -2307,6 +2313,9 @@ impl<'a> Hub<'a> {
                                     let mut e = json!({"sha256": sha, "w": size[0], "h": size[1]});
                                     if let Some(l) = light {
                                         e["light"] = l;
+                                    }
+                                    if let Some(Ok(f)) = finite {
+                                        e["finite"] = f;
                                     }
                                     e
                                 }
@@ -2411,7 +2420,7 @@ impl<'a> Hub<'a> {
     /// passes a claim only when the claim's definition names the document among its deliverables,
     /// since a picture explains and never proves; a snapshot it asked for and couldn't take is
     /// BLOCKED.
-    fn verdict(&self, show: &Show, snapshot_taken: bool) -> &'static str {
+    pub(crate) fn verdict(&self, show: &Show, snapshot_taken: bool) -> &'static str {
         if !snapshot_taken {
             return "BLOCKED";
         }
@@ -2428,43 +2437,3 @@ impl<'a> Hub<'a> {
 
 /// A revision's check time and its `kind_rules` check's own time, when asked for (#202), in ms.
 type CheckTimes = (f64, Option<Map<String, Value>>);
-
-/// The store's packs with each one a pack requires (`requires.packs`, by its name) before it, in
-/// the order offered otherwise (#142).
-fn required_first(packs: &[(String, PathBuf)]) -> Vec<&(String, PathBuf)> {
-    let read = |dir: &PathBuf| -> (String, Vec<String>) {
-        let manifest: Value = std::fs::read(dir.join("pack.json"))
-            .ok()
-            .and_then(|b| serde_json::from_slice(&b).ok())
-            .unwrap_or(Value::Null);
-        let name = manifest["name"].as_str().unwrap_or("").to_string();
-        let needs = manifest["requires"]["packs"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(Value::as_str)
-            .filter_map(|t| t.rsplit_once('@'))
-            .map(|(n, _)| n.rsplit_once('/').map_or(n, |(_, n)| n).to_string())
-            .collect();
-        (name, needs)
-    };
-    let read: Vec<(String, Vec<String>)> = packs.iter().map(|(_, dir)| read(dir)).collect();
-    let mut out: Vec<usize> = Vec::new();
-    fn visit(i: usize, read: &[(String, Vec<String>)], out: &mut Vec<usize>, depth: usize) {
-        if out.contains(&i) || depth > read.len() {
-            return;
-        }
-        for need in &read[i].1 {
-            if let Some(j) = read.iter().position(|(n, _)| n == need) {
-                visit(j, read, out, depth + 1);
-            }
-        }
-        if !out.contains(&i) {
-            out.push(i);
-        }
-    }
-    for i in 0..packs.len() {
-        visit(i, &read, &mut out, 0);
-    }
-    out.into_iter().map(|i| &packs[i]).collect()
-}

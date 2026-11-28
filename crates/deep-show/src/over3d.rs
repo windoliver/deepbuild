@@ -204,6 +204,7 @@ impl Hub<'_> {
         let edged = edged(doc, t, size)?;
         let doc = edged.as_ref().unwrap_or(doc);
         let (rgba, scene) = self.painted3d(doc, t, size)?;
+        self.keep_settled(doc);
         let plant = self.scenario.module_planted.clone();
         let plant = plant.as_deref();
         if plant == Some(AS_BOXES) {

@@ -2,6 +2,8 @@
 //! on the GPU that drew the frame, over its pre-tone image and object-ID pass: the subject's px
 //! stay on the GPU, and a few KB of sums cross to the CPU.
 
+pub mod finite;
+
 use deep_canvas::registry::{LightQuery, LightSums};
 use deep_gpu::device::Device;
 

@@ -112,8 +112,11 @@ impl G {
     }
 }
 
+pub const HALF_RANGE: [f64; 2] = [-65504.0, 65504.0];
+
 fn texture(target_op: &str, output: &str, ty: &str) -> Value {
-    json!({"type": ty, "from": {"texture": {"target": {"op": target_op, "output": output}}}})
+    let range = (ty == "texture").then_some(HALF_RANGE);
+    json!({"type": ty, "from": {"texture": {"target": {"op": target_op, "output": output}}}, "range": range})
 }
 
 fn param(path: &str, ty: &str, default: Value, range: [f64; 2]) -> Value {
@@ -213,6 +216,7 @@ pub fn down(karis: bool) -> Value {
                 let l = g.s("luminance@1", json!({"rgb": rgb}));
                 let one = g.c(json!(1.0));
                 let d = g.add(&one, &l);
+                let d = g.s("max@1", json!({"a": d, "b": one}));
                 g.div(&one, &d)
             })
         })

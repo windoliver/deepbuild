@@ -1106,7 +1106,7 @@ pub fn graph(seed: u64, max_steps: usize) -> Graph {
     let (repeat, select, swizzle) = (b.repeat, b.select, b.swizzle);
     let body = std::mem::take(&mut b.scopes[0].steps);
     let op = json!({
-        "id": format!("gen.s{seed}"), "kind": "compute", "origin": "composed",
+        "id": format!("gen.s{seed}"), "kind": "compute", "origin": "shipped",
         "about": format!("Seeded random graph {seed} of the f64 interpreter's suite: well typed, every lane it makes written at its own index."),
         "inputs": {
             "xf": {"type": "f32", "count": words, "from": {"storage": {"op": "core", "output": "xf"}}},

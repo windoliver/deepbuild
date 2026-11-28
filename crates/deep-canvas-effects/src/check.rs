@@ -1,6 +1,6 @@
 //! The operator check (canvas primitives: Compile, validate and cache; Operator cost and limits;
 //! Determinism class), in order: closed ops, types, a DAG, fixed repeat counts, the rules for its
-//! kind, limits, determinism and cost. Nothing reaches the emitter, let alone the GPU, before it
+//! kind, limits, determinism, values and cost. Nothing reaches the emitter, let alone the GPU, before it
 //! passes; each refusal names its step, field or output.
 
 // A refusal is the check's whole answer, made once per refused operator, so its size never matters.
@@ -66,6 +66,7 @@ pub struct Checked {
     pub iterates: Vec<Iterated>,
     /// A material's light responses (#485), each checked as a material operator of its own.
     pub responses: BTreeMap<String, Checked>,
+    pub values: crate::values::Verdict,
 }
 
 /// An iterate step as the check passed it: its body a pass whose inputs are those of the
@@ -130,6 +131,8 @@ pub struct CheckOptions {
     pub carried_exact: bool,
     /// #1993's planted check: a stepped operator's stability bound is never computed.
     pub skips_bound: bool,
+    pub unit_float_textures: bool,
+    pub mul_two_corners: bool,
 }
 
 struct Ctx<'a> {
@@ -1623,38 +1626,4 @@ pub fn read_and_check_with(v: &Value, options: CheckOptions) -> Result<Checked, 
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    /// A material operator that writes nothing and answers the light loop with `light` (#485).
-    fn answering(light: Value) -> Value {
-        json!({"id": "cel", "kind": "material", "origin": "composed", "about": "A response.",
-            "steps": {}, "outputs": {}, "cost": {"ns_per_px": 50}, "light": light})
-    }
-
-    fn response(first: Value) -> Value {
-        json!({"steps": {"d": first, "c": {"op": "mul@1", "args": {"a": "radiance", "b": "d"}}},
-            "outputs": {"radiance": "c"}})
-    }
-
-    #[test]
-    fn a_light_response_counts_once_for_each_light_a_cluster_holds() {
-        let ndl = json!({"op": "dot@1", "args": {"a": "n", "b": "l"}});
-        let c = read_and_check(&answering(response(ndl))).expect("it checks");
-        let light = &c.responses["light"];
-        assert!(light.estimate > 0.0);
-        let lights = deep_canvas_scene3d::light::SHADED as f64;
-        assert_eq!(c.estimate, light.estimate * lights);
-        // What the loop hands it comes from the GPU's shading: same machine at best.
-        assert_eq!(c.class, Class::SameMachine);
-    }
-
-    #[test]
-    fn a_light_response_takes_no_derivative() {
-        let ddx = json!({"op": "ddx@1", "args": {"x": "shadow"}});
-        let issues = read_and_check(&answering(response(ddx))).unwrap_err();
-        assert_eq!(issues[0].reason, Some("derivative_in_divergent_flow"));
-        assert_eq!(issues[0].path.as_deref(), Some("light"));
-    }
-}
+mod tests;

@@ -1009,6 +1009,12 @@ impl<'a> Hub<'a> {
                     let started = std::time::Instant::now();
                     // #1938: a pixel check runs on the frames drawn for it here, or not at all.
                     let out = match (check.frames, drawn.and_then(|d| d.get(doc))) {
+                        (_, Some(crate::pixels::Drawn::Refused(issue))) => {
+                            let mut issue = issue.clone();
+                            issue["requirement_check"] = json!(kind);
+                            raised.push(issue);
+                            Default::default()
+                        }
                         (Some((draws, run)), Some(crate::pixels::Drawn::Frames(f, fp))) => {
                             if let Ok(mut c) = self.light_cost.lock() {
                                 *c = [0.0; 3];

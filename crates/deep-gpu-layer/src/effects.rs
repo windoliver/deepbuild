@@ -613,6 +613,8 @@ pub fn operator_plants(p: Option<Planted>) -> (Options, check::CheckOptions) {
             wide_fetches: false,
             carried_exact: p == Some(Planted::CarriedClassExact),
             skips_bound: p == Some(Planted::CheckSkipsBound),
+            unit_float_textures: false,
+            mul_two_corners: false,
         },
     )
 }
@@ -681,7 +683,7 @@ fn op_graph(name: &str, types: &[Ty], rows: usize) -> Result<(Value, Ty), Value>
     }
     steps.insert("r".into(), json!({"op": name, "args": args}));
     // The step's result type, from a check of the graph before its write.
-    let probe = json!({"id": "op-probe", "kind": "compute", "origin": "composed", "about": "The step alone, to type its result.",
+    let probe = json!({"id": "op-probe", "kind": "compute", "origin": "shipped", "about": "The step alone, to type its result.",
         "inputs": inputs.clone(), "steps": steps.clone(), "outputs": {"out": {"storage": {"type": "u32", "count": rows.max(1)}}},
         "elements": rows.max(1), "workgroup": 64, "cost": {"ns_per_element": 1000.0}});
     let rty = check::read_and_check(&probe)
@@ -716,7 +718,7 @@ fn op_graph(name: &str, types: &[Ty], rows: usize) -> Result<(Value, Ty), Value>
         json!({"op": "write@1", "args": {"buf": "out", "i": "e", "v": bits}}),
     );
     Ok((
-        json!({"id": format!("op-{name}"), "kind": "compute", "origin": "composed", "about": format!("The public step {name} over rows of bits."),
+        json!({"id": format!("op-{name}"), "kind": "compute", "origin": "shipped", "about": format!("The public step {name} over rows of bits."),
             "inputs": inputs, "steps": steps, "outputs": {"out": {"storage": {"type": "u32", "count": rows.max(1)}}},
             "elements": rows.max(1), "workgroup": 64, "cost": {"ns_per_element": 1000.0}}),
         rty,

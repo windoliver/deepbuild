@@ -73,7 +73,7 @@ fn check_iterating(op: &Operator, options: CheckOptions) -> Result<Checked, Vec<
                 op: key.clone(),
                 output: output.into(),
             },
-            range: None,
+            range: (it.format == "rgba8unorm").then_some([0.0, 1.0]),
             default: None,
         };
         inputs.insert("prev".into(), tex("prev"));
@@ -114,6 +114,9 @@ fn check_iterating(op: &Operator, options: CheckOptions) -> Result<Checked, Vec<
             responses: BTreeMap::new(),
         };
         let checked = check_with(&body, options)?;
+        if let (crate::values::Verdict::Unproven(issues), false) = (&checked.values, crate::values::first_party(op)) {
+            return Err(issues.clone());
+        }
         extra += it.count as f64 * checked.estimate;
         floor = floor.max(checked.class);
         outer.steps.remove(id);
@@ -128,6 +131,9 @@ fn check_iterating(op: &Operator, options: CheckOptions) -> Result<Checked, Vec<
         });
     }
     let mut c = check_inner(&outer, options, extra, floor)?;
+    for it in &iterates {
+        c.values = c.values.and(&it.body.values);
+    }
     c.iterates = iterates;
     Ok(c)
 }
@@ -195,6 +201,9 @@ fn check_answering(op: &Operator, options: CheckOptions) -> Result<Checked, Vec<
         check_inner(&outer, options, extra, floor)?
     };
     c.op.responses = op.responses.clone();
+    for r in responses.values() {
+        c.values = c.values.and(&r.values);
+    }
     c.responses = responses;
     Ok(c)
 }
@@ -615,6 +624,10 @@ fn check_inner(
             )
         }]);
     }
+    let values = crate::values::prove_parts(op, &order, &ctx.body_order, &ctx.types, options);
+    if let (crate::values::Verdict::Unproven(issues), false) = (&values, crate::values::first_party(op)) {
+        return Err(issues.clone());
+    }
     let estimate = ctx.weight * NS_PER_UNIT + f64::from(ctx.fetches) * NS_PER_FETCH + extra;
     match op.cost {
         None if op.origin != Origin::Shipped => {
@@ -656,5 +669,6 @@ fn check_inner(
         storage_inputs,
         iterates: Vec::new(),
         responses: BTreeMap::new(),
+        values,
     })
 }
