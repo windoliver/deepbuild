@@ -1,0 +1,39 @@
+{
+  "pass": "particles_draw",
+  "inputs": "particles.wgsl's entry points, each drawn into its own rgba16float target with the frame's additive blend (color one + one, alpha kept at the clear's 0) and stacked as panels of one 32 × 48 output. Rows 0-15, vs + fs (the dot draw, kind 0) over 32 × 16 with no depth attachment (an empty reversed-Z depth passes every sprite): an orthographic clip maps world (x, y) to px (x, y), y down, z 0.5; size 8 px at birth and death (size scale 1), so a dot's half extent is 4 px; opacity 1 at birth and death, opacity scale 1; two color stops, at 0 of life the linear color (0.8, 8/15, 4/15), codes (204, 136, 68), at 0.5 the color of codes (40, 200, 240); dot 0 at (4.5, 4.5) at 0 of its life, dot 1 at (11.5, 11.5) at 0.5, and slot 2 at (8, 8) with age over life -1, not alive. A dot's pixel at offset at (in half extents) adds color × (1 - |at|²)² × opacity × (1 - life). Rows 16-23, vs + half_fs (a puff, kind 2) into the 32 × 8 half-size target of a 64 × 16 view, the same clip for 64 × 16, size 10 px (half extent 5 full px, 2.5 half px), one stop whose color × 0.35 is codes (68, 44, 20); puff 0 at full px (7, 7) and puff 1 at (39, 7), both at 0 of life; the scene's depth (64 × 16) is 1.0, nearer than the puffs' 0.5, at full px x ≥ 32 on odd rows and 0 elsewhere. A half pixel adds color × 0.35 exp(-3 |at|²) × the share of its four full pixels whose depth is at most 0.5. Rows 24-31, upsample_vs + upsample_fs from a 16 × 4 input; rows 32-39, upsample_vs + upsample_full_fs from a 32 × 8 input; rows 40-47, upsample_vs + upsample_quarter_fs from an 8 × 2 input; each a 32 × 8 target, a linear clamp-to-edge sampler, and an input of two tones by column (texel (v, v ÷ 2, 0, 1) in codes): v = 40 left of input column 8 and 200 from it; 60 left of 16 and 180 from it; 40 left of 4 and 200 from it. Pixel x samples input texel coordinate (x + 0.5) × k - 0.5 with k = 0.5, 1 and 0.25",
+  "size": [32, 48],
+  "channels": 4,
+  "items": [
+    { "id": "particles_draw.fs.background", "at": [0, 0, 32, 16] },
+    { "id": "particles_draw.fs.dot0", "at": [1, 1, 7, 7] },
+    { "id": "particles_draw.fs.dot1", "at": [8, 8, 7, 7] },
+    { "id": "particles_draw.half_fs.background", "at": [0, 16, 32, 8] },
+    { "id": "particles_draw.half_fs.puff0", "at": [1, 17, 5, 5] },
+    { "id": "particles_draw.half_fs.puff1", "at": [17, 17, 5, 5] },
+    { "id": "particles_draw.upsample_fs", "at": [0, 24, 32, 8] },
+    { "id": "particles_draw.upsample_full_fs", "at": [0, 32, 32, 8] },
+    { "id": "particles_draw.upsample_quarter_fs", "at": [0, 40, 32, 8] }
+  ],
+  "expect": [
+    { "at": [4, 4], "value": [204, 136, 68, 0], "why": "dot 0's centre pixel, at = 0: shape (1 - 0)² = 1, opacity 1 × (1 - 0) = 1, its color at life 0 is stop 0's: (204, 136, 68); the alpha the blend keeps is the clear's 0" },
+    { "at": [11, 11], "value": [20, 100, 120, 0], "why": "dot 1's centre pixel: shape 1, life 0.5 sits on stop 1, so its color is (40, 200, 240), times opacity 1 × (1 - 0.5) = 0.5: (20, 100, 120)" },
+    { "at": [6, 6], "value": [51, 34, 17, 0], "why": "dot 0 at pixel centre (6.5, 6.5), 2 px right and down of its centre: at = (0.5, 0.5), |at|² = 0.5, shape (1 - 0.5)² = 0.25: (204, 136, 68) × 0.25 = (51, 34, 17)" },
+    { "at": [0, 15], "value": [0, 0, 0, 0], "why": "outside both dots' quads (dot 0's reaches y 8.5): only the clear, 0" },
+    { "at": [8, 8], "value": [0, 0, 0, 0], "why": "where slot 2 would sit: it isn't alive, so it draws nothing; dot 0 is at |at|² = (1, 1) → 2 and dot 1 at (0.75, 0.75) → 1.125, both past the disc, so the clear's 0" },
+    { "at": [3, 19], "value": [68, 44, 20, 0], "why": "half_fs: puff 0's centre, half pixel (3, 3) at (3.5, 3.5) = full (7, 7) ÷ 2: at = 0, shape 0.35 exp(0) = 0.35, life 0 so opacity 1; its four full pixels (6-7, 6-7) are left of x 32, depth 0, all shown: 1 × the stop's (68, 44, 20)" },
+    { "at": [19, 19], "value": [34, 22, 10, 0], "why": "half_fs: puff 1's centre, half pixel (19, 3) = full (39, 7) ÷ 2: shape 0.35, but of its four full pixels (38-39, 6-7) row 7 is odd and past x 32, depth 1.0 nearer than 0.5: two hidden, shown 0.5: (68, 44, 20) × 0.5 = (34, 22, 10)" },
+    { "at": [10, 16, 4, 8], "value": [0, 0, 0, 0], "why": "half_fs: between the puffs (puff 0 reaches half x 6, puff 1 starts at 17): the clear" },
+    { "at": [0, 24, 15, 8], "value": [40, 20, 0, 0], "why": "upsample_fs: x ≤ 14 samples texel coordinate x ÷ 2 - 0.25 ≤ 6.75, both neighbours (clamped at 0) in the left tone: 40, 20" },
+    { "at": [15, 24, 1, 8], "value": [80, 40, 0, 0], "why": "upsample_fs: x = 15 samples 7.25: 0.75 of texel 7 (40) + 0.25 of texel 8 (200) = 30 + 50 = 80; green half, 40" },
+    { "at": [16, 24, 1, 8], "value": [160, 80, 0, 0], "why": "upsample_fs: x = 16 samples 7.75: 0.25 × 40 + 0.75 × 200 = 10 + 150 = 160; green 80" },
+    { "at": [17, 24, 15, 8], "value": [200, 100, 0, 0], "why": "upsample_fs: x ≥ 17 samples ≥ 8.25, both neighbours (clamped at 15) in the right tone: 200, 100" },
+    { "at": [0, 32, 16, 8], "value": [60, 30, 0, 0], "why": "upsample_full_fs: pixel x samples texel coordinate exactly x, its own texel: left of 16, 60, 30" },
+    { "at": [16, 32, 16, 8], "value": [180, 90, 0, 0], "why": "upsample_full_fs: from 16 on its own texel, 180, 90" },
+    { "at": [0, 40, 14, 8], "value": [40, 20, 0, 0], "why": "upsample_quarter_fs: x ≤ 13 samples x ÷ 4 - 0.375 ≤ 2.875, both neighbours in the left tone: 40, 20" },
+    { "at": [14, 40, 1, 8], "value": [60, 30, 0, 0], "why": "upsample_quarter_fs: x = 14 samples 3.125: 0.875 × 40 + 0.125 × 200 = 35 + 25 = 60; green 30" },
+    { "at": [15, 40, 1, 8], "value": [100, 50, 0, 0], "why": "upsample_quarter_fs: x = 15 samples 3.375: 0.625 × 40 + 0.375 × 200 = 25 + 75 = 100; green 50" },
+    { "at": [16, 40, 1, 8], "value": [140, 70, 0, 0], "why": "upsample_quarter_fs: x = 16 samples 3.625: 0.375 × 40 + 0.625 × 200 = 15 + 125 = 140; green 70" },
+    { "at": [17, 40, 1, 8], "value": [180, 90, 0, 0], "why": "upsample_quarter_fs: x = 17 samples 3.875: 0.125 × 40 + 0.875 × 200 = 5 + 175 = 180; green 90" },
+    { "at": [18, 40, 14, 8], "value": [200, 100, 0, 0], "why": "upsample_quarter_fs: x ≥ 18 samples ≥ 4.125, both neighbours (clamped at 7) in the right tone: 200, 100" }
+  ]
+}

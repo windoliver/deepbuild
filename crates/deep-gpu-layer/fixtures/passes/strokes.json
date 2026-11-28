@@ -1,0 +1,16 @@
+{
+  "pass": "strokes",
+  "inputs": "strokes.wgsl's vs and fs, one dab over a 40 × 20 rgba16float target cleared to (0, 0, 0, 1) with the frame's premultiplied over (color one + one minus source alpha, alpha kept), an orthographic (identity) clip. The dab: centre (16.5, 10) px, angle 0, seed 0, length 27 px, width 20 px, anchor (0, 0, 0.5) so its depth is 0.5, linear color (4/7, 8/21, 4/21) at opacity 1. The scene's depth holds the dab's own surface, 0.5, at x < 24 and a nearer surface, 0.75, from x = 24 on. At pixel centre (px, py) the dab's uv = ((px - 16.5) ÷ 13.5, (py - 10) ÷ 10); its alpha is body × bristle × tail with body = 1 - smoothstep(0.7, 1, |uv|), lane = ⌊(uv.y × 0.5 + 0.5) × 7⌋, bristle = 0.7 + 0.3 × fract(sin(lane × 12.9898) × 43758.5453) and tail = 1 - 0.35 × smoothstep(0.2, 1, uv.x); its color writes color × alpha over the background",
+  "size": [40, 20],
+  "channels": 4,
+  "items": [
+    { "id": "strokes.background", "at": [0, 0, 40, 20] },
+    { "id": "strokes.dab0", "at": [3, 0, 21, 20] },
+    { "id": "strokes.dab0.under_nearer", "at": [24, 0, 6, 20] }
+  ],
+  "expect": [
+    { "at": [16, 1], "value": [51, 34, 17, 255], "why": "pixel centre (16.5, 1.5): uv = (0, -0.85), |uv| = 0.85, smoothstep(0.7, 1, 0.85) = 0.5 so body = 0.5; lane ⌊(-0.425 + 0.5) × 7⌋ = ⌊0.525⌋ = 0 and seed 0, so the hash's argument is 0, sin 0 = 0, bristle 0.7; uv.x = 0 ≤ 0.2 so tail 1; alpha 0.35. Color × 0.35 = (0.2, 2/15, 1/15): codes (51, 34, 17) over black; alpha kept at 1, 255" },
+    { "at": [26, 10], "value": [0, 0, 0, 255], "why": "inside the dab (uv = (0.74, 0.05), |uv| < 0.7, it would paint) but the scene's depth there is 0.75, 0.25 off the dab's 0.5 (> 0.002): not its own surface, discarded, the background (0, 0, 0, 1)" },
+    { "at": [0, 0], "value": [0, 0, 0, 255], "why": "left of the dab's quad (it starts at x = 3): the background" }
+  ]
+}

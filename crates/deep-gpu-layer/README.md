@@ -7,6 +7,7 @@ The binary `deep-gpu`, the proof surface for the GPU layer (#377): `deep-gpu run
 ## Where new code goes
 
 - `src/main.rs`: the command line, call dispatch and the `Planted` list; each call family in its own module (`frames.rs`, `conformance.rs`, `live.rs`, `view3d.rs`, `effects.rs`, `host.rs`, `levels.rs`, `golden.rs`, `timing.rs` and the rest).
+- `src/passes.rs`: the fixture table (`fixtures/passes.json`) and the `passes` and `pass_fixture` calls (#1428): every WGSL pass we write, a `*.wgsl` file under this crate or deep-effects-render or a WGSL string under `crates/`, runs on its analytic fixture (`fixtures/passes/<pass>.json`, expected values written by hand) beside its CPU reference, and its planted twin fails it. One module per pass under `src/passes/`; `scripts/pass-fixtures.mjs` fails a pass with no row.
 - `src/worker.rs`: the render thread that owns all GPU work. `src/window.rs`: the headless window and its capture.
 - Test-only modules (`src/allocations.rs`, `src/testgpu.rs`, `src/burn.wgsl`) build only under `test-meter`; keep new test fixtures behind a feature too.
 - Tests: the acceptance suites drive the binary; the unit tests are `src/plugin.rs`'s and the layout lane's (#3256): a `#[repr(C)]` struct a shader reads names its shader struct with `deep_gpu::paired!`, and `src/shader_layout.rs` lists the modules and the structs with one side only.

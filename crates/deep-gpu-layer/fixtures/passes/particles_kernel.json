@@ -1,0 +1,18 @@
+{
+  "pass": "particles_kernel",
+  "inputs": "closed.wgsl's main over particles::pack's words for one item at t = 2.5 s: 4 slots, rate 1 per s, span 10 s, life 4 s (both ends), a point emitter at origin (0, 1, 0), ballistic at the vector (1, 2, 0) m/s under gravity (0, -2, 0) m/s² with no drag, no bounce, landing, kill or turbulence, seed 7. Births so far n = 2.5, so slot 0 holds birth 0 (age 2.5 s), slot 1 birth 1 (age 1.5 s), slot 2 birth 2 (age 0.5 s) and slot 3 none yet. Each slot is one element of 8 channels, its instance columns (x, y, z, age over life, vx, vy, vz, unused), in codes of 1/256 of a metre, a m/s or a whole life, so 2 codes is 7.8 mm",
+  "size": [4, 1],
+  "channels": 8,
+  "items": [
+    { "id": "particles_kernel.slot0", "at": [0, 0, 1, 1] },
+    { "id": "particles_kernel.slot1", "at": [1, 0, 1, 1] },
+    { "id": "particles_kernel.slot2", "at": [2, 0, 1, 1] },
+    { "id": "particles_kernel.slot3", "at": [3, 0, 1, 1] }
+  ],
+  "expect": [
+    { "at": [2, 0], "value": [128, 448, 0, 32, 256, 256, 0, 0], "why": "a = 0.5: x = 0 + 1 × 0.5 = 0.5, y = 1 + 2 × 0.5 - ½ × 2 × 0.25 = 1.75, age over life 0.5 ÷ 4 = 0.125, v = (1, 2 - 2 × 0.5, 0) = (1, 1, 0); times 256: 128, 448, 0, 32, 256, 256, 0" },
+    { "at": [1, 0], "value": [384, 448, 0, 96, 256, -256, 0, 0], "why": "a = 1.5: x = 1.5, y = 1 + 3 - ½ × 2 × 2.25 = 1.75, age over life 0.375, v = (1, 2 - 3, 0) = (1, -1, 0); times 256: 384, 448, 0, 96, 256, -256, 0" },
+    { "at": [0, 0], "value": [640, -64, 0, 160, 256, -768, 0, 0], "why": "a = 2.5: x = 2.5, y = 1 + 5 - ½ × 2 × 6.25 = -0.25, age over life 0.625, v = (1, 2 - 5, 0) = (1, -3, 0); times 256: 640, -64, 0, 160, 256, -768, 0" },
+    { "at": [3, 0], "value": [0, 0, 0, -256, 0, 0, 0, 0], "why": "slot 3's first birth is birth 3, due at 3 s: no particle yet, so zeros and age over life -1, -256 codes" }
+  ]
+}

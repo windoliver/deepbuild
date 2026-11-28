@@ -1,0 +1,18 @@
+{
+  "pass": "operator_emit",
+  "inputs": "two composed operators compiled by deep-effects-render's compile, so their WGSL is what deep-canvas-effects' emit writes. Rows 0 and 1: emit::pass of pass_fixture.scale@1 (px = pixel@1, c = load@1 of src at px, out = c × 0.75) run as the reference runs a shipped pass, over a 4 × 2 rgba16float frame whose left two columns hold (1, 0.5, 0.25, 1) and right two (0.25, 0.75, 1, 1), written to a 4 × 2 rgba16float target and read back × 255. Row 2: emit::compute of pass_fixture.affine@1 (4 elements, element e writes 7e + 9 into a u32 storage out) dispatched by the runner, element e at (e, 2) with its integer in the first channel and 0 in the rest",
+  "size": [4, 3],
+  "channels": 4,
+  "items": [
+    { "id": "operator_emit.left", "at": [0, 0, 2, 2] },
+    { "id": "operator_emit.right", "at": [2, 0, 2, 2] },
+    { "id": "operator_emit.elements", "at": [0, 2, 4, 1] }
+  ],
+  "expect": [
+    { "at": [1, 2], "value": [16, 0, 0, 0], "why": "element 1 writes 7 × 1 + 9 = 16" },
+    { "at": [0, 0], "value": [191, 96, 48, 191], "why": "(1, 0.5, 0.25, 1) × 0.75 = (0.75, 0.375, 0.1875, 0.75), exact in half floats, × 255 = (191.25, 95.625, 47.81, 191.25)" },
+    { "at": [3, 1], "value": [48, 143, 191, 191], "why": "(0.25, 0.75, 1, 1) × 0.75 = (0.1875, 0.5625, 0.75, 0.75), × 255 = (47.81, 143.44, 191.25, 191.25)" },
+    { "at": [0, 2], "value": [9, 0, 0, 0], "why": "element 0 writes 7 × 0 + 9 = 9" },
+    { "at": [3, 2], "value": [30, 0, 0, 0], "why": "element 3 writes 7 × 3 + 9 = 30" }
+  ]
+}

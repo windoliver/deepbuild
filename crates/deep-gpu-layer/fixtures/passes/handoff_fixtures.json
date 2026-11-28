@@ -1,0 +1,12 @@
+{
+  "pass": "handoff_fixtures",
+  "inputs": "fixtures.rs's VERTEX (a full-screen triangle, uv × 2 − 1 for uv in {(0, 0), (2, 0), (0, 2)}, depth Z) followed by FLAT (Z = 0.5; fs returns (51, 102, 153, 255) / 255), drawn once into a 16 × 16 rgba8unorm target cleared to transparent, as the handoff lane's flat fixtures draw it",
+  "size": [16, 16],
+  "channels": 4,
+  "items": [{ "id": "handoff_fixtures.flat", "at": [0, 0, 16, 16] }],
+  "expect": [
+    { "at": [0, 15], "value": [51, 102, 153, 255], "why": "the triangle's corners are (−1, −1), (3, −1), (−1, 3) in clip space, so it covers the frame; FLAT's (51, 102, 153, 255) / 255 stored in rgba8unorm is (51, 102, 153, 255)" },
+    { "at": [15, 0], "value": [51, 102, 153, 255], "why": "the top-right pixel's centre (15.5, 0.5) is clip (0.9375, 0.9375), inside the covering triangle: FLAT's bytes" },
+    { "at": [8, 8], "value": [51, 102, 153, 255], "why": "pixel centre (8.5, 8.5) is clip (0.0625, −0.0625), inside: FLAT's bytes" }
+  ]
+}

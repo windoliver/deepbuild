@@ -172,7 +172,7 @@ pub fn linear_image(bytes: &[u8], size: [u32; 2]) -> Image {
     img
 }
 
-const DEPTH_WGSL: &str = "
+pub const DEPTH_WGSL: &str = "
 @group(0) @binding(0) var src: texture_2d<f32>;
 @vertex fn vs(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4<f32> {
     let p = vec2<f32>(f32((vi << 1u) & 2u), f32(vi & 2u));

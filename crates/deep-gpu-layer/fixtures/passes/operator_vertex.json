@@ -1,0 +1,12 @@
+{
+  "pass": "operator_vertex",
+  "inputs": "check_operator.rs's unchecked vertex vs (a full-screen triangle, p × 2 − 1 for p in {(0, 0), (2, 0), (0, 2)}) with the fragment main returning (0.2, 0.4, 0.6, 1.0), drawn once into an 8 × 8 rgba16float target (the linear target it draws into) cleared to transparent",
+  "size": [8, 8],
+  "channels": 4,
+  "items": [{ "id": "operator_vertex.full", "at": [0, 0, 8, 8] }],
+  "expect": [
+    { "at": [0, 7], "value": [51, 102, 153, 255], "why": "the triangle's corners are (−1, −1), (3, −1), (−1, 3) in clip space, so it covers the frame; (0.2, 0.4, 0.6, 1.0) × 255 = (51, 102, 153, 255), and the halves nearest 0.2, 0.4, 0.6 (0.19995, 0.39990, 0.60010) stay within 0.03 of a code" },
+    { "at": [7, 0], "value": [51, 102, 153, 255], "why": "the top-right pixel's centre (7.5, 0.5) is clip (0.875, 0.875), inside the covering triangle: the same color" },
+    { "at": [4, 3], "value": [51, 102, 153, 255], "why": "pixel centre (4.5, 3.5) is clip (0.125, 0.125), inside: the same color" }
+  ]
+}

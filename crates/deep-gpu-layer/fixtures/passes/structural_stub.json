@@ -1,0 +1,12 @@
+{
+  "pass": "structural_stub",
+  "inputs": "the WGSL deep-effects-render's compile writes for a compute operator whose one step, scan@1 over 4 u32 elements, runs on the shipped multi-dispatch kernels: the empty @compute fn cs. It is dispatched once (1 × 1 × 1) under a layout binding a read-write storage buffer of 4 u32 at group 0 binding 0, the buffer holding 10, 20, 30, 40; the buffer is read back as 4 elements, each element's code its integer",
+  "size": [4, 1],
+  "channels": 1,
+  "items": [{ "id": "structural_stub.held", "at": [0, 0, 4, 1] }],
+  "expect": [
+    { "at": [0, 0], "value": [10], "why": "cs's body is empty, so it writes nothing and element 0 keeps the 10 it was given" },
+    { "at": [1, 0], "value": [20], "why": "nothing writes element 1: it keeps 20" },
+    { "at": [3, 0], "value": [40], "why": "nothing writes element 3: it keeps 40" }
+  ]
+}

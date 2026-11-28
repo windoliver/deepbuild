@@ -1,0 +1,12 @@
+{
+  "pass": "scene_pipeline",
+  "inputs": "scene.rs's pipeline_source(3, BGRA [16, 128, 240, 255]): its full-screen triangle (uv × (2, −2) + (−1, 1) for uv in {(0, 0), (2, 0), (0, 2)}) and its COLOR constant (240, 128, 16, 255) / 255, drawn once into an 8 × 8 bgra8unorm target cleared to transparent; values are the target's bytes, in BGRA order",
+  "size": [8, 8],
+  "channels": 4,
+  "items": [{ "id": "scene_pipeline.fill", "at": [0, 0, 8, 8] }],
+  "expect": [
+    { "at": [0, 0], "value": [16, 128, 240, 255], "why": "the triangle's corners are (−1, 1), (3, 1), (−1, −3) in clip space, so it covers the whole frame; COLOR = (240, 128, 16, 255) / 255 written to bgra8unorm stores B = 16, G = 128, R = 240, A = 255" },
+    { "at": [7, 7], "value": [16, 128, 240, 255], "why": "the bottom-right pixel's centre (7.5, 7.5) is clip (0.875, −0.875), inside the covering triangle, so the same COLOR bytes" },
+    { "at": [4, 5], "value": [16, 128, 240, 255], "why": "pixel centre (4.5, 5.5) is clip (0.125, −0.375), inside the triangle: COLOR's bytes again" }
+  ]
+}

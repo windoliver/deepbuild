@@ -10,6 +10,7 @@ The effects module's render side on the GPU layer (#380): each shipped operator'
 - `src/frame.rs`: the effects chain inside scene3d's post passes, and the `Planted` wrong programs.
 - `src/glow.rs`: the glow's mip-chain plan, shared by the frame, the GPU run and the CPU reference. `src/reference.rs`: a shipped pass against its CPU reference in f64.
 - No tests here: tests/acceptance/380 proves it through `deep-gpu` (crates/deep-gpu-layer).
+- Each WGSL file here has its analytic fixture, CPU reference and planted twin in deep-gpu-layer's `src/passes/` (#1428); a new WGSL file or string needs its row in `crates/deep-gpu-layer/fixtures/passes.json`.
 - An operator's graph, checks and WGSL emitter belong in deep-canvas-effects, which touches no GPU.
 
 ## What it may import

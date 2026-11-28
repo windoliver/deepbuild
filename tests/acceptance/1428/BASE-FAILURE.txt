@@ -1,0 +1,351 @@
+Base run of tests/acceptance/1428 at 0beb4a141 ("Merge pull request #3754 ..."), before any change for #1428.
+
+Command, from the checkout:
+  node scripts/throttle.mjs test --stall 120 -- node node_modules/vitest/vitest.mjs run --root tests/acceptance/1428 --no-file-parallelism --reporter=verbose --testTimeout=600000
+
+The four GPU files built deep-gpu (cargo build --locked --bin deep-gpu --features test-meter, through scripts/throttle.mjs build, with CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0) from an empty target/ on this Mac (macOS, Apple silicon, Metal); the two lane files made their scratch copies.
+
+Started 2026-11-28T05:08:02.685Z 0:08  up 13 mins, 9 users, load averages: 39.96 23.72 14.88
+Ended   2026-11-28T05:25:13.091Z 0:25  up 30 mins, 9 users, load averages: 53.68 61.38 48.76
+Result: 6 files failed, 14 tests failed, 0 passed; Duration 1029 s (mostly the build). Load averages are in the two lines above.
+
+Each test fails at one of the suite's assertions, at the surface the issue adds, which the base doesn't have:
+- ac1-lane.test.ts (3) and ac5-planted-string.test.ts (2): "the lane scripts/pass-fixtures.mjs exists": the lane is new.
+- ac1-fixtures.test.ts (3), ac2-tolerance.test.ts (2), ac4-reading.test.ts (2): "the passes call (the fixture table) is answered, not refused": deep-gpu run answers {"code":"bad_input","reason":"unknown call"}; the fixture table, pass_fixture and the planted names pixel_one_code, pixel_three_codes, skips_fixture and each pass's twin are new.
+- ac3-saved-frame.test.ts (2): "save_frame is answered, not refused": deep-gpu run answers {"code":"bad_input","reason":"unknown call"}; save_frame and replay_frame are new.
+No test passes on the base, so no criterion is met there by what the base already does.
+
+----- vitest output (redacted: the checkout is <checkout>, temp folders <tmp>, home folders ~) -----
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1428
+
+ × ac3-saved-frame.test.ts > #1428.cc64770c a saved frame replayed on the same machine is byte-equal to the original render > #1428.cc64770c a frame saved as its draw data and atlas bytes, moved to another folder and replayed in a fresh deep-gpu process, is byte-equal to the original render 2373ms
+   → save_frame is answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+ × ac3-saved-frame.test.ts > #1428.cc64770c a saved frame replayed on the same machine is byte-equal to the original render > #1428.cc64770c the replay draws the text from the saved atlas bytes with no shaping: with the atlas bytes zeroed, the replay's text box differs from the original, or the replay refuses the frame naming its atlas 166ms
+   → save_frame is answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+ × ac2-tolerance.test.ts > #1428.842a6c09 a one-code-value error in one channel of one pixel inside the tolerance passes; a three-value error in one pixel fails, naming the item > #1428.842a6c09 with one channel of one pixel of every pass's analytic fixture one code value off (--planted pixel_one_code), every pass reads PASS with zero outlier pixels 2286ms
+   → the passes call (the fixture table) is answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+ × ac2-tolerance.test.ts > #1428.842a6c09 a one-code-value error in one channel of one pixel inside the tolerance passes; a three-value error in one pixel fails, naming the item > #1428.842a6c09 with one pixel of every pass's analytic fixture three code values off (--planted pixel_three_codes), every pass fails with that one pixel, naming the pass and the item drawn there, three code values from its expected value 152ms
+   → the passes call (the fixture table) is answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+ × ac1-fixtures.test.ts > #1428.5e263fc9 every WGSL file under the two crates has an analytic fixture and a planted twin that fails it, naming the pass and the item > #1428.5e263fc9 every WGSL file under crates/deep-effects-render and crates/deep-gpu-layer is a pass in the fixture table, each pass with an analytic fixture file in the checkout and a planted twin of its own file 2286ms
+   → the passes call (the fixture table) is answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+ × ac1-fixtures.test.ts > #1428.5e263fc9 every WGSL file under the two crates has an analytic fixture and a planted twin that fails it, naming the pass and the item > #1428.5e263fc9 every pass's analytic fixture runs and reads PASS: the pass within 2 of 255 per channel of its hand-written values and of its CPU reference, with zero outlier pixels 147ms
+   → the passes call (the fixture table) is answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+ × ac1-fixtures.test.ts > #1428.5e263fc9 every WGSL file under the two crates has an analytic fixture and a planted twin that fails it, naming the pass and the item > #1428.5e263fc9 every pass's planted twin fails its analytic fixture, naming the pass and the item for the worst 16 pixels, worst first, with their expected and actual values 148ms
+   → the passes call (the fixture table) is answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+ × ac5-planted-string.test.ts > #1428.6b850f58 a planted WGSL string in a test crate with no fixture fails the lane, naming the file > #1428.6b850f58 a vertex and fragment pass held in a raw Rust string in a test crate's src/lib.rs, with no fixture, fails the lane, naming that file 5ms
+   → the lane scripts/pass-fixtures.mjs exists: expected false to be true // Object.is equality
+ × ac5-planted-string.test.ts > #1428.6b850f58 a planted WGSL string in a test crate with no fixture fails the lane, naming the file > #1428.6b850f58 a compute kernel held in an ordinary quoted Rust string in a test crate's src/kernel.rs, with no fixture, fails the lane, naming that file 1ms
+   → the lane scripts/pass-fixtures.mjs exists: expected false to be true // Object.is equality
+ × ac1-lane.test.ts > #1428.5e263fc9 every WGSL file under the two crates has an analytic fixture and a planted twin; a file with neither fails the lane, naming the file > #1428.5e263fc9 the lane passes the checkout as it is, where every WGSL file and string it finds has an analytic fixture and a planted twin 6ms
+   → the lane scripts/pass-fixtures.mjs exists: expected false to be true // Object.is equality
+ × ac1-lane.test.ts > #1428.5e263fc9 every WGSL file under the two crates has an analytic fixture and a planted twin; a file with neither fails the lane, naming the file > #1428.5e263fc9 a WGSL file planted under crates/deep-effects-render with no fixture or twin fails the lane, naming the file 1ms
+   → the lane scripts/pass-fixtures.mjs exists: expected false to be true // Object.is equality
+ × ac1-lane.test.ts > #1428.5e263fc9 every WGSL file under the two crates has an analytic fixture and a planted twin; a file with neither fails the lane, naming the file > #1428.5e263fc9 a WGSL file planted under crates/deep-gpu-layer with no fixture or twin fails the lane, naming the file 0ms
+   → the lane scripts/pass-fixtures.mjs exists: expected false to be true // Object.is equality
+ × ac4-reading.test.ts > #1428.f55fda22 the result reads as a reading unless the pass's analytic fixture ran, and a planted run with the fixture skipped never reads PASS > #1428.f55fda22 every pass whose analytic fixture ran reads PASS and says its fixture ran 2244ms
+   → the passes call (the fixture table) is answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+ × ac4-reading.test.ts > #1428.f55fda22 the result reads as a reading unless the pass's analytic fixture ran, and a planted run with the fixture skipped never reads PASS > #1428.f55fda22 with every pass's analytic fixture skipped (--planted skips_fixture), each pass's comparison against its CPU reference reads as a reading, never PASS, and says its fixture did not run 144ms
+   → the passes call (the fixture table) is answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 14 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac1-fixtures.test.ts > #1428.5e263fc9 every WGSL file under the two crates has an analytic fixture and a planted twin that fails it, naming the pass and the item > #1428.5e263fc9 every WGSL file under crates/deep-effects-render and crates/deep-gpu-layer is a pass in the fixture table, each pass with an analytic fixture file in the checkout and a planted twin of its own file
+AssertionError: the passes call (the fixture table) is answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:136:78
+    134| export function answered(reply: JsonObject, what: string): JsonObject {
+    135|   if (reply['code'] === 'unsupported_platform') expect.fail(`INCONCLUS…
+    136|   expect(reply['code'], `${what} is answered, not refused: ${shown(rep…
+       |                                                                              ^
+    137|   return reply;
+    138| }
+ ❯ passesTable helpers.ts:142:17
+ ❯ ac1-fixtures.test.ts:14:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/14]⎯
+
+ FAIL  ac1-fixtures.test.ts > #1428.5e263fc9 every WGSL file under the two crates has an analytic fixture and a planted twin that fails it, naming the pass and the item > #1428.5e263fc9 every pass's analytic fixture runs and reads PASS: the pass within 2 of 255 per channel of its hand-written values and of its CPU reference, with zero outlier pixels
+AssertionError: the passes call (the fixture table) is answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:136:78
+    134| export function answered(reply: JsonObject, what: string): JsonObject {
+    135|   if (reply['code'] === 'unsupported_platform') expect.fail(`INCONCLUS…
+    136|   expect(reply['code'], `${what} is answered, not refused: ${shown(rep…
+       |                                                                              ^
+    137|   return reply;
+    138| }
+ ❯ passesTable helpers.ts:142:17
+ ❯ ac1-fixtures.test.ts:30:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/14]⎯
+
+ FAIL  ac1-fixtures.test.ts > #1428.5e263fc9 every WGSL file under the two crates has an analytic fixture and a planted twin that fails it, naming the pass and the item > #1428.5e263fc9 every pass's planted twin fails its analytic fixture, naming the pass and the item for the worst 16 pixels, worst first, with their expected and actual values
+AssertionError: the passes call (the fixture table) is answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:136:78
+    134| export function answered(reply: JsonObject, what: string): JsonObject {
+    135|   if (reply['code'] === 'unsupported_platform') expect.fail(`INCONCLUS…
+    136|   expect(reply['code'], `${what} is answered, not refused: ${shown(rep…
+       |                                                                              ^
+    137|   return reply;
+    138| }
+ ❯ passesTable helpers.ts:142:17
+ ❯ ac1-fixtures.test.ts:37:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/14]⎯
+
+ FAIL  ac1-lane.test.ts > #1428.5e263fc9 every WGSL file under the two crates has an analytic fixture and a planted twin; a file with neither fails the lane, naming the file > #1428.5e263fc9 the lane passes the checkout as it is, where every WGSL file and string it finds has an analytic fixture and a planted twin
+AssertionError: the lane scripts/pass-fixtures.mjs exists: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runLane helpers.ts:238:61
+    236| export interface Lane { status: number | null; stdout: string; stderr:…
+    237| export function runLane(root?: string): Lane {
+    238|   expect(existsSync(lanePath()), `the lane ${LANE} exists`).toBe(true);
+       |                                                             ^
+    239|   const args = [lanePath(), ...(root ? ['--root', root] : [])];
+    240|   const r = spawnSync(process.execPath, args, { cwd: REPO, encoding: '…
+ ❯ ac1-lane.test.ts:33:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/14]⎯
+
+ FAIL  ac1-lane.test.ts > #1428.5e263fc9 every WGSL file under the two crates has an analytic fixture and a planted twin; a file with neither fails the lane, naming the file > #1428.5e263fc9 a WGSL file planted under crates/deep-effects-render with no fixture or twin fails the lane, naming the file
+AssertionError: the lane scripts/pass-fixtures.mjs exists: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runLane helpers.ts:238:61
+    236| export interface Lane { status: number | null; stdout: string; stderr:…
+    237| export function runLane(root?: string): Lane {
+    238|   expect(existsSync(lanePath()), `the lane ${LANE} exists`).toBe(true);
+       |                                                             ^
+    239|   const args = [lanePath(), ...(root ? ['--root', root] : [])];
+    240|   const r = spawnSync(process.execPath, args, { cwd: REPO, encoding: '…
+ ❯ plantedFileFailsTheLane ac1-lane.test.ts:21:18
+ ❯ ac1-lane.test.ts:40:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/14]⎯
+
+ FAIL  ac1-lane.test.ts > #1428.5e263fc9 every WGSL file under the two crates has an analytic fixture and a planted twin; a file with neither fails the lane, naming the file > #1428.5e263fc9 a WGSL file planted under crates/deep-gpu-layer with no fixture or twin fails the lane, naming the file
+AssertionError: the lane scripts/pass-fixtures.mjs exists: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runLane helpers.ts:238:61
+    236| export interface Lane { status: number | null; stdout: string; stderr:…
+    237| export function runLane(root?: string): Lane {
+    238|   expect(existsSync(lanePath()), `the lane ${LANE} exists`).toBe(true);
+       |                                                             ^
+    239|   const args = [lanePath(), ...(root ? ['--root', root] : [])];
+    240|   const r = spawnSync(process.execPath, args, { cwd: REPO, encoding: '…
+ ❯ plantedFileFailsTheLane ac1-lane.test.ts:21:18
+ ❯ ac1-lane.test.ts:44:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/14]⎯
+
+ FAIL  ac2-tolerance.test.ts > #1428.842a6c09 a one-code-value error in one channel of one pixel inside the tolerance passes; a three-value error in one pixel fails, naming the item > #1428.842a6c09 with one channel of one pixel of every pass's analytic fixture one code value off (--planted pixel_one_code), every pass reads PASS with zero outlier pixels
+AssertionError: the passes call (the fixture table) is answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:136:78
+    134| export function answered(reply: JsonObject, what: string): JsonObject {
+    135|   if (reply['code'] === 'unsupported_platform') expect.fail(`INCONCLUS…
+    136|   expect(reply['code'], `${what} is answered, not refused: ${shown(rep…
+       |                                                                              ^
+    137|   return reply;
+    138| }
+ ❯ passesTable helpers.ts:142:17
+ ❯ ac2-tolerance.test.ts:10:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/14]⎯
+
+ FAIL  ac2-tolerance.test.ts > #1428.842a6c09 a one-code-value error in one channel of one pixel inside the tolerance passes; a three-value error in one pixel fails, naming the item > #1428.842a6c09 with one pixel of every pass's analytic fixture three code values off (--planted pixel_three_codes), every pass fails with that one pixel, naming the pass and the item drawn there, three code values from its expected value
+AssertionError: the passes call (the fixture table) is answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:136:78
+    134| export function answered(reply: JsonObject, what: string): JsonObject {
+    135|   if (reply['code'] === 'unsupported_platform') expect.fail(`INCONCLUS…
+    136|   expect(reply['code'], `${what} is answered, not refused: ${shown(rep…
+       |                                                                              ^
+    137|   return reply;
+    138| }
+ ❯ passesTable helpers.ts:142:17
+ ❯ ac2-tolerance.test.ts:23:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/14]⎯
+
+ FAIL  ac3-saved-frame.test.ts > #1428.cc64770c a saved frame replayed on the same machine is byte-equal to the original render > #1428.cc64770c a frame saved as its draw data and atlas bytes, moved to another folder and replayed in a fresh deep-gpu process, is byte-equal to the original render
+AssertionError: save_frame is answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:136:78
+    134| export function answered(reply: JsonObject, what: string): JsonObject {
+    135|   if (reply['code'] === 'unsupported_platform') expect.fail(`INCONCLUS…
+    136|   expect(reply['code'], `${what} is answered, not refused: ${shown(rep…
+       |                                                                              ^
+    137|   return reply;
+    138| }
+ ❯ saveFrame ac3-saved-frame.test.ts:14:17
+ ❯ ac3-saved-frame.test.ts:41:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/14]⎯
+
+ FAIL  ac3-saved-frame.test.ts > #1428.cc64770c a saved frame replayed on the same machine is byte-equal to the original render > #1428.cc64770c the replay draws the text from the saved atlas bytes with no shaping: with the atlas bytes zeroed, the replay's text box differs from the original, or the replay refuses the frame naming its atlas
+AssertionError: save_frame is answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:136:78
+    134| export function answered(reply: JsonObject, what: string): JsonObject {
+    135|   if (reply['code'] === 'unsupported_platform') expect.fail(`INCONCLUS…
+    136|   expect(reply['code'], `${what} is answered, not refused: ${shown(rep…
+       |                                                                              ^
+    137|   return reply;
+    138| }
+ ❯ saveFrame ac3-saved-frame.test.ts:14:17
+ ❯ ac3-saved-frame.test.ts:50:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/14]⎯
+
+ FAIL  ac4-reading.test.ts > #1428.f55fda22 the result reads as a reading unless the pass's analytic fixture ran, and a planted run with the fixture skipped never reads PASS > #1428.f55fda22 every pass whose analytic fixture ran reads PASS and says its fixture ran
+AssertionError: the passes call (the fixture table) is answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:136:78
+    134| export function answered(reply: JsonObject, what: string): JsonObject {
+    135|   if (reply['code'] === 'unsupported_platform') expect.fail(`INCONCLUS…
+    136|   expect(reply['code'], `${what} is answered, not refused: ${shown(rep…
+       |                                                                              ^
+    137|   return reply;
+    138| }
+ ❯ passesTable helpers.ts:142:17
+ ❯ ac4-reading.test.ts:10:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/14]⎯
+
+ FAIL  ac4-reading.test.ts > #1428.f55fda22 the result reads as a reading unless the pass's analytic fixture ran, and a planted run with the fixture skipped never reads PASS > #1428.f55fda22 with every pass's analytic fixture skipped (--planted skips_fixture), each pass's comparison against its CPU reference reads as a reading, never PASS, and says its fixture did not run
+AssertionError: the passes call (the fixture table) is answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:136:78
+    134| export function answered(reply: JsonObject, what: string): JsonObject {
+    135|   if (reply['code'] === 'unsupported_platform') expect.fail(`INCONCLUS…
+    136|   expect(reply['code'], `${what} is answered, not refused: ${shown(rep…
+       |                                                                              ^
+    137|   return reply;
+    138| }
+ ❯ passesTable helpers.ts:142:17
+ ❯ ac4-reading.test.ts:16:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/14]⎯
+
+ FAIL  ac5-planted-string.test.ts > #1428.6b850f58 a planted WGSL string in a test crate with no fixture fails the lane, naming the file > #1428.6b850f58 a vertex and fragment pass held in a raw Rust string in a test crate's src/lib.rs, with no fixture, fails the lane, naming that file
+AssertionError: the lane scripts/pass-fixtures.mjs exists: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runLane helpers.ts:238:61
+    236| export interface Lane { status: number | null; stdout: string; stderr:…
+    237| export function runLane(root?: string): Lane {
+    238|   expect(existsSync(lanePath()), `the lane ${LANE} exists`).toBe(true);
+       |                                                             ^
+    239|   const args = [lanePath(), ...(root ? ['--root', root] : [])];
+    240|   const r = spawnSync(process.execPath, args, { cwd: REPO, encoding: '…
+ ❯ plantedStringFailsTheLane ac5-planted-string.test.ts:42:18
+ ❯ ac5-planted-string.test.ts:54:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/14]⎯
+
+ FAIL  ac5-planted-string.test.ts > #1428.6b850f58 a planted WGSL string in a test crate with no fixture fails the lane, naming the file > #1428.6b850f58 a compute kernel held in an ordinary quoted Rust string in a test crate's src/kernel.rs, with no fixture, fails the lane, naming that file
+AssertionError: the lane scripts/pass-fixtures.mjs exists: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runLane helpers.ts:238:61
+    236| export interface Lane { status: number | null; stdout: string; stderr:…
+    237| export function runLane(root?: string): Lane {
+    238|   expect(existsSync(lanePath()), `the lane ${LANE} exists`).toBe(true);
+       |                                                             ^
+    239|   const args = [lanePath(), ...(root ? ['--root', root] : [])];
+    240|   const r = spawnSync(process.execPath, args, { cwd: REPO, encoding: '…
+ ❯ plantedStringFailsTheLane ac5-planted-string.test.ts:42:18
+ ❯ ac5-planted-string.test.ts:58:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/14]⎯
+
+
+ Test Files  6 failed (6)
+      Tests  14 failed (14)
+   Start at  00:08:03
+   Duration  1029.04s (tests 100%)
+

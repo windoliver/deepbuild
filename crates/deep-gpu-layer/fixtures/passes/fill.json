@@ -1,0 +1,11 @@
+{
+  "pass": "fill",
+  "inputs": "fill.wgsl for a 2D rgba8unorm output of 6 × 5 texels, filled with fill.v = (0.2, 0.4, 0.6, 1), dispatched as 2 × 2 groups of 4 × 4 × 4, so the invocations past the texture's size return",
+  "size": [6, 5],
+  "channels": 4,
+  "items": [{ "id": "fill.output", "at": [0, 0, 6, 5] }],
+  "expect": [
+    { "at": [0, 0], "value": [51, 102, 153, 255], "why": "0.2, 0.4, 0.6 and 1 of 255 are 51, 102, 153 and 255" },
+    { "at": [0, 0, 6, 5], "value": [51, 102, 153, 255], "why": "every texel holds the one value, the last row and column too" }
+  ]
+}

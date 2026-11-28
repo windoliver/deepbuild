@@ -1,0 +1,16 @@
+{
+  "pass": "player_blit",
+  "inputs": "deep-player's BLIT drawn into a 4 × 2 rgba8unorm target from a 4 × 2 rgba8unorm frame through a linear sampler, 1:1: row 0 holds (255, 0, 0, 255), (0, 255, 0, 255), (0, 0, 255, 255), (255, 255, 255, 255); row 1 holds (10, 20, 30, 40), (50, 60, 70, 80), (90, 100, 110, 120), (130, 140, 150, 160). The full-screen triangle's uv at pixel centre (x, y) is ((x + 0.5) / 4, (y + 0.5) / 2), a texel centre, so the linear sample is that texel alone",
+  "size": [4, 2],
+  "channels": 4,
+  "items": [
+    { "id": "player_blit.row0", "at": [0, 0, 4, 1] },
+    { "id": "player_blit.row1", "at": [0, 1, 4, 1] }
+  ],
+  "expect": [
+    { "at": [1, 1], "value": [50, 60, 70, 80], "why": "uv = (1.5 / 4, 1.5 / 2) = (0.375, 0.75), texel (0.375 × 4 − 0.5, 0.75 × 2 − 0.5) = (1, 1) with weight 1: (50, 60, 70, 80)" },
+    { "at": [0, 0], "value": [255, 0, 0, 255], "why": "uv = (0.125, 0.25), texel (0, 0) with weight 1: (255, 0, 0, 255)" },
+    { "at": [3, 0], "value": [255, 255, 255, 255], "why": "uv = (0.875, 0.25), texel (3, 0) with weight 1: (255, 255, 255, 255)" },
+    { "at": [3, 1], "value": [130, 140, 150, 160], "why": "uv = (0.875, 0.75), texel (3, 1) with weight 1: (130, 140, 150, 160)" }
+  ]
+}

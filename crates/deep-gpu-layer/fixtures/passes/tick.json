@@ -1,0 +1,12 @@
+{
+  "pass": "tick",
+  "inputs": "tick.wgsl's spin over a 16 × 16 rgba8unorm target, loops = 1: x = fract(fract(px.x × 0.001 + px.y × 0.002) × 3.7 + 0.1234) at each pixel centre px, written (x, x, x, 1)",
+  "size": [16, 16],
+  "channels": 4,
+  "items": [{ "id": "tick.spin", "at": [0, 0, 16, 16] }],
+  "expect": [
+    { "at": [0, 0], "value": [33, 33, 33, 255], "why": "x = 0.0015 × 3.7 + 0.1234 = 0.12895, 32.88 of 255" },
+    { "at": [15, 0], "value": [47, 47, 47, 255], "why": "x = 0.0165 × 3.7 + 0.1234 = 0.18445, 47.03 of 255" },
+    { "at": [15, 15], "value": [75, 75, 75, 255], "why": "x = 0.0465 × 3.7 + 0.1234 = 0.29545, 75.34 of 255" }
+  ]
+}
