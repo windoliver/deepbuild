@@ -783,6 +783,13 @@ pub fn next(cx: &mut App) {
     });
 }
 
+pub fn focus_list(cx: &mut App) {
+    let Some(window) = selection(cx).window else {
+        return;
+    };
+    let _ = window.update(cx, |_, window, cx| views::focus_list(window, cx));
+}
+
 thread_local! {
     /// The unread row whose page is open, by the one unread rule (#1461).
     static READER: std::cell::RefCell<crate::unread::Reader> = std::cell::RefCell::default();

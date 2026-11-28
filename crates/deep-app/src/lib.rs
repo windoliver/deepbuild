@@ -37,6 +37,7 @@ pub mod connect;
 pub mod contact_sheet;
 /// #2403: the app's own words, one table per language by key.
 pub mod copy;
+mod decided;
 pub mod device;
 pub mod empties;
 #[cfg(feature = "fixtures")]

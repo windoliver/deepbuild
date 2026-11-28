@@ -241,7 +241,9 @@ fn shipped(root: &Path) -> Vec<View> {
                     Kind::Session => Some(SESSION),
                     Kind::Welcome => Some(WELCOME),
                     Kind::Agents => Some(AGENTS),
-                    Kind::Sidebar | Kind::NeedsYou | Kind::Line | Kind::Rules => None,
+                    Kind::Sidebar | Kind::NeedsYou | Kind::Line | Kind::Rules | Kind::Decided => {
+                        None
+                    }
                 },
                 panel: None,
             })

@@ -1,0 +1,1 @@
+{ "alone": true, "why": "binary: each file builds deep-drive (plain and with env-plants, each with deep-app/test-confirm) with cargo into this checkout's target/ and copies it out, and hold, last and shown build deep-hook and start hubs whose 10 s hold runs on the hub's test clock with real time, so a sibling's load can carry a hold past its Undo", "slow": ["hold.test.ts"] }

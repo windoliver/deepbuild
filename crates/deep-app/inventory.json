@@ -9,6 +9,14 @@
       "literals": []
     },
     {
+      "panel": "deepbuild/decided",
+      "entry": "crates/deep-app/src/views.rs Shipped, Kind::Decided",
+      "roles": [
+        "ink_primary"
+      ],
+      "literals": []
+    },
+    {
       "panel": "deepbuild/extension",
       "entry": "crates/deep-app/src/views.rs Slot",
       "roles": [],

@@ -197,6 +197,11 @@ fn time_of(time: crate::list::Time, now: u64) -> String {
             states::span(age)
         }
         crate::list::Time::At(at) => states::moment(at, now),
+        crate::list::Time::Left(until) => {
+            let left = until.saturating_sub(now);
+            states::changes_after(left % 1000 + 1);
+            states::span(left.div_ceil(1000) * 1000)
+        }
     }
 }
 
@@ -336,6 +341,7 @@ pub(crate) struct RowDrawn {
     pub(crate) timed: bool,
     /// #1808's planted row draws its title whole, over the slots to its right.
     under: bool,
+    undo: bool,
 }
 
 impl RowDrawn {
@@ -515,6 +521,7 @@ impl RowDrawn {
             rtl,
             timed,
             under,
+            undo: matches!(row.time, Some(crate::list::Time::Left(_))),
         }
     }
 }
@@ -649,6 +656,22 @@ pub(crate) fn row_element(
                 .text_color(chrome.ink_secondary)
                 .child(drawn.drawn_word.clone()),
         )
+        .children(drawn.undo.then(|| {
+            let ask = id.to_owned();
+            row_slot(id, "undo", copy::text("question.undo").to_owned())
+                .role(Role::Button)
+                .flex_none()
+                .h_full()
+                .flex()
+                .items_center()
+                .pl(s.space(1))
+                .text_color(chrome.ink_primary)
+                .child(copy::text("question.undo"))
+                .on_click(move |_, window, cx| {
+                    cx.stop_propagation();
+                    crate::card::undo_ask(&ask, window, cx);
+                })
+        }))
         // The flag, at most one, in the right slot beside the word (#2019): never a state, so in the word's ink.
         .children(drawn.flag.as_ref().map(|(code, text)| {
             row_slot(id, "flag", format!("{code}: {text}"))

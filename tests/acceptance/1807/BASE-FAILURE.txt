@@ -1,0 +1,266 @@
+# #1807 acceptance suite on the base 0beb4a141, run once (2026-11-28), before any implementation.
+# node node_modules/vitest/vitest.mjs run --root tests/acceptance/1807 --no-file-parallelism --testTimeout=600000
+# Stack lines are left out; home folders are written ~ and temp folders <tmp>.
+# The one pass is last.test.ts's clean AC3 test: the base already keeps the only answered ask's receipt and Undo on its
+# page through the Undo window (#1101's receipt), so AC3 fails at the base only on its plant, which the base's env-plants
+# build doesn't know ("wasn't caught"). AC4's Needs-you half (count 1, no settled row) also holds at the base; it fails on
+# the missing Decided page. Every other test fails at its assertion for the missing feature, and each plant test stops at
+# its clean precondition. shown.test.ts's 1700 s are mostly its builds waiting for a build grant on a loaded machine.
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/github-issue-1807-6dbae2/agent-a39993921a23dc76e/tests/acceptance/1807
+
+ ❯ shown.test.ts (1 test | 1 failed) 1699799ms
+   ❯ #1807 AC6 #1807.9a39e256 (1)
+     × #1807.9a39e256 Shown to you: an answered row counting down beside the next ask's card, the last receipt on its page and the Decided page, light and dark, judged only by the recorded taste call 1699682ms
+ ❯ hold.test.ts (4 tests | 4 failed) 2123ms
+   ❯ #1807 AC1 #1807.7b07b348 (2)
+     × #1807.7b07b348 a push allowed at 0 s shows "Starts in" and Undo on its row and its card at 4 s, though a second ask is open 2028ms
+     × #1807.7b07b348 a planted list that drops the answered row at 2 s (answered-row-leaves-at-2s) fails, naming the ask 0ms
+   ❯ #1807 AC2 #1807.9f2f358f (2)
+     × #1807.9f2f358f ⌘Z at 6 s leaves the push not run and the ask open again in place 1ms
+     × #1807.9f2f358f a planted app that clears its own receipt and sends nothing (undo-clears-receipt-only) fails, naming the missing call 0ms
+ ❯ decided.test.ts (4 tests | 4 failed) 469ms
+   ❯ #1807 AC4 #1807.55e5c424 (2)
+     × #1807.55e5c424 a defaulted ask, a rule's firing and a decision applied for you each show on Decided and never under Needs you 233ms
+     × #1807.55e5c424 a planted settled row under Needs you (settled-row-under-needs-you) fails, naming the count 0ms
+   ❯ #1807 AC5 #1807.ed9995d7 (2)
+     × #1807.ed9995d7 Decided is in the View menu and ⌘K, and no list row opens it 230ms
+     × #1807.ed9995d7 a planted Decided row in the list (decided-row-in-list) fails, naming it 1ms
+ ❯ last.test.ts (2 tests | 1 failed) 34501ms
+   ❯ #1807 AC3 #1807.77fab939 (2)
+     × #1807.77fab939 a planted app that jumps to another page within the Undo window (last-receipt-jumps-away) fails 32725ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 10 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  decided.test.ts > #1807 AC4 #1807.55e5c424 > #1807.55e5c424 a defaulted ask, a rule's firing and a decision applied for you each show on Decided and never under Needs you
+AssertionError: the View menu holds no Decided item: it holds ["Commands","Home","Needs you","Agents","Rules"]: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the View menu holds no Decided item: it holds [\"Commands\",\"Home\",\"Needs you\",\"Agents\",\"Rules\"]",
++ ]
+
+ ❯ decided.test.ts:16:43
+     14|   it(`${ID.settled} a defaulted ask, a rule's firing and a decision ap…
+     15|     const failures = await cleanSettled();
+     16|     expect(failures, failures.join('\n')).toEqual([]);
+       |                                           ^
+     17|   }, 120 * MINUTE);
+     18|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/10]⎯
+
+ FAIL  decided.test.ts > #1807 AC4 #1807.55e5c424 > #1807.55e5c424 a planted settled row under Needs you (settled-row-under-needs-you) fails, naming the count
+AssertionError: the clean run already fails, so the plant can't be told from it: the View menu holds no Decided item: it holds ["Commands","Home","Needs you","Agents","Rules"]: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the View menu holds no Decided item: it holds [\"Commands\",\"Home\",\"Needs you\",\"Agents\",\"Rules\"]",
++ ]
+
+ ❯ decided.test.ts:21:109
+     19|   it(`${ID.settled} a planted settled row under Needs you (${PLANT.set…
+     20|     const before = await cleanSettled();
+     21|     expect(before, `the clean run already fails, so the plant can't be…
+       |                                                                                                             ^
+     22|     const planted = await settledJudge(PLANT.settledUnderNeedsYou);
+     23|     expect(planted.filter((f) => /count reads/.test(f)), `the settled …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/10]⎯
+
+ FAIL  decided.test.ts > #1807 AC5 #1807.ed9995d7 > #1807.ed9995d7 Decided is in the View menu and ⌘K, and no list row opens it
+AssertionError: the View menu holds no Decided item: it holds ["Commands","Home","Needs you","Agents","Rules"]
+⌘K finds no Decided for "Decided": it lists []: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the View menu holds no Decided item: it holds [\"Commands\",\"Home\",\"Needs you\",\"Agents\",\"Rules\"]",
++   "⌘K finds no Decided for \"Decided\": it lists []",
++ ]
+
+ ❯ decided.test.ts:30:43
+     28|   it(`${ID.page} Decided is in the View menu and ⌘K, and no list row o…
+     29|     const failures = await cleanDoors();
+     30|     expect(failures, failures.join('\n')).toEqual([]);
+       |                                           ^
+     31|   }, 120 * MINUTE);
+     32|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/10]⎯
+
+ FAIL  decided.test.ts > #1807 AC5 #1807.ed9995d7 > #1807.ed9995d7 a planted Decided row in the list (decided-row-in-list) fails, naming it
+AssertionError: the clean run already fails, so the plant can't be told from it: the View menu holds no Decided item: it holds ["Commands","Home","Needs you","Agents","Rules"]
+⌘K finds no Decided for "Decided": it lists []: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the View menu holds no Decided item: it holds [\"Commands\",\"Home\",\"Needs you\",\"Agents\",\"Rules\"]",
++   "⌘K finds no Decided for \"Decided\": it lists []",
++ ]
+
+ ❯ decided.test.ts:35:109
+     33|   it(`${ID.page} a planted Decided row in the list (${PLANT.decidedRow…
+     34|     const before = await cleanDoors();
+     35|     expect(before, `the clean run already fails, so the plant can't be…
+       |                                                                                                             ^
+     36|     const planted = await decidedDoorsJudge(PLANT.decidedRowInList);
+     37|     expect(planted.filter((f) => /the list holds a Decided row/.test(f…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/10]⎯
+
+ FAIL  hold.test.ts > #1807 AC1 #1807.7b07b348 > #1807.7b07b348 a push allowed at 0 s shows "Starts in" and Undo on its row and its card at 4 s, though a second ask is open
+AssertionError: ask:01MCC5TF8W8T92MG5VD1906KPX (`git push origin main`): its row isn't in the list 4 s after it was allowed; the list holds ["ask:01MCC5TFANGK7HRNSEZQRFXK6C","project:shop","session:0c6375d8-8e46-41b2-80ed-3c993f540564"]: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "ask:01MCC5TF8W8T92MG5VD1906KPX (`git push origin main`): its row isn't in the list 4 s after it was allowed; the list holds [\"ask:01MCC5TFANGK7HRNSEZQRFXK6C\",\"project:shop\",\"session:0c6375d8-8e46-41b2-80ed-3c993f540564\"]",
++ ]
+
+ ❯ hold.test.ts:34:43
+     32|   it(`${ID.row} a push allowed at 0 s shows "Starts in" and Undo on it…
+     33|     const failures = failuresOf((await cleanRun()).row);
+     34|     expect(failures, failures.join('\n')).toEqual([]);
+       |                                           ^
+     35|   }, 180 * MINUTE);
+     36|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/10]⎯
+
+ FAIL  hold.test.ts > #1807 AC1 #1807.7b07b348 > #1807.7b07b348 a planted list that drops the answered row at 2 s (answered-row-leaves-at-2s) fails, naming the ask
+AssertionError: the clean run already fails, so the plant can't be told from it: ask:01MCC5TF8W8T92MG5VD1906KPX (`git push origin main`): its row isn't in the list 4 s after it was allowed; the list holds ["ask:01MCC5TFANGK7HRNSEZQRFXK6C","project:shop","session:0c6375d8-8e46-41b2-80ed-3c993f540564"]: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "ask:01MCC5TF8W8T92MG5VD1906KPX (`git push origin main`): its row isn't in the list 4 s after it was allowed; the list holds [\"ask:01MCC5TFANGK7HRNSEZQRFXK6C\",\"project:shop\",\"session:0c6375d8-8e46-41b2-80ed-3c993f540564\"]",
++ ]
+
+ ❯ hold.test.ts:39:109
+     37|   it(`${ID.row} a planted list that drops the answered row at 2 s (${P…
+     38|     const before = failuresOf((await cleanRun()).row);
+     39|     expect(before, `the clean run already fails, so the plant can't be…
+       |                                                                                                             ^
+     40|     const planted = await scene(PLANT.rowLeavesAt2s);
+     41|     const caught = (await rowAndCardAt4(planted)).filter((f) => f.incl…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/10]⎯
+
+ FAIL  hold.test.ts > #1807 AC2 #1807.9f2f358f > #1807.9f2f358f ⌘Z at 6 s leaves the push not run and the ask open again in place
+AssertionError: ask:01MCC5TF8W8T92MG5VD1906KPX (`git push origin main`): ⌘Z at 6 s on ask/01MCC5TFANGK7HRNSEZQRFXK6C made no ask.undo call for ask:01MCC5TF8W8T92MG5VD1906KPX, the missing call; the app sent []
+ask:01MCC5TF8W8T92MG5VD1906KPX (`git push origin main`): after ⌘Z at 6 s its row isn't in the list; the list holds ["ask:01MCC5TFANGK7HRNSEZQRFXK6C","project:shop","session:0c6375d8-8e46-41b2-80ed-3c993f540564"]
+ask:01MCC5TF8W8T92MG5VD1906KPX (`git push origin main`) isn't open again after ⌘Z at 6 s: the hub's inbox reads ask:01MCC5TF8W8T92MG5VD1906KPX closed, answered, not open and unanswered
+ask:01MCC5TF8W8T92MG5VD1906KPX (`git push origin main`) ran 12.0 s after its yes, though ⌘Z at 6 s undid it: expected [ …(4) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "ask:01MCC5TF8W8T92MG5VD1906KPX (`git push origin main`): ⌘Z at 6 s on ask/01MCC5TFANGK7HRNSEZQRFXK6C made no ask.undo call for ask:01MCC5TF8W8T92MG5VD1906KPX, the missing call; the app sent []",
++   "ask:01MCC5TF8W8T92MG5VD1906KPX (`git push origin main`): after ⌘Z at 6 s its row isn't in the list; the list holds [\"ask:01MCC5TFANGK7HRNSEZQRFXK6C\",\"project:shop\",\"session:0c6375d8-8e46-41b2-80ed-3c993f540564\"]",
++   "ask:01MCC5TF8W8T92MG5VD1906KPX (`git push origin main`) isn't open again after ⌘Z at 6 s: the hub's inbox reads ask:01MCC5TF8W8T92MG5VD1906KPX closed, answered, not open and unanswered",
++   "ask:01MCC5TF8W8T92MG5VD1906KPX (`git push origin main`) ran 12.0 s after its yes, though ⌘Z at 6 s undid it",
++ ]
+
+ ❯ hold.test.ts:49:43
+     47|   it(`${ID.undo} ⌘Z at 6 s leaves the push not run and the ask open ag…
+     48|     const failures = failuresOf((await cleanRun()).undo);
+     49|     expect(failures, failures.join('\n')).toEqual([]);
+       |                                           ^
+     50|   }, 180 * MINUTE);
+     51|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/10]⎯
+
+ FAIL  hold.test.ts > #1807 AC2 #1807.9f2f358f > #1807.9f2f358f a planted app that clears its own receipt and sends nothing (undo-clears-receipt-only) fails, naming the missing call
+AssertionError: the clean run already fails, so the plant can't be told from it: ask:01MCC5TF8W8T92MG5VD1906KPX (`git push origin main`): ⌘Z at 6 s on ask/01MCC5TFANGK7HRNSEZQRFXK6C made no ask.undo call for ask:01MCC5TF8W8T92MG5VD1906KPX, the missing call; the app sent []
+ask:01MCC5TF8W8T92MG5VD1906KPX (`git push origin main`): after ⌘Z at 6 s its row isn't in the list; the list holds ["ask:01MCC5TFANGK7HRNSEZQRFXK6C","project:shop","session:0c6375d8-8e46-41b2-80ed-3c993f540564"]
+ask:01MCC5TF8W8T92MG5VD1906KPX (`git push origin main`) isn't open again after ⌘Z at 6 s: the hub's inbox reads ask:01MCC5TF8W8T92MG5VD1906KPX closed, answered, not open and unanswered
+ask:01MCC5TF8W8T92MG5VD1906KPX (`git push origin main`) ran 12.0 s after its yes, though ⌘Z at 6 s undid it: expected [ …(4) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "ask:01MCC5TF8W8T92MG5VD1906KPX (`git push origin main`): ⌘Z at 6 s on ask/01MCC5TFANGK7HRNSEZQRFXK6C made no ask.undo call for ask:01MCC5TF8W8T92MG5VD1906KPX, the missing call; the app sent []",
++   "ask:01MCC5TF8W8T92MG5VD1906KPX (`git push origin main`): after ⌘Z at 6 s its row isn't in the list; the list holds [\"ask:01MCC5TFANGK7HRNSEZQRFXK6C\",\"project:shop\",\"session:0c6375d8-8e46-41b2-80ed-3c993f540564\"]",
++   "ask:01MCC5TF8W8T92MG5VD1906KPX (`git push origin main`) isn't open again after ⌘Z at 6 s: the hub's inbox reads ask:01MCC5TF8W8T92MG5VD1906KPX closed, answered, not open and unanswered",
++   "ask:01MCC5TF8W8T92MG5VD1906KPX (`git push origin main`) ran 12.0 s after its yes, though ⌘Z at 6 s undid it",
++ ]
+
+ ❯ hold.test.ts:54:109
+     52|   it(`${ID.undo} a planted app that clears its own receipt and sends n…
+     53|     const before = failuresOf((await cleanRun()).undo);
+     54|     expect(before, `the clean run already fails, so the plant can't be…
+       |                                                                                                             ^
+     55|     const planted = await scene(PLANT.undoSendsNothing);
+     56|     const caught = (await undoAt6(planted)).filter((f) => f.includes('…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/10]⎯
+
+ FAIL  last.test.ts > #1807 AC3 #1807.77fab939 > #1807.77fab939 a planted app that jumps to another page within the Undo window (last-receipt-jumps-away) fails
+AssertionError: the app that jumps to another page within the Undo window wasn't caught: : expected [] to not deeply equal []
+
+Compared values have no visual difference.
+
+ ❯ last.test.ts:29:131
+     27|     const planted = await receiptRun(PLANT.lastReceiptLeaves);
+     28|     const caught = planted.failures.filter((f) => f.includes(planted.a…
+     29|     expect(caught, `the app that jumps to another page within the Undo…
+       |                                                                                                                                   ^
+     30|   }, 180 * MINUTE);
+     31| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/10]⎯
+
+ FAIL  shown.test.ts > #1807 AC6 #1807.9a39e256 > #1807.9a39e256 Shown to you: an answered row counting down beside the next ask's card, the last receipt on its page and the Decided page, light and dark, judged only by the recorded taste call
+AssertionError: each state is right before its picture is taken: light: no answered row counting down beside the next ask's card to picture: ask:01MCC5TFM8GNWNN7EN2C1BFFAV's row reads nothing, the page is ask/01MCC5TG5Y43Z4HQFHDQX42125
+light: no Decided page to picture: the View menu holds no Decided item: it holds ["Commands","Home","Needs you","Agents","Rules"]
+dark: no answered row counting down beside the next ask's card to picture: ask:01MCC5TFM8GNWNN7EN2C1BFFAV's row reads nothing, the page is ask/01MCC5TG5Y43Z4HQFHDQX42125
+dark: no Decided page to picture: the View menu holds no Decided item: it holds ["Commands","Home","Needs you","Agents","Rules"]: expected [ …(4) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "light: no answered row counting down beside the next ask's card to picture: ask:01MCC5TFM8GNWNN7EN2C1BFFAV's row reads nothing, the page is ask/01MCC5TG5Y43Z4HQFHDQX42125",
++   "light: no Decided page to picture: the View menu holds no Decided item: it holds [\"Commands\",\"Home\",\"Needs you\",\"Agents\",\"Rules\"]",
++   "dark: no answered row counting down beside the next ask's card to picture: ask:01MCC5TFM8GNWNN7EN2C1BFFAV's row reads nothing, the page is ask/01MCC5TG5Y43Z4HQFHDQX42125",
++   "dark: no Decided page to picture: the View menu holds no Decided item: it holds [\"Commands\",\"Home\",\"Needs you\",\"Agents\",\"Rules\"]",
++ ]
+
+ ❯ shown.test.ts:64:97
+     62|       }
+     63|     }
+     64|     expect(failures, `each state is right before its picture is taken:…
+       |                                                                                                 ^
+     65|     writeFileSync(join(dir, 'run.json'), `${JSON.stringify({ issue: 18…
+     66|     files['run.json'] = sha256(readFileSync(join(dir, 'run.json')));
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/10]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  10 failed | 1 passed (11)
+   Start at  00:08:07
+   Duration  1737.53s (tests 100%)
+
