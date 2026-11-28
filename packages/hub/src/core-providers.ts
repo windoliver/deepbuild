@@ -4,6 +4,7 @@ import type { EnvironmentProvider } from './environment-port.js';
 import type { ForgeProvider } from './forge-port.js';
 import type { KnowledgeProvider } from './knowledge-port.js';
 import type { WorkspacesProvider } from './workspaces-port.js';
+import type { Connection, RecordStore } from '@deepbuild/record';
 
 /** Internal DI contract: required domain capabilities supplied by the outer runtime, never selected by Core. */
 export interface CoreProviders {
@@ -13,4 +14,5 @@ export interface CoreProviders {
   knowledge: KnowledgeProvider;
   forge: ForgeProvider;
   workspaces: WorkspacesProvider;
+  telemetry: (o: { record: RecordStore; connection: Connection }) => Promise<{ close(): Promise<void> }>;
 }

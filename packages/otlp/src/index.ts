@@ -215,6 +215,7 @@ export function startReceiver(options: ReceiverOptions): Promise<Receiver> {
     server.once('error', reject);
     server.listen(options.port ?? DEFAULT_PORT, HOST, () => {
       server.off('error', reject);
+      server.on('error', (error) => { process.stderr.write(`deep otlp: the receiver on ${HOST}: ${error.message}\n`); });
       const address = server.address();
       const port = typeof address === 'object' && address ? address.port : 0;
       resolve({

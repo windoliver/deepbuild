@@ -615,6 +615,10 @@
           "spec": "0.0.0",
           "why": "Issue #237: the hub holds the kernel's one lease table, opened on its record, with env-local's kinds declared in it, and the supervisor leases every run's keys through it."
         },
+        "@deepbuild/otlp": {
+          "spec": "0.0.0",
+          "why": "Issue #1852: the running hub starts the OTLP receiver with its own record writer and stops it with the hub."
+        },
         "@deepbuild/record": {
           "spec": "0.0.0",
           "why": "Issue #16: the hub is the record's one writer (#14)."

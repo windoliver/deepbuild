@@ -10,7 +10,7 @@ import { join } from 'node:path';
 interface DoctorItem {
   item: 'otlp.telemetry';
   agent: 'claude-code';
-  code: 'healthy' | 'telemetry_unreadable' | 'not_checked';
+  code: 'healthy' | 'telemetry_unreadable' | 'not_checked' | 'hub_unreachable' | 'ports_taken';
   level: 'ok' | 'fail' | 'skip';
   evidence: string;
   fix: string;
@@ -19,6 +19,8 @@ interface DoctorItem {
 const MANAGED = process.platform === 'darwin' ? '/Library/Application Support/ClaudeCode/managed-settings.json' : '/etc/claude-code/managed-settings.json';
 const SIGNALS = ['traces', 'logs'] as const;
 const READABLE = new Set(['http/protobuf', 'http/json']);
+const HOST = '127.0.0.1';
+const PROBE_MS = 2000;
 
 interface Setting { value: string; from: string }
 const OTLP_PATHS = new Set(['/', '/v1/traces', '/v1/logs']);
@@ -42,7 +44,7 @@ function envBlock(path: string): Record<string, unknown> {
 }
 
 /** The OTLP receiver's item for Claude Code, from `env` (the shell Claude Code starts from) and its settings files. */
-export function doctor(env: NodeJS.ProcessEnv): DoctorItem[] {
+export async function doctor(env: NodeJS.ProcessEnv): Promise<DoctorItem[]> {
   const port = 4318;
   const settings = new Map<string, Setting>();
   const layer = (vars: Record<string, unknown>, from: string) => {
@@ -56,7 +58,7 @@ export function doctor(env: NodeJS.ProcessEnv): DoctorItem[] {
     return s ? `${name}=${name.endsWith('_ENDPOINT') ? redact(s.value) : s.value} (${s.from})` : `${name}=(unset)`;
   };
   const item = (code: DoctorItem['code'], level: DoctorItem['level'], evidence: string, fix: string): DoctorItem[] => [{ item: 'otlp.telemetry', agent: 'claude-code', code, level, evidence, fix }];
-  const receiver = `http://127.0.0.1:${port}`;
+  const receiver = `http://${HOST}:${port}`;
 
   if (settings.get('CLAUDE_CODE_ENABLE_TELEMETRY')?.value !== '1') {
     return item('not_checked', 'skip', `${shown('CLAUDE_CODE_ENABLE_TELEMETRY')}: Claude Code exports no telemetry, so there is no protocol or address to read`,
@@ -80,7 +82,7 @@ export function doctor(env: NodeJS.ProcessEnv): DoctorItem[] {
     let url: URL | undefined;
     try { url = new URL(endpoint); } catch { url = undefined; }
     const path = own ? `/v1/${signal}` : '/';
-    if (!url || url.protocol !== 'http:' || url.hostname !== '127.0.0.1' || url.port !== String(port) || url.pathname !== path || url.search) {
+    if (!url || url.protocol !== 'http:' || url.hostname !== HOST || url.port !== String(port) || url.pathname !== path || url.search) {
       problems.push(`${settings.has(endpointVar) ? shown(endpointVar) : `${endpointVar}=(unset, so ${endpoint})`} for ${signal}: the receiver listens at ${receiver}${own ? path : ''} only`);
     }
     read.push(`${signal}: ${protocol} to ${redact(endpoint)}`);
@@ -89,5 +91,25 @@ export function doctor(env: NodeJS.ProcessEnv): DoctorItem[] {
     return item('telemetry_unreadable', 'fail', problems.join('; '),
       `In Claude Code's settings.json env, set OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf and OTEL_EXPORTER_OTLP_ENDPOINT=${receiver}, and remove any per-signal protocol or endpoint that differs.`);
   }
-  return item('healthy', 'ok', read.join('; '), 'Nothing: the receiver reads the telemetry Claude Code sends.');
+  const answer = await probe(`${receiver}/v1/logs`);
+  if (answer === null) {
+    return item('hub_unreachable', 'fail', `${read.join('; ')}; nothing answers at ${HOST}:${port}, so no tool span or request cost reaches the record`,
+      `Start the hub with deep hub start, not in safe mode: it runs the receiver at ${receiver}.`);
+  }
+  if (answer !== 200) {
+    const said = answer === 0 ? `gave no HTTP answer to an empty export within ${PROBE_MS} ms` : `answered an empty export with HTTP ${answer}`;
+    return item('ports_taken', 'fail', `${read.join('; ')}; another process holds port ${port} on ${HOST} and ${said}, so the hub runs without its receiver`,
+      `Stop the process that holds port ${port} on ${HOST}, then restart the hub (deep hub stop, deep hub start) so its receiver takes the port.`);
+  }
+  return item('healthy', 'ok', `${read.join('; ')}; the receiver answers at ${HOST}:${port}`, 'Nothing: the receiver reads the telemetry Claude Code sends.');
+}
+
+async function probe(url: string): Promise<number | null> {
+  try {
+    const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}', signal: AbortSignal.timeout(PROBE_MS) });
+    await res.body?.cancel();
+    return res.status;
+  } catch (error) {
+    return (error as { cause?: { code?: string } }).cause?.code === 'ECONNREFUSED' ? null : 0;
+  }
 }

@@ -2,7 +2,7 @@
 
 ## What it is for
 
-The OTLP receiver (#42), an optional first-party extension: it listens on 127.0.0.1 for an agent's own OpenTelemetry traces and logs and maps Claude Code's tool spans to `tool.span` and each model request's cost to `request.cost`, plus its `deep doctor` item. The CLI's doctor calls that item; nothing in the workspace starts the receiver yet, only its tests.
+The OTLP receiver (#42), an optional first-party extension: it listens on 127.0.0.1 for an agent's own OpenTelemetry traces and logs and maps Claude Code's tool spans to `tool.span` and each model request's cost to `request.cost`, plus its `deep doctor` item. The installed hub starts the receiver on 127.0.0.1:4318 with its own record writer, `ext:otlp`, and stops it when it stops; a hub that finds the port taken runs without it (#1852). The CLI's doctor calls the item, which also sends an empty export to 127.0.0.1:4318 and fails, naming the address, when nothing answers there or another process holds the port.
 
 ## Where new code goes
 

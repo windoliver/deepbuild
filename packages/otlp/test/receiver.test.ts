@@ -176,26 +176,27 @@ describe('the receiver closes only once its exports are answered', () => {
 });
 
 describe('deep doctor never shows a secret an endpoint carries', () => {
-  const run = (vars: Record<string, string>) => {
+  const run = async (vars: Record<string, string>) => {
     const config = join(temp(), '.claude');
     mkdirSync(config);
     writeFileSync(join(config, 'settings.json'), JSON.stringify({ env: { CLAUDE_CODE_ENABLE_TELEMETRY: '1', OTEL_LOGS_EXPORTER: 'otlp', OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf', ...vars } }));
-    return doctor({ HOME: config, CLAUDE_CONFIG_DIR: config })[0]!;
+    return (await doctor({ HOME: config, CLAUDE_CONFIG_DIR: config }))[0]!;
   };
   // Failed on: the healthy path printing the endpoint as given, and the failing path keeping its query.
-  it('a password on a readable endpoint and a token in an unreadable one are redacted', () => {
-    const healthy = run({ OTEL_EXPORTER_OTLP_ENDPOINT: 'http://me:hunter2@127.0.0.1:4318' });
-    expect(healthy.level).toBe('ok');
-    expect(healthy.evidence).not.toContain('hunter2');
-    const failing = run({ OTEL_EXPORTER_OTLP_ENDPOINT: 'http://127.0.0.1:4317/?token=hunter2' });
+  it('a password on a readable endpoint and a token in an unreadable one are redacted', async () => {
+    const readable = await run({ OTEL_EXPORTER_OTLP_ENDPOINT: 'http://me:hunter2@127.0.0.1:4318' });
+    expect(readable.code).not.toBe('telemetry_unreadable');
+    expect(readable.evidence).toContain('redacted@127.0.0.1:4318');
+    expect(readable.evidence).not.toContain('hunter2');
+    const failing = await run({ OTEL_EXPORTER_OTLP_ENDPOINT: 'http://127.0.0.1:4317/?token=hunter2' });
     expect(failing.level).toBe('fail');
     expect(failing.evidence).toContain('OTEL_EXPORTER_OTLP_ENDPOINT');
     expect(failing.evidence).not.toContain('hunter2');
   });
   // Failed on: an endpoint's path kept whole, and an endpoint that isn't a URL shown nearly as given.
-  it('a token in an endpoint path or in an endpoint that is not a URL is redacted', () => {
+  it('a token in an endpoint path or in an endpoint that is not a URL is redacted', async () => {
     for (const endpoint of ['http://127.0.0.1:4318/token/hunter2', 'me:hunter2@127.0.0.1:4318', '127.0.0.1:4318/hunter2']) {
-      const item = run({ OTEL_EXPORTER_OTLP_ENDPOINT: endpoint });
+      const item = await run({ OTEL_EXPORTER_OTLP_ENDPOINT: endpoint });
       expect(item.level).toBe('fail');
       expect(item.evidence).toContain('OTEL_EXPORTER_OTLP_ENDPOINT');
       expect(item.evidence).not.toContain('hunter2');
