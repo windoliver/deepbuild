@@ -612,3 +612,89 @@ shows it reads the frame Vision dropped.
 
 `npx vitest run --root tests/acceptance/1172 judges`: 1 file, 85 passed. `npx tsc -p tests/acceptance/1172/tsconfig.json
 --noEmit`: clean. `shell.test.ts` and `probe ocr-in` were not run (they need the Mac).
+
+## Eleventh redraft (2026-11-27)
+
+Redrafted blind at e2fbca67e from #1172 and its comments, the design, AGENTS.md, GLOSSARY.md and this folder, with the Mac
+runner's text records of R7t (`target/mac/1172-pack-check/e2fbca67e/R7t/`: `ac1-2.txt` to `ac1-4.txt`, `exits.txt`,
+`pics/*/index.txt`) and the coordinator's timings from R7; no implementation code was read and no picture was viewed.
+
+### The dispute
+
+1. **A dropped ellipsis.** R7t, a right program at e2fbca67e: AC1 passed in two clean runs (ac1-2, ac1-4) and failed in
+   ac1-3: `the list's pixels draw 2 open ask row(s), not 3`, its list region reading `How it looks tomorrow 19:53` for one
+   row and `... How it looks tomorrow 19:53` for the other two. The same capture (`dh16-NphLG7-shell-3.png`) read offline:
+   whole `.accurate`, all three rows `• ... How it looks tomorrow 19:53`; `.accurate` on the left 520 px, all three with
+   the ellipsis; `.fast`, all three with none. Whether a row counts hung on Vision keeping one small glyph, which varies with
+   the crop.
+2. **Builds inside the timed checks.** In a fresh checkout the first test that needs a binary built it (`appBinary`'s
+   cargo, `supportBinaries`, the probe's `swiftc`) inside its own 8-minute timeout. At load about 60: R7 ac1-1's first
+   window came 18 min after vitest started, R7t ac1-1's 12 min (AC1 timed out at 480 s; the spike test took 310 s, mostly
+   its plant's build), and R7t's twin A clone timed out at 480 s with no window ever drawn. With builds cached, test 1 took
+   about 43 s. A slow build read as the program's FAIL, and the twin's "fail" was never the criterion's judgement.
+
+### Ruling
+
+1. Upheld. A row OCR read with its ellipsis was drawn: an ellipsis no program drew is not something `.accurate` invents,
+   while a drawn one is something it drops (ac1-3, and `.fast` always). So the count is the greatest number of open rows any
+   `.accurate` reading of the capture holds, the list region's and the whole window's (the tenth redraft already makes both
+   readings; R5e showed the whole one can drop a frame the region one keeps, R7t the reverse for one glyph). The ellipsis
+   stays required for a line to count: the design's row is "mark, title, then state word and time at the right edge", and
+   #1808 cuts a title that doesn't fit with an ellipsis, so a row of kind and time alone is still a wrong program (ninth
+   redraft). Counting by the row's slots without the ellipsis was rejected for that reason: it would pass that program.
+   Where no reading holds enough rows but one reading's lines that read exactly an open row's right slots with no ellipsis
+   (bare lines) make up the shortfall, the reading can't tell a dropped glyph from a row drawn without one: `UNREADABLE`,
+   so INCONCLUSIVE, never PASS. Too many rows fails in any reading, counting bare lines too.
+2. Upheld. Invariant 2: a build that didn't finish judged nothing. Builds now run before the timed checks, in `shell.test.ts`'s
+   `beforeAll`, under their own bound; a build that fails or isn't done by then is `BLOCKED`, never FAIL or PASS. The bound,
+   45 min, is the slowest observed first build (18 min) with room for load, inside AGENTS.md's hour for testing a change.
+
+### What changed
+
+| Change | Source |
+|---|---|
+| `rowReading`: one reading's open rows, rows reading answered, and bare lines (left of the list's edge, not a row, and reading exactly an open row's text after its ellipsis, a one-character mark token dropped) | R7t ac1-3; the design's row; #1808 |
+| `rowReadingsFailures`: `rowLineFailures` over several readings. Open rows: the greatest count; more than wanted in any reading, or rows and bare lines together more than wanted, fails; fewer fails unless one reading's bare lines make up the shortfall exactly, which is `UNREADABLE`; answered rows: the greatest count, more than `kept` fails | Above; invariant 2 |
+| `listLines`: a reading's lines whose box ends left of the list's edge | Review of 77597bdc5: Vision may merge a list line with the page's whole question into one box whose centre is left of the edge |
+| `shellFailuresBest`: `shellFailuresRead`'s checks, the rows counted by `rowReadingsFailures` over the list region's `.accurate` reading and the whole window's `.accurate` reading cut to `listLines`, each used where it read a line left of the list's edge; neither, and the region not blank, is `UNREADABLE`. `.fast` still never counts. `shell.test.ts`'s AC1 and AC2 calls use it | Above; tenth redraft |
+| `within(work, ms, what)`: `work`, or `BLOCKED` when it fails or runs past `ms`; a `BLOCKED` inside it is said once | Invariant 2 |
+| `BUILD_MS` (45 min) and `prebuilt(plants)`, under `within`: the probe built and its permissions checked first, and only then the plain app, the plants and the support binaries, so no cargo starts where the probe is `BLOCKED` (another OS, or a missing permission on macOS). `shell.test.ts`: `beforeAll(() => prebuilt(['plant-spike-window']), BUILD_MS + 1 min)` | R7, R7t timings |
+| README, Builds: one sentence on the `beforeAll` | As above |
+| `judges.test.ts`: 17 cases (102 pass). Against main, `helpers.ts` changes by added lines only; `shellFailuresRead` and `rowLineFailures` stay for other readers | AGENTS.md |
+
+### How the wrong programs still fail
+
+- **Twin A** (AC2, the answered ask drawn open): the tree fails it (`answeredFailures`) whatever the pixels read; on the
+  pixels any reading with 3 open rows fails, and a reading with 2 open rows and one bare line now fails too (3, not 2,
+  "1 of them with no ellipsis"), where the tenth redraft would have counted 2.
+- **The planted spike window:** named from the tree and the whole reading as before, and its plant is now built in the
+  `beforeAll`, so its test judges a window, not a build.
+- **The blank-main twin:** no `Tasks` node and no session row, so the tree fails and no edge is found: a FAIL. A blank list
+  region with no reading counts 0 rows and fails.
+- **The ninth redraft's wrong programs:** a row missing (2 of 3 in every reading, no bare line), handle rows, rows of kind
+  and time with no ellipsis (0 open rows, so no bare line can exist), rows only right of the edge, two answered rows, and an
+  extra titleless row beside the three all fail, pinned in `judges.test.ts`. A page line reading a row's kind and time right
+  of the edge is not a bare line. A 2-of-3 program whose whole reading merged a list line with the page's whole question
+  (one box from the list to the page, centre left of the edge) still fails: the whole reading counts only lines ending left
+  of the edge.
+- **A build that never finishes** (the twin's clone): `BLOCKED`, said as such; the twin then proves nothing until rerun with
+  its build done, which the runner must count as unrun, not as the twin failing.
+
+### Still not settled
+
+1. **A program that draws one row without its ellipsis and the rest with it, every time,** reads INCONCLUSIVE, never FAIL,
+   since one reading can't tell that from a dropped glyph. If every reading of every retry within `settled` drops the same
+   glyph on a right program, that is INCONCLUSIVE too.
+2. **A build that outlives `BUILD_MS`** is left running (its `execFile` child isn't stopped by the bound); it finishes or
+   ends with the run. Other files in this folder still build inside their first test; only AC1 and AC2 were disputed.
+3. **`BLOCKED` in a `beforeAll`** fails the file's tests with that message and exits 1; the runner reads the `BLOCKED:` text,
+   as it already must for the permission checks.
+4. Earlier items stand (tenth, 1 to 4).
+
+### Run here (Linux, no Mac)
+
+`npx vitest run --root tests/acceptance/1172 judges`: 1 file, 102 passed (85 before, 17 new); one new judge first failed on
+`within` wrapping its own timeout as "failed", fixed in `within`. Amended after a review of 77597bdc5: `listLines` for
+the whole reading, and `prebuilt` builds the probe before starting cargo. `npx tsc -p tests/acceptance/1172/tsconfig.json
+--noEmit`: clean. `shell.test.ts`, `prebuilt` and `shellFailuresBest` were not run (they need the Mac). `packages/evidence/dist/patterns.json`
+was built in this worktree (`node build-patterns.mjs`, ignored by git) so the judges could load.

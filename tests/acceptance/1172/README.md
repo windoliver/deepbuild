@@ -37,7 +37,9 @@ DA1172_SCREENS=<dir> npx vitest run --root tests/acceptance/1172 shown   # keeps
 - **Builds.** The helpers run them, each once, and copy `deep-app` out of the target folder under its own name:
   `cargo build --locked -p deep-app --bin deep-app` (plain, then with each plant), and `deep-show`, `deep-replica` and
   `deep-hook`, which the hub and the proof run from `target/debug`. After a plant's build the plain build runs again, so the
-  checkout's `target/debug/deep-app` is never left a plant. `CARGO_TARGET_DIR` is honored.
+  checkout's `target/debug/deep-app` is never left a plant. `CARGO_TARGET_DIR` is honored. `shell.test.ts` runs every build
+  it needs (and the probe's `swiftc`) in a `beforeAll`, bounded by `BUILD_MS` (45 min), before any timed check; a build
+  that fails or isn't done by then is `BLOCKED`, never a fail of the program (REDRAFT.md, Eleventh redraft).
 - **Folders.** Homes are `/tmp/dh16-*/h` (a socket path must fit 104 bytes), binaries `$TMPDIR/da1172-bin-<uid>`. It never
   touches the real `~/.deepbuild`, `~/.claude` or `~/Library/LaunchAgents`; the real hub here is started by `deep hub run`, not
   the login service.

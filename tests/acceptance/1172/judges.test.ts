@@ -2,7 +2,7 @@
 // judge AC1, AC2, AC4 and AC5 lean on must pass a right reading and fail the wrong ones, so a failure on the real app is
 // the app's, not the judge's.
 import { describe, expect, it } from 'vitest';
-import { answeredFailures, askRowFailures, askRowLine, blankIn, drawsRow, rowLineFailures, unlessUnreadable, unreadable, gridLaw, groundAndInk, hex, type Ask, type Line, type Node, type Picture, type Rgb } from './helpers.ts';
+import { answeredFailures, askRowFailures, askRowLine, blankIn, drawsRow, listLines, rowLineFailures, rowReadingsFailures, unlessUnreadable, unreadable, within, gridLaw, groundAndInk, hex, type Ask, type Line, type Node, type Picture, type Rgb } from './helpers.ts';
 
 const GROUND: Rgb = [255, 255, 255];
 const FIVE: Rgb = [216, 27, 154];
@@ -306,5 +306,87 @@ describe('#1172 (judges) a capture OCR reads nothing from is unreadable, never 0
   it('the blank-main twin fails on the tree (no list), never INCONCLUSIVE', () => {
     const failures = ['the window has no registered sidebar: no node is named "Tasks"', 'can\'t find the list on the pixels: no session row ["Cart totals","Release notes"] is on the tree'];
     expect(unlessUnreadable(failures)).toEqual(failures);
+  });
+});
+
+describe('#1172 (judges) a row whose ellipsis OCR dropped, counted over the readings (Eleventh redraft)', () => {
+  const asks: Ask[] = ['Which header colour on the login page?', 'Which font for the printed receipt?', 'Which layout for the changelog?']
+    .map((question, i) => ({ handle: `ask:0${i + 1}`, question, option: { id: 'one', label: 'a' }, other: 'b', session: 's', task: 't' }));
+  const list = (text: string): Line => ({ text, box: [10, 0, 200, 20] });
+  const page = (text: string): Line => ({ text, box: [900, 0, 400, 20] });
+  /** R7t ac1-3's list region, `.accurate` over [0, 0, listEdgePx, height]: one row's ellipsis lost. */
+  const REGION = ['Needs you', 'How it looks tomorrow 19:53', '... How it looks tomorrow 19:53', '... How it looks tomorrow 19:53', 'No project', '• Cart totals', '• Release notes', '38 s', '38 s'].map(list);
+  /** The same capture's whole-window `.accurate` reading: all three rows with their ellipsis, and the page. */
+  const WHOLE = [...['Needs you', '• ... How it looks tomorrow 19:53', '• ... How it looks tomorrow 19:53', '• ... How it looks tomorrow 19:53', 'No project', '• Cart totals', '• Release notes', '38 s', '38 s'].map(list),
+    ...['How it looks', 'Which header colour on the login page?', 'Blue header recommended', 'Green header', 'Default: Blue header • at tomorrow 19:53', 'Answer'].map(page)];
+  /** The `.fast` reading of the same list: every row without its ellipsis. */
+  const FAST = ['Needs you', 'How it looks tomorrow 19:53', 'How it looks tomorrow 19:53', 'How it looks tomorrow 19:53', 'No project', 'Cart totals', 'Release notes'].map(list);
+  const judge = (readings: readonly (readonly Line[])[], open = 3, kept = 0): string => rowReadingsFailures(readings, asks, 520, { open, kept }).join('\n');
+
+  it('control: R7t ac1-3, the region read short one ellipsis beside the whole read with all three, passes', () => {
+    expect(judge([REGION, WHOLE])).toBe('');
+  });
+  it('control: either reading order, and the whole read alone, pass', () => {
+    expect(judge([WHOLE, REGION])).toBe('');
+    expect(judge([WHOLE])).toBe('');
+  });
+  it('R7t ac1-3\'s region read alone, short only by a row read without its ellipsis, is INCONCLUSIVE, never a fail or a pass', () => {
+    const failures = rowReadingsFailures([REGION], asks, 520, { open: 3, kept: 0 });
+    expect(failures.join('\n')).toMatch(/^UNREADABLE: the list's pixels draw at most 2 open ask row\(s\) with their ellipsis, not 3/);
+    expect(() => unlessUnreadable(failures)).toThrow(/INCONCLUSIVE/);
+  });
+  it('wrong program: rows drawn with their kind and time and no ellipsis (the .fast reading\'s look) fail, 0 not 3', () => {
+    expect(judge([FAST])).toMatch(/^the list's pixels draw 0 open ask row\(s\), not 3/);
+  });
+  it('wrong program: a row missing from the list fails in every reading, never INCONCLUSIVE', () => {
+    const two = WHOLE.filter((_, i) => i !== 3);
+    expect(judge([two, REGION.filter((_, i) => i !== 1)])).toMatch(/^the list's pixels draw 2 open ask row\(s\), not 3/);
+  });
+  it('wrong program: an extra row drawn with no title and no ellipsis beside the three fails', () => {
+    expect(judge([[...WHOLE, list('How it looks tomorrow 19:53')]])).toMatch(/4 open ask row\(s\), not 3, 1 of them with no ellipsis/);
+  });
+  it('twin A: the answered ask still drawn open fails by count, with or without its ellipsis read', () => {
+    expect(judge([REGION, WHOLE], 2, 1)).toMatch(/^the list's pixels draw 3 open ask row\(s\), not 2/);
+    expect(judge([REGION], 2, 1)).toMatch(/^the list's pixels draw 3 open ask row\(s\), not 2, 1 of them with no ellipsis/);
+  });
+  it('AC2 control: two open rows and the answered row drawn answered pass, one reading short an ellipsis', () => {
+    const after = [list('Needs you'), list('How it looks tomorrow 19:53'), list('• ... How it looks tomorrow 19:53'), list('• ... answered 19:54')];
+    const whole = [list('Needs you'), list('• ... How it looks tomorrow 19:53'), list('• ... How it looks tomorrow 19:53'), list('• ... answered 19:54')];
+    expect(judge([after, whole], 2, 1)).toBe('');
+  });
+  it('wrong program: two answered rows fail in whichever reading draws them', () => {
+    expect(judge([[list('• ... How it looks tomorrow 19:53'), list('• ... How it looks tomorrow 19:53'), list('… answered'), list('… answered')]], 2, 1)).toMatch(/2 answered ask row\(s\), more than 1/);
+  });
+  it('wrong program: handle rows, or rows drawn only right of the list\'s edge, count none in any reading', () => {
+    expect(judge([['ask:01MCB How it looks tomorrow 19:53', 'ask:02MCB How it looks tomorrow 19:53', 'ask:03MCB How it looks tomorrow 19:53'].map(list)])).toMatch(/^the list's pixels draw 0 open ask row\(s\), not 3/);
+    expect(judge([WHOLE.map((l) => ({ ...l, box: [900, 0, 400, 20] }))])).toMatch(/^the list's pixels draw 0 open ask row\(s\), not 3/);
+  });
+  it('a page line reading a row\'s kind and time right of the edge is no bare row', () => {
+    expect(judge([[...REGION.slice(2, 4), page('How it looks tomorrow 19:53')]])).toMatch(/^the list's pixels draw 2 open ask row\(s\), not 3/);
+  });
+  it('wrong program: 2 of 3 rows, where the whole reading merged a list line with the page\'s whole question, fails', () => {
+    const merged: Line = { text: '• Release notes Which font for the printed receipt?', box: [10, 0, 900, 20] };
+    const whole = [list('Needs you'), list('• ... How it looks tomorrow 19:53'), list('• ... How it looks tomorrow 19:53'), merged];
+    expect(judge([whole])).toBe('');
+    expect(listLines(whole, 520)).not.toContain(merged);
+    expect(judge([REGION.filter((_, i) => i !== 1), listLines(whole, 520)])).toMatch(/^the list's pixels draw 2 open ask row\(s\), not 3/);
+  });
+  it('wrong program: no reading at all fails by count, never a pass', () => {
+    expect(judge([])).toMatch(/^the list's pixels draw 0 open ask row\(s\), not 3/);
+  });
+});
+
+describe('#1172 (judges) builds run before the timed checks, bounded, and a build that can\'t finish is BLOCKED (Eleventh redraft)', () => {
+  it('control: a build done within its bound gives its result', async () => {
+    await expect(within(Promise.resolve('bin'), 1000, 'building')).resolves.toBe('bin');
+  });
+  it('a build still running at its bound is BLOCKED, never a fail of the program', async () => {
+    await expect(within(new Promise(() => undefined), 20, 'building the app')).rejects.toThrow(/^BLOCKED: building the app didn't finish within 0 min; it ran before any check, so nothing was judged/);
+  });
+  it('a build that fails is BLOCKED, naming what failed', async () => {
+    await expect(within(Promise.reject(Error('cargo build: exit 101')), 1000, 'building the app')).rejects.toThrow(/^BLOCKED: building the app failed: cargo build: exit 101/);
+  });
+  it('a BLOCKED inside a build (no Accessibility permission) stays BLOCKED, said once', async () => {
+    await expect(within(Promise.reject(Error('BLOCKED: no Accessibility permission')), 1000, 'building')).rejects.toThrow(/^BLOCKED: no Accessibility permission; it ran before/);
   });
 });

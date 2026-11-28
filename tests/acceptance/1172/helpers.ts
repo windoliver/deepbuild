@@ -831,3 +831,123 @@ export function unlessUnreadable(failures: readonly string[]): readonly string[]
   if (failures.length && failures.every((f) => f.startsWith(UNREADABLE))) inconclusive(failures.join('; '));
   return failures;
 }
+
+// ---- A row whose ellipsis OCR dropped, and builds before the timed checks (REDRAFT.md, Eleventh redraft). Added beside
+// the judges above, which stay as they were.
+
+const leftOf = (l: Line, edgePx: number | null): boolean => edgePx === null || (l.box[0] ?? 0) + (l.box[2] ?? 0) / 2 < edgePx;
+const slotsAfterEllipsis = (text: string): string | null => {
+  const m = [...text.matchAll(/…|\.{2,}/g)].at(-1);
+  return m ? squash(text.slice(m.index! + m[0].length)) || null : null;
+};
+
+/** The lines whose box ends left of `edgePx`: a whole-window reading's list lines, never a list line OCR merged with the page's. */
+export const listLines = (lines: readonly Line[], edgePx: number): Line[] => lines.filter((l) => (l.box[0] ?? 0) + (l.box[2] ?? 0) <= edgePx);
+
+/**
+ * One OCR reading of the list: its open rows (`askRowLine`, not reading answered), its rows reading answered, and its bare
+ * lines, which read exactly an open row's right slots (kind and time) with no ellipsis before them: the row a right program
+ * drew whose small ellipsis glyph OCR dropped (R7t ac1-3), or a row drawn with no title and no ellipsis. A bare line alone
+ * never counts as a row; it only says a count short by it can't be decided.
+ */
+export function rowReading(lines: readonly Line[], asks: readonly Ask[], edgePx: number | null): { open: Line[]; kept: Line[]; bare: Line[] } {
+  const rows = askRowLines(lines, asks, edgePx);
+  const open = rows.filter((l) => !ANSWERED_WORD.test(l.text));
+  const slots = new Set(open.map((l) => slotsAfterEllipsis(l.text)).filter((s) => s !== null));
+  const bare = lines.filter((l) => leftOf(l, edgePx) && !rows.includes(l) && slots.has(squash(l.text.replace(/^\s*\S\s+/, ''))));
+  return { open, kept: rows.filter((l) => ANSWERED_WORD.test(l.text)), bare };
+}
+
+/**
+ * `rowLineFailures` over several readings of the same capture (`.accurate` of the list's region and of the whole window).
+ * A row OCR read with its ellipsis is drawn, so the count is the greatest number of open rows any reading holds. More
+ * than `open` in any reading, or more rows and bare lines together, fails; so does more than `kept` answered rows. Fewer
+ * fails, unless some reading's bare lines make up the shortfall exactly: then whether those lines lost their ellipsis to
+ * OCR or were drawn without one can't be told, and the result is `UNREADABLE` (INCONCLUSIVE), never a pass.
+ */
+export function rowReadingsFailures(readings: readonly (readonly Line[])[], asks: readonly Ask[], edgePx: number | null, want: { open: number; kept: number }): string[] {
+  const read = (readings.length ? readings : [[]]).map((lines) => ({ lines, ...rowReading(lines, asks, edgePx) }));
+  const best = read.reduce((a, b) => (b.open.length > a.open.length ? b : a));
+  const most = read.reduce((a, b) => (b.open.length + b.bare.length > a.open.length + a.bare.length ? b : a));
+  const kept = read.reduce((a, b) => (b.kept.length > a.kept.length ? b : a));
+  const out: string[] = [];
+  if (best.open.length > want.open) out.push(`the list's pixels draw ${best.open.length} open ask row(s), not ${want.open}: of its lines, these draw a row ${sees(best.open)}; all read ${sees(best.lines)}`);
+  else if (most.open.length + most.bare.length > want.open) out.push(`the list's pixels draw ${most.open.length + most.bare.length} open ask row(s), not ${want.open}, ${most.bare.length} of them with no ellipsis: ${sees([...most.open, ...most.bare])}; all read ${sees(most.lines)}`);
+  else if (best.open.length < want.open) {
+    const short = read.find((r) => r.open.length + r.bare.length === want.open);
+    if (short) out.push(`${UNREADABLE}the list's pixels draw at most ${best.open.length} open ask row(s) with their ellipsis, not ${want.open}; one reading adds ${short.bare.length} line(s) reading only a row's kind and time ${sees(short.bare)}, and whether OCR dropped their ellipsis or the row was drawn without one can't be told; all read ${sees(short.lines)}`);
+    else out.push(`the list's pixels draw ${best.open.length} open ask row(s), not ${want.open}: of its lines, these draw a row ${sees(best.open)}; all read ${sees(best.lines)}`);
+  }
+  if (kept.kept.length > want.kept) out.push(`the list's pixels draw ${kept.kept.length} answered ask row(s), more than ${want.kept}: ${sees(kept.kept)}`);
+  return out;
+}
+
+/**
+ * `shellFailuresRead`, with the list's rows counted by `rowReadingsFailures` over the list region's `.accurate` reading and
+ * the whole window's `.accurate` reading (only its lines ending left of the list's edge, `listLines`), each where it read
+ * a line left of the list's edge. R7t ac1-3: the region read
+ * dropped one row's ellipsis that the whole read kept. No such reading of a region that isn't blank is `UNREADABLE`.
+ * Everything else is `shellFailuresRead`'s own.
+ */
+export async function shellFailuresBest(world: World, app: App, want: { rows: readonly Ask[]; count: number }): Promise<string[]> {
+  const out: string[] = [];
+  const tree = await app.tree();
+  const main = tree.windows.flatMap((w) => nodes(w.tree));
+  const named = main.filter((n) => n.name);
+  const win = await app.mainWindow();
+  const picture = await app.capture(`shell-${want.count}`, win);
+  const whole = [0, 0, picture.width, picture.height];
+  const accurate = await ocr(picture);
+  const lines = accurate.length ? accurate : await ocrIn(picture, 'fast', whole);
+  const lost = unreadable(lines, blankIn(picture, whole), 'the whole window');
+  if (lost) out.push(lost);
+  const spike = [...named.map((n) => n.name), ...lines.map((l) => l.text)].find((text) => /\bSession \d{4}\b|waiting on you/.test(text));
+  if (spike) out.push(`the window is the spike window: it draws "${spike}"`);
+  if (!named.some((n) => n.name === 'Tasks')) out.push(`the window has no registered sidebar: no node is named "Tasks"; its names are ${JSON.stringify(named.map((n) => n.name).slice(0, 20))}`);
+  for (const s of world.sessions) {
+    const rows = named.filter((n) => n.role === 'AXButton' && n.name.includes(s.task));
+    if (rows.length !== 1) out.push(`the sidebar should show session "${s.task}" once, as a row; it has ${rows.length}`);
+  }
+  if (!named.some((n) => n.name === 'Needs you')) out.push('the window has no Needs you view: no node is named "Needs you"');
+  const roots = tree.windows.map((w) => w.tree);
+  const tasks = world.sessions.map((s) => s.task);
+  out.push(...askRowFailuresKept(roots, world.asks, want.rows, tasks));
+  const px = listEdgePx(roots, tasks, win.frame, picture.width);
+  if (px === null) out.push(`can't find the list on the pixels: no session row ${JSON.stringify(tasks)} is on the tree`);
+  else {
+    const region = [0, 0, Math.min(Math.ceil(px), picture.width), picture.height];
+    const readings = [await ocrIn(picture, 'accurate', region), listLines(accurate, px)].filter((r) => r.some((l) => leftOf(l, px)));
+    const gone = readings.length ? null : unreadable([], blankIn(picture, region), `the list's region (${JSON.stringify(region)}), by either reading`);
+    if (gone) out.push(gone);
+    else out.push(...rowReadingsFailures(readings, world.asks, px, { open: want.rows.length, kept: world.asks.length - want.rows.length }));
+  }
+  const counted = lines.flatMap((l) => [...l.text.matchAll(/\b(\d+)\s+asks?\s+needs?\s+you\b/gi)]).map((m) => Number(m[1]));
+  for (const n of counted) if (n !== want.count) out.push(`the window's count reads ${n}, not ${want.count}`);
+  const menu = menuCount(tree);
+  if (menu !== want.count) out.push(`the menu bar reads ${JSON.stringify(tree.menu)}, not ${want.count}`);
+  return out;
+}
+
+/** How long a fresh checkout's builds may take before any timed check: R7 and R7t's first builds took 12 to 18 min at load 60. */
+export const BUILD_MS = 45 * 60_000;
+
+/** `work`, or `BLOCKED` when it fails or isn't done within `ms`: nothing was judged, so it is never a FAIL or a PASS. */
+export async function within<T>(work: Promise<T>, ms: number, what: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(Error(`BLOCKED: ${what} didn't finish within ${Math.round(ms / 60_000)} min`)), ms); });
+  try {
+    return await Promise.race([work, late]);
+  } catch (e) {
+    const why = (e as Error).message;
+    return blocked(`${why.startsWith('BLOCKED: ') ? why.slice('BLOCKED: '.length) : `${what} failed: ${why.slice(0, 800)}`}; it ran before any check, so nothing was judged`);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Every binary a file's checks launch, built by `within`: the probe first, and only once it is built and permitted the app, `plants` and the hub's support binaries. */
+export const prebuilt = (plants: readonly Plant[], ms = BUILD_MS): Promise<unknown> =>
+  within((async () => {
+    await probeBinary();
+    await Promise.all([appBinary(), ...plants.map((p) => appBinary(p)), supportBinaries()]);
+  })(), ms, 'building the probe, then the app, its plants and the support binaries');
