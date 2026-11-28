@@ -1,0 +1,44 @@
+$ NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/154-redraft-3525 licences.test.ts --testTimeout=600000 --no-file-parallelism
+# base b134dd38f + the blind #3525 suite commit d9b9015ff; target/debug/deep-hook built, deep-show not built (not built by this job: disk is tight)
+23:15  up 2 days, 17:04, 2 users, load averages: 344.78 256.05 166.30
+v24.22.0
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/festive-dijkstra-c49494/tests/acceptance/154-redraft-3525
+
+ ❯ licences.test.ts (1 test | 1 failed) 12397ms
+   ❯ AC4 #154.ee9b85a0 a library under CC BY-SA, NC or GPL is refused at install (1)
+     × AC4 #154.ee9b85a0 libraries under CC-BY-SA-4.0, CC-BY-NC-4.0 and GPL-3.0-only, and one with a CC-BY-NC-4.0 take, are refused at install naming the licence; CC0 and CC-BY-4.0 install 12278ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  licences.test.ts > AC4 #154.ee9b85a0 a library under CC BY-SA, NC or GPL is refused at install > AC4 #154.ee9b85a0 libraries under CC-BY-SA-4.0, CC-BY-NC-4.0 and GPL-3.0-only, and one with a CC-BY-NC-4.0 take, are refused at install naming the licence; CC0 and CC-BY-4.0 install
+AssertionError: the control test/free-keys under CC0-1.0 installs: exit 3, stdout "Source: /private/tmp/dh154-8CQK5c/libraries/test__free-keys\n  test/free-keys@1.0.0, digest 65dc7853306e74d9e0712640719b3761112328c8274759cc6ff9583679de736d\n  Assets fetch only on first use after an authority ask or your standing rule.\n", stderr "No canvas core is built under ~/private/deepbuild-core/.claude/worktrees/festive-dijkstra-c49494/target; run cargo build --bin deep-show first.\n": expected 3 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 3
+
+ ❯ licences.test.ts:36:97
+     34|       const ran = await addLibrary(w, lib);
+     35|       results[lib.id] = { code: ran.code };
+     36|       expect(ran.code, `the control ${lib.id} under ${lib.license.id} …
+       |                                                                                                 ^
+     37|     }
+     38|     for (const { lib, licence } of forbidden) {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  23:15:11
+   Duration  18.40s (tests 70%, transform 29%, import 2%)
+
+vitest exit 1
+23:15  up 2 days, 17:05, 2 users, load averages: 328.24 257.99 169.08
+tsc exit 0
+
+$ node node_modules/typescript/bin/tsc -p tests/acceptance/154-redraft-3525/tsconfig.json
+(no output)

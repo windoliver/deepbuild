@@ -1,0 +1,12 @@
+{
+  "scripts/repo-rules.mjs": [
+    {
+      "find": [
+        "  const leftovers = git('ls-files', '-z', '--cached').split('\\0').filter((path) => /\\.(?:orig|rej)$/.test(path) && !path.startsWith('vendor/'));"
+      ],
+      "wrong": [
+        "  const leftovers = git('ls-files', '-z', '--cached').split('\\0').filter((path) => /\\.(?:orig|rej)$/.test(path));"
+      ]
+    }
+  ]
+}

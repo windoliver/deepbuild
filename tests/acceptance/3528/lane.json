@@ -1,0 +1,1 @@
+{ "alone": true, "why": "shared: the checkout's working tree, which git ls-files, git grep, the diff against the merge base and three runs of scripts/repo-rules.mjs read whole, untracked files included" }

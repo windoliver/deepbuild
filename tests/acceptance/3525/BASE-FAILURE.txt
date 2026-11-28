@@ -1,0 +1,183 @@
+# #3525 acceptance suite on the merge base b134dd38f (origin/main), deep-show not built; load before and after:
+23:04  up 2 days, 16:54, 2 users, load averages: 100.24 100.79 87.70
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/festive-dijkstra-c49494/tests/acceptance/3525
+
+ ❯ lookups.test.ts (1 test | 1 failed) 12178ms
+   ❯ every form of deep_kinds changes nothing (1)
+     × AC2 #3525.aacef461 each form deep_kinds' schema takes, called on a fixture hub with a library that serves the model, leaves no new asset, ask, job, evidence or revision, no new file in the store and no process started; a planted deep_kinds that still takes fetch fails, naming the asset it brought in 11934ms
+ ❯ fetch.test.ts (1 test | 1 failed) 5738ms
+   ❯ the fetch through its new form is the fetch it was (1)
+     × AC3 #3525.743a5489 the model fetched through its new form lands under the hash the merge base's fetch gives it, after one authority ask for a library not yet allowed and none for one that is; a planted form that fetches with no ask fails, naming the library; offline it answers BLOCKED 5574ms
+ ❯ refused.test.ts (1 test | 1 failed) 7737ms
+   ❯ deep_kinds refuses fetch (1)
+     × AC4 #3525.f70e088e deep_kinds called with op "fetch" is refused with enum at /params/arguments/op, as any value its schema doesn't list is, and its remediation names the tool and form to call in place of the nearest listed value; a planted hub that answers it with an empty listing fails, naming the call 7291ms
+ ❯ together.test.ts (1 test | 1 failed) 3744ms
+   ❯ lookups sent together answer as they would alone (1)
+     × AC6 #3525.92738dfb with a deep_wait held, four deep_kinds lookups sent together each answer before the wait ends, with the bytes each gives when sent alone; a planted server that answers one with another's reply fails, naming both request IDs 3637ms
+ ❯ plan.test.ts (1 test | 1 failed) 2584ms
+   ❯ a session in plan mode can look up what the canvas draws (1)
+     × AC5 #3525.db140e2e a stand-in client that holds every call not listed read-only, as the facts say Claude Code's plan mode does, sends list, field, read and word: all four answer; on the merge base all four are held and the test fails naming the first 2476ms
+ ❯ tokens.test.ts (1 test | 1 failed) 2759ms
+   ❯ the catalogue loads fewer tokens (1)
+     × AC7 #3525.c47e9430 by the pinned tokenizer deep_kinds' listed entry is smaller than the merge base's by at least the fetch fields' tokens and the whole list is no larger; a planted move that copies the fields and leaves them fails, naming both counts 2655ms
+ ❯ listed.test.ts (1 test | 1 failed) 2631ms
+   ❯ deep_kinds is listed as a read (1)
+     × AC1 #3525.2c40eb3b deep mcp lists deep_kinds with readOnlyHint true and idempotentHint true, equal to the generated table; on the merge base it lists readOnlyHint false and this test fails naming the tool and the hint 2474ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  fetch.test.ts > the fetch through its new form is the fetch it was > AC3 #3525.743a5489 the model fetched through its new form lands under the hash the merge base's fetch gives it, after one authority ask for a library not yet allowed and none for one that is; a planted form that fetches with no ask fails, naming the library; offline it answers BLOCKED
+AssertionError: deep_job {"op":"fetch","library":"ext.shelf.library","id":"oak-chair"} waits on your answer: {"code":"unlisted_field","retryable":false,"remediation":"Leave out library: the schema lists only op, kind, tool, params, inputs.","path":"/params/arguments/library","actual":"library","evidence":[]}: expected undefined to be 'held' // Object.is equality
+
+- Expected:
+"held"
+
++ Received:
+undefined
+
+ ❯ fetch.test.ts:50:93
+     48|     const before = (await asks(a)).length;
+     49|     const first = await fetchNew(a);
+     50|     expect(first.value.status, `${call} waits on your answer: ${first.…
+       |                                                                                             ^
+     51|     const raised = (await asks(a)).slice(before);
+     52|     expect(askFailures(false, raised), `the asks the fetch raised: ${b…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  listed.test.ts > deep_kinds is listed as a read > AC1 #3525.2c40eb3b deep mcp lists deep_kinds with readOnlyHint true and idempotentHint true, equal to the generated table; on the merge base it lists readOnlyHint false and this test fails naming the tool and the hint
+AssertionError: deep_kinds' hints as deep mcp lists them: {"title":"Look up what the canvas can draw","readOnlyHint":false,"destructiveHint":false,"idempotentHint":false,"openWorldHint":true}: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep mcp lists deep_kinds readOnlyHint false, not true",
++   "deep mcp lists deep_kinds idempotentHint false, not true",
++ ]
+
+ ❯ listed.test.ts:25:93
+     23|     const wrong = Object.entries(WANT).filter(([h, v]) => hint(kinds, …
+     24|       .map(([h, v]) => `deep mcp lists deep_kinds ${h} ${JSON.stringif…
+     25|     expect(wrong, `deep_kinds' hints as deep mcp lists them: ${brief(k…
+       |                                                                                             ^
+     26|
+     27|     const table = (JSON.parse(readFileSync(join(REPO, 'packages/hub/an…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  lookups.test.ts > every form of deep_kinds changes nothing > AC2 #3525.aacef461 each form deep_kinds' schema takes, called on a fixture hub with a library that serves the model, leaves no new asset, ask, job, evidence or revision, no new file in the store and no process started; a planted deep_kinds that still takes fetch fails, naming the asset it brought in
+AssertionError: every form of deep_kinds leaves the record, the store and the hub's assets as they were (calls: op list: refused {"code":"unavailable","retryable":true,"remediation":"No canvas core is built under ~/private/deepbuild-core/.claude/worktrees/festive-dijkstra-c49494/target; run cargo build --bin deep- | op word: refused {"code":"unavailable","retryable":true,"remediation":"No canvas core is built under ~/private/deepbuild-core/.claude/worktrees/festive-dijkstra-c49494/target; run cargo build --bin deep- | op search: refused {"code":"unavailable","retryable":true,"remediation":"No canvas core is built under ~/private/deepbuild-core/.claude/worktrees/festive-dijkstra-c49494/target; run cargo build --bin deep- | op read: refused {"code":"unavailable","retryable":true,"remediation":"No canvas core is built under ~/private/deepbuild-core/.claude/worktrees/festive-dijkstra-c49494/target; run cargo build --bin deep- | op gallery: refused {"code":"unavailable","retryable":true,"remediation":"No canvas core is built under ~/private/deepbuild-core/.claude/worktrees/festive-dijkstra-c49494/target; run cargo build --bin deep- | op sheet: refused {"code":"unavailable","retryable":true,"remediation":"No canvas core is built under ~/private/deepbuild-core/.claude/worktrees/festive-dijkstra-c49494/target; run cargo build --bin deep- | op step_ceilings: refused {"code":"unavailable","retryable":true,"remediation":"No canvas core is built under ~/private/deepbuild-core/.claude/worktrees/festive-dijkstra-c49494/target; run cargo build --bin deep- | op field: refused {"code":"unavailable","retryable":true,"remediation":"No canvas core is built under ~/private/deepbuild-core/.claude/worktrees/festive-dijkstra-c49494/target; run cargo build --bin deep- | op closure: refused {"code":"unavailable","retryable":true,"remediation":"No canvas core is built under ~/private/deepbuild-core/.claude/worktrees/festive-dijkstra-c49494/target; run cargo build --bin deep- | op bindings: refused {"code":"unavailable","retryable":true,"remediation":"No canvas core is built under ~/private/deepbuild-core/.claude/worktrees/festive-dijkstra-c49494/target; run cargo build --bin deep- | op assets: answered {"rows":[{"id":"oak-chair","name":"Oak Dining Chair","kind":"model","license":{"id":"CC-BY-4.0","terms":"https://creativecommons.org/licenses/by/4.0/","shareable":true,"credit":"Ana Ruiz, Shelf"},"siz | op fetch: answered {"status":"fetched","asset":{"sha256":"2beb0c371a2478b08b32ebd9603ea2c649472db7d4275cd3aee32dc1b25886e5","library":"ext.shelf.library","id":"oak-chair","license":{"id":"CC-BY-4.0","terms":"https://cre): expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep_kinds {\"op\":\"fetch\",\"library\":\"ext.shelf.library\",\"id\":\"oak-chair\"} changed what the hub holds; it brought in the asset oak-chair (2beb0c371a2478b08b32ebd9603ea2c649472db7d4275cd3aee32dc1b25886e5): the record gained evidence.stored (evidence) 01M8DX4YC4TFD45ENKYZCYPPMD: {\"sha256\":\"2beb0c371a2478b08b32ebd9603ea2c649472db7d4275cd3aee32dc1b25886e5\",\"kind\":\"asset.library\",\"type\":\"binary\",\"size\":1124,\"origin\":\"deepbuild\",\"redaction\":\"complete\",\"license\":\"CC-BY-4.0\",\"derived_from\":[],\"step_times\":[]}; the record gained evidence.stored (evidence) 01M8DX4YC7172WMX0Z8FKWSF8J: {\"sha256\":\"7dfd6016cfb182e3caea34fb1ad98625e2f9d24c7e7f97ca13af90d965485194\",\"kind\":\"asset.library\",\"type\":\"binary\",\"size\":168,\"origin\":\"deepbuild\",\"redaction\":\"complete\",\"license\":\"CC-BY-4.0\",\"derived_from\":[],\"step_times\":[]}; the store gained the file 2beb0c371a2478b08b32ebd9603ea2c649472db7d4275cd3aee32dc1b25886e5; the store gained the file 7dfd6016cfb182e3caea34fb1ad98625e2f9d24c7e7f97ca13af90d965485194; the hub keeps a new asset 2beb0c371a2478b08b32ebd9603ea2c649472db7d4275cd3aee32dc1b25886e5",
++ ]
+
+ ❯ lookups.test.ts:46:153
+     44|     const server = await deepMcp('deep mcp', w.home, w.work);
+     45|     const real = await lookupFailures(w, server);
+     46|     expect(real.failures, `every form of deep_kinds leaves the record,…
+       |                                                                                                                                                         ^
+     47|     const answered = real.calls.filter((c) => /^op (list|word|read|fie…
+     48|     expect(answered.length, `the lookups reach the canvas core and ans…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  plan.test.ts > a session in plan mode can look up what the canvas draws > AC5 #3525.db140e2e a stand-in client that holds every call not listed read-only, as the facts say Claude Code's plan mode does, sends list, field, read and word: all four answer; on the merge base all four are held and the test fails naming the first
+AssertionError: the stand-in plan-mode client holds no lookup; the first it held: deep_kinds {"op":"list"}: expected [ 'deep_kinds {"op":"list"}', …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep_kinds {\"op\":\"list\"}",
++   "deep_kinds {\"op\":\"field\",\"path\":\"mark.box@1\"}",
++   "deep_kinds {\"op\":\"read\",\"guide\":\"start\"}",
++   "deep_kinds {\"op\":\"word\",\"word\":\"box\"}",
++ ]
+
+ ❯ plan.test.ts:39:122
+     37|     for (const op of LOOKUPS) replies.push({ op, got: await client.cal…
+     38|
+     39|     expect(client.held, `the stand-in plan-mode client holds no lookup…
+       |                                                                                                                          ^
+     40|     const unanswered = replies.filter((r) => r.got === 'held' || r.got…
+     41|       .map((r) => `deep_kinds ${r.op}: ${r.got === 'held' ? 'held' : b…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  refused.test.ts > deep_kinds refuses fetch > AC4 #3525.f70e088e deep_kinds called with op "fetch" is refused with enum at /params/arguments/op, as any value its schema doesn't list is, and its remediation names the tool and form to call in place of the nearest listed value; a planted hub that answers it with an empty listing fails, naming the call
+AssertionError: deep_kinds with op fetch ({"jsonrpc":"2.0","id":"deep_kinds-fetch#2","result":{"content":[{"type":"text","text":"{\"status\":\"held\",\"ask\":\"ask:01M8DX5DCT0HXNAWMR61B1SZNM\"}"}],"isError":false,"structuredContent":{"status":"held","ask":"ask:01M8DX5DCT0HXNAWMR61B1SZNM"}}}): expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep_kinds {\"op\":\"fetch\",\"library\":\"ext.shelf.library\",\"id\":\"oak-chair\"} (request deep_kinds-fetch#2) was answered, not refused: {\"status\":\"held\",\"ask\":\"ask:01M8DX5DCT0HXNAWMR61B1SZNM\"}",
++ ]
+
+ ❯ refused.test.ts:36:70
+     34|     const server = await deepMcp('deep mcp', w.home, w.work);
+     35|     const real = await refusalFailures(server);
+     36|     expect(real.failures, `deep_kinds with op fetch (${real.seen})`).t…
+       |                                                                      ^
+     37|
+     38|     const tool = listed(await server.tools(), 'deep_kinds');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  together.test.ts > lookups sent together answer as they would alone > AC6 #3525.92738dfb with a deep_wait held, four deep_kinds lookups sent together each answer before the wait ends, with the bytes each gives when sent alone; a planted server that answers one with another's reply fails, naming both request IDs
+AssertionError: deep mcp lists deep_kinds read-only, so a client sends its lookups side by side: {"title":"Look up what the canvas can draw","readOnlyHint":false,"destructiveHint":false,"idempotentHint":false,"openWorldHint":true}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ together.test.ts:48:181
+     46|     const agent = w.sessions.get('agent')!;
+     47|     const kinds = listed(await agent.server.tools(), 'deep_kinds');
+     48|     expect((kinds?.annotations as Line | undefined)?.readOnlyHint, `de…
+       |                                                                                                                                                                                     ^
+     49|
+     50|     const real = await togetherFailures(agent);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  tokens.test.ts > the catalogue loads fewer tokens > AC7 #3525.c47e9430 by the pinned tokenizer deep_kinds' listed entry is smaller than the merge base's by at least the fetch fields' tokens and the whole list is no larger; a planted move that copies the fields and leaves them fails, naming both counts
+AssertionError: deep mcp's tools/list, counted: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep_kinds' listed entry is 1084 tokens; the merge base's is 1084, and it must fall by at least the fetch fields' 99, to at most 985",
++ ]
+
+ ❯ tokens.test.ts:31:69
+     29|     const tools = await server.tools();
+     30|     server.child.kill('SIGTERM');
+     31|     expect(tokenFailures(tools), 'deep mcp\'s tools/list, counted').to…
+       |                                                                     ^
+     32|
+     33|     const planted = await deepMcp('deep mcp that leaves the fetch fiel…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+
+ Test Files  7 failed | 1 passed | 1 skipped (9)
+      Tests  7 failed | 1 passed | 1 skipped (9)
+   Start at  23:04:56
+   Duration  43.66s (tests 88%, import 11%, transform 1%)
+
+23:05  up 2 days, 16:55, 2 users, load averages: 95.16 99.74 88.01
