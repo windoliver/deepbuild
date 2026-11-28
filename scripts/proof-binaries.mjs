@@ -237,7 +237,7 @@ export function selectBinaries(cwd, patterns, hubBinaries = true, findBuilds = f
 export function placeHubBinaries(cwd, bin, names) {
   const debug = join(cwd, 'target', 'debug'), placed = join(debug, PLACED);
   const earlier = existsSync(placed) ? readFileSync(placed, 'utf8').split('\n').filter(Boolean).map((name) => basename(name)) : [];
-  for (const name of new Set([...HUB_BINARIES, ...earlier])) rmSync(join(debug, name), { force: true });
+  for (const name of new Set([...HUB_BINARIES, ...earlier, ...names])) rmSync(join(debug, name), { force: true });
   rmSync(placed, { force: true });
   if (names.length) mkdirSync(debug, { recursive: true });
   if (names.length) writeFileSync(placed, `${names.join('\n')}\n`);
