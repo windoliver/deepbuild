@@ -24,6 +24,8 @@ pub struct State {
     pub volume: Vec<f64>,
     pub bindings: Vec<i32>,
     pub toggle: Vec<bool>,
+    pub done: Vec<bool>,
+    pub custom: Vec<f64>,
 }
 
 /// What a rule asks of the run beyond the arrays: a level to load or to leave.
@@ -89,6 +91,8 @@ impl State {
             volume: shell.settings.volume.iter().map(|(_, v)| *v).collect(),
             bindings,
             toggle: vec![false; shell.settings.toggle.len()],
+            done: vec![false; n],
+            custom: shell.settings.custom.iter().map(|c| c.default).collect(),
         }
     }
 
@@ -106,6 +110,8 @@ impl State {
             ("volume", json!(self.volume)),
             ("bindings", json!(self.bindings)),
             ("toggle", json!(self.toggle)),
+            ("done", json!(self.done)),
+            ("custom", json!(self.custom)),
         ]
     }
 
@@ -320,6 +326,19 @@ impl State {
                     };
                 }
             }
+            Some(("custom", name)) => {
+                if let Some(i) = shell.custom(name) {
+                    let options = &control.options;
+                    self.custom[i] = match control.kind {
+                        Kind::Choice => options
+                            .get(v.max(0.0) as usize)
+                            .and_then(Value::as_f64)
+                            .unwrap_or(self.custom[i]),
+                        Kind::Toggle => 1.0 - self.custom[i].clamp(0.0, 1.0),
+                        _ => v,
+                    };
+                }
+            }
             _ => {}
         }
     }
@@ -327,6 +346,9 @@ impl State {
     /// The level completed: the next one unlocked, and the level select shown.
     pub fn completed(&mut self) {
         let l = self.level.max(0) as usize;
+        if let Some(d) = self.done.get_mut(l) {
+            *d = true;
+        }
         if let Some(next) = self.unlocked.get_mut(l + 1) {
             *next = true;
             self.selected = (l + 1) as i32;

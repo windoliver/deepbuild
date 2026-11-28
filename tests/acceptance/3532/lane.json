@@ -1,0 +1,1 @@
+{ "alone": true, "why": "timing: kit-ledger.test.mjs holds the check's time on a built tree to 5 s, and every test starts cargo build of deep-show through the check in one kept tree and target folder, whose ledger two tests plant, which a sibling run would rebuild or read" }

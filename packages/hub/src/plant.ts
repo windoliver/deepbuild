@@ -367,8 +367,10 @@ export type Plant =
   | 'reads-every-row' | 'page-hook-frame-per-event' | 'query-per-row'
   // #2060's: a key with no reading of the programs its check's command names, one that holds the run's own link to each,
   // one whose base run's holds none, and a reader that skips a program it can't find.
-  | 'key-leaves-out-programs' | 'key-holds-program-link' | 'program-readings-head-only' | 'skips-absent-program';
+  | 'key-leaves-out-programs' | 'key-holds-program-link' | 'program-readings-head-only' | 'skips-absent-program'
+  | 'loop-holds-receiver-alone' | 'names-other-session-for-unreported-address' | 'channel-without-count';
 const PLANTS: readonly string[] = [
+  'loop-holds-receiver-alone', 'names-other-session-for-unreported-address', 'channel-without-count',
   'asks-every-registry-run',
   'statusline-user-settings-only', 'window-unknown-as-zero', 'window-carried-from-other-repo', 'sends-block-whole',
   'doctor-sums-per-file', 'doctor-counts-lines-only',
