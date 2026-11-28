@@ -1,0 +1,196 @@
+Runs of tests/acceptance/25-redraft-3243 at base 118ec119f (origin/main), macOS (MacBook Pro), Node 24.22.0,
+2026-11-24, on a machine loaded to 1-minute load 85-240 by other work (shown with each run). Setup: fresh git clone
+from GitHub, git checkout 118ec119f, npm ci, npm run build --workspaces, cargo build --locked -p deep-hook (the
+helpers then build target/debug/deep-hook with --features env-plants). Every run:
+node node_modules/vitest/vitest.mjs run --no-file-parallelism <path> --reporter=verbose.
+Long lines are cut at 900 characters; temp paths are written <clone>/… or <scratch>.
+This round's asking.ts: the hook fired beside each judged one is a control session's UserPromptSubmit (no longer a
+Stop), so a hub that fails every Stop alike reads FAIL; the agent's deep_ask PreToolUse is judged the same way (a
+refused deep_ask with that hook's own fail-open evidence is a starved try); whether the Stop had ended is read once
+for the check and its assertion.
+
+== 1. Base: both files pass
+== base start Tue Nov 24 03:35:29 PST 2026 load: { 190.33 237.55 247.19 }
+ ✓ tests/acceptance/25-redraft-3243/held.test.ts > AC1 #25.0215da31 A held stop continues with the answer > AC1 #25.0215da31 an answer given while the stop is held comes back as that Stop's decision: block, and the turn goes on with it 2858ms
+ ✓ tests/acceptance/25-redraft-3243/one-route.test.ts > AC4 #25.1eae4ef9 An answer that lands while the session's stop is held and its waiter is alive goes back through the Stop hold only > AC4 #25.1eae4ef9 with the stop held and the waiter alive, the answer goes back by the Stop hold only, the waiter exits without waking, and the transcript shows its ID once 2725ms
+      Tests  2 passed (2)
+exit 0 end Tue Nov 24 03:35:37 PST 2026 load: { 178.53 233.52 245.65 }
+
+-- the same after every temporary edit below was reverted and rebuilt (the deep-hook binary checked free of the edit)
+== base-final start Tue Nov 24 03:40:49 PST 2026 load: { 192.69 180.13 213.29 }
+ ✓ tests/acceptance/25-redraft-3243/one-route.test.ts > AC4 #25.1eae4ef9 An answer that lands while the session's stop is held and its waiter is alive goes back through the Stop hold only > AC4 #25.1eae4ef9 with the stop held and the waiter alive, the answer goes back by the Stop hold only, the waiter exits without waking, and the transcript shows its ID once 3220ms
+ ✓ tests/acceptance/25-redraft-3243/held.test.ts > AC1 #25.0215da31 A held stop continues with the answer > AC1 #25.0215da31 an answer given while the stop is held comes back as that Stop's decision: block, and the turn goes on with it 3113ms
+      Tests  2 passed (2)
+exit 0 end Tue Nov 24 03:40:58 PST 2026 load: { 208.28 183.97 214.27 }
+
+== 2. Twins: the twin's whole-file packages/hub/src/plant.ts copied over the product file, npm run build -w
+   packages/hub, its file run, then git checkout -- packages/hub/src/plant.ts and the build again.
+   Each fails at its own assertion, not INCONCLUSIVE.
+
+-- twin answer-skips-held-stop, held.test.ts (#25.0215da31)
+== twin-answer-skips-held-stop start Tue Nov 24 03:35:46 PST 2026 load: { 168.40 230.51 244.51 }
+ × tests/acceptance/25-redraft-3243/held.test.ts > AC1 #25.0215da31 A held stop continues with the answer > AC1 #25.0215da31 an answer given while the stop is held comes back as that Stop's decision: block, and the turn goes on with it 2111ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: AC1 the held stop must continue with the answer: Claude Code's Stop must get decision: block whose reason carries Green header 8916f8f6 (green8916f8f6) for ask:01M86NECSDFX3E1GZRC11V6R5M; it got no decision: block: {"runs":[{"command":"exec '<clone>/…","code":0,"signal":null,"timedOut":false,"stdout":"{\"systemMessage\":\"says done · next: DeepBuild · session/702ee158/01M86NECVFJC75TC6FX8Z4HMPQ\"}","stderr":""},{"command":"exec '<clone>/…","code":2,"signal":null,"timedOut":false,"stdout":"","stderr":"DeepBuild delivers your answers:\nYour answer to ask:01M86NECSDFX3E1GZRC11V6R5M (\"Which header colour do you want for 8916f8f6?\"): Green header 8916f8f6 (green8916f8f6).\n\nDeepBuild: says done · next: DeepBuild · session/702ee158/01M86NECVFJC75TC6FX8Z4HMPQ\n"}]}: expected false to be true // Object.is equality
+ ❯ tests/acceptance/25-redraft-3243/held.test.ts:36:349
+ ❯ untilFed tests/acceptance/25-redraft-3243/asking.ts:149:7
+      Tests  1 failed (1)
+exit 1 end Tue Nov 24 03:35:49 PST 2026 load: { 158.60 227.44 243.35 }
+
+-- twin both-routes, one-route.test.ts (#25.1eae4ef9)
+== twin-both-routes start Tue Nov 24 03:35:54 PST 2026 load: { 148.30 224.17 242.10 }
+ × tests/acceptance/25-redraft-3243/one-route.test.ts > AC4 #25.1eae4ef9 An answer that lands while the session's stop is held and its waiter is alive goes back through the Stop hold only > AC4 #25.1eae4ef9 with the stop held and the waiter alive, the answer goes back by the Stop hold only, the waiter exits without waking, and the transcript shows its ID once 2052ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: AC4 ask:01M86NEMKAP4GP5HE98MNBBA68 must go back through exactly one route, the Stop hold; it went by the Stop hold (decision: block) and the waiter (exit 2 with the answer): {"blocked":"says done · next: DeepBuild · session/17ffa0cb/01M86NEMNTYR1QF72T2GYSAGHS\nDeepBuild delivers your answers:\nYour answer to ask:01M86NEMKAP4GP5HE98MNBBA68 (\"Which header colour do you want for e842486f?\"): Green header e842486f (greene842486f).","runs":[{"command":"exec '<clone>/…","code":0,"signal":null,"timedOut":false,"stdout":"{\"decision\":\"block\",\"reason\":\"says done · next: DeepBuild · session/17ffa0cb/01M86NEMNTYR1QF72T2GYSAGHS\\nDeepBuild delivers your answers:\\nYour answer to ask:01M86NEMKAP4GP5HE98MNBBA68 (\\\"Which header colour do you want for e842486f?\\\"): Green header e842486f (greene842486f).\",\"systemMessage\":\"says done · next: DeepBuild · session/17ffa
+ ❯ tests/acceptance/25-redraft-3243/one-route.test.ts:45:252
+ ❯ untilFed tests/acceptance/25-redraft-3243/asking.ts:149:7
+      Tests  1 failed (1)
+exit 1 end Tue Nov 24 03:35:57 PST 2026 load: { 138.82 220.94 240.86 }
+
+== 3. Hubs that fail the Stop, on a fed machine, FAIL
+
+-- 3a. A hub that doesn't hold, without deep-hook's fail-open evidence. Temporary edit of packages/hub/src/server.ts
+   line 715 (reverted, hub rebuilt): every Stop answered at once, acknowledged with no hold:
+    -    if (hold === null) conn.sock.end(line({ ack: meta.id, hold_until_ms: null }) + ruled);
+    +    if (hold === null || meta.event === 'Stop') conn.sock.end(line({ ack: meta.id, hold_until_ms: null }) + ruled);
+   Both files FAIL on the first try at the held-stop assertion (exit 0, empty stdout and stderr, nothing spooled).
+== hub-never-holds-stop start Tue Nov 24 03:36:02 PST 2026 load: { 138.82 220.94 240.86 }
+ × tests/acceptance/25-redraft-3243/held.test.ts > AC1 #25.0215da31 A held stop continues with the answer > AC1 #25.0215da31 an answer given while the stop is held comes back as that Stop's decision: block, and the turn goes on with it 1483ms
+ × tests/acceptance/25-redraft-3243/one-route.test.ts > AC4 #25.1eae4ef9 An answer that lands while the session's stop is held and its waiter is alive goes back through the Stop hold only > AC4 #25.1eae4ef9 with the stop held and the waiter alive, the answer goes back by the Stop hold only, the waiter exits without waking, and the transcript shows its ID once 1579ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: AC1 the Stop of a session whose question ask:01M86NEVWT2HWBY7H92YZBF10N is open must be held for your answer; it ended before you answered: {"runs":[{"command":"exec '<clone>/…","code":0,"signal":null,"timedOut":false,"stdout":"","stderr":""},{"command":"exec '<clone>/…","code":null,"signal":null,"timedOut":false,"stdout":"","stderr":""}]}: expected true to be false // Object.is equality
+ ❯ tests/acceptance/25-redraft-3243/held.test.ts:27:191
+ ❯ untilFed tests/acceptance/25-redraft-3243/asking.ts:149:7
+AssertionError: AC4 the Stop of a session whose question ask:01M86NEXYZNDTQZG1G6BZWXMWD is open must be held for your answer; it ended before you answered: {"runs":[{"command":"exec '<clone>/…","code":0,"signal":null,"timedOut":false,"stdout":"","stderr":""},{"command":"exec '<clone>/…","code":null,"signal":null,"timedOut":false,"stdout":"","stderr":""}]}: expected true to be false // Object.is equality
+ ❯ tests/acceptance/25-redraft-3243/one-route.test.ts:30:191
+ ❯ untilFed tests/acceptance/25-redraft-3243/asking.ts:149:7
+      Tests  2 failed (2)
+exit 1 end Tue Nov 24 03:36:06 PST 2026 load: { 130.19 217.79 239.63 }
+
+-- 3b. A hub that closes the connection on every Stop, unacknowledged, so deep-hook fails open and spools an unmarked
+   line (Down{late:false}) for every Stop, the control's included. Temporary edit of packages/hub/src/server.ts
+   (reverted, hub rebuilt):
+    -    if (this.lost) return void conn.sock.end();
+    +    if (this.lost || parsed.meta.event === 'Stop') return void conn.sock.end();
+   Each try is starved by its evidence, but the UserPromptSubmit beside it got through each time: FAIL at untilFed's
+   assertion after 5 tries, both files (with a control Stop this read INCONCLUSIVE).
+== hub-closes-every-stop start Tue Nov 24 03:36:15 PST 2026 load: { 116.53 211.98 237.31 }
+AC4 try 1: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NF8J2PM4AW5636CQCQ13H; the hook beside it got through: exit 0
+AC4 try 2: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NF9JP868ZEVY5971KJ5SW; the hook beside it got through: exit 0
+AC4 try 3: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NFAMBM73C4NPDJVE9GR5R; the hook beside it got through: exit 0
+AC4 try 4: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NFBQTBFGBHF9CPG9JTZPH; the hook beside it got through: exit 0
+AC4 try 5: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NFCR53QF7ZC22PPVRA7TV; the hook beside it got through: exit 0
+ × tests/acceptance/25-redraft-3243/one-route.test.ts > AC4 #25.1eae4ef9 An answer that lands while the session's stop is held and its waiter is alive goes back through the Stop hold only > AC4 #25.1eae4ef9 with the stop held and the waiter alive, the answer goes back by the Stop hold only, the waiter exits without waking, and the transcript shows its ID once 5674ms
+   → AC4 the session's hook failed open in each of 5 tries while a UserPromptSubmit fired beside it to the same hub got through each time, so the hub, not the machine, failed it: try 1: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NF8J2PM4AW5636CQCQ13H (the hook beside it got through); try 2: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NF9JP868ZEVY5971KJ5SW (the hook beside it got through); try 3: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NFAMBM73C4NPDJVE9GR5R (the hook beside it got through); try 4: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NFBQTBFGBHF9CPG9JTZPH (the hook beside it got through); try 5: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NFCR53QF7ZC22PPVRA7TV (the hook beside it got through): expected true to be fals
+AC1 try 1: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NFFK268DBT0EXTAKFEGJK; the hook beside it got through: exit 0
+AC1 try 2: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NFHT2616YRZ8RGKGKVYD9; the hook beside it got through: exit 0
+AC1 try 3: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NFMAEHJ1XJ10KKNHASCR5; the hook beside it got through: exit 0
+AC1 try 4: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NFNWD6E0P8JWJV9Q41WWB; the hook beside it got through: exit 0
+AC1 try 5: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NFQKV6ZDJC214KDNXD90M; the hook beside it got through: exit 0
+ × tests/acceptance/25-redraft-3243/held.test.ts > AC1 #25.0215da31 A held stop continues with the answer > AC1 #25.0215da31 an answer given while the stop is held comes back as that Stop's decision: block, and the turn goes on with it 10596ms
+   → AC1 the session's hook failed open in each of 5 tries while a UserPromptSubmit fired beside it to the same hub got through each time, so the hub, not the machine, failed it: try 1: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NFFK268DBT0EXTAKFEGJK (the hook beside it got through); try 2: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NFHT2616YRZ8RGKGKVYD9 (the hook beside it got through); try 3: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NFMAEHJ1XJ10KKNHASCR5 (the hook beside it got through); try 4: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NFNWD6E0P8JWJV9Q41WWB (the hook beside it got through); try 5: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NFQKV6ZDJC214KDNXD90M (the hook beside it got through): expected true to be fals
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: AC1 the session's hook failed open in each of 5 tries while a UserPromptSubmit fired beside it to the same hub got through each time, so the hub, not the machine, failed it: try 1: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NFFK268DBT0EXTAKFEGJK (the hook beside it got through); try 2: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NFHT2616YRZ8RGKGKVYD9 (the hook beside it got through); try 3: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NFMAEHJ1XJ10KKNHASCR5 (the hook beside it got through); try 4: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NFNWD6E0P8JWJV9Q41WWB (the hook beside it got through); try 5: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NFQKV6ZDJC214KDNXD90M (the hook beside it got through): expected true t
+ ❯ untilFed tests/acceptance/25-redraft-3243/asking.ts:162:287
+AssertionError: AC4 the session's hook failed open in each of 5 tries while a UserPromptSubmit fired beside it to the same hub got through each time, so the hub, not the machine, failed it: try 1: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NF8J2PM4AW5636CQCQ13H (the hook beside it got through); try 2: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NF9JP868ZEVY5971KJ5SW (the hook beside it got through); try 3: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NFAMBM73C4NPDJVE9GR5R (the hook beside it got through); try 4: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NFBQTBFGBHF9CPG9JTZPH (the hook beside it got through); try 5: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NFCR53QF7ZC22PPVRA7TV (the hook beside it got through): expected true t
+ ❯ untilFed tests/acceptance/25-redraft-3243/asking.ts:162:287
+      Tests  2 failed (2)
+exit 1 end Tue Nov 24 03:36:36 PST 2026 load: { 94.84 200.87 232.74 }
+
+== 4. A starved deep-hook reads INCONCLUSIVE
+   Temporary local edit of crates/deep-hook/src/main.rs (reverted, then deep-hook rebuilt), switched by a mode file
+   <scratch>/starve-mode:
+
+    @@ fn exchange: after the request is written to the hub, before the acknowledgement is read
+    +    if std::fs::read_to_string("<scratch>/starve-mode").is_ok_and(|m| m.trim() == "late") {
+    +        std::thread::sleep(Duration::from_secs(3));
+    +        return (Some(request), Outcome::Down { late: true }, hello);
+    +    }
+    @@ fn forward: right after PENDING.set
+    +    if let Ok(mode) = std::fs::read_to_string("<scratch>/starve-mode") {
+    +        let text = &PENDING.get().unwrap().0;
+    +        if mode.trim() == "all" || event == "Stop" && mode.trim() == "ask" && text.contains("I will wait for your answer") {
+    +            std::thread::sleep(Duration::from_millis(80));
+    +        }
+    +    }
+    @@ fn watchdog: first thing in its thread
+    +        if std::fs::read_to_string("<scratch>/starve-mode").is_ok_and(|m| m.trim() == "late") {
+    +            std::thread::sleep(Duration::from_secs(4));
+    +        }
+
+   Modes "all" and "late" now starve every hook, as a starved machine does (earlier rounds starved only Stops; a
+   machine that starves only Stops is now read as a hub that fails them, 3b).
+
+-- 4a. mode "all": every hook starved before its request goes (the watchdog lets it through at 50 ms and spools it).
+   The agent's deep_ask PreToolUse is let through unstamped, so deep_ask is refused as unbound; with that PreToolUse's
+   own spooled line, and the UserPromptSubmit beside it starved too, each try is starved: INCONCLUSIVE after 5 tries.
+   (Before this round's PreToolUse check, this read FAIL: BLOCKED at the ask.created wait, asking.ts:187.)
+== starve-all-held start Tue Nov 24 03:36:44 PST 2026 load: { 86.86 195.67 230.52 }
+AC1 try 1: deep_ask was refused ([{"type":"text","text":"{\"code\":\"unbound\",\"retryable\":false,\"remediation\":\"This deep_ask call binds to no session: no PreToolUse stamped for it is unspent.\",\"path\":\"/params/arguments\",\"actual\":\"deep_ask\",\"evidence\":[]}"}]) and deep-hook spooled its PreToolUse 01M86NG5V2RJPVBSHK62GVTJ6N; the hook beside it did not get through: deep-hook spooled its UserPromptSubmit 01M86NG5V4A8719H914JZ3BPQA
+AC1 try 2: deep_ask was refused ([{"type":"text","text":"{\"code\":\"unbound\",\"retryable\":false,\"remediation\":\"This deep_ask call binds to no session: no PreToolUse stamped for it is unspent.\",\"path\":\"/params/arguments\",\"actual\":\"deep_ask\",\"evidence\":[]}"}]) and deep-hook spooled its PreToolUse 01M86NG77VVQVH984G9XV7X99Z; the hook beside it did not get through: deep-hook spooled its UserPromptSubmit 01M86NG786VEAF8C5J6DTM6HJF
+AC1 try 3: deep_ask was refused ([{"type":"text","text":"{\"code\":\"unbound\",\"retryable\":false,\"remediation\":\"This deep_ask call binds to no session: no PreToolUse stamped for it is unspent.\",\"path\":\"/params/arguments\",\"actual\":\"deep_ask\",\"evidence\":[]}"}]) and deep-hook spooled its PreToolUse 01M86NG8NTVP5RA6XMS4S1SWWA; the hook beside it did not get through: deep-hook spooled its UserPromptSubmit 01M86NG8NTFNHV95F66BC7VFT0
+AC1 try 4: deep_ask was refused ([{"type":"text","text":"{\"code\":\"unbound\",\"retryable\":false,\"remediation\":\"This deep_ask call binds to no session: no PreToolUse stamped for it is unspent.\",\"path\":\"/params/arguments\",\"actual\":\"deep_ask\",\"evidence\":[]}"}]) and deep-hook spooled its PreToolUse 01M86NGA6KY7GFM46CZE14MX23; the hook beside it did not get through: deep-hook spooled its UserPromptSubmit 01M86NGA6N3076YAVV2KQ699F9
+AC1 try 5: deep_ask was refused ([{"type":"text","text":"{\"code\":\"unbound\",\"retryable\":false,\"remediation\":\"This deep_ask call binds to no session: no PreToolUse stamped for it is unspent.\",\"path\":\"/params/arguments\",\"actual\":\"deep_ask\",\"evidence\":[]}"}]) and deep-hook spooled its PreToolUse 01M86NGBK7XYTFPK0VZEPBT7GG; the hook beside it did not get through: deep-hook spooled its UserPromptSubmit 01M86NGBK79QFGEQ294BCA0MHW
+ ↓ tests/acceptance/25-redraft-3243/held.test.ts > AC1 #25.0215da31 A held stop continues with the answer > AC1 #25.0215da31 an answer given while the stop is held comes back as that Stop's decision: block, and the turn goes on with it 7934ms [INCONCLUSIVE: deep-hook failed open (no acknowledgement within its 50 ms, the hub counted down) in each of 5 tries, so whether the hub holds the stop is unknown; rerun on a machine with time to spare: try 1: deep_ask was refused ([{"type":"text","text":"{\"code\":\"unbound\",\"retryable\":false,\"remediation\":\"This deep_ask call binds to no session: no PreToolUse stamped for it is unspent.\",\"path\":\"/params/arguments\",\"actual\":\"deep_ask\",\"evidence\":[]}"}]) and deep-hook spooled its PreToolUse 01M86NG5V2RJPVBSHK62GVTJ6N (the hook beside it didn't: deep-hook spooled its UserPromptSubmit 01M86NG5V4A8719H914JZ3BPQA); try 2: deep_ask was r
+      Tests  1 skipped (1)
+exit 0 end Tue Nov 24 03:36:54 PST 2026 load: { 84.86 191.66 228.69 }
+
+== starve-all-one-route start Tue Nov 24 03:36:54 PST 2026 load: { 84.86 191.66 228.69 }
+AC4 try 1: deep_ask was refused ([{"type":"text","text":"{\"code\":\"unbound\",\"retryable\":false,\"remediation\":\"This deep_ask call binds to no session: no PreToolUse stamped for it is unspent.\",\"path\":\"/params/arguments\",\"actual\":\"deep_ask\",\"evidence\":[]}"}]) and deep-hook spooled its PreToolUse 01M86NGF9QYW50GABYVF55KT34; the hook beside it did not get through: deep-hook spooled its UserPromptSubmit 01M86NGF9MD183R3NFJG2S7R83
+AC4 try 2: deep_ask was refused ([{"type":"text","text":"{\"code\":\"unbound\",\"retryable\":false,\"remediation\":\"This deep_ask call binds to no session: no PreToolUse stamped for it is unspent.\",\"path\":\"/params/arguments\",\"actual\":\"deep_ask\",\"evidence\":[]}"}]) and deep-hook spooled its PreToolUse 01M86NGGSWM0SZKMGGVTVQJK2E; the hook beside it did not get through: deep-hook spooled its UserPromptSubmit 01M86NGGSWR0XGY0Y8DZGZXAP9
+AC4 try 3: deep_ask was refused ([{"type":"text","text":"{\"code\":\"unbound\",\"retryable\":false,\"remediation\":\"This deep_ask call binds to no session: no PreToolUse stamped for it is unspent.\",\"path\":\"/params/arguments\",\"actual\":\"deep_ask\",\"evidence\":[]}"}]) and deep-hook spooled its PreToolUse 01M86NGJ8VQM4F1V95BH59HZ1W; the hook beside it did not get through: deep-hook spooled its UserPromptSubmit 01M86NGJ8XVPGE4YS1XMD996MV
+AC4 try 4: deep_ask was refused ([{"type":"text","text":"{\"code\":\"unbound\",\"retryable\":false,\"remediation\":\"This deep_ask call binds to no session: no PreToolUse stamped for it is unspent.\",\"path\":\"/params/arguments\",\"actual\":\"deep_ask\",\"evidence\":[]}"}]) and deep-hook spooled its PreToolUse 01M86NGKV416SF8PJMGHD0Q9N8; the hook beside it did not get through: deep-hook spooled its UserPromptSubmit 01M86NGKV5H9WTPKJSK0TZ7HK6
+AC4 try 5: deep_ask was refused ([{"type":"text","text":"{\"code\":\"unbound\",\"retryable\":false,\"remediation\":\"This deep_ask call binds to no session: no PreToolUse stamped for it is unspent.\",\"path\":\"/params/arguments\",\"actual\":\"deep_ask\",\"evidence\":[]}"}]) and deep-hook spooled its PreToolUse 01M86NGND8WJXVQE00DQ5H01CV; the hook beside it did not get through: deep-hook spooled its UserPromptSubmit 01M86NGNDAV8GCCRTNWXT2ZRTB
+ ↓ tests/acceptance/25-redraft-3243/one-route.test.ts > AC4 #25.1eae4ef9 An answer that lands while the session's stop is held and its waiter is alive goes back through the Stop hold only > AC4 #25.1eae4ef9 with the stop held and the waiter alive, the answer goes back by the Stop hold only, the waiter exits without waking, and the transcript shows its ID once 8128ms [INCONCLUSIVE: deep-hook failed open (no acknowledgement within its 50 ms, the hub counted down) in each of 5 tries, so whether the hub holds the stop is unknown; rerun on a machine with time to spare: try 1: deep_ask was refused ([{"type":"text","text":"{\"code\":\"unbound\",\"retryable\":false,\"remediation\":\"This deep_ask call binds to no session: no PreToolUse stamped for it is unspent.\",\"path\":\"/params/arguments\",\"actual\":\"deep_ask\",\"evidence\":[]}"}]) and deep-hook spooled its PreToolUse 01M86NGF9QYW50GABY
+      Tests  1 skipped (1)
+exit 0 end Tue Nov 24 03:37:04 PST 2026 load: { 106.92 192.96 228.73 }
+
+-- 4b. mode "late": every hook's request reaches the hub, so the hub records the Stop and the waiter starts while
+   the Stop is still out; the pre-answer check sees it unsettled and the test answers; then deep-hook, given no time
+   for 3 s, lets it through late. The check after the answer (this Stop's own evidence) reads the try as starved, and
+   the UserPromptSubmit beside it was late too: INCONCLUSIVE after 5 tries, both files.
+== starve-late-held start Tue Nov 24 03:37:20 PST 2026 load: { 96.68 186.56 225.82 }
+AC1 try 1: the stop with the ask open ended after your answer without it and deep-hook's Stop said "deep-hook: spooled 01M86NHQH88QPJVVXRYYCDY57G, but its sync didn't finish within the hook's 50 ms"; deep-hook spooled its Stop 01M86NHQH88QPJVVXRYYCDY57G marked late; the hook beside it did not get through: deep-hook spooled its UserPromptSubmit 01M86NHQHB8ZJSC1JV467RKGDV marked late
+AC1 try 2: the stop with the ask open ended after your answer without it and deep-hook spooled its Stop 01M86NJARZAEG5YNEJQ9ZKRTZ1 marked late; the hook beside it did not get through: deep-hook spooled its UserPromptSubmit 01M86NJAS2PSWAJZKM05PR8NQN marked late
+AC1 try 3: the stop with the ask open ended after your answer without it and deep-hook spooled its Stop 01M86NJXTBBK52468EHQC6X4AD marked late; the hook beside it did not get through: deep-hook spooled its UserPromptSubmit 01M86NJXTE1YAX67MSJSYRD87Z marked late
+AC1 try 4: the stop with the ask open ended after your answer without it and deep-hook spooled its Stop 01M86NKGWD88KRS7FRZCJG1Y4Q marked late; the hook beside it did not get through: deep-hook spooled its UserPromptSubmit 01M86NKGWMDHKDPGQEB3V5Z510 marked late
+AC1 try 5: the stop with the ask open ended after your answer without it and deep-hook spooled its Stop 01M86NM4NMJTDRVMJ1657PTKP2 marked late; the hook beside it did not get through: deep-hook spooled its UserPromptSubmit 01M86NM4NMR2V2DAENW60JF8G3 marked late
+ ↓ tests/acceptance/25-redraft-3243/held.test.ts > AC1 #25.0215da31 A held stop continues with the answer > AC1 #25.0215da31 an answer given while the stop is held comes back as that Stop's decision: block, and the turn goes on with it 99201ms [INCONCLUSIVE: deep-hook failed open (no acknowledgement within its 50 ms, the hub counted down) in each of 5 tries, so whether the hub holds the stop is unknown; rerun on a machine with time to spare: try 1: the stop with the ask open ended after your answer without it and deep-hook's Stop said "deep-hook: spooled 01M86NHQH88QPJVVXRYYCDY57G, but its sync didn't finish within the hook's 50 ms"; deep-hook spooled its Stop 01M86NHQH88QPJVVXRYYCDY57G marked late (the hook beside it didn't: deep-hook spooled its UserPromptSubmit 01M86NHQHB8ZJSC1JV467RKGDV marked late); try 2: the stop with the ask open ended after your answer without it and deep-hook
+      Tests  1 skipped (1)
+exit 0 end Tue Nov 24 03:39:02 PST 2026 load: { 108.57 164.39 212.60 }
+
+== starve-late-one-route start Tue Nov 24 03:39:02 PST 2026 load: { 108.57 164.39 212.60 }
+AC4 try 1: the stop with the ask open ended after your answer without it and deep-hook spooled its Stop 01M86NMWM50ZPET7BVQKD20YRQ marked late; the hook beside it did not get through: deep-hook's UserPromptSubmit said "deep-hook: spooled 01M86NMWMB16NBKYW2V638GFJ7, but its sync didn't finish within the hook's 50 ms"; deep-hook spooled its UserPromptSubmit 01M86NMWMB16NBKYW2V638GFJ7 marked late
+AC4 try 2: the stop with the ask open ended after your answer without it and deep-hook spooled its Stop 01M86NNGDWCTMQAMSMFVNQHCM3 marked late; the hook beside it did not get through: deep-hook spooled its UserPromptSubmit 01M86NNGDXMXY7VSZAJ0KVVK79 marked late
+AC4 try 3: the stop with the ask open ended after your answer without it and deep-hook spooled its Stop 01M86NP46SCC6BVCNX43393SHR marked late; the hook beside it did not get through: deep-hook spooled its UserPromptSubmit 01M86NP46VV1D2HF1PEES13HTC marked late
+AC4 try 4: the stop with the ask open ended after your answer without it and deep-hook spooled its Stop 01M86NPQK2V796FN42FV84AR5Z marked late; the hook beside it did not get through: deep-hook spooled its UserPromptSubmit 01M86NPQK4TNZT54AFPP6TZD36 marked late
+AC4 try 5: the stop with the ask open ended after your answer without it and deep-hook spooled its Stop 01M86NQB31SBP6B89N4H4CMKAF marked late; the hook beside it did not get through: deep-hook spooled its UserPromptSubmit 01M86NQB36GXXKKXBA8TTPFJ2Y marked late
+ ↓ tests/acceptance/25-redraft-3243/one-route.test.ts > AC4 #25.1eae4ef9 An answer that lands while the session's stop is held and its waiter is alive goes back through the Stop hold only > AC4 #25.1eae4ef9 with the stop held and the waiter alive, the answer goes back by the Stop hold only, the waiter exits without waking, and the transcript shows its ID once 101200ms [INCONCLUSIVE: deep-hook failed open (no acknowledgement within its 50 ms, the hub counted down) in each of 5 tries, so whether the hub holds the stop is unknown; rerun on a machine with time to spare: try 1: the stop with the ask open ended after your answer without it and deep-hook spooled its Stop 01M86NMWM50ZPET7BVQKD20YRQ marked late (the hook beside it didn't: deep-hook's UserPromptSubmit said "deep-hook: spooled 01M86NMWMB16NBKYW2V638GFJ7, but its sync didn't finish within the hook's 50 ms"; deep-hook spooled its U
+      Tests  1 skipped (1)
+exit 0 end Tue Nov 24 03:40:47 PST 2026 load: { 194.75 180.32 213.55 }
+
+-- 4c. mode "ask": only the Stop with the ask open starved, the UserPromptSubmit beside it gets through each time,
+   as with a hub that never acknowledges a held stop within 50 ms: FAIL at untilFed's assertion after 5 tries
+== starve-ask-held start Tue Nov 24 03:37:04 PST 2026 load: { 106.92 192.96 228.73 }
+AC1 try 1: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NGS9QMZYN2YN0QWTYT36X; the hook beside it got through: exit 0
+AC1 try 2: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NGVMBRV6BVJXYWYN9QQ54; the hook beside it got through: exit 0
+AC1 try 3: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NGXW85VK0P3117JPFP3J1; the hook beside it got through: exit 0
+AC1 try 4: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NH08KYSDRJQTGCS8F9ESX; the hook beside it got through: exit 0
+AC1 try 5: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NH2P9PFXGDM1PP85VYTF6; the hook beside it got through: exit 0
+ × tests/acceptance/25-redraft-3243/held.test.ts > AC1 #25.0215da31 A held stop continues with the answer > AC1 #25.0215da31 an answer given while the stop is held comes back as that Stop's decision: block, and the turn goes on with it 12835ms
+   → AC1 the session's hook failed open in each of 5 tries while a UserPromptSubmit fired beside it to the same hub got through each time, so the hub, not the machine, failed it: try 1: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NGS9QMZYN2YN0QWTYT36X (the hook beside it got through); try 2: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NGVMBRV6BVJXYWYN9QQ54 (the hook beside it got through); try 3: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NGXW85VK0P3117JPFP3J1 (the hook beside it got through); try 4: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NH08KYSDRJQTGCS8F9ESX (the hook beside it got through); try 5: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NH2P9PFXGDM1PP85VYTF6 (the hook beside it got through): expected true to be fals
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: AC1 the session's hook failed open in each of 5 tries while a UserPromptSubmit fired beside it to the same hub got through each time, so the hub, not the machine, failed it: try 1: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NGS9QMZYN2YN0QWTYT36X (the hook beside it got through); try 2: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NGVMBRV6BVJXYWYN9QQ54 (the hook beside it got through); try 3: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NGXW85VK0P3117JPFP3J1 (the hook beside it got through); try 4: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NH08KYSDRJQTGCS8F9ESX (the hook beside it got through); try 5: the stop with the ask open ended unheld and deep-hook spooled its Stop 01M86NH2P9PFXGDM1PP85VYTF6 (the hook beside it got through): expected true t
+ ❯ untilFed tests/acceptance/25-redraft-3243/asking.ts:162:287
+      Tests  1 failed (1)
+exit 1 end Tue Nov 24 03:37:20 PST 2026 load: { 96.68 186.56 225.82 }
+
+   Not run on its own: spool lines lost to the hub's 2 s replay before a hook's end is reported, a watch 'error'
+   (Linux's recursive watch; this Mac raised none), an earlier hook's late reading landing after a Stop's mark, the
+   double read of settled that this round removed, and a hub that garbles (rather than closes) every Stop reply.
+
+== 5. Types and the wait ratchet
+npx tsc --noEmit -p tests/acceptance/25-redraft-3243/tsconfig.json: exit 0.
+node scripts/wait-ratchet.mjs: no finding in tests/acceptance/25-redraft-3243 (the folder is read as untracked; it
+exits 1 at base for its 10 findings in packages/hub/test and packages/record/test, none of this folder's). The two
+clock reads in asking.ts's untilFed carry `// deadline:` markers; the spool watch is an fs event, not a timer.
