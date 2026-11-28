@@ -1,31 +1,34 @@
-// #2813 AC2: on #1831's branch (PR #2802), `node scripts/proof.mjs before trace` no longer reports spine.test.mjs or
-// #1831's other fast node files as `the run was stopped after 20 minutes`.
-// Runs this checkout's proof tooling (its scripts/ laid over the branch's) in a scratch repository at PR #2802's head,
-// with origin/main at the branch's base. By hand: it builds the branch's binaries and takes an hour or more (README).
-// Run: node --test tests/acceptance/2813-redraft-ac2/branch.test.mjs
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { copyFileSync, createWriteStream, existsSync, lstatSync, mkdirSync, mkdtempSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { copyFileSync, createWriteStream, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const CHECKOUT = realpathSync(fileURLToPath(new URL('../../../', import.meta.url)));
-const ISSUES = fileURLToPath(new URL('./issues/', import.meta.url)); // #1831's body, as gh gave it on Nov 27, 2026
-const HEAD = '3d2115ea6936d36617ac9bbd4a2ef933dbc172ed'; // refs/pull/2802/head
-const BASE = 'd4cef00fbd02632188a161c94c19a9660a3ee6ba'; // PR #2802's base, main as it stood then
+const ISSUES = fileURLToPath(new URL('./issues/', import.meta.url));
+const HEAD = '3d2115ea6936d36617ac9bbd4a2ef933dbc172ed';
+const BASE = 'd4cef00fbd02632188a161c94c19a9660a3ee6ba';
 const STOPPED = 'the run was stopped after 20 minutes';
 const FOLDER = 'tests/acceptance/1831';
-// #1831's node test files that build nothing (its README: "no build, a few seconds", "no build, under a minute"):
-// neither can reach the 20-minute cap of a run of its own.
 const SPINE = `${FOLDER}/spine.test.mjs`;
 const FAST = [SPINE, `${FOLDER}/harness.test.mjs`];
-// The two that build deep-show and deep-gpu (canvas.test.mjs a release deep-show too): a run of their own may read
-// the cap, as the issue keeps for a file stopped at it.
 const BUILDING = [`${FOLDER}/canvas.test.mjs`, `${FOLDER}/deep-show.test.mjs`];
-const AC2_1831 = '#1831.2e170a8b'; // spine.test.mjs's tag
 const PROOF_CAP_MS = 5 * 3_600_000;
+const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+function criteria(issue) {
+  const body = readFileSync(join(ISSUES, `${issue}.md`), 'utf8');
+  const section = body.split(/^###\s+Acceptance criteria\s*$/m)[1]?.split(/^#{1,6}\s/m)[0] ?? '';
+  return [...section.matchAll(/^\s*- \[[ xX]\] (.+)$/gm)].map(([, text]) => ({ text: text.trim(), id: `#${issue}.${createHash('sha256').update(text.trim().replace(/\s+/g, ' ')).digest('hex').slice(0, 8)}` }));
+}
+const spineCriterion = () => {
+  const found = criteria(1831).filter(({ text }) => text.includes('node scripts/spine.mjs list'));
+  assert.equal(found.length, 1, `issues/1831.md holds one criterion on \`node scripts/spine.mjs list\`: ${JSON.stringify(found)}`);
+  return found[0].id;
+};
 
 function git(cwd, args, options = {}) {
   const result = spawnSync('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'advice.detachedHead=false', ...args], { cwd, encoding: 'utf8', maxBuffer: 1 << 28, ...options });
@@ -34,10 +37,6 @@ function git(cwd, args, options = {}) {
 }
 const has = (cwd, sha) => spawnSync('git', ['cat-file', '-e', `${sha}^{commit}`], { cwd }).status === 0;
 
-/**
- * A scratch repository at PR #2802's head whose origin/main is its base. Its objects are read from this checkout's
- * repository, never written there; what it lacks is fetched from origin into the scratch repository alone.
- */
 function branchRepository(directory) {
   const repo = join(directory, 'repo');
   const common = realpathSync(resolve(CHECKOUT, git(CHECKOUT, ['rev-parse', '--git-common-dir']).trim()));
@@ -55,14 +54,13 @@ function branchRepository(directory) {
   return repo;
 }
 
-/** Lays this checkout's scripts/ (what git lists there, edits and new files included) in place of the branch's. */
 function layScripts(repo) {
   rmSync(join(repo, 'scripts'), { recursive: true, force: true });
   const paths = git(CHECKOUT, ['ls-files', '-z', '--cached', '--others', '--exclude-standard', 'scripts']).split('\0').filter(Boolean);
   for (const path of new Set(paths)) {
     const from = join(CHECKOUT, path), to = join(repo, path);
     const stat = lstatSync(from, { throwIfNoEntry: false });
-    if (!stat || stat.isDirectory()) continue; // deleted in the worktree
+    if (!stat || stat.isDirectory()) continue;
     mkdirSync(dirname(to), { recursive: true });
     if (stat.isSymbolicLink()) symlinkSync(readlinkSync(from), to);
     else copyFileSync(from, to);
@@ -70,11 +68,11 @@ function layScripts(repo) {
 }
 
 test(`#2813.60c058b2 on #1831's branch (PR #2802), \`node scripts/proof.mjs before trace\` reports none of #1831's fast node files as ${STOPPED}, and spine.test.mjs gets a verdict of its own`, { timeout: PROOF_CAP_MS + 30 * 60_000 }, async (t) => {
+  const spineTag = spineCriterion();
   const directory = realpathSync(mkdtempSync(join(tmpdir(), 'deep-2813-ac2-')));
   const log = `${directory}.log`;
   let child = null;
   t.after(() => {
-    // Only the process group this test started, by its PID.
     if (child && child.exitCode === null && child.signalCode === null) try { process.kill(-child.pid, 'SIGKILL'); } catch {}
     rmSync(directory, { recursive: true, force: true });
     console.log(`#2813 AC2: the run's output is kept in ${log}`);
@@ -83,12 +81,9 @@ test(`#2813.60c058b2 on #1831's branch (PR #2802), \`node scripts/proof.mjs befo
 
   const repo = branchRepository(directory);
   layScripts(repo);
-  // proof.mjs imports typescript; the scratch repository has no packages of its own, so it finds this checkout's
-  // one folder up, outside the repository, where no lane lists it as a file of the change.
   assert.ok(existsSync(join(CHECKOUT, 'node_modules/typescript')), 'run npm ci in this checkout first: proof.mjs imports typescript');
   symlinkSync(join(CHECKOUT, 'node_modules'), join(directory, 'node_modules'));
 
-  // The machine's own HOME, throttle table and bays, as any proof run here uses them; #1831's body from this suite.
   const env = { ...process.env, DEEP_PROOF_ISSUES: ISSUES };
   for (const name of ['NODE_TEST_CONTEXT', 'DEEP_BIN_DIR', 'CARGO_TARGET_DIR', 'CARGO_BUILD_TARGET_DIR', 'DEEP_PREFLIGHT', 'DEEP_OPEN_ISSUES', 'DEEP_PERF_LOCK', 'DEEP_THROTTLE_TABLE', 'DEEP_THROTTLE_READINGS']) delete env[name];
 
@@ -96,11 +91,13 @@ test(`#2813.60c058b2 on #1831's branch (PR #2802), \`node scripts/proof.mjs befo
   const scripts = `${git(CHECKOUT, ['rev-parse', 'HEAD']).trim()}${git(CHECKOUT, ['status', '--porcelain', '--', 'scripts']).trim() ? ' with uncommitted edits' : ''}`;
   out.write(`#2813 AC2 by hand\nbranch: PR #2802 head ${HEAD}, origin/main ${BASE}\nscripts/: this checkout's (${CHECKOUT} at ${scripts})\nrun: DEEP_PROOF_ISSUES=${ISSUES} node scripts/proof.mjs before trace (in ${repo})\nstarted: ${new Date().toISOString()} on ${process.platform}-${process.arch}\n\n`);
   child = spawn(process.execPath, ['scripts/proof.mjs', 'before', 'trace'], { cwd: repo, env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  child.stdout.setEncoding('utf8');
+  child.stderr.setEncoding('utf8');
   let stdout = '';
   child.stdout.on('data', (chunk) => { stdout += chunk; out.write(chunk); });
   child.stderr.on('data', (chunk) => out.write(chunk));
   let capped = false;
-  const cap = setTimeout(() => { capped = true; try { process.kill(-child.pid, 'SIGKILL'); } catch {} }, PROOF_CAP_MS);
+  const cap = setTimeout(() => { capped = true; try { process.kill(-child.pid, 'SIGKILL'); } catch {} }, PROOF_CAP_MS); // deadline: bounds the proof run, which ends on its own long before
   const [status, signal] = await new Promise((done) => child.on('close', (...ended) => done(ended)));
   clearTimeout(cap);
   out.write(`\nended: ${new Date().toISOString()}, exit ${status}${signal ? ` (${signal})` : ''}\n`);
@@ -118,6 +115,6 @@ test(`#2813.60c058b2 on #1831's branch (PR #2802), \`node scripts/proof.mjs befo
   t.diagnostic(capReached.length ? `stopped at their own cap: ${capReached.join(', ')}` : `no #1831 file reached the 20-minute cap in this run, so it can't tell the fix from the base's single run ${where}`);
 
   for (const file of FAST) assert.deepEqual(stopped.filter((line) => line.includes(file)), [], `${file} builds nothing, yet reads ${STOPPED} ${where}`);
-  const verdict = new RegExp(`^(?:PASS|FAIL) before: ${SPINE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} › .*${AC2_1831.replace('.', '\\.')}`);
-  assert.ok(lines.some((line) => verdict.test(line)), `${SPINE}'s tagged test ${AC2_1831} gets no PASS or FAIL of its own in the before lane; its lines:\n${lane.filter((line) => line.includes(SPINE)).join('\n') || '(none)'}\n${where}`);
+  const verdict = new RegExp(`^(?:PASS|FAIL) before: ${escape(SPINE)} › .*${escape(spineTag)}`);
+  assert.ok(lines.some((line) => verdict.test(line)), `${SPINE}'s tagged test ${spineTag} gets no PASS or FAIL of its own in the before lane; its lines:\n${lane.filter((line) => line.includes(SPINE)).join('\n') || '(none)'}\n${where}`);
 });

@@ -49,6 +49,15 @@ scratch dir in the temporary folder, printing its path; that log is the PR's evi
 issue keeps for the stopped file. `tests/harness-low-power.test.mjs` and `tests/reference-macs.test.mjs` carry no
 #1831 tag, so the lanes don't run them.
 
+The test file holds no comments (a new suite file's comment ceiling is 0); this README is its explanation. Its one
+marker, `// deadline:`, is on the 5-hour timer, which only bounds the proof run: the test kills the run's process
+group (the one it started, by PID) if it is still going then, and fails. The `›` in the lines is read as UTF-8 text
+(`setEncoding('utf8')` on both streams), so a chunk boundary can't split it. `#1831.2e170a8b`, spine's tag, isn't
+written in the test: it is worked out at runtime from `issues/1831.md`, with the hash `scripts/proof-change.mjs`
+gives a criterion (the first eight hex digits of the SHA-256 of its trimmed text, white space collapsed), as the one
+criterion naming `node scripts/spine.mjs list`. So the closed-issue sweep never reads the test as holding #1831's
+criterion.
+
 It asserts, on the printed lane lines:
 
 - the proof finished within five hours (`proof: wall time` printed);
