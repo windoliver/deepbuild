@@ -790,7 +790,6 @@ pub struct Hub<'a> {
     /// its last `deep_show`, before the track and the session's picks (crate::played).
     pub tracks: BTreeMap<String, deep_canvas_input::track::Track>,
     pub forms: BTreeMap<String, Value>,
-    /// Each document's session.
     pub sessions: BTreeMap<String, DocSession>,
     /// #1250: each piece's live play as the app keeps it for clips, and each panel's cards.
     pub(crate) clips: crate::clip::Clips,
@@ -809,7 +808,6 @@ pub struct Hub<'a> {
     pub pending_light: Option<Value>,
     /// Each panel's interaction scope (#383).
     pub scopes: BTreeMap<String, crate::input::PanelScope>,
-    /// The input router's last serial.
     pub serial: u64,
     /// The plug-ins' panels in the trusted ring (#401).
     pub ring: crate::ring::Ring,
