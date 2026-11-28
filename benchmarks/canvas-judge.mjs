@@ -63,6 +63,7 @@ export const EFFICIENCY = {
   'canvas-atlas-draw': { draw_rows_frame_ms: (r) => r.draw_rows_frame_ms },
   'canvas-atlas-slice': { slice_rows_frame_ms: (r) => r.slice_rows_frame_ms },
   'canvas-fx-pack': Object.fromEntries(['pack_check_ms', 'operator_compile_ms', 'still_dispatches'].map((k) => [k, (r) => r[k]])),
+  'canvas-pack-checks': { first_reply_ms: (r) => r.first_reply_ms },
   'canvas-local-tone-map': { local_1080p_gpu_ms: (r) => r.local_1080p_gpu_ms, local_2160p_gpu_ms: (r) => r.local_2160p_gpu_ms },
   'canvas-ground': {
     bevel_ms: (r) => r.bevel_ms, subdivide_ms: (r) => r.subdivide_ms, distribute_ms: (r) => r.distribute_ms, arc_length_ms: (r) => r.arc_length_ms,

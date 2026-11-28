@@ -1,0 +1,35 @@
+#1316 acceptance suite at the base 1b4929ae7 ("Merge pull request #3436"), fresh GitHub clone, 2026-11-24.
+Machine: Mac18,1 / Apple M6 (on the base's tests/acceptance/319 reference-Mac list), macOS, Node 24.22.0.
+Load: 1-minute load average 108.7 at start (131/138 over 5/15 min); other sessions shared the GPU and CPUs.
+deep-gpu build (cargo build --locked --bin deep-gpu, CARGO_INCREMENTAL=0, CARGO_PROFILE_DEV_DEBUG=0) in a fresh
+target: about 35 minutes under that load, done before the suite ran.
+
+Command:
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1316 --no-file-parallelism --reporter=verbose
+Result: 1 failed, 1 passed; duration 114.5 s (build already warm).
+
+AC2 #1316.33db7d22 (ac2-planted-race.test.ts): FAILED, as expected, in 2.5 s.
+  deep-gpu run --planted environment_texture_race exited 2; stdout {"ok":false,"code":"bad_input"}.
+  The base's Planted::parse doesn't know the name, so --planted refuses it before any drawing
+  (assertion at helpers.ts runGpu: "exited 0 ... expected 2 to be +0").
+
+AC1 #1316.a4e5e495 (ac1-identical.test.ts): PASSED at the base on this Mac, in 103.6 s.
+  SheenChair:     10 fresh processes, 1 distinct final and 1 distinct linear target at frame 0
+  DispersionTest: 10 fresh processes, 1 distinct final and 1 distinct linear target at frame 0
+  Rerun of AC1 alone straight after: PASSED again in 81.1 s, the same counts (1 and 1 per sample).
+  So 20 fresh processes per sample gave 0 differing pixels in either target. The race the issue reports
+  (SheenChair 12 to ~30,000 pixels; DispersionTest ~250; one render in four of the chair at 1d3ae632) did not
+  reproduce here. The test was not changed to force a failure.
+
+Extra probe (outside the suite, the same SheenChair document as AC1, 1280 x 800, filmic):
+  6 fresh processes asking only for the final target (as 428's AC9 taste run does) and 6 asking for final+linear.
+  All 12 finals hashed 20412580da64d2c9...; all 6 linears hashed 871174eb8087d505....
+  (428's TASTE.json recorded bc0c0c89... for its chair screenshot on another Mac at an earlier base, so the hashes
+  aren't comparable across machines.)
+
+What this means for the lanes: AC1 has no failing wrong program at this base on this Mac (Mac18,1 / M6). It may
+reproduce on the Macs the issue was seen on (the M3s), on a different load, or not at all at this base; the
+implementer's before lane for AC1 needs a run that fails at the merge base or a planted twin. AC2 fails at the base
+for the reason its criterion names: there is no planted race.
+
+tsc: node node_modules/typescript/bin/tsc -p tests/acceptance/1316/tsconfig.json exits 0.

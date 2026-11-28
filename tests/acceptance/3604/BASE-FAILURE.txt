@@ -1,0 +1,55 @@
+# #3604 suite at the base: INCONCLUSIVE, not run. The test grant didn't come within the hour, and the request was stopped
+
+Base: d303e2b64 (this worktree's HEAD, detached, "Merge pull request #3643 …"), with only this job's files added. No
+implementation of #3604 exists.
+Host: Mac17,10, macOS 27.2, arm64; the one-minute load was 105 to 237 through the wait (other sessions), on 18 cores.
+
+What was asked, once (checkout path redacted as <checkout>):
+
+  cd <checkout> && node scripts/throttle.mjs test --wait 300 -- sh scripts/lease nice -n 10 sh <run>
+  where <run> did, with PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0:
+    node node_modules/vitest/vitest.mjs run --root <scratch> --testTimeout=600000          (README: Checked before the base run)
+    node node_modules/vitest/vitest.mjs run --root tests/acceptance/3604 --no-file-parallelism --testTimeout=600000
+
+  and, to shorten the test grant's hold, under a build grant: cargo build --locked --bin deep-logic, and #416's
+  assembler as ../416/interfaces/wat.ts builds it.
+
+The throttle table held one test grant (another session's, 79 minutes old when this request was 64 minutes old) with
+the load over the cores, so no second test grant could start; this request stood fifth of seven test requests, and the
+build request fifteenth of fifteen. At an hour (AGENTS.md, Delivery: testing takes at most an hour, the wait for a grant
+included) both were stopped by PID (SIGTERM, throttle exit 143), their commands never started. Nothing of the suite ran
+against deep-logic, the assembler, Chrome or deep-show.
+
+What did run:
+
+  node node_modules/typescript/bin/tsc -p tests/acceptance/3604/tsconfig.json          → exit 0, no output
+  npm ci --no-audit --no-fund (under a build grant)                                     → exit 0
+
+What the base run is expected to show, read from the base's source and not run: every test first runs its own
+node-side checks (the values worked by hand against model.ts, each recomputed by a scratch script), then calls
+`circuitLib()` (helpers.ts), which sends `{"call": "first_party"}` and expects a first-party pack that declares
+circuit@2. deep-logic at the base embeds seven packs (crates/deep-logic/src/first_party.rs: interfaces, lanes, modslib,
+process, separation, circuit 1.0.0, sense) and nothing under crates/, packs/ or scripts/ names circuit@2, so each test
+would fail on the same assertion, reached from its own line:
+
+  AssertionError: a first-party pack declares circuit@2 (packs: …): expected undefined to be defined
+   ❯ circuitLib helpers.ts
+
+  hours.test.ts         #3604.078b075a, #3604.ff1304f0, #3604.e20080d5 (3 tests: hour() → circuitLib)
+  ac02-overload.test.ts #3604.25e37a8c (1)
+  ac03-short.test.ts    #3604.7de81c1e (2)
+  ac04-curves.test.ts   #3604.455db5a3 (1)
+  ac05-reset.test.ts    #3604.60102bcb (2)
+  ac06-rcd.test.ts      #3604.ff1304f0 (1)
+  ac07-leak.test.ts     #3604.e20080d5 (2: opens() → circuitLib)
+  ac08-stair.test.ts    #3604.9e3754a5 (2)
+  ac09-own-array.test.ts #3604.806e872b (2)
+  ac10-dimmer.test.ts   #3604.6b0e4105 (1)
+  ac11-set.test.ts      #3604.8a2d3993 (1)
+  ac12-doorbell.test.ts #3604.1a449f4f (3)
+  ac13-hosts.test.ts    #3604.56962e6a (3)
+  ac14-readout.test.ts  #3604.5cb1ae24 (2: setup() → circuitLib, before deep-show is built)
+  ac15-budget.test.ts   #3604.8683c04d (2: the timing test fails before any frame, so it reads the missing interface, not INCONCLUSIVE)
+  ac16-kit.test.ts      #3604.726c5f11 (2)
+
+Expected: 16 files failed, 30 tests failed, none passed. This record is to be replaced by the real run's.

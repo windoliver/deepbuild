@@ -258,6 +258,9 @@ pub enum Planted {
     MirrorSamplesFullFrame,
     /// #468: a circle of confusion linear in |d − s|, matched to the physical one at 10 m.
     CocLinearInDistance,
+    /// #3506: the depth of field copies the image it shares with motion blur into the linear one
+    /// before its gather writes it.
+    DofReadsSharedBeforeWrite,
     /// #166: the water's foam carried from frame to frame as simulation state.
     WaterFoamKeepsState,
     /// #268: the shore's field measured from each item's centre, not where it meets the water.
@@ -321,6 +324,7 @@ pub enum Planted {
     ClaimsMsaaOverSingleSample,
     PuffBlockCopy,
     ResolveAccumulatesFrames,
+    EnvironmentTextureRace,
     /// #385's wrong programs (tests/acceptance/385/README.md: Planted programs): the GPU layer's
     /// solid fills two codes redder; GPUI's glyph quads half a device px right; Vello GPU on
     /// whatever its spike record says; each sector of a group composited on its own.
@@ -787,6 +791,7 @@ impl Planted {
             "mirror_halves_twice" => Planted::MirrorHalvesTwice,
             "mirror_samples_full_frame" => Planted::MirrorSamplesFullFrame,
             "coc_linear_in_distance" => Planted::CocLinearInDistance,
+            "dof_reads_shared_before_write" => Planted::DofReadsSharedBeforeWrite,
             "flare_ignores_occlusion" => Planted::FlareIgnoresOcclusion,
             "water_foam_keeps_state" => Planted::WaterFoamKeepsState,
             "shore_field_from_centre" => Planted::ShoreFieldFromCentre,
@@ -829,6 +834,7 @@ impl Planted {
             "claims_msaa_over_single_sample" => Planted::ClaimsMsaaOverSingleSample,
             "puff_block_copy" => Planted::PuffBlockCopy,
             "resolve_accumulates_frames" => Planted::ResolveAccumulatesFrames,
+            "environment_texture_race" => Planted::EnvironmentTextureRace,
             "shifts_fill_two_codes" => Planted::ShiftsFillTwoCodes,
             "grid_keeps_previous_step" => Planted::GridKeepsPreviousStep,
             "grid_role_before_rebuild" => Planted::GridRoleBeforeRebuild,
