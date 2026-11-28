@@ -291,7 +291,13 @@ const main = () => {
     console.log('PASS copy release');
     return;
   }
+  const sourceAlone = root !== resolve(checkout) && !existsSync(join(root, SOURCE, '..', 'Cargo.toml'));
+  if (!existsSync(join(root, TABLES)) && !sourceAlone) {
+    console.error(`FAIL copy: no copy tables at ${join(root, TABLES)}`);
+    process.exit(1);
+  }
   const tablesRoot = existsSync(join(root, TABLES)) ? root : checkout;
+  if (tablesRoot !== root) console.log(`copy tables read from ${join(resolve(checkout), TABLES)}: ${root} holds the app's source alone`);
   const found = lint(root, tablesRoot);
   for (const line of found) console.log(line);
   // A key a shipped language lacks, or holds stale, draws its English: listed here, failed only by the release check.
