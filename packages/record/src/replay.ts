@@ -80,7 +80,6 @@ export function planHash(plan: ReplayPlan): string {
   return createHash('sha256').update(canonical(plan)).digest('hex');
 }
 
-
 // The one-sided t quantile, from the regularized incomplete beta (Numerical Recipes, 6.1 and 6.4).
 function lnGamma(x: number): number {
   const c = [76.18009172947146, -86.50532032941677, 24.01409824083091, -1.231739572450155, 0.1208650973866179e-2, -0.5395239384953e-5];

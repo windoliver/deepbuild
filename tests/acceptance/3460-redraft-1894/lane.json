@@ -1,0 +1,1 @@
+{ "alone": true, "why": "binary: its one file starts a real hub (deep hub run, with this checkout's deep-hook), as tests/acceptance/3460/scope.test.ts does, whose folder runs alone by its own lane.json" }
