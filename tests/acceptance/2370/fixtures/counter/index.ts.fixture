@@ -1,0 +1,17 @@
+export default function (deep: any): void {
+  const seen: Record<string, number> = { 'GET /status': 0, 'POST /set': 0 };
+  let value = '';
+  deep.registerRoute('GET /status', () => {
+    seen['GET /status'] = (seen['GET /status'] ?? 0) + 1;
+    return { status: 200, body: `status ${value}` };
+  });
+  deep.registerRoute('POST /set', (request: { body?: string }) => {
+    seen['POST /set'] = (seen['POST /set'] ?? 0) + 1;
+    value = request?.body ?? '';
+    return { status: 200, body: `set ${value}` };
+  });
+  deep.registerCheck('ext.counter.report', async () => ({
+    outcome: 'failed', testsRun: 1, evidence: [], read: [], mask: null,
+    failures: [{ test: 'report', file: 'index.ts', line: 1, stack: null, assertion: false, message: JSON.stringify({ pid: process.pid, seen }) }],
+  }));
+}
