@@ -47,6 +47,7 @@ One page per module topic. Each decision names the file and the symbol it govern
 - [0005](0005-gate-floor-verdict-and-measures.md): the gate's floor, a claim's verdict record, price and size
 - [0006](0006-web-export-set-ceilings.md): the web-export task's set ceilings
 - [0007](0007-kept-pack-checks.md): a pack check's result kept in the store, what a taken row gives a core, and its counts
+- [0008](0008-scene-relations.md): the `scene.relations` check kind
 - [0011](0011-circuit-2-pack.md): the circuit@2 pack, its reference library and the script that writes it
 - [0016](0016-scene-renderer-shared-targets.md): the scene renderer's shared depth and resolved image
 - [0017](0017-logic-circuit-and-shell.md): the logic module's circuit judge and its course shell
