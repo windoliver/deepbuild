@@ -388,7 +388,6 @@ function checkSecurity(files) {
     report('PASS', 'security', `${securityFiles.security} names the private report form, ${securityFiles.chooser} links it, and ${securityFiles.contributing} and ${securityFiles.security} state the rule in the same words`);
 }
 
-// #3528: a tracked file a merge or patch tool leaves behind, outside the vendored crates, which publish their own.
 function checkLeftovers() {
   const leftovers = git('ls-files', '-z', '--cached').split('\0').filter((path) => /\.(?:orig|rej)$/.test(path) && !path.startsWith('vendor/'));
   for (const path of leftovers) report('FAIL', 'leftovers', `${path} is a tracked .orig or .rej file`, fixes.leftover);

@@ -28,22 +28,16 @@ const DATA: &str = include_str!("actions.json");
 const UNREACHABLE: Duration = Duration::from_millis(1000);
 /// Longer than any call the hub holds open, as `deep mcp` waits.
 const ANSWER: Duration = Duration::from_secs(55);
-/// #2654's cap on one line, a request or the hub's reply, as `deep mcp` holds it (LINE_CAP in packages/hub/src/mcp.ts).
 const LINE_CAP: usize = 16 * 1024 * 1024;
 const CAP_TEXT: &str = "16 MiB (16,777,216 bytes)";
 
 enum Capped {
     Line(String),
-    /// The last line, which the stream ended before its newline.
     Unended(String),
-    /// A line passed the cap here; the rest of it is dropped by the next read.
     TooLong,
     End,
 }
 
-/// Lines of at most LINE_CAP bytes, each decoded once it is whole, so a line or a character cut across two reads is
-/// read as one. A longer line comes out once as TooLong where it passes the cap, and its bytes are dropped as they come,
-/// never kept, up to the newline that ends it. A line that isn't UTF-8 ends the stream, as `lines()` did.
 struct Lines<R> {
     reader: R,
     dropping: bool,
@@ -162,8 +156,6 @@ fn unreachable(why: &str) -> Value {
     ])
 }
 
-/// error@2 for a hub reply past the cap, in `deep mcp`'s words but for this server's name: the call may have acted,
-/// so it isn't retryable.
 fn too_large() -> Value {
     object(vec![
         ("code", text("too_large")),
@@ -287,7 +279,6 @@ impl Hub {
                 }
             })
             .ok()?;
-        // The handshake's deadline is over: a reply may take as long as its call.
         reader.get_ref().set_read_timeout(None).ok()?;
         let mut lines = Lines {
             reader,
@@ -298,8 +289,6 @@ impl Hub {
                 let line = match lines.next() {
                     Capped::Line(line) => line,
                     end => {
-                        // Closed, mid-reply too, or a reply past the cap, which is a fault, not an answer: every call
-                        // still waiting on it is told so, and the next call connects again.
                         let refusal = match end {
                             Capped::TooLong => {
                                 let _ = lines.reader.get_ref().shutdown(Shutdown::Both);

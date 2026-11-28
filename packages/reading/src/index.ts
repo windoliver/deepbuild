@@ -398,7 +398,6 @@ export async function findCommand(args: readonly string[], hub?: AskHub): Promis
   return command('find', args, hub, false, async (slicer, p) => {
     const found = await slicer.find(p.what, p.cursor, undefined, p.file !== undefined ? { path: p.file, cwd: process.cwd() } : undefined);
     const none = !found.hits.length && found.next === undefined;
-    // A query of two or more words was looked for as one run of characters, and an empty reply says so (#3460).
     const note = none && p.file === undefined && (p.what.match(/[\p{L}\p{M}\p{N}]+/gu)?.length ?? 0) > 1 ? `Nothing in the record holds ${JSON.stringify(p.what)} as one run of characters.` : undefined;
     if (p.json) return JSON.stringify(note !== undefined ? { ...found, note } : found);
     if (note !== undefined) return note;

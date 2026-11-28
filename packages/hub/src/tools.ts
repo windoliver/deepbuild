@@ -307,13 +307,11 @@ export function checkArguments(tool: string, args: unknown): Obj {
     const near = nearest(tool, Object.keys(SCHEMAS));
     throw refuse('not_found', '/params/tool', near ? `Call ${near} in place of ${tool}.` : `Call one of the deep_* tools: ${Object.keys(SCHEMAS).join(', ')}.`, tool);
   }
-  // deep_kinds' fetch moved to deep_job (#3525): refused at its selector, before any field it took is, naming its new place.
   if (tool === 'deep_kinds' && isObj(args) && args.op === 'fetch') {
     throw refuse('enum', '/params/arguments/op', 'Call deep_job with op fetch and the same library and id, or pack and asset: deep_kinds only looks things up, and bringing an asset in is deep_job\'s fetch.', args.op);
   }
   try {
     const checked = check(schema, args ?? {}, '/params/arguments') as Obj;
-    // deep_job's fetch fields are op fetch's alone; a list or run that gives one is refused, as a field its schema doesn't list.
     const stray = tool === 'deep_job' && checked.op !== 'fetch' ? ['library', 'id', 'pack', 'asset'].find((k) => checked[k] !== null) : undefined;
     if (stray) throw refuse('unlisted_field', `/params/arguments/${stray}`, `Leave out ${stray}: only op fetch takes it.`, stray);
     return checked;

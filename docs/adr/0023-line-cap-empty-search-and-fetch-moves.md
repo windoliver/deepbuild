@@ -1,0 +1,29 @@
+# 0023: The hook's line cap, an empty search's note, and where the asset fetch moved
+
+Status: accepted. These are the decisions that comments added to main between 2026-11-24 and 2026-11-27 held and that were written nowhere else; the comments are gone, as [0001](0001-code-carries-no-comments.md) asks.
+
+## One line through the hook (#2654)
+
+- **A line is capped at `LINE_CAP` bytes, a request or the hub's reply, as `deep mcp` holds it.** `crates/deep-hook/src/actions.rs`, `LINE_CAP`; the same number is `LINE_CAP` in `packages/hub/src/mcp.ts`.
+- **A line is decoded once it is whole.** `crates/deep-hook/src/actions.rs`, `Lines` and `Capped`. A line or a character cut across two reads is read as one. A longer line comes out once as too long where it passes the cap, and its bytes are dropped as they come, never kept, up to the newline that ends it. A line that isn't UTF-8 ends the stream, as `lines()` did. The stream's last line may end before its newline.
+- **A hub reply past the cap is a fault, not an answer.** `crates/deep-hook/src/actions.rs`, the reply loop and `too_large`. A closed stream, mid-reply too, or a reply past the cap tells every call still waiting on it so, and the next call connects again. `too_large` answers error@2 in `deep mcp`'s words but for this server's name, and it isn't retryable: the call may have acted.
+- **The handshake's deadline ends with the handshake.** `crates/deep-hook/src/actions.rs`, the reply loop. A reply may take as long as its call.
+
+## A search that finds nothing (#3460)
+
+- **An empty reply says why, so it never reads as nothing known.** `packages/hub/src/search.ts`, `whyNothing`, `NOTE_WORDS` and `NOTE_WORD`. The note reads the query's first 16 words, one search a word, each by the search's own word rule and scope, stopping at the first source that holds the word. It names each word no source the call may read holds; or, when each is held somewhere, says that no one source holds them all. A word is named by at most a fixed count of characters, so 16 words keep the reply well under the cap.
+- **Hits come in one order, each citing its source:** your decisions, newest first, then the wiki's and the spec's, then the session's own, then readings, then past sessions. `packages/hub/src/search.ts`, `search` and `everyHit`. A past session's hit says what the record and its branch head tell of that session, read for this reply's hits only. The reply reaches the agent as JSON under #63's cap, and what doesn't fit goes by cursor.
+- **`deep find` says when a query of two or more words was looked for as one run of characters.** `packages/reading/src/index.ts`, `findCommand`. An empty reply to such a query says so.
+- **The search reading is a reading, never a pass or a fail, with no threshold.** `scripts/search-reading.mjs`, run as `node scripts/search-reading.mjs <fixture.json>`. The fixture is `{claims: [{page, id, text}], queries: [{form, query, claim}]}`; each query is tied to the claim, by its `wiki:<page>#<id>` handle, that answers it, in one of three forms: `words` (the claim's own words as a list), `form` (one word in another form) and `question`. The shipped wiki learns the claims in a temp home while no hub runs, each resting on a decision of yours, and a hub of its own runs there with no model and no network. Each query is asked through `deep_search`, by a `deep mcp` started in a folder no session works in so its calls are bound to none, and through `deep find --json`, following `next` to the end. A query is found only when the reply holds its own claim; another claim's hit is not finding it. A query's length is its words by `deep_search`'s rule, runs of letters and digits. For each search, then each form, it prints the queries found over those asked, by words in the query, and each query not found with its claim. The hub's home is a short folder, since its socket path must fit the OS's limit, which a path under the macOS temp folder exceeds. A write after `deep mcp` exits fails the ask through its exit, never the process, and the hub is ready when its first line says so, as the hub's own tests wait for it. It stops only what it started, by PID.
+
+## The asset fetch moved to `deep_job` (#3525)
+
+- **`deep_kinds`' fetch is refused at its selector, before any field it took is, naming its new place.** `packages/hub/src/tools.ts`, `checkArguments`.
+- **`deep_job`'s fetch fields are op `fetch`'s alone.** `packages/hub/src/tools.ts`, `checkArguments`. A list or run that gives one is refused, as a field its schema doesn't list.
+- **A fetch waits for the extensions to load, as a lookup of kinds does.** `packages/hub/src/mcp-operations.ts`. A fetch reads the libraries the extensions add, as a lookup reads the kinds they add. Asset search reads the hub's libraries, which no room reaches; a fetch brings an asset in from them and is not asked twice.
+- **Suites that brought an asset in through `deep_kinds` are kept as written and run by hand; their blind redrafts run in their place, alone.** `scripts/lanes-lists.mjs`, `scripts/lanes.mjs`. With the fetch moved and `deep_kinds`' fetch refused, those files no longer hold their scene. #2898's table, reads and repeats files state `deep_kinds`' old hints and are kept the same way. Each redraft starts a hub with a sandboxed fill and render, as its original did. The redrafted budget files time the six-stem render, as #154's and #154-redraft's do.
+
+## Smaller ones
+
+- **A tracked file a merge or patch tool leaves behind fails the repo rules, outside the vendored crates, which publish their own.** `scripts/repo-rules.mjs`, `checkLeftovers` (#3528).
+- **A mapped hook's request line is built for a payload the core rebuilt from what the parser kept of the hook.** `packages/hub/src/hookmap.ts`, `mappedHook`. It is the line the adapters map.

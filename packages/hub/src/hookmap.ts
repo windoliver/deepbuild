@@ -573,7 +573,6 @@ function payloadCaller(payload: Record<string, unknown>): string | undefined {
   return undefined;
 }
 
-/** A request line the adapters map, for a payload the core rebuilt from what the parser kept of the hook. */
 export function mappedHook(meta: HookMeta, draft: Draft, payload: Record<string, unknown>, transcript: readonly Record<string, unknown>[]): Record<string, unknown> | undefined {
   if (meta.agent === 'pi' || meta.agent === 'paseo') return undefined;
   const name = ADAPTERS[meta.agent] ?? 'claude';
