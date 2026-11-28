@@ -462,7 +462,7 @@ export class AnswerDelivery {
 
   /** The notes as the agent reads them, each labelled as yours, sent from the app, with its request ID. */
   noteText(notes: Note[]): string {
-    return `DeepBuild delivers your words, sent from the app:\n${notes.map((n) => `(request ${n.request}) ${n.text}`).join('\n')}`;
+    return `DeepBuild delivers the person's words, from the app:\n${notes.map((n) => `(request ${n.request}) ${n.text}`).join('\n')}`;
   }
 
   /** session.note, from the app: your words into a session, by the route its flags allow, as an answer goes (#25). */

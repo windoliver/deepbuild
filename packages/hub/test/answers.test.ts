@@ -45,7 +45,7 @@ it('offers only unanswered deliveries in the same thread, with words and images 
     const waiting = await answers.waitingFor('S2');
     expect(waiting.map(row => row.id)).toEqual([first]);
     expect(waiting[0]).toMatchObject({ words: 'Keep the heading', image });
-    expect(answerText(waiting)).toBe(`DeepBuild delivers your answers:\nYour answer to ask:${first} ("Which heading?"): Keep it (keep) — with your words: "Keep the heading" and a screenshot, sha256 ${image}.`);
+    expect(answerText(waiting)).toBe(`DeepBuild delivers answers:\n"Which heading?" Keep it (keep), with their words: "Keep the heading" and a screenshot, sha256 ${image}; answer to ask:${first}`);
     excluded.add(first);
     expect(await answers.waitingFor('S2')).toEqual([]);
     excluded.delete(first);

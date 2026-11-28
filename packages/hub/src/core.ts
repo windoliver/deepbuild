@@ -2195,7 +2195,7 @@ export class Core {
     // A cloud resource nobody can be asked about from here stays denied, as with the hub down; a destructive command
     // runs only staged.
     if (FOREIGN.has(meta.agent) || !meta.session) {
-      if (call.decided?.includes('cloud-resource')) return { deny: 'DeepBuild blocked this: creating a cloud resource the plan doesn\'t name needs your standing rule or your answer, and this session can\'t be asked.' };
+      if (call.decided?.includes('cloud-resource')) return { deny: 'DeepBuild blocked this: creating a cloud resource the plan doesn\'t name needs the person\'s rule or answer, and this session can\'t be asked.' };
       return call.stage !== undefined ? this.staging.gate(meta, call, false) : {};
     }
     const held = await this.holds.gate(meta, call);

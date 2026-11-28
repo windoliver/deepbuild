@@ -56,7 +56,7 @@ describe('a saved approval of an MCP tool', () => {
     await holds.listed('s2', 'claude-code', cwd);
     const [first] = (await record.raw("SELECT id, question FROM asks WHERE kind = 'authority'")) as { id: string; question: string }[];
     expect(first?.question, "the update's ask names the tool and shows its hints as the server's own claims").toMatch(/delete_repo.*The server says, as its own claims: delete_repo: \{"readOnlyHint":true\}/);
-    expect(await call('s2'), 'held until you answer').toContain(`ask:${first!.id}`);
+    expect(await call('s2'), 'held until you answer').toContain(`ask/${first!.id}`);
     await asks.answer(as('cli'), `ask:${first!.id}`, { option: 'approve', plan_hash: (await asks.card(`ask:${first!.id}`)).plan!.hash, token: 'click' });
     expect(await call('s2'), 'your yes covers the tool at the schema you approved').toBeUndefined();
 
@@ -65,7 +65,7 @@ describe('a saved approval of an MCP tool', () => {
     const held = await call('s3');
     const second = ((await record.raw("SELECT id FROM asks WHERE kind = 'authority' ORDER BY created")) as { id: string }[])[1];
     expect(second, 'the changed schema raises a new ask for the update').toBeDefined();
-    expect(held, 'with its schema changed, the approval has lapsed: the call waits on the new ask').toContain(`ask:${second!.id}`);
+    expect(held, 'with its schema changed, the approval has lapsed: the call waits on the new ask').toContain(`ask/${second!.id}`);
     await record.close();
   }, 60_000);
 });
@@ -91,15 +91,15 @@ describe('a call that needs your authority in the turn a proceed starts', () => 
         await reply(socket, hookLine(ulid(++t), 'Stop', { ...base, hook_event_name: 'Stop', stop_hook_active: false, last_assistant_message: 'want me to push to main?' }));
         const watched = await reply(socket, hookLine(ulid(++t), 'PreToolUse', { ...push, tool_use_id: 't1' }, { matched: ['authority-push'] }));
         expect(watched.exit, `the push alone is held: ${watched.stderr}`).toBe(2);
-        expect(watched.stderr).toMatch(/ask:/);
+        expect(watched.stderr).toMatch(/ask\//);
         const warned = await reply(socket, hookLine(ulid(++t), 'PreToolUse', { ...push, tool_use_id: 't2' }, { matched: ['yours-push', 'authority-push'] }));
         expect(warned.exit, `a warn entry matching the push too lets nothing through: ${warned.stdout}${warned.stderr}`).toBe(2);
-        expect(warned.stderr).toMatch(/ask:/);
+        expect(warned.stderr).toMatch(/ask\//);
         // A block entry denies it outright: no ask your yes couldn't settle.
         const denied = await reply(socket, hookLine(ulid(++t), 'PreToolUse', { ...push, tool_use_id: 't3', tool_input: { command: 'git push origin dev' } }, { matched: ['no-push', 'authority-push'] }));
         expect(denied.exit).toBe(2);
         expect(denied.stderr).toContain('DeepBuild blocked this: blocks. Go on. (guard no-push)');
-        expect(denied.stderr).not.toMatch(/ask:/);
+        expect(denied.stderr).not.toMatch(/ask[:/]/);
       }, { DEEP_HUB_TEST_SORTER: sorter });
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -172,7 +172,7 @@ describe('a held push (#1156)', () => {
     });
     await record.append(as('core', 's1'), { v: 1, id: ulid(now()), kind: 'question.proceeded', ts: now(), data: { question: 'Push?', rule: 'r' } });
     const held = await holds.gate({ session: 's1', agent: 'claude-code', cwd: dir } as HookMeta, { label: 'git push https://example.com/a/b.git main', classes: ['push'] });
-    expect(held, 'the push waits on an ask').toContain('ask:');
+    expect(held, 'the push waits on an ask').toContain('ask/');
     expect(seen).toEqual(['s1 with 0 asks']);
   });
 
@@ -195,7 +195,7 @@ describe('a held push (#1156)', () => {
     await record.append(as('core', 's1'), { v: 1, id: ulid(now()), kind: 'question.proceeded', ts: now(), data: { question: 'Merge it?', rule: 'r' } });
     await stop('a84d9054868905e4c');
     const held = await merge();
-    expect(held ?? 'let through', "the merge waits on an ask though a subagent stopped in the proceed's turn").toContain('ask:');
+    expect(held ?? 'let through', "the merge waits on an ask though a subagent stopped in the proceed's turn").toContain('ask/');
     const raised = (await record.raw("SELECT question FROM asks WHERE kind = 'authority'")) as { question: string }[];
     expect(raised.map((a) => a.question), 'one ask, naming the proceed').toEqual([expect.stringContaining('the turn a "proceed" started for "Merge it?"')]);
     // The session's own stop does end the proceed's turn.
@@ -219,7 +219,7 @@ describe('a held push (#1156)', () => {
     await record.append(as('core', 's1'), { v: 1, id: ulid(now()), kind: 'question.proceeded', ts: now(), data: { question: 'Push?', rule: 'r' } });
     const started = Date.now();
     const held = await holds.gate({ session: 's1', agent: 'claude-code', cwd: dir } as HookMeta, { label: 'git push origin main', classes: ['push'] });
-    expect(held, 'the push waits on an ask').toContain('ask:');
+    expect(held, 'the push waits on an ask').toContain('ask/');
     expect(Date.now() - started).toBeLessThan(5000);
   }, 20_000);
 });

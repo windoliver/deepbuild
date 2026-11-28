@@ -22,7 +22,7 @@ import { codexRelations } from './codex-settings.js';
 
 import { revives } from './memory.js';
 
-import { Holds } from './holds.js';
+import { address, Holds } from './holds.js';
 import type { Hosts } from './hosts.js';
 
 import { couldDo, struck } from './could-do.js';
@@ -391,7 +391,7 @@ export class McpOperations {
         return this.callPluginAction(session, args);
       }
       if (stands === 'deny') return { status: 'declined', ask };
-      if (stands !== 'allow') return { status: 'held', ask: stands, reason: `DeepBuild is holding ${name}: it waits for your answer to ${stands}; once you say yes, call it again with the same request ID.` };
+      if (stands !== 'allow') return { status: 'held', ask: stands, reason: `DeepBuild is holding ${name}: call it again with the same request ID once the person says yes at ${address(stands)}.` };
     }
     const result = await this.options.services.extensions!.callAction({
       action: name, target, input, caller: this.agentConnection(session), request,
@@ -657,7 +657,7 @@ export class McpOperations {
         if (this.options.kernel.stopping && this.options.settings.plant !== 'stop-answers-waiting') throw refuse('unavailable', '', 'The hub is stopping, and nothing was answered; wait on the ask again once it is back.', handle, true);
         if (this.options.kernel.stopping || Date.now() >= until) {
           if (places) this.options.delivery().askWaits.delete(handle.slice(4));
-          return { ask: handle, status: 'waiting', ...(noWake(this.options.state().sessions.get(session)?.agent) ? { note: 'Still waiting for your answer; wait on it again with deep_wait.' } : {}), answer: null, deadline: row.deadline, default: row.default_option === null ? null : JSON.parse(row.default_option) };
+          return { ask: handle, status: 'waiting', ...(noWake(this.options.state().sessions.get(session)?.agent) ? { note: 'Still waiting for the person\'s answer; wait again with deep_wait.' } : {}), answer: null, deadline: row.deadline, default: row.default_option === null ? null : JSON.parse(row.default_option) };
         }
         await wait.woken;
       } finally {
@@ -753,7 +753,7 @@ export class McpOperations {
     const [claim] = (await this.options.services.record.raw(`SELECT id, data FROM events WHERE session_id = ? AND kind = 'claim.made' ${which} ORDER BY log_pos DESC LIMIT 1`, [session])) as { id: string; data: string }[];
     if (!claim) throw refuse('not_found', '/params/arguments/claim', 'Run a check for a claim this session made: claim first with deep_claim.', args.claim);
     if (!await this.options.judging().projectTrusted(cwd)) {
-      throw refuse('unconfirmed', '/params/arguments/check', `${cwd} isn't a project you trust, so ${String(args.check)} didn't run: its spec checks run only once you trust it, by your answer in the app or by Claude Code's or Codex's own trust of it.`, args.check);
+      throw refuse('unconfirmed', '/params/arguments/check', `${cwd} isn't a project the person trusts, so ${String(args.check)} didn't run: its spec checks run only once they trust it, in the app or by Claude Code's or Codex's own trust of it.`, args.check);
     }
     const commit = String((JSON.parse(claim.data) as Obj).commit);
     // A document check runs on its current revision (#1723); a host check runs at your remote home (#1942).

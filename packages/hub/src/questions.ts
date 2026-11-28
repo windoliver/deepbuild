@@ -10,7 +10,7 @@ import type { Asks, PlanInput } from '@deepbuild/asks';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { leftOpen } from '@deepbuild/gate';
 import type { Connection } from '@deepbuild/record';
-import type { Holds } from './holds.js';
+import { address, type Holds } from './holds.js';
 import { repoRoot } from './rules.js';
 import type { HookMeta, Plant } from './wire.js';
 import { couldDo, SECRET_NAME, struck, type Found, type Reach } from './could-do.js';
@@ -218,7 +218,7 @@ export class Questions {
     } else if (read.sort === 'choice') {
       const handle = await this.choice(meta, read.choice);
       const label = read.choice.options.find((o) => o.id === read.choice.recommended)?.label;
-      if (label && !read.choice.own) sorted.back.push(`DeepBuild: go on with ${label}, marked as undoable; ${handle} waits for your answer, and only steps that leave the machine wait with it.`);
+      if (label && !read.choice.own) sorted.back.push(`DeepBuild: go on with ${label}, marked as undoable; only steps that leave the machine wait for the person's answer at ${address(handle)}.`);
     } else if (read.sort === 'offer') {
       const asked = await this.offered(meta, read.question, read.effect);
       if (!asked) sorted.noHold = true;

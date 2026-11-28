@@ -77,19 +77,24 @@ export class Answers {
   }
 }
 
+/** What only an answer's own text says, as the transcript shows it in a turn (#906): its line's end, the ID last (#1813). */
+export const said = (ask: string): string => `answer to ask:${ask}`;
+
 /** The answers as the agent reads them, each naming its ask; free text never becomes an authority decision. */
 export function answerText(rows: Answer[], commitsUnder?: (ask: string) => string[] | undefined): string {
   const lines = rows.map((row) => {
     const chosen = row.answer === null ? null : JSON.parse(row.answer) as unknown;
     const options = row.options === null ? [] : JSON.parse(row.options) as { id: string; label: string }[];
     const label = options.find((o) => o.id === chosen)?.label;
-    // Your answer differs from the option the agent went on with: it hears both, and the commits made under the old one.
+    // The person's answer differs from the option the agent went on with: it hears both, and the commits made under the old one.
+    // Each line leads with the ask's question and ends with said(id), the ID last (#1813).
+    const q = row.question ? `"${row.question}" ` : '';
     const under = row.undoes && chosen !== row.undoes && typeof chosen === 'string' && label ? commitsUnder?.(row.id) : undefined;
-    if (under) return `Your answer to ask:${row.id}${row.question ? ` ("${row.question}")` : ''}: ${label} (${chosen}), in place of ${options.find((o) => o.id === row.undoes)?.label ?? row.undoes}, which you went on with. Undo it${under.length ? `: the commits made under it are ${under.join(', ')}` : ''}, then move to ${label}.`;
-    const beside = [row.words === null || row.words === chosen ? [] : [`your words: "${row.words}"`], row.image === null ? [] : [`a screenshot, sha256 ${row.image}`]].flat();
-    if (row.image !== null && row.image === chosen) return `Your answer to ask:${row.id}${row.question ? ` ("${row.question}")` : ''}: a screenshot, sha256 ${row.image}${row.words === null ? '' : ` — with your words: "${row.words}"`}.`;
-    if (chosen === 'agent' && row.words) return `Your answer to ask:${row.id}: the agent can do it, so take this step yourself. ${row.words}`;
-    return `Your answer to ask:${row.id}${row.question ? ` ("${row.question}")` : ''}: ${label ? `${label} (${String(chosen)})` : String(chosen)}${beside.length ? ` — with ${beside.join(' and ')}` : ''}.`;
+    if (under) return `${q}${label} (${chosen}), in place of ${options.find((o) => o.id === row.undoes)?.label ?? row.undoes}, which you went on with. Undo it${under.length ? `: the commits made under it are ${under.join(', ')}` : ''}, then move to ${label}; ${said(row.id)}`;
+    const beside = [row.words === null || row.words === chosen ? [] : [`their words: "${row.words}"`], row.image === null ? [] : [`a screenshot, sha256 ${row.image}`]].flat();
+    if (row.image !== null && row.image === chosen) return `${q}a screenshot, sha256 ${row.image}${row.words === null ? '' : `, with their words: "${row.words}"`}; ${said(row.id)}`;
+    if (chosen === 'agent' && row.words) return `The agent can do it, so take this step yourself. ${row.words}; ${said(row.id)}`;
+    return `${q}${label ? `${label} (${String(chosen)})` : String(chosen)}${beside.length ? `, with ${beside.join(' and ')}` : ''}; ${said(row.id)}`;
   });
-  return `DeepBuild delivers your answers:\n${lines.join('\n')}`;
+  return `DeepBuild delivers answers:\n${lines.join('\n')}`;
 }
