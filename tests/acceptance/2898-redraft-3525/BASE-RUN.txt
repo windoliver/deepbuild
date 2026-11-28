@@ -1,0 +1,108 @@
+# Base run of tests/acceptance/2898-redraft-3525/ at b134dd38f (2026-11-26, macOS, deep-show and deep-hook built in target/debug). First and last lines: uptime (load) and node version.
+23:55  up 2 days, 17:45, 2 users, load averages: 151.57 134.79 126.35
+v24.22.0
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/festive-dijkstra-c49494/tests/acceptance/2898-redraft-3525
+
+ ❯ reads.test.ts (1 test | 1 failed) 16754ms
+   ❯ a tool listed read-only changes nothing (1)
+     × AC3 #2898.dee08b24 each tool listed read-only is called in every form its schema takes on a hub with a document, an ask and a claim, and the record gains no ask, claim, open item, revision, job, evidence or proposal and no process starts; a planted deep_query that records an open item fails, naming the tool and the event's kind; a planted table that lists deep_kinds read-only fails on its fetch, naming the asset it brought in 16523ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  reads.test.ts > a tool listed read-only changes nothing > AC3 #2898.dee08b24 each tool listed read-only is called in every form its schema takes on a hub with a document, an ask and a claim, and the record gains no ask, claim, open item, revision, job, evidence or proposal and no process starts; a planted deep_query that records an open item fails, naming the tool and the event's kind; a planted table that lists deep_kinds read-only fails on its fetch, naming the asset it brought in
+AssertionError: the servers list read-only the tools the table does (deep mcp: deep_query, deep_search, deep_status, deep_wait; deep mcp actions: find_actions; deep-hook mcp actions: find_actions; the reading tools: find, read): expected [ 'deep_query', 'deep_search', …(5) ] to deeply equal [ 'deep_kinds', 'deep_query', …(6) ]
+
+- Expected
++ Received
+
+@@ -1,7 +1,6 @@
+  [
+-   "deep_kinds",
+    "deep_query",
+    "deep_search",
+    "deep_status",
+    "deep_wait",
+    "find",
+
+ ❯ reads.test.ts:34:182
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  23:55:42
+   Duration  19.72s (tests 86%, transform 13%, import 1%)
+
+exit 1
+23:56  up 2 days, 17:45, 2 users, load averages: 148.21 135.17 126.69
+
+# Second run, 2026-11-27, same base and builds: table.test.ts and repeats.test.ts (vitest run --root tests/acceptance/2898-redraft-3525 --no-file-parallelism --testTimeout=900000 table.test.ts repeats.test.ts). First and last lines: uptime (load) and node version.
+ 0:10  up 2 days, 18 hrs, 2 users, load averages: 126.15 151.96 156.40
+v24.22.0
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/festive-dijkstra-c49494/tests/acceptance/2898-redraft-3525
+
+ ❯ repeats.test.ts (1 test | 1 failed) 19568ms
+   ❯ a tool listed idempotent can be called again (1)
+     × AC4 #2898.4e085daf each tool listed idempotent is called twice with the same input, the second while the first is pending, and once more: the second call starts no process and adds nothing the first didn't; a planted deep_job that runs its tool again fails, naming the job 19290ms
+ ❯ table.test.ts (1 test | 1 failed) 8345ms
+   ❯ the listing comes from one generated table (1)
+     × AC2 #2898.195c199f every server's listing states the issue's final table, both forms of deep mcp actions list the same bytes, scripts/skill.mjs generates a table beside packages/hub/tools.json that this checkout holds as it generates it, and a planted tools.ts that states deep_status destructive fails the drift check, naming the tool and the hint 8022ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  repeats.test.ts > a tool listed idempotent can be called again > AC4 #2898.4e085daf each tool listed idempotent is called twice with the same input, the second while the first is pending, and once more: the second call starts no process and adds nothing the first didn't; a planted deep_job that runs its tool again fails, naming the job
+AssertionError: the servers list idempotent the tools the table does (deep mcp: deep_job, deep_query, deep_search, deep_status, deep_wait; deep mcp actions: call_action, find_actions; deep-hook mcp actions: call_action, find_actions; the reading tools: find, read): expected [ 'call_action', 'deep_job', …(7) ] to deeply equal [ 'call_action', 'deep_job', …(8) ]
+
+- Expected
++ Received
+
+@@ -1,9 +1,8 @@
+  [
+    "call_action",
+    "deep_job",
+-   "deep_kinds",
+    "deep_query",
+    "deep_search",
+    "deep_status",
+    "deep_wait",
+    "find",
+
+ ❯ repeats.test.ts:90:183
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  table.test.ts > the listing comes from one generated table > AC2 #2898.195c199f every server's listing states the issue's final table, both forms of deep mcp actions list the same bytes, scripts/skill.mjs generates a table beside packages/hub/tools.json that this checkout holds as it generates it, and a planted tools.ts that states deep_status destructive fails the drift check, naming the tool and the hint
+AssertionError: each server's tools list the hints the issue's table gives them: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep mcp: deep_kinds readOnlyHint lists false, the table true",
++   "deep mcp: deep_kinds idempotentHint lists false, the table true",
++ ]
+
+ ❯ table.test.ts:19:129
+     17|     const p = await plainHub();
+     18|     const lists = await listings(p);
+     19|     expect(lists.flatMap((l) => drift(l.server, l.tools)), 'each serve…
+       |                                                                                                                                 ^
+     20|
+     21|     const node = lists.find((l) => l.server === 'deep mcp actions')!;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  2 failed (2)
+   Start at  00:10:44
+   Duration  32.15s (tests 89%, transform 8%, import 3%)
+
+exit 1
+ 0:11  up 2 days, 18 hrs, 2 users, load averages: 150.99 155.00 157.31

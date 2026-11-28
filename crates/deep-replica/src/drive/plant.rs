@@ -66,11 +66,8 @@ pub enum Plant {
     ShellFocusStaysDisabled,
     /// #851: a game shell's prompts keep the keys' glyphs whatever device wrote last.
     ShellPromptsKeepKeys,
-    /// #3605: a game shell marks a level done when it is entered.
     ShellDoneOnEnter,
-    /// #3605: a game shell keeps `done` in a run's save, not its profile record.
     ShellDoneInSave,
-    /// #3605: a game shell hands a level a setting through its read region, with no entry on its track.
     ShellSettingInReadRegion,
     /// The process's footprint read fails, as the system call does on any error (#1431 criterion 2).
     FootprintReadFails,

@@ -46,24 +46,14 @@ struct Window3 {
 }
 
 mod captured;
+mod in_look;
 mod parse;
 mod reports;
 pub(crate) use parse::*;
 
 use captured::captured;
+use in_look::in_look_status;
 use reports::{fill_lights, light_reports};
-
-/// #462's planted `status_in_look`: the status map of the look a render draws in, where it has
-/// one of its own; `None` for the shipped program, which draws the document's.
-fn in_look_status(
-    planted: Option<Planted>,
-    look_json: &Value,
-) -> Result<Option<deep_canvas_marks::look::Status>, Value> {
-    if planted != Some(Planted::StatusInLook) {
-        return Ok(None);
-    }
-    status::status_of(look_json)
-}
 
 pub fn call(app: &mut App, out: &str, call: &Value) -> Value {
     match run(app, out, call) {
