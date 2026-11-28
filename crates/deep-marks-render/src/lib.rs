@@ -98,6 +98,10 @@ struct View {
 
 /// One step of a document session: a whole revision (or the last one), the time of its first
 /// frame, the view, the record, and how many frames it presents.
+#[cfg_attr(
+    not(target_os = "macos"),
+    expect(dead_code, reason = "only macOS reads it")
+)]
 struct Step {
     doc: Option<Map<String, Value>>,
     t: i64,
@@ -108,6 +112,10 @@ struct Step {
     look: Option<Look>,
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    expect(dead_code, reason = "only macOS reads it")
+)]
 enum Request {
     Frames {
         doc: Map<String, Value>,
@@ -175,12 +183,20 @@ enum Request {
 
 /// Where a `live` run's frame is written: one frame of a phase (`None`: its last), or every
 /// frame of it into a folder.
+#[cfg_attr(
+    not(target_os = "macos"),
+    expect(dead_code, reason = "only macOS reads it")
+)]
 enum Shot {
     One(Option<u32>, String),
     Every(PathBuf),
 }
 
 /// #1486: a `live` run: the document's view opened, moved, settled and redrawn on the real clock.
+#[cfg_attr(
+    not(target_os = "macos"),
+    expect(dead_code, reason = "only macOS reads it")
+)]
 struct Live {
     doc: Map<String, Value>,
     look: Look,
@@ -1084,7 +1100,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                     || p == "decodes_before_header"
                     || p == "cap_counts_copies_only"
                     || p == "decoder_ignores_orientation"
-                    || vertical_plant(p).is_some() =>
+                    || asset::vertical_plant(p).is_some() =>
             {
                 (Planted::None, false, false)
             }
@@ -1166,7 +1182,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
         let mut request = request;
         // #1215: the line's planted vertical shaper, for this line alone; its runs are cached apart.
         let plant = input.get("planted").and_then(Value::as_str);
-        deep_text::vertical::plant(plant.and_then(vertical_plant).unwrap_or_default());
+        deep_text::vertical::plant(plant.and_then(asset::vertical_plant).unwrap_or_default());
         request.hit = match input.get("hit") {
             None => None,
             Some(v) => Some(point(v)?),
@@ -1469,26 +1485,6 @@ mod status;
 #[cfg(target_os = "macos")]
 mod video;
 pub use counting::{Counting, ALLOCATIONS, SERVICE_ALLOCATIONS};
-
-/// #1215's wrong vertical shapers, by their `raster` `planted` names.
-fn vertical_plant(name: &str) -> Option<deep_text::vertical::Planted> {
-    let none = deep_text::vertical::Planted::default();
-    Some(match name {
-        "vertical_laid_horizontal" => deep_text::vertical::Planted {
-            horizontal: true,
-            ..none
-        },
-        "never_turns" => deep_text::vertical::Planted {
-            never_turns: true,
-            ..none
-        },
-        "skips_vert" => deep_text::vertical::Planted {
-            skips_vert: true,
-            ..none
-        },
-        _ => return None,
-    })
-}
 
 /// #1215: a page point `[x, y]` in document u.
 fn point(v: &Value) -> Option<[f64; 2]> {

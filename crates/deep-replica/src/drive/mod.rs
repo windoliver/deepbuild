@@ -216,6 +216,7 @@ struct Replica {
     /// window reports its pointer at its top-left corner, over the list, whenever GPUI asks it again.
     pointer: Rc<Cell<Point<Pixels>>>,
     device: Option<Device>,
+    #[cfg(target_os = "macos")]
     pasted: Option<String>,
     shots: u64,
     recordings: u64,
@@ -811,6 +812,7 @@ impl Replica {
             hub,
             focus: None,
             device,
+            #[cfg(target_os = "macos")]
             pasted: None,
             shots: 0,
             recordings: 0,
@@ -1637,10 +1639,7 @@ impl Replica {
                     .cx
                     .update(|cx| cx.read_from_clipboard())
                     .and_then(|item| item.text());
-                if let Some(text) = text.filter(|t| self.pasted.as_ref() != Some(t)) {
-                    plant::write_pasteboard(&text);
-                    self.pasted = Some(text);
-                }
+                plant::write_pasteboard_once(text, &mut self.pasted);
             }
             #[cfg(target_os = "macos")]
             Some(Plant::MovesFocus) => {

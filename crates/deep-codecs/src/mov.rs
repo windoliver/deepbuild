@@ -10,7 +10,9 @@
 //! run with no composition offsets and no edit list, so frame k is at exactly k × the frame length.
 
 use crate::mp4::Colr;
-use crate::{full_box, mp4_box, Planted};
+#[cfg(any(target_os = "macos", test))]
+use crate::Planted;
+use crate::{full_box, mp4_box};
 
 /// The video track: coded samples in decode order, each `ticks` of `timescale` long. `config` is
 /// the body of the codec's configuration box (`avcC`, `hvcC`), `keys` each sample's sync flag
@@ -140,6 +142,7 @@ pub fn timescale(p: u32, q: u32) -> (u32, u32) {
 }
 
 /// #157: `timescale`, or the planted muxers' 600 or 1000 with the nearest whole tick per frame.
+#[cfg(any(target_os = "macos", test))]
 pub(crate) fn planted_timescale(p: u32, q: u32, planted: &Planted) -> (u32, u32) {
     let fixed = [
         ("muxer_timescale_600", 600u64),

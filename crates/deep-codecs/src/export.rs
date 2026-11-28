@@ -9,10 +9,12 @@
 //! its file as the encoder gives them, so the tool holds one frame. A join reads each part's
 //! `moov` alone and copies its samples across, never holding a part.
 
+#[cfg(target_os = "macos")]
 use std::cell::RefCell;
 use std::fs::File;
 use std::io::{BufRead, BufWriter, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
+#[cfg(target_os = "macos")]
 use std::rc::Rc;
 
 use serde_json::{json, Value};
@@ -108,6 +110,7 @@ impl Feed {
 /// look with grain. Spike 1, 1080p60, H.264 and HEVC alike: frames with ±12 grain clear each
 /// floor from 0.70, 0.80 and 0.90 (least PSNR 36.2, 41.5, 49.2 dB); clean gradients clear 43 dB
 /// at 0.30 and 46 at 0.50, so the plain tiers keep a margin for detail.
+#[cfg(target_os = "macos")]
 fn quality(tier: &str, grain: bool) -> Result<f64, Value> {
     let tiers = [
         ("draft", 0.50, 0.70),
@@ -123,6 +126,7 @@ fn quality(tier: &str, grain: bool) -> Result<f64, Value> {
 /// #157: the planted starved encoder's bit rate, asked for whatever the look, size or quality.
 /// Spike 1: from 1 Mb/s down the encoder gives about 3.8 Mb/s (H.264) or 1.6 (HEVC) at 1080p60,
 /// 29 to 30 dB of luma PSNR with grain and 32 to 34 without.
+#[cfg(target_os = "macos")]
 const STARVED: u32 = 64_000;
 
 /// A part being written under its temporary name: `ftyp` and a 64-bit `mdat` header, then each
@@ -433,6 +437,7 @@ impl Drop for Part {
 }
 
 /// A file's SHA-256, read a megabyte at a time.
+#[cfg(target_os = "macos")]
 fn hash_file(path: &Path) -> std::io::Result<String> {
     let mut sha = Hashed(std::io::sink(), Sha256::new());
     std::io::copy(
@@ -628,10 +633,9 @@ fn streamed<R: BufRead, W: Write>(
                 buf.len()
             ))));
         }
-        let key = head["key"].as_bool() == Some(true);
         match &mut sink {
             #[cfg(target_os = "macos")]
-            Sink::Part(p) => p.push(k, &buf, key),
+            Sink::Part(p) => p.push(k, &buf, head["key"].as_bool() == Some(true)),
             Sink::Pngs(p) => p.push(k, &buf),
         }
         .map_err(Some)?;
@@ -913,6 +917,7 @@ fn png(job: &Job, planted: &Planted) -> Result<Value, Value> {
 }
 /// The planted starved encoder's loss: each `n` × `n` block of each of the plane's `parts`
 /// interleaved components (a `w` × `h` plane) set to the block's rounded mean.
+#[cfg(target_os = "macos")]
 fn flatten(plane: &mut [u8], w: usize, h: usize, parts: usize, n: usize) {
     for by in (0..h).step_by(n) {
         for bx in (0..w).step_by(n) {
@@ -955,6 +960,7 @@ fn png_frame(
 }
 /// An AVC sample's NAL units with its SEI units (type 6) left out; `length` is the size of each
 /// unit's length prefix.
+#[cfg(target_os = "macos")]
 fn without_sei(sample: &[u8], length: usize) -> Vec<u8> {
     let mut out = Vec::with_capacity(sample.len());
     let mut o = 0;
@@ -1231,6 +1237,7 @@ mod tests {
         std::fs::remove_dir_all(dir).unwrap();
     }
 
+    #[cfg(target_os = "macos")]
     use crate::pipe::tests::piped_job;
 
     #[cfg(target_os = "macos")]

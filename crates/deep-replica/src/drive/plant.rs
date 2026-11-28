@@ -167,6 +167,14 @@ pub fn write_pasteboard(text: &str) {
 }
 
 #[cfg(target_os = "macos")]
+pub fn write_pasteboard_once(text: Option<String>, pasted: &mut Option<String>) {
+    if let Some(text) = text.filter(|t| pasted.as_ref() != Some(t)) {
+        write_pasteboard(&text);
+        *pasted = Some(text);
+    }
+}
+
+#[cfg(target_os = "macos")]
 pub fn take_front() {
     use objc2::MainThreadMarker;
     use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy};

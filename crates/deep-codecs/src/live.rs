@@ -1,7 +1,9 @@
 //! #499: the live view's decode worker for one video, a sandboxed copy of the binary that decodes
 //! the frames the view asks for, one session kept open so playing forward decodes each frame once.
 
-use std::io::{Read, Write};
+#[cfg(target_os = "macos")]
+use std::io::Read;
+use std::io::Write;
 
 #[cfg(target_os = "macos")]
 use crate::apple;
@@ -79,7 +81,6 @@ pub fn serve_live(args: &[String]) -> i32 {
     } else {
         (out_w & !1, out_h & !1)
     };
-    let (dw, dh) = turn::size(ow, oh, turn);
     let mut out = std::io::stdout().lock();
     let mut head = LIVE_MAGIC.to_vec();
     for v in [
@@ -102,6 +103,7 @@ pub fn serve_live(args: &[String]) -> i32 {
     }
     #[cfg(target_os = "macos")]
     {
+        let (dw, dh) = turn::size(ow, oh, turn);
         let Some(config) = t.entry.config.as_ref() else {
             return 1;
         };

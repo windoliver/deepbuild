@@ -50,6 +50,7 @@ fn main() {
 }
 
 /// What a load of the fetched-dependency fixture must look like. Mirrors AC5's two observations.
+#[cfg(target_os = "macos")]
 fn judge_load(dependency: &str, refusal: Option<&str>, connections: usize) -> Result<(), String> {
     let mut failures = Vec::new();
     match refusal {

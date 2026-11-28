@@ -221,7 +221,7 @@ fn openpty(cols: u16, rows: u16) -> Option<(OwnedFd, OwnedFd)> {
             &mut slave,
             std::ptr::null_mut(),
             std::ptr::null_mut(),
-            &mut size,
+            &raw mut size,
         )
     };
     if rc != 0 {

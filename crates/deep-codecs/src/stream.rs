@@ -5,18 +5,20 @@
 //! decoder's own 8-bit Y plane (and alpha plane) unconverted, or straight BGRA through the file's
 //! own tags. Samples are read where they lie, never the whole file.
 
+#[cfg(target_os = "macos")]
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::{BufRead, Write};
 use std::path::Path;
+#[cfg(target_os = "macos")]
 use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 
 use crate::pipe::Pipe;
-use crate::{
-    backed, codec, mp4, over_caps, points_at, refused, track_color, Caps, Format, Job, Planted,
-};
+#[cfg(target_os = "macos")]
+use crate::track_color;
+use crate::{backed, codec, mp4, over_caps, points_at, refused, Caps, Format, Job, Planted};
 
 fn error(e: impl ToString) -> Value {
     json!({"error": e.to_string()})
@@ -97,9 +99,13 @@ fn streamed<R: BufRead, W: Write>(
     let mut out = Out {
         pipe,
         head: Some((head, sound)),
+        #[cfg(target_os = "macos")]
         bgra,
+        #[cfg(target_os = "macos")]
         matrix: String::new(),
+        #[cfg(target_os = "macos")]
         range: String::new(),
+        #[cfg(target_os = "macos")]
         blocked: Duration::ZERO,
     };
     match movie.tracks.iter().find(|t| t.kind == mp4::Kind::Video) {
@@ -174,11 +180,15 @@ fn read_at(file: &File, s: &mp4::Sample) -> std::io::Result<Vec<u8>> {
 struct Out<'p, R, W> {
     pipe: &'p mut Pipe<R, W>,
     head: Option<(Value, Vec<u8>)>,
+    #[cfg(target_os = "macos")]
     bgra: bool,
     /// The file's tagged (or assumed) matrix and range, for BGRA.
+    #[cfg(target_os = "macos")]
     matrix: String,
+    #[cfg(target_os = "macos")]
     range: String,
     /// The time spent handing the head and frames to the pipe: a slow reader's, not decoding.
+    #[cfg(target_os = "macos")]
     blocked: Duration,
 }
 
@@ -196,6 +206,7 @@ impl<R: BufRead, W: Write> Out<'_, R, W> {
     }
 
     /// Frame k's bytes; false once the parent has gone.
+    #[cfg(target_os = "macos")]
     fn frame(&mut self, k: usize, bytes: &[u8], range: &str) -> bool {
         let handing = Instant::now();
         let sent = self.start(Some(range))

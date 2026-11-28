@@ -41,6 +41,10 @@ pub(crate) struct Planted {
     /// Each frame is handed over as soon as it is hashed, never waiting for a coded frame.
     pub no_window: bool,
     /// A slot's index is sent before the GPU has put the frame in the slot.
+    #[cfg_attr(
+        not(target_os = "macos"),
+        expect(dead_code, reason = "only macOS reads it")
+    )]
     pub before_hash: bool,
 }
 

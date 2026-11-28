@@ -241,29 +241,34 @@ impl Other {
     /// `ignores`, and encoded as a PNG: the same bytes each time for the same source.
     pub fn png(&self, ignores: bool) -> Result<Vec<u8>, String> {
         #[cfg(target_os = "macos")]
-        let px = self.still.rgba()?;
-        #[cfg(not(target_os = "macos"))]
-        let px: Vec<u8> = return Err("no platform image decoder here".into());
-        let [w, h] = self.size;
-        let mut img = DynamicImage::ImageRgba8(
-            RgbaImage::from_raw(w, h, px).ok_or("the decoded picture isn't its size")?,
-        );
-        if !ignores {
-            img.apply_orientation(self.orientation);
+        {
+            let px = self.still.rgba()?;
+            let [w, h] = self.size;
+            let mut img = DynamicImage::ImageRgba8(
+                RgbaImage::from_raw(w, h, px).ok_or("the decoded picture isn't its size")?,
+            );
+            if !ignores {
+                img.apply_orientation(self.orientation);
+            }
+            // The platform's decoder drew it into sRGB, so the PNG says so.
+            let img = img.into_rgba8();
+            let mut out = Vec::new();
+            let mut png = png::Encoder::new(&mut out, img.width(), img.height());
+            png.set_color(png::ColorType::Rgba);
+            png.set_depth(png::BitDepth::Eight);
+            png.set_source_srgb(png::SrgbRenderingIntent::Perceptual);
+            let mut writer = png.write_header().map_err(|e| e.to_string())?;
+            writer
+                .write_image_data(img.as_raw())
+                .map_err(|e| e.to_string())?;
+            writer.finish().map_err(|e| e.to_string())?;
+            Ok(out)
         }
-        // The platform's decoder drew it into sRGB, so the PNG says so.
-        let img = img.into_rgba8();
-        let mut out = Vec::new();
-        let mut png = png::Encoder::new(&mut out, img.width(), img.height());
-        png.set_color(png::ColorType::Rgba);
-        png.set_depth(png::BitDepth::Eight);
-        png.set_source_srgb(png::SrgbRenderingIntent::Perceptual);
-        let mut writer = png.write_header().map_err(|e| e.to_string())?;
-        writer
-            .write_image_data(img.as_raw())
-            .map_err(|e| e.to_string())?;
-        writer.finish().map_err(|e| e.to_string())?;
-        Ok(out)
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = ignores;
+            Err("no platform image decoder here".into())
+        }
     }
 }
 

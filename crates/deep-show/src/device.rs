@@ -5,6 +5,7 @@
 //! that callback counts: nothing is estimated. macOS only (CoreAudio's default output unit);
 //! elsewhere `soak` answers `no_output`.
 
+#[cfg(any(target_os = "macos", test))]
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 
 use deep_canvas_media::mix::Player;
@@ -13,12 +14,15 @@ use serde_json::{json, Value};
 use crate::stepped::Worlds;
 
 /// The ring's fill in frames, what the mixer keeps ahead of the device: about 43 ms at 48 kHz.
+#[cfg(target_os = "macos")]
 const TARGET: usize = 2048;
 /// Frames the mixer renders at a time.
+#[cfg(target_os = "macos")]
 const CHUNK: usize = 256;
 
 /// A single-producer, single-consumer ring of interleaved stereo f32 samples, held as bits. The
 /// consumer allocates nothing and takes no lock.
+#[cfg(any(target_os = "macos", test))]
 pub struct Ring {
     buf: Vec<AtomicU32>,
     written: AtomicUsize,
@@ -34,6 +38,7 @@ pub struct Ring {
     waker: std::sync::OnceLock<std::thread::Thread>,
 }
 
+#[cfg(any(target_os = "macos", test))]
 impl Ring {
     pub fn new(frames: usize) -> Ring {
         Ring {
@@ -125,9 +130,12 @@ pub fn soak_live(
 /// #525: what a live play keeps written ahead of the device, and the IO buffer it asks the device
 /// for: 512 and 256 frames, about 10.7 and 5.3 ms at 48 kHz, as the test backend's device writes
 /// ahead (Phase: a step not ready in time is an underrun, which a long ring would hide).
+#[cfg(target_os = "macos")]
 const LIVE: usize = 512;
+#[cfg(target_os = "macos")]
 const LIVE_BUFFER: u32 = 256;
 /// One audio block (Sound and video on the picture's clock: Blocks).
+#[cfg(target_os = "macos")]
 const BLOCK: usize = 128;
 
 /// #525: plays a media document whose worlds are live on the default output for `seconds` of

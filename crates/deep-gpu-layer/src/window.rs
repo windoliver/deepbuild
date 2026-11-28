@@ -7,8 +7,11 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+#[cfg(target_os = "macos")]
+use std::time::Instant;
 
+#[cfg(target_os = "macos")]
 use deep_gpu::ring::SlotState;
 use deep_gpu::view::Ui;
 use gpui_kit::*;

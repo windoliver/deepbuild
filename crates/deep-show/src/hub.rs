@@ -719,12 +719,11 @@ pub enum Body {
 mod bands;
 mod call;
 mod planted;
-mod presented;
+pub(crate) mod presented;
 mod revise;
 pub use call::*;
 use planted::read_programs;
 pub(crate) use planted::{clock_noise, export_noise};
-pub(crate) use presented::only_layer;
 
 /// A background job (#857): a playtest batch's replicas of a document's session, or a bake of
 /// one, each evaluated frame after frame at the background priority.
