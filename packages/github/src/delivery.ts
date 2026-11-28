@@ -27,7 +27,7 @@ const HELD_MS = 30 * 86_400_000;
 /** How far back a call may have started and still be running at a push. */
 const LONGEST_CALL_MS = 6 * 3600_000;
 
-export type GitHubPlant = 'posts-on-head' | 'unguarded-marks-every-push' | 'unguarded-marks-none';
+type GitHubPlant = 'posts-on-head' | 'unguarded-marks-every-push' | 'unguarded-marks-none';
 interface GitHubSession { id: string; agent: string; cwd: string }
 interface GitHubOptions {
   /** The REST root. */

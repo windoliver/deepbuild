@@ -36,7 +36,7 @@ import type { CallContext } from './session-types.js';
 import { HubCanvas } from './hub-canvas.js';
 import { AUTHORITY, type Obj, isObj, writing } from "./hub-shared.js";
 import type { HumanControlPort } from './human-control-port.js';
-export interface TrustedActionsOptions {
+interface TrustedActionsOptions {
  settings: CoreOptions;
  services: {
 readonly devices: Devices;

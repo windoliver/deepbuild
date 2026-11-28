@@ -7,7 +7,7 @@ import { numbersKit as kitFor } from './kit.js';
 import { runNumbers } from './run.js';
 import type { NumbersFill, NumbersSpec } from './types.js';
 
-export type { AddedTerm, NumbersFill, NumbersSpec, Query, Side, SpeedClaim, SpeedPlant, SpeedResult, StatedNumber, TimingCheck, Toolchain } from './types.js';
+export type { AddedTerm, NumbersFill, NumbersSpec, Side, SpeedClaim, SpeedPlant, SpeedResult, StatedNumber, TimingCheck, Toolchain } from './types.js';
 export { checkSpeed } from './speed.js';
 
 /** The numbers kind's runner, as the check.kind@1 fill deep.registerCheck registers: local queries, so no cost. */

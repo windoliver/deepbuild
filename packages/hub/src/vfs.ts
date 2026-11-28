@@ -10,7 +10,7 @@ import Database, { type Statement } from 'better-sqlite3';
 import type { Backend } from '@deepbuild/record';
 import type { VfsSettings } from './wire.js';
 
-export type PointKind = 'commit' | 'log_pos_block' | 'spool_read' | 'spool_removal' | 'evidence_rename' | 'rules_rewrite' | 'journal_rewrite' | 'terminals_rewrite'
+type PointKind = 'commit' | 'log_pos_block' | 'spool_read' | 'spool_removal' | 'evidence_rename' | 'rules_rewrite' | 'journal_rewrite' | 'terminals_rewrite'
   // An agent sync's (#148): its crash journal durable, a target renamed into place, that target's folder flushed, the sync recorded complete.
   | 'sync_intent' | 'sync_replace' | 'sync_flush' | 'sync_complete';
 

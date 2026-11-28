@@ -4,7 +4,7 @@ import { gitEnv } from './env.js';
 export interface ProviderPush { commit: string; author: string; committer: string; recorded: { pusher: string | null; repo: string; fork: boolean } }
 export interface PushReading { commit: string; pusher: string | null }
 export interface PushRecordReader { id: string; read(pushes: ProviderPush[]): PushReading[] }
-export interface PushKit { pushes: ProviderPush[]; expected: PushReading[] }
+interface PushKit { pushes: ProviderPush[]; expected: PushReading[] }
 
 /** The kit's recorded pushes: a fork's, a stranger's push of a commit authored as you, an empty actor, and yours. */
 export function pushRecordKit(): PushKit {
@@ -33,14 +33,14 @@ export function runPushRecordKit(reader: PushRecordReader): { passed: boolean; f
   return { passed: failures.length === 0, failures };
 }
 
-export interface HeadInput {
+interface HeadInput {
   repo: string; base: string; head: string;
   recorded: string[];
   yours: string[];
   provider: ProviderPush[];
   reader?: PushRecordReader;
 }
-export type HeadPlan = { run: 'host' } | { run: 'sandbox'; network: false; credentials: false } | { run: 'blocked'; cause: 'untrusted head'; owner: 'you' };
+type HeadPlan = { run: 'host' } | { run: 'sandbox'; network: false; credentials: false } | { run: 'blocked'; cause: 'untrusted head'; owner: 'you' };
 export interface HeadResult {
   trusted: boolean;
   commits: { commit: string; trusted: boolean; via: 'session' | 'pusher' | null; pusher: string | null }[];

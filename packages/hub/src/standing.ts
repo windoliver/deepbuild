@@ -132,7 +132,7 @@ export function aboutCall(classes: readonly string[], command: string, notes: Re
  * What a call that adds a dependency is about: the packages, keyed by the tool that adds them, so a standing rule for
  * that tool covers them all; one run straight from a registry is asked as a run (#1509).
  */
-export function aboutDependency(manager: string, names: readonly string[], command: string, run: boolean): About {
+function aboutDependency(manager: string, names: readonly string[], command: string, run: boolean): About {
   return {
     source: 'effect.dependency',
     subject: { effect: 'dependency', target: { kind: 'package', ref: names.join(' '), owner: manager }, change: null },
@@ -170,7 +170,7 @@ export function standingRules(rows: readonly { id: string; answer: string; subje
 }
 
 /** What the gate's decision on a dependency or a cloud resource uses of the hub. */
-export interface Gate {
+interface Gate {
   holds: Pick<Holds, 'decide'>;
   /** Whether a saved decision covers what a call is about, asked with nothing raised. */
   covered(session: string, about: About): Promise<boolean>;

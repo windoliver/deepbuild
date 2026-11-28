@@ -1,12 +1,12 @@
 export * from './runtime.js';
 export type { DoctorItem } from './generated/types.js';
 export { d1Digest, frozenDrift, parseDigest, recordHash } from './digest.js';
-export { lintSchemas, type LintProblem } from './lint.js';
+export { lintSchemas } from './lint.js';
 export { compilePattern, type Inst } from './pattern.js';
 export { generateTypeScript } from './codegen-ts.js';
 export { generateRust } from './codegen-rust.js';
-export { buildCatalogue, catalogue, catalogueDrift, checkViewBindings, type CatalogueEntry } from './catalogue.js';
-export { HANDLE_SCHEMES, parseHandle, printHandle, type Handle } from './handles.js';
+export { buildCatalogue, catalogue, catalogueDrift, checkViewBindings } from './catalogue.js';
+export { HANDLE_SCHEMES, parseHandle, printHandle } from './handles.js';
 export { contextBoundFor, joinHookReplies, negotiateFeatures, type HookContribution, type JoinedHookReply } from './hook.js';
 export { checkManifest } from './manifest.js';
 export { extensionApi, hubSlots, type ApiEntry, type HubSlot } from './slots.js';

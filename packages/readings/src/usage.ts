@@ -5,16 +5,16 @@ import { open, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Cost } from './types.js';
 
-export interface Tokens { input: number; output: number; cache_write: number; cache_read: number }
+interface Tokens { input: number; output: number; cache_write: number; cache_read: number }
 /** `cache_write`'s two parts, by the lifetime each record's own split gives; what is left of it came with no split. */
-export interface Split extends Tokens { cache_write_5m: number; cache_write_1h: number }
+interface Split extends Tokens { cache_write_5m: number; cache_write_1h: number }
 /**
  * USD per million tokens; `cache_write` is the five-minute write's price and `cache_write_1h` the one-hour write's. A
  * model is priced by its exact name, or that name with a `-<date>` after it; any other model is unpriced, and so is a
  * model whose row lacks either write price, so no write is ever priced by the other kind's.
  */
-export interface RateCard { name: string; models: Record<string, { input: number; output: number; cache_write?: number; cache_write_1h?: number; cache_read: number }> }
-export interface UsageCount { totals: Split & { unknown_turns: number }; turns: { turn: string; usage: Tokens | null }[]; cost: Cost }
+interface RateCard { name: string; models: Record<string, { input: number; output: number; cache_write?: number; cache_write_1h?: number; cache_read: number }> }
+interface UsageCount { totals: Split & { unknown_turns: number }; turns: { turn: string; usage: Tokens | null }[]; cost: Cost }
 
 const price = (input: number, output: number, cache_write: number, cache_write_1h: number, cache_read: number) => ({ input, output, cache_write, cache_write_1h, cache_read });
 const OPUS_41 = price(15, 75, 18.75, 30, 1.5);

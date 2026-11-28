@@ -156,7 +156,7 @@ export interface Restored {
 }
 
 /** An overrun a hook found at a call's end before the timer did: recorded then. */
-export interface Overran { call: OpenCall; ran: number }
+interface Overran { call: OpenCall; ran: number }
 /** What a hook's reply carries of the waits: a chat line, context for the agent, a rewritten input with the deadline. */
 export interface Reply { message?: string; context?: string; updatedInput?: Record<string, unknown>; overran?: Overran }
 /** What the event loop does at a due time: show a line while a call runs, and record its overrun. */

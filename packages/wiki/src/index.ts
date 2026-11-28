@@ -27,7 +27,7 @@ export function knownOf(at: string, entry: { role?: string; tool?: string; outsi
       : entry.role === 'user' && !entry.outside ? 'you' : 'inferred';
 }
 /** One thing a claim rests on: the exact quote, and where it is. */
-export type Source = { at: string; quote: string; file?: string } | { repo: string; path: string; commit: string; quote: string };
+type Source = { at: string; quote: string; file?: string } | { repo: string; path: string; commit: string; quote: string };
 export interface Candidate {
   /** `repos/api` is `<folder>/repos/api.md`. */
   page: string;
@@ -40,7 +40,7 @@ export interface Candidate {
   /** The handle of the claim this one replaces. */
   supersedes?: string;
 }
-export interface Learned { written: string[]; dropped: { claim: string; reason: string }[] }
+interface Learned { written: string[]; dropped: { claim: string; reason: string }[] }
 export interface Wiki {
   /** Checks each candidate, records the ones that hold as claims, then rewrites the pages. */
   learn(candidates: Candidate[]): Promise<Learned>;
@@ -56,7 +56,7 @@ export interface Wiki {
   /** Takes a claim off its page on your decision, from your connection only, so no re-read brings it back; resolves with it. */
   forget(connection: Connection, claim: string): Promise<string>;
 }
-export interface WikiOptions {
+interface WikiOptions {
   record: RecordStore;
   folder: string;
   now: () => number;

@@ -8,7 +8,7 @@ import { closingIssues } from './forge.js';
 
 type Word = { text: string; literal: boolean };
 type Command = { words: Word[]; input?: Word; file?: Word; error?: string; redirects?: boolean };
-export interface PrCommand extends Command { verb: 'create' | 'edit'; folder: string; changed: boolean }
+interface PrCommand extends Command { verb: 'create' | 'edit'; folder: string; changed: boolean }
 
 /** A heredoc ends at its delimiter alone; <<- removes leading tabs, not spaces. */
 function heredoc(text: string, from: number, tag: Word, dash: boolean): { body: Word; end: number } {

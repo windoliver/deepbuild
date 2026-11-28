@@ -1,7 +1,7 @@
 /** The kinds of spend a check can cost: a live call, a hosted browser run or a model job. */
 export type PaidKind = 'live call' | 'hosted browser run' | 'model job';
 /** The paid checks of a definition, each with its price, in the definition's order; total_usd is null while any price is unknown. */
-export interface Pricing { total_usd: number | null; checks: { req: string; check: string; paid: PaidKind; usd: number | null }[] }
+interface Pricing { total_usd: number | null; checks: { req: string; check: string; paid: PaidKind; usd: number | null }[] }
 
 /** Prices each paid check of a definition, all lookups at once; a check that costs nothing is never looked up. */
 export async function priceDefinition(

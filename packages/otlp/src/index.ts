@@ -21,7 +21,7 @@ const MAX_BODY = 16 * 1024 * 1024;
 /** Tool-call waits held for a tool span still to come, oldest dropped first. */
 const MAX_WAITS = 10_000;
 
-export interface ReceiverOptions {
+interface ReceiverOptions {
   record: RecordStore;
   /** What the hub proved for the extension's writer; each append adds the export's session and agent. */
   connection: Connection;
@@ -236,7 +236,7 @@ export function startReceiver(options: ReceiverOptions): Promise<Receiver> {
 
 // ---- Reading cost back --------------------------------------------------------------------------------------
 /** A session's or a task's request cost, as its row and its task show it. */
-export type Cost = { captured: true; usd: number } | { captured: false; text: 'not captured' };
+type Cost = { captured: true; usd: number } | { captured: false; text: 'not captured' };
 const NOT_CAPTURED: Cost = { captured: false, text: 'not captured' };
 
 /** The reported cost of the session, or of every session with an attempt at the task; none at all is not captured, never $0. */

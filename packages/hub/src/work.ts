@@ -20,7 +20,7 @@ import { execFile } from 'node:child_process';
 import { realpathSync } from 'node:fs';
 import { hostname } from 'node:os';
 import type { Asks } from '@deepbuild/asks';
-import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
+import { isRecord as isObj, canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { gitEnv } from '@deepbuild/gate';
 import type { WorkItem } from './ask-tasks.js';
 import { mergeOf, onlyWindow, type Landing, type Outcome, type RaiseCall } from './landing.js';
@@ -32,7 +32,6 @@ import { authored, byMilestone, meets, ruleOf, whyOut, type Listed, type Rule } 
 import { forgeFetch } from '@deepbuild/github';
 
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const DAY = 86_400_000;
 /** How often a run looks again: an issue waiting on a person gives up its slot well within 10 s. */
 const PASS_MS = 2_000;
@@ -69,7 +68,7 @@ const MACHINES: Record<string, () => boolean> = {
 };
 
 /** One issue's row: its state word, on every surface the same, and what it waits for. */
-export interface Row { issue: number; word: string; waits_on: string | null; why: string }
+interface Row { issue: number; word: string; waits_on: string | null; why: string }
 interface Issue { n: number; open: boolean; title: string; body: string; blockers: number[] | { unread: string } }
 interface Pull { pr: number; issue: number; login: string; open: boolean; merged: boolean; branch: string; head: string }
 interface Attempt { attempt: number; run: string; agent: string; model: string | null; worktree: string; branch: string; reason: string; ended: { cause: string; verdict: string | null; model: string | null } | null }
@@ -84,7 +83,7 @@ interface Revert { pr: number; landing: string; at: number }
 interface Read { issues: Map<number, Issue>; pulls: Pull[]; reverts: Revert[]; set: number[]; out: Map<number, string>; milestones: Map<number, Listed['milestone']> }
 type Approval = NonNullable<Awaited<ReturnType<Starts['approvalOf']>>>;
 
-export interface WorkOptions {
+interface WorkOptions {
   api: string;
   token(): Promise<string | undefined>;
   repoOf(remote: string): string | undefined;
@@ -1038,7 +1037,7 @@ function unserved(body: string): string | undefined {
  * whole plan window, no end. Words that name a rule instead of numbers (#1335: labels, a milestone, an epic, the
  * author's role) make a standing run, with no set and no end. A string says what's missing or refused.
  */
-export function scopeOf(words: string, now: number): Obj | string {
+function scopeOf(words: string, now: number): Obj | string {
   const rule = ruleOf(words);
   if (typeof rule === 'string') return rule;
   const issues = new Set<number>();

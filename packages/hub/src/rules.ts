@@ -5,11 +5,11 @@
 // its file applies to), its size in tokens and what enforces it: a guard only while its planted call is denied and its
 // twin allowed, otherwise text only. A rule line an agent's edit removed stays in force here, held, as a proposal to you.
 import { execFileSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import type { RubricRule } from '@deepbuild/checks-review';
+import { sha256Hex } from '@deepbuild/contracts';
 import type { RecordStore } from '@deepbuild/record';
 import { callAsYou } from './client.js';
 import { indexFile, loaders, lostIn, marksOf, type Lost, type Marks } from './rule-load.js';
@@ -51,10 +51,9 @@ export interface Rule {
 }
 export interface Held { id: string; text: string; file: string; scope: string; repo: string; proposal: string; ask: string }
 
-const sha256 = (text: string): string => createHash('sha256').update(text).digest('hex');
 /** Text as rules are compared: one space per whitespace run, no trailing period, case folded. */
 export const sameRule = (text: string): string => text.replace(/\s+/g, ' ').trim().replace(/\.$/, '').toLowerCase();
-export const ruleId = (file: string, text: string): string => sha256(`${file}\u0000${sameRule(text)}`).slice(0, 12);
+export const ruleId = (file: string, text: string): string => sha256Hex(Buffer.from(`${file}\u0000${sameRule(text)}`)).slice(0, 12);
 export const handleOf = (rule: Pick<Rule, 'id'>): string => `wiki:rules#${rule.id}`;
 /** A rule's size in tokens: each word piece of up to five letters, each number and each mark is one. */
 export const tokensOf = (text: string): number =>
@@ -413,7 +412,7 @@ export async function reachOf(raw: Raw, repo: string, scope: string, since: numb
 export const reachSince = (now: number, days: number): number => now - days * DAY;
 
 /** The send-backs that named a rule (#1512): how many, and how many of them ended fixed and left; the rest are open. */
-export interface SentBack { count: number; fixed: number; left: number }
+interface SentBack { count: number; fixed: number; left: number }
 /**
  * The send-backs that named each rule since `since`, by rule, as the review's records hold them (#87, #1862): each
  * item a counted round sent back (`review.read`), fixed or left once a claim on its pull request settled

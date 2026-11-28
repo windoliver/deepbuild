@@ -43,10 +43,10 @@ import { duration } from './duration.js';
 export { duration } from './duration.js';
 
 export { AskRefused, CANT_UNDO, cantUndo, HOLD_MS, HOLD_PLANTS } from './model.js';
-export type { AskKind, AsksPlant, BatchCard, BudgetLeft, Card, Change, Decision, EffectSubject, InboxStatus, Missing, PlanStep, PointSubject, Refusal, Resolver, ResolverAnswer, ResolverAsk, RuleState, Subject, TasteSubject } from './model.js';
+export type { AskKind, AsksPlant, BatchCard, BudgetLeft, Card, Decision, InboxStatus, Missing, PlanStep, Refusal, Resolver, ResolverAnswer, ResolverAsk, RuleState, Subject } from './model.js';
 export { subjectKey } from './decision-keys.js';
 
-export type { CardTarget, Target, TargetOrigin } from './targets.js';
+export type { CardTarget, Target } from './targets.js';
 import type { Asks, AsksOptions, DecisionScope, InboxRow, Judgment, PlanInput, Step, StepCheck, Tally, ThreadMessage } from './api.js';
 export type { AskSource, PlanInput, StepCheck, Step, Delivery, Tally, Judgment, DecisionScope, ThreadMessage, AsksOptions, InboxRow, Asks } from './api.js';
 import { askSources, doneYamlAsks, over, readJson } from './settings.js';
@@ -54,7 +54,7 @@ export { askSources, draftAskSettings } from './settings.js';
 import { blockText, chatThread, CONTINUE_WINDOW, isTheirs, MOOT_V2, newer, shippedErrorTurnHook, SIGN_IN, signInProbe, signInSignature, signInText, TRANSIENT, type Continued, type Stop } from './stops.js';
 export { signInAgentOf, signInSignature } from './stops.js';
 import { ANSWER_FIELDS, channelMayAnswer, docOf, isAgent, picturesOf, PROVISIONAL_KINDS, SHA256, TRUSTED, TYPED_KINDS } from './answers.js';
-export { channelMayAnswer, type MayAnswer } from './answers.js';
+export { channelMayAnswer } from './answers.js';
 import { markStep, sameStep } from './steps.js';
 import { changedSince, type GitSaid } from './changes.js';
 

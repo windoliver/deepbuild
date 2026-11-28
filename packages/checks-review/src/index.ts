@@ -9,12 +9,11 @@ import { review } from './review.js';
 import type { ReviewFill, ReviewSpec, Reviewer } from './types.js';
 
 export type {
-  DroppedFinding, ItemOutcome, ReviewerAnswer, ReviewFill, ReviewFinding, ReviewRequest, ReviewResult, Reviewer, ReviewSendBack, ReviewSpec, RubricRule,
+  DroppedFinding, ItemOutcome, ReviewerAnswer, ReviewFill, ReviewFinding, ReviewRequest, ReviewResult, Reviewer, ReviewSpec, RubricRule,
   SendBackItem, SentBack, Site,
 } from './types.js';
-export type { ChangeSession, Independence, ModelPlant, ReviewAt, ReviewJobRun } from './models.js';
-export type { PassFinding, PassReading, PassReviewer, PostClosePass, PostCloseReport } from './post-close.js';
-export type { ReplayedCase } from './replay.js';
+export type { ChangeSession, ModelPlant, ReviewAt } from './models.js';
+export type { PassFinding, PassReviewer, PostClosePass, PostCloseReport } from './post-close.js';
 export { independence, reviewBudget, reviewJobRun } from './models.js';
 export { itemOutcomes } from './outcomes.js';
 export { reviewBeforeCloses } from './post-close.js';

@@ -11,11 +11,11 @@ import { factsFiles, readFacts } from '@deepbuild/adapters/unchecked';
 import { isRecord as isObj } from '@deepbuild/contracts';
 import { tomlValue } from './codex-settings.js';
 
-export type Cause = 'over_budget' | 'shadowed' | 'past_index_limit' | 'untrusted';
+type Cause = 'over_budget' | 'shadowed' | 'past_index_limit' | 'untrusted';
 interface FileSet { name: string; files: string[]; pick: 'all' | 'first'; moreKey?: string }
 interface Mode { sets: string[]; shadows?: Record<string, string>; user: boolean }
 /** One version range's entry, as adapter.facts@7 types it. */
-export interface LoadEntry {
+interface LoadEntry {
   versions: string[];
   source: string;
   home: { dir: string; env?: string };
@@ -30,11 +30,11 @@ export interface LoadEntry {
   loadEvent: { hook: string; file: string; reason?: string; silent?: string[] } | null;
 }
 /** An agent with a rule-load entry: its name as its facts file has it, the name you read, its newest version and that version's entry. */
-export interface Loader { agent: string; name: string; version: string; entry: LoadEntry }
+interface Loader { agent: string; name: string; version: string; entry: LoadEntry }
 /** A file an agent loses lines of: its first line lost, why, and the words that say so. */
 export interface Lost { agent: string; name: string; version: string; path: string; line: number; text: string; cause: Cause; why: string; fix: string; by?: string }
 /** The planted wrong programs a doctor runs (#1514): each file against the whole budget, and the memory index by its lines alone. */
-export interface Plants { perFile?: boolean; linesOnly?: boolean }
+interface Plants { perFile?: boolean; linesOnly?: boolean }
 
 const NAMES: Record<string, string> = { 'claude-code': 'Claude Code', codex: 'Codex' };
 const n = (v: number): string => v.toLocaleString('en-US');
@@ -144,7 +144,7 @@ function launch(entry: LoadEntry, mode: Mode, folder: string): { loaded: Seen[];
 }
 
 /** The first line (from 1) not loaded whole, newline included, under a line limit and a byte limit; undefined when all are. */
-export function firstLost(text: string, cap: { lines?: number; bytes?: number }): { line: number; by: 'lines' | 'bytes' } | undefined {
+function firstLost(text: string, cap: { lines?: number; bytes?: number }): { line: number; by: 'lines' | 'bytes' } | undefined {
   const lines = text.split('\n');
   if (text.endsWith('\n')) lines.pop();
   let end = 0;
@@ -168,7 +168,7 @@ function stopped(entry: LoadEntry, folder: string): LoadEntry['stops'][number] |
 }
 
 /** Claude Code's memory folder name for a repo: its path, each character but a letter or digit made `-`. */
-export const projectSlug = (repo: string): string => repo.replace(/[^A-Za-z0-9]/g, '-');
+const projectSlug = (repo: string): string => repo.replace(/[^A-Za-z0-9]/g, '-');
 /** The memory index an entry names for a repo, when the agent has one. */
 export const indexFile = (l: Loader, repo: string): string | undefined =>
   l.entry.memoryIndex ? expand(l.entry.memoryIndex.file.replace('<project>', projectSlug(repo)), l.entry) : undefined;
@@ -272,12 +272,6 @@ export function marksOf(path: string, line: number, lost: readonly Lost[], recor
     else (marks.not_loaded ??= []).push({ agent: l.agent, cause: l.cause, ...(l.by ? { by: l.by } : {}) });
   }
   return marks;
-}
-/** The line of a file that holds a rule's bullet, from 1; 0 when no line does. */
-export function lineOf(text: string, rule: string): number {
-  const lines = text.split('\n');
-  const i = lines.findIndex((l) => /^\s*[-*+]\s+/.test(l) && l.replace(/^\s*[-*+]\s+/, '').trim() === rule);
-  return i + 1;
 }
 /** The agent a recorded session ran, as its facts file names it. */
 export const agentOf = (recorded: string | null | undefined): string => (recorded === 'claude' ? 'claude-code' : String(recorded ?? ''));

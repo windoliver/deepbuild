@@ -50,7 +50,7 @@ export const doctorItems = async (env: NodeJS.ProcessEnv, options: { prompt: boo
 export const exportCommand = async (args: Args): Promise<number> => (await import('./canvas.js')).exportCommand(args);
 export const kindsCommand = async (args: Args): Promise<number> => (await import('./canvas.js')).kindsCommand(args);
 export { activePlant } from './plant.js';
-export { contractAdapter, extendPreview, type DeprecatedNotice, type RpcEntry } from './contracts.js';
+export { contractAdapter, extendPreview, type DeprecatedNotice } from './contracts.js';
 export { rootOf, rootToken } from './paths.js';
 /** The config eval script keeps its finished report through the hub, the sole evidence writer (#2495). */
 export const storeEvalReport = async (report: string): Promise<string> => (await import('./eval-report.js')).storeEvalReport(report);

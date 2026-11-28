@@ -5,7 +5,7 @@
 // the hub's start each give the handler a fresh try.
 
 /** The failures in a row that set a handler aside (drafted). */
-export const ASIDE_AT = 3;
+const ASIDE_AT = 3;
 
 /** A handler set aside: its extension, its hook kind, its failures in a row, the last of them, and since when. */
 export interface SetAside { extension: string; hook: string; failures: number; last: string; since: number }

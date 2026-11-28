@@ -28,7 +28,7 @@ const BUILD_MS = 30 * 60_000;
 const KEPT = 2;
 const POSTGRES = /^(.*\/)?postgres(:|@|$)/;
 
-export interface Keys { services: string; install: string; migrate: string; seed: string }
+interface Keys { services: string; install: string; migrate: string; seed: string }
 /** The product store as a warm stack sees it (#1017): the hub's, one per repo. Installs and caches are never kept anywhere else. */
 export interface WarmProducts {
   /** The products done.yaml lists among the dependency folders, each with the key the folder's files make. */
@@ -41,10 +41,10 @@ export interface WarmProducts {
   placeCache(worktree: string, key: string, path: string, dst: string): Promise<boolean>;
   keepCache(worktree: string, key: string, path: string, src: string): Promise<void>;
 }
-export interface WarmStep { step: 'services' | 'install' | 'migrate' | 'seed' | 'clone' | 'app'; status: 'ran' | 'reused'; key: string | null; ms: number; product?: { name: string; key: string } }
+interface WarmStep { step: 'services' | 'install' | 'migrate' | 'seed' | 'clone' | 'app'; status: 'ran' | 'reused'; key: string | null; ms: number; product?: { name: string; key: string } }
 /** What the core judges a run's environment by, as @deepbuild/gate's `environmentFindings` takes it. */
-export interface RunFacts { install?: { key: string; placed: string }; database?: string; services: { name: string; volumes: string[] }[] }
-export interface Serving {
+interface RunFacts { install?: { key: string; placed: string }; database?: string; services: { name: string; volumes: string[] }[] }
+interface Serving {
   /** The run's `stack.served`, but for its run handle. */
   served: {
     stack: string; project?: string; checkout: string; ports: Record<string, number>; ready_ms: number; steps: WarmStep[]; caches: { path: string; digest: string }[];

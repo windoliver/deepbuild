@@ -25,7 +25,7 @@ export interface LeaseKind {
   cooldown: number;
   cost: number;
 }
-export interface DeclaredKind extends LeaseKind { plugin: string }
+interface DeclaredKind extends LeaseKind { plugin: string }
 /** `host` is 'local' in R1; leases on two hosts never overlap. */
 export interface Resource { host: string; kind: string; key: string }
 export type Mode = 'exclusive' | 'shared';
@@ -47,7 +47,7 @@ export interface Caller {
   asked?: number;
 }
 /** A refusal: `free` is a pool's units left on the host; BLOCKED `size` is an ask for more units than its pool holds. */
-export type Refusal =
+type Refusal =
   | { status: 'refused'; reason: 'held' | 'pool' | 'cooldown' | 'taken'; holders: Lease[]; message: string; free?: number }
   | { status: 'BLOCKED'; reason: 'cap' | 'size'; holders: Lease[]; message: string };
 export type LeaseResult = { status: 'granted'; lease: Lease } | Refusal;

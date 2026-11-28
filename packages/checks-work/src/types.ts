@@ -35,5 +35,5 @@ export interface WorkFill extends CheckRunnerFill {
 /** The drafting job's proposal for one requirement: its ID, its text as the source states it, and the check it picked, or null. */
 export interface DraftedRequirement { req: string; text: string; check: CheckSpec | null }
 /** An early question: the requirement's ID and the question, which quotes the requirement's text. */
-export interface EarlyQuestion { req: string; question: string }
+interface EarlyQuestion { req: string; question: string }
 export interface Draft { checks: { req: string; spec: CheckSpec }[]; questions: EarlyQuestion[] }

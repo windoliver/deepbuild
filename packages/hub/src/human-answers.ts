@@ -40,7 +40,7 @@ import { about, sinceView } from './receipts.js';
 /** The events that close or open an ask itself, as its table names them (ask.machine@1): what an undo from a view can't go past. */
 const ASK_MOVES = ['ask.answered', 'ask.defaulted', 'default.undone', 'ask.cancelled', 'ask.escalated', 'ask.moot', 'ask.superseded'];
 
-export interface HumanAnswersOptions {
+interface HumanAnswersOptions {
  settings: CoreOptions;
  services: {
 readonly asks: Asks;

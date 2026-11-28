@@ -15,7 +15,7 @@ import { SECTION } from './sections.js';
 import { visible } from './visible.js';
 
 /** What deep status shows under a session's row (status.ts: StatusRow, less what the row holds). */
-export interface Detail { note?: string; verdict?: string; readings?: string[]; calls?: string[]; commits?: string[]; turn?: { calls: number; failed: number } }
+interface Detail { note?: string; verdict?: string; readings?: string[]; calls?: string[]; commits?: string[]; turn?: { calls: number; failed: number } }
 /** A read of the list: its rows at a log_pos, each session's detail when asked, and when the hub stopped answering if it did. */
 interface Read { log_pos: number; rows: Row[]; detail?: Record<string, Detail>; down?: number; explained?: Why; /** A drain holding session starts (#2974), in the hub's words. */ paused?: string }
 
@@ -114,7 +114,7 @@ export function listText(rows: readonly Row[], o: { detail?: Record<string, Deta
  * Why a session reads as it does (#2018), as text: its name, the one sentence, the row of the state table that
  * matched, each record fact that row read (event kind, time and log_pos), and each row above it with the fact it lacked.
  */
-export function whyText(w: Why, now = Date.now()): string {
+function whyText(w: Why, now = Date.now()): string {
   const out = [`${w.title}${w.project ? ` · ${w.project}` : ''}`, `${w.word}: ${w.why}`, `The state table's row that matched: ${w.rule}, which reads ${w.word}.`, w.facts.length ? 'Each record fact it read:' : 'It read no record fact.'];
   for (const f of w.facts) out.push(`  ${f.kind}  ${when(f.ts, now)}  log_pos ${f.log_pos}`);
   if (w.lacked.length) out.push('Each row above it, and the fact it lacked:');

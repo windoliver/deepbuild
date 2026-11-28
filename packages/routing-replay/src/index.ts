@@ -40,9 +40,9 @@ const OPTIONS = [
 /** Past its deadline nothing changes: the jobs stay failing. */
 const DEFAULT = 'leave';
 
-export interface VirtualClock { now(): number; set(ms: number): void }
-export type Plant = 'router-asks-per-job' | 'snapshot-keeps-handle';
-export interface ReplayOptions {
+interface VirtualClock { now(): number; set(ms: number): void }
+type Plant = 'router-asks-per-job' | 'snapshot-keeps-handle';
+interface ReplayOptions {
   /** The replay's own record, opened by the caller on `clock.now` with `evidence`. */
   record: RecordStore;
   /** Where the replay keeps the snapshot, by its hash. */
@@ -51,16 +51,16 @@ export interface ReplayOptions {
   /** A planted wrong program, for the acceptance tests only. */
   plant?: Plant;
 }
-export interface Count { count: number; sample: string }
-export interface Week { week: string; evaluations: number[]; asks: Count; per_job: Count }
-export interface Report {
+interface Count { count: number; sample: string }
+interface Week { week: string; evaluations: number[]; asks: Count; per_job: Count }
+interface Report {
   /** The SHA-256 of the snapshot replayed. */
   snapshot: string;
   /** Asks per week across the window's evaluations, against what routing per job would send. */
   weeks: Week[];
   owned: { reached: Count; sat_past_14_days: Count };
 }
-export interface Replay { report: Report; asks: Asks }
+interface Replay { report: Report; asks: Asks }
 
 interface Merge { commit: string; owner: string }
 interface Failure { build: number; job: string; status: string; maintainers: string[]; merge: Merge | null; inherited_from: number | null }

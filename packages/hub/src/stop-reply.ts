@@ -12,7 +12,7 @@ import { GateRunner } from './gate-runner.js';
 import { type CoreOptions, type HookMeta } from './wire.js';
 import type { Routes } from './session-types.js';
 import type { StopJudgingPort } from './hub-ports.js';
-export interface StopReplyOptions {
+interface StopReplyOptions {
  settings: CoreOptions;
  services: {
 readonly holds: Holds;

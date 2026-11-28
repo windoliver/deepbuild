@@ -10,9 +10,9 @@ import { gitEnv } from '@deepbuild/gate';
 import { exec as run } from './children.js';
 
 /** What deep-hook read of a call that adds a dependency (`dependency manager=… registry=… form=… <item>…`). */
-export interface Note { manager: string; registry: 'npm' | 'pypi' | 'none'; form: 'run' | 'add' | 'manifest'; items: string[] }
+interface Note { manager: string; registry: 'npm' | 'pypi' | 'none'; form: 'run' | 'add' | 'manifest'; items: string[] }
 /** One package as the registry reads it: its version, when that was published and when the name first was; or why it couldn't. */
-export interface Reading { name: string; asked: string | null; version?: string; published?: number; first?: number; couldnt?: string }
+interface Reading { name: string; asked: string | null; version?: string; published?: number; first?: number; couldnt?: string }
 
 const DAY = 86_400_000;
 /** Under this a version or a name is new (drafted): the ask names it so. */

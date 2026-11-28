@@ -92,7 +92,7 @@ const RULE_MESSAGES: Record<keyof typeof R, string> = {
 };
 
 /** The hub's tools that change nothing, as an agent names the MCP tool (#1801): deep_query's refs_to, cost and its other reads. */
-export const READ_TOOLS = ['mcp__deep__deep_query'] as const;
+const READ_TOOLS = ['mcp__deep__deep_query'] as const;
 
 const kase = (id: string, declares: Partial<Case['declares']>, run: (h: Harness) => void): Case => ({ id, revision: REVISION, declares: { flags: [], operations: [], kinds: [], ...declares }, run });
 

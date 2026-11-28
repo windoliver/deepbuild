@@ -11,7 +11,7 @@ import type { Plant } from './plant.js';
 type Obj = Record<string, unknown>;
 export type SignedIn = 'signed_in' | 'signed_out' | 'not_checked';
 /** A probe's reading as the asks core takes it: null when it couldn't run, with the account the agent then records. */
-export interface SignInReading { signedIn: boolean | null; account: string | null; at: number }
+interface SignInReading { signedIn: boolean | null; account: string | null; at: number }
 
 /** How long a probe may take before it reads not checked. */
 const PROBE_MS = 10_000;

@@ -28,7 +28,7 @@ export type Peer =
 /** Turns bytes into ones that say nothing without a key, and back. The same bytes always seal to the same ones. */
 export interface Sealer { seal(bytes: Uint8Array): Promise<Uint8Array>; unseal(sealed: Uint8Array): Promise<Uint8Array> }
 
-export interface EvidenceStoreOptions {
+interface EvidenceStoreOptions {
   root?: string;
   now?: () => number;
   /** For a caller that only gets and reads, such as `deep read`: opening makes no folder and never compacts the journal. */
@@ -58,8 +58,8 @@ export interface PutRequest extends Common {
   /** For a video: where each step starts and ends, so a receipt can open it at that step. */
   steps?: readonly Step[];
 }
-export interface LayerKey { id: string; parent: string | null; level: number }
-export interface Step { step: string; startMs: number; endMs: number }
+interface LayerKey { id: string; parent: string | null; level: number }
+interface Step { step: string; startMs: number; endMs: number }
 export interface TextRequest extends Common { run?: Run }
 export interface TextSink { write(chunk: Uint8Array | string): Promise<void>; close(): Promise<PutResult> }
 export interface Writer {
@@ -70,7 +70,7 @@ export interface Writer {
   text(request: TextRequest): TextSink;
 }
 
-export type SlotReading = { state: 'captured' } | { state: 'truncated'; missing: string } | { state: 'missing'; reason: string };
+type SlotReading = { state: 'captured' } | { state: 'truncated'; missing: string } | { state: 'missing'; reason: string };
 export type PutResult =
   | { status: 'stored'; evidence: Evidence; slot: SlotReading }
   | { status: 'refused'; reason: string; slot: { state: 'missing'; reason: string } };
@@ -95,7 +95,7 @@ export interface Evidence {
   sealed?: true;
 }
 
-export interface RetainInput {
+interface RetainInput {
   cited: ReadonlySet<string>;
   archived: ReadonlySet<string>;
   /** Ids of the map layers installed now. */
@@ -103,7 +103,7 @@ export interface RetainInput {
   /** Only files of these kinds are considered: a series' own pass on the hub's timer (#262). Default: every kind. */
   kinds?: ReadonlySet<string>;
 }
-export interface RetainResult { removed: string[] }
+interface RetainResult { removed: string[] }
 /**
  * `job` is a job tool's host (#1924): there a file goes under its origin rule alone, while its kind's own ask and budget
  * stand for the redaction and license rules that guard what people see in an export, a report or a post.

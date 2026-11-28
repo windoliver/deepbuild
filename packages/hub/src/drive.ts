@@ -27,7 +27,7 @@ function driveBinary(): string {
 }
 
 /** One `deep-drive` process: its `{"ready": true}` first, then one reply line per call, one call at a time, in order. */
-export class Replica {
+class Replica {
   private readonly child: ChildProcessWithoutNullStreams;
   private readonly waiting: ((line: Obj | undefined) => void)[] = [];
   private chain: Promise<unknown>;
@@ -81,7 +81,7 @@ export class Replica {
 }
 
 /** A deep_drive call as the binary takes it: the fields left null dropped, at every depth, so its defaults hold. */
-export function driveCall(value: unknown): unknown {
+function driveCall(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(driveCall);
   if (!isObj(value)) return value;
   return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== null && v !== undefined).map(([k, v]) => [k, driveCall(v)]));

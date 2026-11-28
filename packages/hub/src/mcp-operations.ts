@@ -75,7 +75,7 @@ function answersAsRefusal(value: Obj): boolean {
   return value.outcome === 'refused' || value.outcome === 'conflict' || value.status === 'refused' || coded;
 }
 
-export interface McpOperationsOptions {
+interface McpOperationsOptions {
   settings: CoreOptions;
   doneSpec(cwd: string): unknown;
   services: {

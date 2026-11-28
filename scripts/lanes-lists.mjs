@@ -916,6 +916,8 @@ redrafted['tests/acceptance/1352-redraft-3402/ac1-section.test.mjs'] = 'tests/ac
 byHand.push('tests/acceptance/1352-redraft-3402/ac1-section.test.mjs');
 redrafted['tests/acceptance/2790/purpose.test.ts'] = 'tests/acceptance/2790-redraft-3413/';
 byHand.push('tests/acceptance/2790/purpose.test.ts');
+redrafted['tests/acceptance/1688/ac1-clean.test.mjs'] = 'tests/acceptance/1688-redraft-ac1/';
+byHand.push('tests/acceptance/1688/ac1-clean.test.mjs');
 
 byHand.push('tests/acceptance/2813-redraft-ac2/branch.test.mjs');
 

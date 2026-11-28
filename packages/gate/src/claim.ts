@@ -5,7 +5,7 @@ import type { BaseResult, ClaimCheck, ClaimInput, ContractResult, ContractSide, 
 import { maskIn } from './mask.js';
 
 /** One failed test as check.kind@1 reports it. */
-export interface RecordedFailure { test: string; file: string; line: number; stack: string | null; assertion: boolean; message: string }
+interface RecordedFailure { test: string; file: string; line: number; stack: string | null; assertion: boolean; message: string }
 /** A closed run as the command check kind records it: a run outcome and the record's fields the claim reads, never a verdict. */
 export interface RecordedRun {
   run: string;
@@ -57,7 +57,7 @@ export interface ClaimedCheck {
 export interface ClaimRequirement extends Requirement { real_users?: boolean }
 export interface ClaimedRuns { claim: string; agent: string; repo: string; task: string; commit: string; requirements: ClaimRequirement[]; checks: ClaimedCheck[]; now: number; /** A workspace claim's digests of what its state sources read (#67), part of the verdict's key. */ state?: string[] }
 /** The planted twin: a gate that judges only the exit code, with no masked-exit rule; tests only. */
-export type VerdictPlant = 'exit-code-only';
+type VerdictPlant = 'exit-code-only';
 /**
  * A fault the kit gate@1 plays for a row of the verdict table no commit can reach (#33), named by
  * DEEP_HUB_TEST_JUDGE_FAULT, which only the kit sets: what a broken runner, evidence store or state source would hand

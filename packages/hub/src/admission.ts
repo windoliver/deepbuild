@@ -13,16 +13,16 @@ import type { Used } from '@deepbuild/supervisor';
 /** The clean runs a key needs before its own peaks admit it (drafted). */
 export const CLEAN_RUNS = 3;
 /** How many of a key's last clean runs its percentile reads. */
-export const PEAKS_READ = 20;
+const PEAKS_READ = 20;
 /** Each class's constant, in MB, for a run with nothing better to go on (drafted): a check's 1 GB, and an agent's heavy command's 4 GB. */
 export const CLASS_MB = { check: 1000, heavy: 4000 } as const;
 
-export type Basis = 'runs' | 'declared' | 'class';
+type Basis = 'runs' | 'declared' | 'class';
 /** What a run is admitted on: its expected peak in MB, what that came from, what its check declares and the key whose history it read. */
 export interface Admission { mb: number; on: Basis; declared?: number; key?: string }
 
 /** The nearest-rank 95th percentile: of three peaks, the highest. */
-export function p95(values: readonly number[]): number {
+function p95(values: readonly number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
   return sorted[Math.max(0, Math.ceil(0.95 * sorted.length) - 1)]!;
 }

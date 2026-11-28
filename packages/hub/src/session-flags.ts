@@ -26,7 +26,7 @@ import type { TranscriptReader } from './transcript-reader.js';
 import { gatesOff, watched, watchWords, type WatchCause } from './watch.js';
 import { derivedId, ulid, type Draft, type HookMeta } from './wire.js';
 
-export interface SessionFlagsOptions {
+interface SessionFlagsOptions {
   services: {
     readonly record: RecordStore;
     readonly now: () => number;

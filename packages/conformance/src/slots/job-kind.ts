@@ -13,7 +13,7 @@ const JOB = 'job.kind@1';
 
 type Texts = Record<string, string>;
 interface JobReply { outputs: Texts | null; failed: string | null }
-export interface JobKindFill extends SlotFill {
+interface JobKindFill extends SlotFill {
   slot: 'job.kind@1';
   kind: string;
   tool: string;

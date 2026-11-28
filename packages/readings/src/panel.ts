@@ -1,7 +1,7 @@
 // What the Numbers panel shows of each reading, and what deep_search finds.
 import type { ClassifierCheck, Reading } from './types.js';
 
-export interface PanelRow {
+interface PanelRow {
   id: string; subject: string | null; value: number | string | null; unit: string;
   source: string; age_ms: number; basis: 'observed' | 'modeled';
   status: 'current' | 'STALE';

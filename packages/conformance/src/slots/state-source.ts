@@ -18,7 +18,7 @@ export interface StateChange { id: string; item: string; was: JsonValue; to: Jso
 /** A plan as the asks core takes one: its steps, and the digest of the diff they show. */
 export interface StatePlan { steps: { does: string; changes: string[]; undo: string | null; public: boolean; cost: number }[]; diff: string }
 export type StateUndo = { plan: StatePlan } | { cannot: string };
-export interface StateFixture {
+interface StateFixture {
   /** A fresh fixture: read, compare and undo answer from it from now on. Answers the changes to try. */
   start(): StateChange[] | Promise<StateChange[]>;
   /** The world makes this change to the fixture. */

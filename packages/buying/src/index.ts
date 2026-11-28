@@ -8,10 +8,10 @@
 // The receipt's amount is the purchase's cost reading, which charges the budget and releases the reservation.
 import type { Asks, PlanStep } from '@deepbuild/asks';
 import type { Ledger } from '@deepbuild/budget';
-import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
+import { isRecord as isObj, canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { asCore, readSince, ulid, type Connection, type RecordStore } from '@deepbuild/record';
 
-export interface PurchaseInput {
+interface PurchaseInput {
   /** `run:<ULID>`: a purchase is named as a paid run is. */
   purchase: string;
   what: string;
@@ -23,7 +23,7 @@ export interface PurchaseInput {
   /** Its undo: how the seller refunds or cancels it; null where the seller allows none. */
   refund: string | null;
 }
-export type Bought =
+type Bought =
   | { purchase: string; status: 'reserved' }
   | { purchase: string; status: 'paid'; receipt: string }
   | { purchase: string; status: 'asked'; ask: string };
@@ -31,7 +31,7 @@ export type Bought =
 export interface Processor {
   charge(request: { card: string; seller: string; usd: number; purchase: string }): Promise<{ receipt: Uint8Array; usd: number }>;
 }
-export interface BuyingOptions { record: RecordStore; asks: Asks; ledger: Ledger; now: () => number; processor: Processor }
+interface BuyingOptions { record: RecordStore; asks: Asks; ledger: Ledger; now: () => number; processor: Processor }
 export interface Buying {
   /** A card rule you set on the trusted path; `card` is the processor's reference to a card it holds. Its ID. */
   cardRule(connection: Connection, rule: { seller: string; max_usd: number; card: string }): Promise<string>;
@@ -110,7 +110,6 @@ const masked = (text: string): string => {
 const isText = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
 const isPrice = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0;
 const dollars = (usd: number): string => `$${usd.toFixed(2)}`;
-const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 class Buyer implements Buying {
   private cursor = 0;

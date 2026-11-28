@@ -79,8 +79,6 @@ export const REACHED = 10_000;
 /** The reading a session gets for a turn with tool calls none of whose hooks reached the hub. */
 export const HOOKS_MISSING = 'hooks not reaching DeepBuild';
 
-export const TRANSCRIPT_STEP = 64 * 1024 * 1024;
-
 /** How long after the hub reads a turn's end it judges whether any of the turn's hooks reached it. */
 export const TURN_GRACE = 100;
 
@@ -233,7 +231,7 @@ export const AUTOMATIC_QUEUED = /<task-notification>|^\s*<(?:cross-session-messa
  * What `<dir>/rules.json` says calls do: the effect classes each `effect:` guard entry stands for, by the entry's
  * name, and the class its `classes` give a tool, as deep-hook reads them.
  */
-export let rulesSeen: { key: string; value: ReturnType<typeof readEffects> } | undefined;
+let rulesSeen: { key: string; value: ReturnType<typeof readEffects> } | undefined;
 
 export function effectEntries(dir: string): ReturnType<typeof readEffects> {
   const file = join(dir, 'rules.json');
@@ -242,7 +240,7 @@ export function effectEntries(dir: string): ReturnType<typeof readEffects> {
   return rulesSeen.value;
 }
 
-export function readEffects(dir: string): { effects: Map<string, string[]>; tools: Map<string, string> } {
+function readEffects(dir: string): { effects: Map<string, string[]>; tools: Map<string, string> } {
   const effects = new Map<string, string[]>();
   const rules = readJson(join(dir, 'rules.json'));
   const entries = isObj(rules) && isObj(rules.entries) ? rules.entries : rules;
@@ -304,7 +302,7 @@ export function continueText(because: string, task: string | null): string {
       : 'DeepBuild: this turn stopped on a dropped connection or an overloaded service. Continue where you left off; this is its one automatic continue.';
 }
 
-export function withAppend(record: RecordStore, append: RecordStore['append']): RecordStore {
+function withAppend(record: RecordStore, append: RecordStore['append']): RecordStore {
   return new Proxy(record, {
     get: (target, key) => {
       if (key === 'append') return append;

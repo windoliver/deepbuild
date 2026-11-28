@@ -10,7 +10,7 @@ export interface Piece { text: string; keep?: boolean; ids?: string[] }
  * pieces is cut between them, a part without is inline or by handle whole.
  */
 export interface Part { name: string; text?: string | undefined; keep?: boolean; pieces?: Piece[] }
-export interface Fitted { inline: string; rest: string; inlineNames: string[]; restNames: string[]; inlineIds: string[] }
+interface Fitted { inline: string; rest: string; inlineNames: string[]; restNames: string[]; inlineIds: string[] }
 
 const JOIN = '\n\n';
 /** Room the continue line takes: its words and a handle of 64 hex digits, with room to spare. */

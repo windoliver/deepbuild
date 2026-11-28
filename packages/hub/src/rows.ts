@@ -35,7 +35,7 @@ export interface Row {
   host?: string;
 }
 /** A flag as a row carries it: the reading's, less the facts it read. */
-export type RowFlag = Omit<Flag, 'facts'>;
+type RowFlag = Omit<Flag, 'facts'>;
 /** The row.set version a session's or an ask's row needs: @5 on a host, @4 with a flag, @3 with what its turn is doing, else @1. */
 export const rowVersion = (row: Row): number => (row.host ? 5 : row.flag ? 4 : row.doing ? 3 : 1);
 /** A row with its place in the list: every reader sorts by `order`'s bytes. */
@@ -244,7 +244,7 @@ export async function whyOf(query: Query, now: number, session: string, rows: re
  * step's tense and its object, and when that event came. `ago` says the step is over, so a reader writes "2 min ago"
  * after it rather than how long it has run.
  */
-export interface Doing { words: string; at: number; ago: boolean }
+interface Doing { words: string; at: number; ago: boolean }
 /** Each tool kind's verb: running, done, failed, and as a permission prompt names it. */
 const VERBS: Record<string, readonly [string, string, string, string]> = {
   shell: ['Running', 'Ran', "Couldn't run", 'run'],

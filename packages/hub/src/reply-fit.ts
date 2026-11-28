@@ -12,7 +12,7 @@ import type { Refusal } from './wire.js';
 
 type Obj = Record<string, unknown>;
 /** A limit in each unit a client counts; a unit it doesn't count is left out. */
-export interface Figures { chars?: number; tokens?: number; bytes?: number }
+interface Figures { chars?: number; tokens?: number; bytes?: number }
 interface Entry { versions: string[]; result: Figures; error: Figures }
 /** The limit a client is held to, as mcp.tools_listed@2 records it. */
 export interface Limit { client: string | null; client_version: string | null; from: string; result: Figures; error: Figures; cap: Figures; error_cap: Figures }

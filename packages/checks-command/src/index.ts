@@ -25,7 +25,7 @@ import { absent, DOES_NOTHING, filtersIn, firstLine, GO_TEST, hiddenChild, maskO
 export type { Seeded } from './seeded.js';
 
 /** Planted twins the criteria name, selected per check; tests only. */
-export type Plant = 'exit-code-only' | 'last-attempt-only' | 'no-do-not-track';
+type Plant = 'exit-code-only' | 'last-attempt-only' | 'no-do-not-track';
 export interface CommandCheck {
   /** Where every start, signal and wait goes. */
   host: Host;
@@ -56,10 +56,10 @@ export interface CommandCheck {
   outside?: boolean;
   plant?: Plant;
 }
-export interface Attempt { test: string; outcome: 'passed' | 'failed' }
-export interface ContractCount { output: string; size: number; compared: number | null; largest_error: number | null }
+interface Attempt { test: string; outcome: 'passed' | 'failed' }
+interface ContractCount { output: string; size: number; compared: number | null; largest_error: number | null }
 /** One timed repeat: flushed only when the tool's report says so for it; a repeat the report leaves out is not flushed, never cold. */
-export interface TimedRepeat { repeat: number; flushed: boolean }
+interface TimedRepeat { repeat: number; flushed: boolean }
 export interface CommandRun extends CheckResult {
   run: string;
   /** Whether a test tool's report counted the run's tests (#1861): false for a run whose exit status is its one result, such as a typecheck's. */

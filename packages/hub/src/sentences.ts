@@ -38,7 +38,7 @@ export function changeSentence(files: readonly string[], ran: readonly string[] 
 }
 
 /** A verdict as the record keeps it: its outcome, its requirements, its own smallest case, whether its commit moved, and its send-back's round. */
-export interface VerdictFields {
+interface VerdictFields {
   outcome: string;
   requirements: readonly { req: string; outcome: string; smallest: string | null; points_to: string | null }[];
   smallest: string | null;

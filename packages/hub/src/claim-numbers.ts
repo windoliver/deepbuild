@@ -20,7 +20,7 @@ import type { ClaimCheck } from './gate-runner.js';
 /** The terms a claim's diff adds to its queries, with the sample they run on as the merge base `base` holds it. */
 export interface TermsSpec extends CheckSpec { kind: 'numbers'; runner: 'terms'; base: string; sample: string; added: AddedTerm[] }
 /** A check a claim's numbers get, as the gate runs it, and its spec. */
-export interface NumbersCheck { check: ClaimCheck; spec: SpeedSpec | TermsSpec }
+interface NumbersCheck { check: ClaimCheck; spec: SpeedSpec | TermsSpec }
 /** What a query file may hold at most: a file past it is no query this reads. */
 const QUERY_BYTES = 256 * 1024;
 /** The terms' queries on a sample of real data, whose time nothing knows before they've run on it, never fit a fast lane. */

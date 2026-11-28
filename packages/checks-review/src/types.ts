@@ -24,7 +24,7 @@ export interface Site { file: string; line: number; quote: string }
 export interface ReviewFinding extends Site { rule: string }
 /** One rule and every site of it, so the agent fixes the class. */
 export interface SendBackItem { rule: string; sites: Site[] }
-export interface ReviewSendBack { items: SendBackItem[] }
+interface ReviewSendBack { items: SendBackItem[] }
 export interface DroppedFinding { finding: { file?: unknown; line?: unknown; rule?: unknown; quote?: unknown }; reason: string }
 
 export interface ReviewResult extends CheckResult {

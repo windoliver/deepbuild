@@ -4,7 +4,7 @@ import type { CheckContext, CheckResult, CheckRunnerFill, CheckSpec, KindBudget 
 import type { TimingReport } from '@deepbuild/verdicts';
 
 /** A query: a SQLite file in the checkout, opened read-only, and SQL whose one row's first column is the number. */
-export interface Query { database: string; sql: string }
+interface Query { database: string; sql: string }
 /** One number a claim states, as written (`4,500`), the query behind it, and an independent recount where one exists. */
 export interface StatedNumber { where: string; stated: string; query: Query; recount?: Query }
 /** A term the change adds: the query with it and without it, both run on a read-only sample of real data. */

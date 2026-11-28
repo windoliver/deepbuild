@@ -2,9 +2,9 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import type { Agent, JobRecord, McpServer, Plant, StopCause, Subagent } from './types.js';
+import { isRecord as isObj } from '@deepbuild/contracts/json';
 
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const readJson = (path: string): unknown => {
   try { return JSON.parse(readFileSync(path, 'utf8')); } catch { return undefined; }
 };
@@ -48,7 +48,7 @@ export interface AgentParts {
   ownHome?(o: { temp: string; home: string; env: Record<string, string | undefined>; billsKey: boolean }): Record<string, string>;
   stream(e: Obj, job: Streamed, run: StreamRun): void;
 }
-export interface Streamed {
+interface Streamed {
   rec: JobRecord;
   seen: Set<string>;
   answered?: string;
@@ -56,7 +56,7 @@ export interface Streamed {
   stopCause?: StopCause;
   said?: string;
 }
-export interface StreamRun {
+interface StreamRun {
   settle(): void;
   cause(error: string): StopCause;
   errors(): { field: string; values: Record<string, string> };

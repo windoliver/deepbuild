@@ -5,7 +5,7 @@ import { closeSync, openSync, readSync, fstatSync } from 'node:fs';
 import { ADAPTERS, readFacts, type HookRequestLine, type JsonObject } from '@deepbuild/adapters';
 import { scrubText } from '@deepbuild/evidence';
 import { adapterOf, coveredBy, registry } from './adapter-facts.js';
-export { adapterOf, hubAdapters, registry } from './adapter-facts.js';
+export { adapterOf, registry } from './adapter-facts.js';
 import { isObject as isObj, canonicalize, getSchema, sha256Hex, validate, type JsonValue } from '@deepbuild/contracts/runtime';
 import { isPrCreate, prUrlIn } from './forge.js';
 import { countMcp } from './mcp-servers.js';
@@ -164,7 +164,7 @@ function modeRead(provider: string, entry: JsonObject, mode: string, shown: stri
   return { code: 'mode_unknown', reading: `This session runs ${provider} through paseo in ${mode ? `the mode ${shown}` : 'a mode its snapshot does not name'}: mode not known. Its facts don't list it, so it isn't read as one that asks, and a call may run with no check before it. Its turn's end is still checked.` };
 }
 /** A model call as the agent's own transcript records it (#2019): a retry, with its attempt, most and cause, or the reply that ends the retries. */
-export interface ModelCall { outcome: 'retry' | 'reply'; attempt?: number; max?: number; cause?: string; at: number; record: string }
+interface ModelCall { outcome: 'retry' | 'reply'; attempt?: number; max?: number; cause?: string; at: number; record: string }
 /**
  * A transcript entry the agent's facts (`retries`) mark as its retry of a model call, or as the model's reply that
  * ends retries; read by the facts alone, never the agent's name or text. Undefined for any other entry.

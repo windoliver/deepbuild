@@ -35,7 +35,7 @@ import { refuse, Refused, refusal, ulid, type CoreOptions } from './wire.js';
 
 import { DAY, ghToken, SECRETS_TTL, type Obj, isObj, misjudged } from "./hub-shared.js";
 
-export interface HubReadingsOptions {
+interface HubReadingsOptions {
  settings: CoreOptions & { forge: string };
  services: {
 readonly wikiWritten: KnowledgeProvider['writtenOf'];

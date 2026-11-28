@@ -22,7 +22,7 @@ import { watched, watchWords, type Watch } from './watch.js';
 import { ROUNDS, verdictLine } from '@deepbuild/verdicts';
 
 /** The words a session's state reads as (design: States people see); the table below gives their order. */
-export type State = 'needs you' | 'stuck' | 'flagged' | 'sent back' | 'BLOCKED' | 'INVALID' | 'INCONCLUSIVE' | 'stale' | 'says done' | 'working' | 'queued' | 'PASS' | 'finished' | 'quiet';
+type State = 'needs you' | 'stuck' | 'flagged' | 'sent back' | 'BLOCKED' | 'INVALID' | 'INCONCLUSIVE' | 'stale' | 'says done' | 'working' | 'queued' | 'PASS' | 'finished' | 'quiet';
 /** A session's row; a finished one carries what its last turn did: each tool call, then each commit by SHA. */
 export interface StatusRow { id: string; repo: string; agent: string; state: State; why: string; note?: string; verdict?: string; calls?: string[]; commits?: string[]; readings?: string[]; turn?: { calls: number; failed: number } }
 /** A session with no hook for this long reads quiet, unless an ask, a block or its newest claim says more. */
@@ -50,7 +50,7 @@ type Cause = 'ask' | 'gone' | 'waiting' | 'words' | 'stuck' | 'promised' | 'fail
 /** A record fact a reading read (#2018): the event's kind, its time and its place in the log. */
 export interface Fact { kind: string; ts: number; log_pos: number }
 /** A row of the table above the one that matched, with the fact it lacked. */
-export interface Lacked { rule: string; state: State; fact: string }
+interface Lacked { rule: string; state: State; fact: string }
 /** A session's state as the record reads it, with why. */
 /** `plain` is `why` with no age in it and `since` the time it counts from, so a row built from it changes only with its state (#1463). */
 /**
@@ -65,7 +65,7 @@ export interface Lacked { rule: string; state: State; fact: string }
 export interface Reading { id: string; project_id: string | null; agent: string | null; worktree: string | null; /** The host a session on another machine runs on (#999). */ host?: string; state: State; cause: Cause; rule: string; why: string; plain: string; since: number | null; waits_on: string | null; facts: Fact[]; lacked: Lacked[]; note?: string; flag?: Flag; until?: number }
 
 /** The one flag a row shows beside its word (#2019), never a state: the first of FLAGS that applies. */
-export type FlagCode = 'interrupted' | 'retrying' | 'repeating' | 'watch-only' | 'unpushed';
+type FlagCode = 'interrupted' | 'retrying' | 'repeating' | 'watch-only' | 'unpushed';
 /**
  * A flag from record facts: `text`, the one line its slot shows, with no age in it (a reader says how long from
  * since), its fix and the facts it read; and what each flag names: an interrupted session's last call and when it can

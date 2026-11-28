@@ -12,7 +12,7 @@ const RESTART_WINDOW_MS = 60 * 60_000;
 export const PROMOTE_RESTARTS = 2;
 
 /** What the budget leaves now: how many restarts, and when the next frees up; `bad` names a file that reads as spent. */
-export interface Budget { left: number; frees?: number; bad?: string; at: readonly number[] }
+interface Budget { left: number; frees?: number; bad?: string; at: readonly number[] }
 
 export const budgetFile = (dir: string): string => join(dir, 'restarts.json');
 

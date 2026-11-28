@@ -6,7 +6,7 @@ import type { Ask, BatchCard, InboxStatus, Obj } from './model.js';
 import { duration } from './duration.js';
 
 /** Batches every `every` ms since the epoch, showing at most `cap` asks a UTC day. */
-export interface Batches { every: number; cap: number }
+interface Batches { every: number; cap: number }
 interface ShowingOptions {
   ask: (handle: string) => Ask | undefined;
   open: () => Ask[];

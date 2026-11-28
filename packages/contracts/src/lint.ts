@@ -3,7 +3,7 @@ import { compilePattern } from './pattern.js';
 import { isPublished, isUntouched } from './schemas.js';
 import { FORMATS } from './validate.js';
 
-export interface LintProblem { schema: string; path: string; reason: string }
+interface LintProblem { schema: string; path: string; reason: string }
 
 // `x-acts` marks a field a reader must act on (it can deny, block, answer or lower a verdict), which a minor may never
 // add (#139); an annotation, read by the contract step only.

@@ -3,7 +3,7 @@
 // it work, and that event starts its beat again.
 
 /** How long a beat's runs find nothing to do before it stops. */
-export const QUIET_MS = 5000;
+const QUIET_MS = 5000;
 
 /**
  * Runs `job` every `ms` while it reports work. Once its runs have found nothing to do for `quietMs`, the beat stops,
@@ -11,7 +11,7 @@ export const QUIET_MS = 5000;
  * Runs never overlap: a wake during a run is kept for the run after it, and a run that outlasts the beat on a loaded
  * machine delays the next instead of queueing it.
  */
-export class Beat {
+class Beat {
   private timer: NodeJS.Timeout | undefined;
   private running = false;
   private woken = false;

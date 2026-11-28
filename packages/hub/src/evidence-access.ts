@@ -27,7 +27,7 @@ import { refuse, Refused, refusal, type CoreOptions } from './wire.js';
 
 import { type Obj, isObj, isUnder } from "./hub-shared.js";
 
-export interface EvidenceAccessOptions {
+interface EvidenceAccessOptions {
  settings: CoreOptions;
  services: {
 readonly log: LogReads;

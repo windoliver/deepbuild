@@ -8,8 +8,8 @@ import { constants, cpSync, existsSync, mkdirSync, readdirSync, readlinkSync, re
 import { join } from 'node:path';
 
 /** Where an injected failure stops the install: tests only. */
-export type FailAt = 'after-unpack' | 'before-switch' | 'during-switch';
-export interface Release { home: string; archive: Buffer; manifest: Buffer; signature: Buffer; publicKey: string | Buffer; failAt?: FailAt }
+type FailAt = 'after-unpack' | 'before-switch' | 'during-switch';
+interface Release { home: string; archive: Buffer; manifest: Buffer; signature: Buffer; publicKey: string | Buffer; failAt?: FailAt }
 
 const KEEP = 3;
 const NAME = /^[0-9A-Za-z][0-9A-Za-z._+-]*$/;

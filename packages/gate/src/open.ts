@@ -1,4 +1,4 @@
-export type LeftFrom = 'section' | 'bug' | 'issue' | 'limit' | 'placeholder' | 'task';
+type LeftFrom = 'section' | 'bug' | 'issue' | 'limit' | 'placeholder' | 'task';
 /** One thing left open: its words, where they came from, and for a section's item the section's heading. */
 export interface LeftOpen { text: string; from: LeftFrom; section?: string }
 

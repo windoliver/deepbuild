@@ -203,14 +203,14 @@ export const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(r
 
 /** What a run's database clone carries (#332): the template's seed record, the template's digest and when it was cloned. */
 export interface SeedRecord { source: string; copied_at: string; migration: string; template: string; cloned_at: number }
-export interface Stack {
+interface Stack {
   run: string; pid: number; ports: Record<string, number>; /** Its health route, its ports filled in. */ url: string;
   /** The compose project its containers carry, for a compose stack. */ project?: string;
   /** Its database's clone record, when the environment seeds one. */ seed?: SeedRecord;
 }
 /** Whether the stack's health route answers 200 now. */
 export const answers = async (stack: Stack): Promise<boolean> => (await get(stack.url)).status === 200;
-export type Up = { status: 'ready'; stack: Stack } | { status: 'BLOCKED'; run: string; cause: string };
+type Up = { status: 'ready'; stack: Stack } | { status: 'BLOCKED'; run: string; cause: string };
 /** One key of the kind from `keys`, leased to the stack's holder for its run; or why none could be. */
 export type Take = (kind: string, keys: string[]) => Promise<{ key: string } | { cause: string }>;
 

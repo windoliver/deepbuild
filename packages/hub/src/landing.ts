@@ -42,9 +42,9 @@ interface Requirement { req: string; text: string; settled_by: string | null; ou
  * One judgement of a change: its claim's verdict on the merge of its head with main, and what that merge was. One that
  * waits only on calls (#1345) names what its landing would reach that a revert can't take back, and the calls it raised.
  */
-export interface Judged { claim: string; outcome: Outcome; requirements: Requirement[]; commit: string; tree: string; head: string; main: string; at: number; why?: string; reaches?: string | null; calls?: string[] }
+interface Judged { claim: string; outcome: Outcome; requirements: Requirement[]; commit: string; tree: string; head: string; main: string; at: number; why?: string; reaches?: string | null; calls?: string[] }
 /** A call a change waits on (#1345): one requirement whose oracle is you, still pending on the change's merge with main. */
-export interface Call { issue: number; pr: number; head: string; main: string; commit: string; claim: string; req: string; text: string; reaches: string | null }
+interface Call { issue: number; pr: number; head: string; main: string; commit: string; claim: string; req: string; text: string; reaches: string | null }
 /** Raises the call for a requirement, or finds the one raised for it already: its handle. Given only where calls are on. */
 export type RaiseCall = (call: Call) => Promise<string>;
 /** A change as the lander keeps it: its pull request, its issue and the newest judgement of it. */
@@ -54,7 +54,7 @@ interface State { repo: string; changes: Record<string, Change>; judgements: num
 /** Why landings stopped: the commit main was read back at, or went red at, and the files that differ. */
 interface Stop { commit: string; files: string[] }
 /** One round's report, as `deep land --json` prints it. */
-export interface Round {
+interface Round {
   landed: { pr: number; issue: number; commit: string }[];
   /** Each change held, why, and the calls it waits on where calls are on (#1345). */
   held: { pr: number; issue: number; reason: string; calls?: string[] }[];
@@ -62,7 +62,7 @@ export interface Round {
   stopped: Stop | null;
 }
 
-export interface LandingOptions {
+interface LandingOptions {
   root: string;
   repoOf(remote: string): string | undefined;
   /** The forge's REST root, and the token its reads and merges go with. */
@@ -490,7 +490,7 @@ export function onlyWindow(j: Pick<Judged, 'outcome' | 'requirements'>): boolean
 /** A requirement whose oracle is you, still waiting on your answer: a call (#1345). */
 const waitsOnYou = (q: Requirement): boolean => q.oracle === 'person' && q.outcome === 'pending';
 /** Whether a verdict's only open requirements wait on your answers (#1345): every other one passed. */
-export function onlyCalls(j: Pick<Judged, 'outcome' | 'requirements'>): boolean {
+function onlyCalls(j: Pick<Judged, 'outcome' | 'requirements'>): boolean {
   const open = j.requirements.filter((q) => q.outcome !== 'PASS');
   return j.outcome !== 'PASS' && open.length > 0 && open.every(waitsOnYou);
 }

@@ -5,11 +5,11 @@ import { open, type FileHandle } from 'node:fs/promises';
 import { type Plant } from './plant.js';
 
 import type { TranscriptReading } from './session-types.js';
+import { isRecord as isObj } from '@deepbuild/contracts/json';
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const TRANSCRIPT_STEP = 64 * 1024 * 1024;
 const TURN_ENTRIES = 5_000;
-export interface TranscriptReaderOptions { plant: Plant | undefined; now: () => number }
+interface TranscriptReaderOptions { plant: Plant | undefined; now: () => number }
 export class TranscriptReader {
   constructor(private readonly options: TranscriptReaderOptions) {}
 

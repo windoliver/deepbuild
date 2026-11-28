@@ -95,7 +95,7 @@ export class Writes {
 }
 
 /** What a write made from a view names: the newest change to its target after that view. */
-export interface Change { kind: string; log_pos: number; ts: number; data: Obj }
+interface Change { kind: string; log_pos: number; ts: number; data: Obj }
 
 /**
  * A write made from a view (#1577): an undo, an overrule or a staged undo carries `view`, the log position of what you

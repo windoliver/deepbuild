@@ -12,7 +12,7 @@ import type { Asks } from '@deepbuild/asks';
 import type { RecordStore } from '@deepbuild/record';
 
 /** One published JSON-RPC method of the hub. */
-export interface RpcEntry {
+interface RpcEntry {
   method: string;
   since: string;
   stability: 'stable' | 'preview';

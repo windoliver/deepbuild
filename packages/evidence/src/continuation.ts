@@ -1,7 +1,7 @@
 import { MessageChannel, Worker } from 'node:worker_threads';
 import type { DigestState } from './digest.ts';
 
-export interface Continued { state: DigestState; sha256: string }
+interface Continued { state: DigestState; sha256: string }
 let worker: Worker | undefined;
 let queue = Promise.resolve();
 /** Continue a verified prefix while holding at most one incoming chunk and one worker's SHA state. */

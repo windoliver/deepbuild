@@ -11,14 +11,14 @@ type Obj = Record<string, unknown>;
 const hash = (v: string | Uint8Array) => createHash('sha256').update(v).digest('hex');
 const ID = /^[a-z0-9][a-z0-9_-]*\/[a-z0-9][a-z0-9_-]*$/;
 const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
-export interface PackAsset {
+interface PackAsset {
   path: string; url: string; sha256: string; size: number;
   license: { id: string; terms: string; shareable: boolean; credit: string | null };
   upstream: { url: string; version: string; modified: string };
   title?: string; publisher?: string; edition?: string;
 }
 export const PUBLICATION_FIELDS = ['title', 'publisher', 'edition'] as const;
-export interface PackVersion {
+interface PackVersion {
   id: string; version: string; ref: string; digest: string; manifest: Obj; assets: PackAsset[];
   /** How many times the canvas core's pack check ran on this version, for a pack the release ships (#1720). */
   checks?: number;
@@ -87,7 +87,7 @@ function releasePacks(): { folder: string; pack?: PackVersion; error?: string }[
 }
 
 /** A version the pack check refused (#1720), kept with its issues so it isn't checked again: `checks` counts the runs. */
-export interface Refusal { ref: string; digest: string; issues: unknown[]; checks: number }
+interface Refusal { ref: string; digest: string; issues: unknown[]; checks: number }
 
 /** Only a copy that passed the canvas pack check is registered. A republished version can't change its bytes. */
 export class Packs {

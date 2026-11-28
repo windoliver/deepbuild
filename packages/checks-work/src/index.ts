@@ -9,7 +9,7 @@ import { kitFor } from './kit.js';
 import { runWork } from './run.js';
 import type { WorkFill, WorkKind, WorkSpec } from './types.js';
 
-export type { DataSpec, Draft, DraftedRequirement, DocumentSpec, EarlyQuestion, JsonType, MessageSpec, ServiceSpec, WorkFill, WorkKind, WorkSpec } from './types.js';
+export type { DataSpec, Draft, DraftedRequirement, DocumentSpec, JsonType, MessageSpec, ServiceSpec, WorkFill, WorkKind, WorkSpec } from './types.js';
 export { draftChecks } from './draft.js';
 
 /** Each kind's budget per run: local work, so no cost; a service check's requests take the longest. */

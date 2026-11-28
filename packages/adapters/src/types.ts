@@ -21,14 +21,14 @@ export interface AdapterCaps {
   mcp: boolean; rewrite: boolean; editInput: boolean; errorTurnHook: boolean; startTurn: boolean;
 }
 /** adapter.unsupported@1: per surface, the driven operations the adapter can't do there. */
-export type Unsupported = { [surface: string]: string[] };
+type Unsupported = { [surface: string]: string[] };
 
 export interface DoctorItem { code: string; level: 'ok' | 'warn' | 'fail' | 'skip'; evidence: string; fix: string }
 
 export type StopCause =
   | 'sign_in_required' | 'token_refresh_failed' | 'plan_window_spent' | 'rate_limited' | 'refusal' | 'max_turns'
   | 'context_overflow' | 'tool_schema_rejected' | 'agent_crashed' | 'timed_out' | 'unknown';
-export interface StopReading { cause: StopCause; reset?: number }
+interface StopReading { cause: StopCause; reset?: number }
 
 /** The data of a turn.usage event. */
 export interface TurnUsage {
@@ -39,7 +39,7 @@ export interface TurnUsage {
   cost: { basis: 'reported'; usd: number } | { basis: 'estimated'; usd: number; rate_card: string } | { basis: 'unpriced' };
   context?: { used: number; window: number };
 }
-export interface Skill { name: string; source: string }
+interface Skill { name: string; source: string }
 
 /**
  * What the adapter is handed for a permission request: the asks core's delivery, plus the chosen option's label, as

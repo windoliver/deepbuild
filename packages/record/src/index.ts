@@ -7,26 +7,26 @@ import { ulid } from '@deepbuild/record/ids';
 import { closeSync, copyFileSync, existsSync, fsyncSync, openSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import { dirname } from 'node:path';
 import Database from 'better-sqlite3';
-import { canonicalize, listSchemas, registry, sha256Hex } from '@deepbuild/contracts';
+import { isRecord as isObj, canonicalize, listSchemas, registry, sha256Hex } from '@deepbuild/contracts';
 import type { JsonValue, Registry, SchemaEntry } from '@deepbuild/contracts';
 import { scrubText } from '@deepbuild/evidence';
 import type { EvidenceStore, Writer as EvidenceWriter } from '@deepbuild/evidence';
 import { findMessages, foldText, refreshIndex, touched, type FoundMessage } from './archive.js';
-import { CHECKED, copyMessages, loadLearned, parseClaimLine, readEvidence, replayCheck, resolveHandle, ROLLERS, placingTranscript, YOURS, sessionTranscript, startSlice, toRollBack, dependsOn, type ClaimLine, type Entry as Resolved, type HeldAtLoad, type LearnedChange, type LearnedLoad, type Message, type Placing, type SliceEntry, type Transcripts } from './learned.js';
+import { CHECKED, copyMessages, loadLearned, parseClaimLine, readEvidence, replayCheck, resolveHandle, ROLLERS, placingTranscript, YOURS, sessionTranscript, startSlice, toRollBack, dependsOn, type ClaimLine, type Entry as Resolved, type LearnedChange, type LearnedLoad, type Message, type Placing, type SliceEntry, type Transcripts } from './learned.js';
 import { compareReplay, planHash } from './replay.js';
 import { movable, type Refusal } from './lifecycle.js';
 import { PROJECTIONS, Projector, tableDef, type Projected } from './projections.js';
 import type { Statement } from 'better-sqlite3';
-import { fileStorage, isBackend, openReadOnly, testStorage, type Backend, type Db, type Durability, type Storage, type SyncCall, type TestStorage } from './storage.js';
+import { fileStorage, isBackend, openReadOnly, testStorage, type Backend, type Db, type Durability, type Storage, type TestStorage } from './storage.js';
 import { metaOf, RecordError } from './meta.js';
 
 export { compareReplay, foldText, parseClaimLine, planHash, PROJECTIONS, testStorage, ulid };
 export type { FoundMessage };
 export { openTrust, type ProjectTrust } from './trust.js';
 export { recordSize } from './storage.js';
-export { RecordError, writerGeneration, type RecordErrorCode } from './meta.js';
-export type { Comparison, Measure, MeasureResult, ReplayPlan, ReplayResult, ReplayRun, TaskPair, Variant } from './replay.js';
-export type { Backend, ClaimLine, HeldAtLoad, LearnedLoad, Message, Resolved, SliceEntry, Storage, SyncCall, TestStorage };
+export { RecordError, writerGeneration } from './meta.js';
+export type { Comparison, ReplayPlan, ReplayResult, ReplayRun } from './replay.js';
+export type { Backend, ClaimLine, Message, SliceEntry, TestStorage };
 
 /** What the hub's socket proved about a writer's connection (#16 proves it; the record only reads it). */
 export interface Connection {
@@ -105,7 +105,7 @@ export interface RecordOptions {
 export interface Replaying { replayed: number; events: number }
 export interface Row { [column: string]: unknown }
 export interface Table { name: string; primaryKey: string[]; rows: Row[] }
-export interface TurnView { turn: number | null; stopped: boolean; events: string[] }
+interface TurnView { turn: number | null; stopped: boolean; events: string[] }
 export interface SessionView { id: string; status: string; readings: string[]; turns: TurnView[] }
 
 export interface RecordStore {
@@ -275,7 +275,6 @@ CREATE TABLE IF NOT EXISTS receipts (device TEXT NOT NULL, request TEXT NOT NULL
 `;
 
 type Obj = { [key: string]: JsonValue };
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 /** Each event kind's schema versions in `entries`, added to `into`: a kind's list is replaced, never changed in place. */
 function versionsOf(entries: readonly SchemaEntry[], into: Map<string, number[]>): Map<string, number[]> {
   for (const { schema } of entries) {

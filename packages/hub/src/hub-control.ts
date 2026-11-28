@@ -79,7 +79,7 @@ import { ghToken, type Obj, isObj, counting } from "./hub-shared.js";
 import type { Delivery } from '@deepbuild/asks';
 import type { IntakeService } from './intake-port.js';
 
-export interface HubControlOptions {
+interface HubControlOptions {
   settings: CoreOptions & { forge: string };
   services: {
     readonly wikiWritten: KnowledgeProvider['writtenOf'];

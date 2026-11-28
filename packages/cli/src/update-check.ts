@@ -3,7 +3,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-export interface UpdateCheck { line: string; status: 'up-to-date' | 'update-available' | 'could-not-check' }
+interface UpdateCheck { line: string; status: 'up-to-date' | 'update-available' | 'could-not-check' }
 
 export async function checkForUpdate({ fetchManifest, current, statePath, now }: {
   fetchManifest: () => Promise<{ version: string }>; current: string; statePath: string; now: () => Date;

@@ -6,7 +6,7 @@ import type { Validation } from './validate.js';
 /** A caller's list, read by its indices into a plain array, so its own methods never run. */
 const byIndex = <T>(list: readonly T[]): T[] => Array.from({ length: list.length }, (_, i) => list[i]!);
 
-export interface CatalogueEntry { kind: string; version: number; schema: string; feeds: string[] }
+interface CatalogueEntry { kind: string; version: number; schema: string; feeds: string[] }
 
 /** One entry per event kind schema: a schema whose root lists the projections it feeds in `x-feeds`. */
 export function buildCatalogue(entries: readonly SchemaEntry[]): CatalogueEntry[] {

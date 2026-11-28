@@ -26,8 +26,6 @@ const MCP_SERVER = 'deep';
 const HOOKS = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PermissionRequest', 'PostToolUse', 'PreCompact', 'PostCompact', 'SubagentStart', 'SubagentStop', 'Stop', 'Interrupt', 'SessionEnd'];
 
 const home = (): string => process.env.CODEX_HOME || join(homedir(), '.codex');
-/** Whether Codex has a home here: setup leaves a machine without one alone. */
-export const hasCodex = (): boolean => existsSync(home());
 export const codexHooks = (): string => join(home(), 'hooks.json');
 export const codexConfig = (): string => join(home(), 'config.toml');
 const recordFile = (root: string): string => join(root, 'codex-hooks.json');
