@@ -1,0 +1,1 @@
+{"alone":true,"why":"binary: helpers.ts runs cargo build -p deep-hook, runs target/debug/deep-hook for every hook and starts a deep hub run."}
