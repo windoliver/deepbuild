@@ -203,7 +203,8 @@ function locked(act) {
       throw error;
     }
   };
-  write(mine, JSON.stringify({ pid: process.pid, start: processes().get(process.pid).start }));
+  const held = JSON.stringify({ pid: process.pid, start: processes().get(process.pid).start });
+  write(mine, held);
   const { ino } = statSync(mine);
   for (;;) {
     try {
@@ -234,7 +235,9 @@ function locked(act) {
     }
     sleep(2 + Math.random() * 8);
   }
+  let own;
   try {
+    own = openSync(mine, 'r+');
     rmSync(mine, { force: true });
     // A run killed before it took the lock leaves its file to link from, and one killed in a write its new table.
     for (const name of readdirSync(folder())) {
@@ -270,6 +273,13 @@ function locked(act) {
       if (statSync(mark).ino === ino) rmSync(mark, { force: true });
     } catch (error) {
       if (error.code !== 'ENOENT') throw error;
+    } finally {
+      if (own !== undefined) {
+        try {
+          writeSync(own, JSON.stringify({ pid: process.pid, start: '' }).padEnd(held.length), 0);
+        } catch {}
+        closeSync(own);
+      }
     }
   }
 }
