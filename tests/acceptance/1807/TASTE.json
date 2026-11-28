@@ -1,0 +1,9 @@
+{
+  "issue": 1807,
+  "criterion": "AC6",
+  "verdict": null,
+  "who": null,
+  "when": null,
+  "files": {},
+  "note": "No call recorded yet. A person fills this in once, on the pictures one check run wrote to $DA1807_SCREENS: verdict looks_right or looks_wrong, who, when, and files with each file's name and SHA-256 (answered-row-beside-next-light.png, answered-row-beside-next-dark.png, last-receipt-light.png, last-receipt-dark.png, decided-light.png, decided-dark.png, run.json)."
+}
