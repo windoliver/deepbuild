@@ -169,7 +169,7 @@ impl Render for Host {
             .flex_1()
             .h_full()
             .when(self.wheel_notifies, |host| {
-                host.on_scroll_wheel(cx.listener(|_, _, _, cx| cx.notify()))
+                host.on_scroll(cx.listener(|_, _, _, cx| cx.notify()))
             })
             .child(items)
     }

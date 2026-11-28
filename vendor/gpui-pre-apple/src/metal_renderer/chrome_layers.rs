@@ -4,24 +4,51 @@
 //! backdrop, at full, half or quarter scale), runs its registered operator's stages on it, and
 //! draws the result at its order, premultiplied, with its clip and edge.
 //!
+//! From gpui-pre 0.3.11 a frame is one pass with a depth buffer: its opaque rectangles are drawn
+//! first, nearest first, and everything else is tested against them. A chrome primitive ends the
+//! pass, so it cuts the frame there: the rectangles drawn first are only those painted before it,
+//! and the pass that goes on after it draws the next ones first, up to the next chrome primitive.
+//! A backdrop copy therefore holds what was painted before it and nothing painted after.
+//!
 //! Operators are registered by the app as Metal source written from shipped operators, under a
 //! fixed binding contract: fragment buffer 0 is the frame (the output's size), buffer 1 the
 //! operator's inputs, sampler 0 a linear clamp-to-edge sampler and textures 0.. its texture
 //! inputs in order. An effect names an operator; a name nobody registered draws nothing.
 
 use std::collections::HashMap;
-use std::mem;
+use std::ops::Range;
+use std::ptr::NonNull;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
+use std::mem;
 
 use anyhow::{Context as _, Result};
 use gpui::{
     BackdropScale, Bounds, ChromeEffect, ChromeKind, ChromeLayer, ChromePrimitive, Corners,
-    DevicePixels, PrimitiveBatch, ScaledPixels, Scene, Size, point, size,
+    DevicePixels, PrimitiveBatch, ScaledPixels, Scene, Size, point, quad_depth, quad_depth_scale,
+    size,
 };
-use metal::MTLPixelFormat;
+use objc2::{Message, rc::Retained, runtime::ProtocolObject};
+use objc2_core_foundation::CFRetained;
+use objc2_core_video::CVMetalTexture;
+use objc2_foundation::NSString;
+use objc2_metal::{
+    MTLBlendFactor, MTLBlendOperation, MTLBlitCommandEncoder, MTLCommandBuffer, MTLCommandEncoder,
+    MTLCompileOptions, MTLDevice, MTLLibrary, MTLLoadAction, MTLOrigin, MTLPixelFormat,
+    MTLPrimitiveType, MTLRenderCommandEncoder, MTLRenderPassDescriptor,
+    MTLRenderPipelineDescriptor, MTLRenderPipelineState, MTLSamplerAddressMode,
+    MTLSamplerDescriptor, MTLSamplerMinMagFilter, MTLSamplerState, MTLSize, MTLStorageMode,
+    MTLStoreAction, MTLTexture, MTLTextureDescriptor, MTLTextureUsage, MTLViewport,
+};
 
-use super::{InstanceBufferWriter, MetalRenderer, new_command_encoder_for_texture, write_instances};
+use super::{
+    GlobalInputIndex, InstanceBindings, InstanceBufferWriter, MetalRenderer, QuadInputIndex,
+    write_instances,
+};
+
+type Pipeline = Retained<ProtocolObject<dyn MTLRenderPipelineState>>;
+type Texture = Retained<ProtocolObject<dyn MTLTexture>>;
+type Encoder = Retained<ProtocolObject<dyn MTLRenderCommandEncoder>>;
 
 /// What a run's texture binding reads.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -104,6 +131,9 @@ fn planted() -> Planted {
     }
 }
 
+/// The slot the composite's two functions read its uniform at, after the two every pipeline reads.
+const COMPOSITE: usize = 2;
+
 /// The composite's uniform, as `ChromeComposite` in `shaders_carried.metal`.
 #[repr(C)]
 struct Composite {
@@ -141,192 +171,160 @@ const IDENTITY: [f32; 16] = [
     1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1.,
 ];
 
-/// The pipelines a layer's scene renders with: GPUI's own, but with the destination's alpha
-/// scaled by one minus the source's, so the offscreen target holds the group's true coverage.
-struct LayerPipelines {
-    shadows: metal::RenderPipelineState,
-    quads: metal::RenderPipelineState,
-    underlines: metal::RenderPipelineState,
-    monochrome_sprites: metal::RenderPipelineState,
-    polychrome_sprites: metal::RenderPipelineState,
-    path_sprites: metal::RenderPipelineState,
-    surfaces: metal::RenderPipelineState,
-}
-
 pub(super) struct Chrome {
-    library_device: metal::Device,
-    layer: LayerPipelines,
-    composite: metal::RenderPipelineState,
-    composite_straight: metal::RenderPipelineState,
-    downsample: metal::RenderPipelineState,
-    sampler: metal::SamplerState,
+    device: Retained<ProtocolObject<dyn MTLDevice>>,
+    composite: Pipeline,
+    composite_straight: Pipeline,
+    downsample: Pipeline,
+    sampler: Retained<ProtocolObject<dyn MTLSamplerState>>,
     /// Offscreen targets by (use, depth), reused frame to frame; Metal orders their reuse.
-    targets: HashMap<(u32, usize), metal::Texture>,
+    targets: HashMap<(u32, usize), Texture>,
     /// Backdrop copies taken earlier in paint order, by key, until an effect reads them.
-    captures: HashMap<u64, metal::Texture>,
+    captures: HashMap<u64, Texture>,
     /// Each registered operator's compiled graphs.
-    compiled: HashMap<String, Vec<metal::RenderPipelineState>>,
+    compiled: HashMap<String, Vec<Pipeline>>,
     depth: usize,
+    /// The instances of each layer's scene in the frame being drawn, by the scene's address.
+    layers: HashMap<usize, InstanceBindings>,
+    /// While a layer's scene is drawn, the command buffer of the frame it belongs to.
+    frame: Option<Retained<ProtocolObject<dyn MTLCommandBuffer>>>,
 }
 
-fn layer_pipeline(
-    device: &metal::DeviceRef,
-    library: &metal::LibraryRef,
+/// A pipeline from the library's functions. `source` is the source color's blend factor, one for
+/// a premultiplied source, or none for no blending; `depth` says it draws in a pass with the
+/// frame's depth buffer.
+pub(super) fn pipeline(
+    device: &ProtocolObject<dyn MTLDevice>,
+    library: &ProtocolObject<dyn MTLLibrary>,
     label: &str,
     vertex: &str,
     fragment: &str,
-    premultiplied_source: bool,
-) -> metal::RenderPipelineState {
-    let state = |descriptor: &metal::RenderPipelineDescriptorRef| {
-        let attachment = descriptor.color_attachments().object_at(0).unwrap();
-        attachment.set_destination_alpha_blend_factor(metal::MTLBlendFactor::OneMinusSourceAlpha);
+    source: Option<MTLBlendFactor>,
+    depth: bool,
+) -> Result<Pipeline> {
+    let function = |name: &str| {
+        library
+            .newFunctionWithName(&NSString::from_str(name))
+            .with_context(|| format!("locating the function {name}"))
     };
-    pipeline(device, library, label, vertex, fragment, premultiplied_source, state)
-}
-
-fn pipeline(
-    device: &metal::DeviceRef,
-    library: &metal::LibraryRef,
-    label: &str,
-    vertex: &str,
-    fragment: &str,
-    premultiplied_source: bool,
-    adjust: impl Fn(&metal::RenderPipelineDescriptorRef),
-) -> metal::RenderPipelineState {
-    let descriptor = metal::RenderPipelineDescriptor::new();
-    descriptor.set_label(label);
-    let vertex_fn = library.get_function(vertex, None).expect("a chrome vertex function");
-    let fragment_fn = library.get_function(fragment, None).expect("a chrome fragment function");
-    descriptor.set_vertex_function(Some(vertex_fn.as_ref()));
-    descriptor.set_fragment_function(Some(fragment_fn.as_ref()));
-    let attachment = descriptor.color_attachments().object_at(0).unwrap();
-    attachment.set_pixel_format(MTLPixelFormat::BGRA8Unorm);
-    attachment.set_blending_enabled(true);
-    attachment.set_rgb_blend_operation(metal::MTLBlendOperation::Add);
-    attachment.set_alpha_blend_operation(metal::MTLBlendOperation::Add);
-    attachment.set_source_rgb_blend_factor(if premultiplied_source {
-        metal::MTLBlendFactor::One
-    } else {
-        metal::MTLBlendFactor::SourceAlpha
-    });
-    attachment.set_source_alpha_blend_factor(metal::MTLBlendFactor::One);
-    attachment.set_destination_rgb_blend_factor(metal::MTLBlendFactor::OneMinusSourceAlpha);
-    attachment.set_destination_alpha_blend_factor(metal::MTLBlendFactor::OneMinusSourceAlpha);
-    adjust(&descriptor);
+    let (vertex, fragment) = (function(vertex)?, function(fragment)?);
+    let descriptor = MTLRenderPipelineDescriptor::new();
+    descriptor.setLabel(Some(&NSString::from_str(label)));
+    descriptor.setVertexFunction(Some(vertex.as_ref()));
+    descriptor.setFragmentFunction(Some(fragment.as_ref()));
+    // SAFETY: index zero is within the pipeline's color attachment array.
+    let attachment = unsafe { descriptor.colorAttachments().objectAtIndexedSubscript(0) };
+    attachment.setPixelFormat(MTLPixelFormat::BGRA8Unorm);
+    attachment.setBlendingEnabled(source.is_some());
+    if let Some(source) = source {
+        attachment.setRgbBlendOperation(MTLBlendOperation::Add);
+        attachment.setAlphaBlendOperation(MTLBlendOperation::Add);
+        attachment.setSourceRGBBlendFactor(source);
+        attachment.setSourceAlphaBlendFactor(MTLBlendFactor::One);
+        attachment.setDestinationRGBBlendFactor(MTLBlendFactor::OneMinusSourceAlpha);
+        attachment.setDestinationAlphaBlendFactor(MTLBlendFactor::OneMinusSourceAlpha);
+    }
+    if depth {
+        descriptor.setDepthAttachmentPixelFormat(MTLPixelFormat::Depth32Float);
+    }
     device
-        .new_render_pipeline_state(&descriptor)
-        .expect("a chrome pipeline")
+        .newRenderPipelineStateWithDescriptor_error(&descriptor)
+        .with_context(|| format!("creating the {label} pipeline"))
 }
 
 impl Chrome {
-    pub(super) fn new(device: &metal::DeviceRef, library: &metal::LibraryRef) -> Self {
-        let layer = |label, vertex, fragment, premultiplied| {
-            layer_pipeline(device, library, label, vertex, fragment, premultiplied)
-        };
+    pub(super) fn new(
+        device: &ProtocolObject<dyn MTLDevice>,
+        library: &ProtocolObject<dyn MTLLibrary>,
+    ) -> Result<Self> {
         let sampler = {
-            let descriptor = metal::SamplerDescriptor::new();
-            descriptor.set_min_filter(metal::MTLSamplerMinMagFilter::Linear);
-            descriptor.set_mag_filter(metal::MTLSamplerMinMagFilter::Linear);
-            descriptor.set_address_mode_s(metal::MTLSamplerAddressMode::ClampToEdge);
-            descriptor.set_address_mode_t(metal::MTLSamplerAddressMode::ClampToEdge);
-            device.new_sampler(&descriptor)
+            let descriptor = MTLSamplerDescriptor::new();
+            descriptor.setMinFilter(MTLSamplerMinMagFilter::Linear);
+            descriptor.setMagFilter(MTLSamplerMinMagFilter::Linear);
+            descriptor.setSAddressMode(MTLSamplerAddressMode::ClampToEdge);
+            descriptor.setTAddressMode(MTLSamplerAddressMode::ClampToEdge);
+            device
+                .newSamplerStateWithDescriptor(&descriptor)
+                .context("creating the chrome sampler")?
         };
-        let downsample = pipeline(
-            device,
-            library,
-            "chrome_downsample",
-            "chrome_fullscreen_vertex",
-            "chrome_downsample_fragment",
-            true,
-            |descriptor| {
-                let attachment = descriptor.color_attachments().object_at(0).unwrap();
-                attachment.set_blending_enabled(false);
-            },
-        );
-        Self {
-            library_device: device.to_owned(),
-            layer: LayerPipelines {
-                shadows: layer("chrome_shadows", "shadow_vertex", "shadow_fragment", false),
-                quads: layer("chrome_quads", "quad_vertex", "quad_fragment", false),
-                underlines: layer("chrome_underlines", "underline_vertex", "underline_fragment", false),
-                monochrome_sprites: layer(
-                    "chrome_monochrome_sprites",
-                    "monochrome_sprite_vertex",
-                    "monochrome_sprite_fragment",
-                    false,
-                ),
-                polychrome_sprites: layer(
-                    "chrome_polychrome_sprites",
-                    "polychrome_sprite_vertex",
-                    "polychrome_sprite_fragment",
-                    false,
-                ),
-                path_sprites: layer("chrome_path_sprites", "path_sprite_vertex", "path_sprite_fragment", true),
-                surfaces: layer("chrome_surfaces", "surface_vertex", "surface_fragment", false),
-            },
-            composite: pipeline(device, library, "chrome", "chrome_vertex", "chrome_fragment", true, |_| {}),
-            composite_straight: pipeline(
+        let composite = |label, source| {
+            pipeline(device, library, label, "chrome_vertex", "chrome_fragment", Some(source), true)
+        };
+        Ok(Self {
+            device: device.retain(),
+            composite: composite("chrome", MTLBlendFactor::One)?,
+            composite_straight: composite("chrome_straight", MTLBlendFactor::SourceAlpha)?,
+            downsample: pipeline(
                 device,
                 library,
-                "chrome_straight",
-                "chrome_vertex",
-                "chrome_fragment",
+                "chrome_downsample",
+                "chrome_fullscreen_vertex",
+                "chrome_downsample_fragment",
+                None,
                 false,
-                |_| {},
-            ),
-            downsample,
+            )?,
             sampler,
             targets: HashMap::new(),
             captures: HashMap::new(),
             compiled: HashMap::new(),
             depth: 0,
-        }
+            layers: HashMap::new(),
+            frame: None,
+        })
     }
 
-    fn target(&mut self, kind: u32, size: Size<DevicePixels>, format: MTLPixelFormat) -> metal::Texture {
+    fn target(&mut self, kind: u32, size: Size<DevicePixels>, format: MTLPixelFormat) -> Result<Texture> {
         let key = (kind, self.depth);
-        let fits = self.targets.get(&key).is_some_and(|t| {
-            t.width() == size.width.0 as u64
-                && t.height() == size.height.0 as u64
-                && t.pixel_format() == format
-        });
+        let (width, height) = (size.width.0.max(1) as usize, size.height.0.max(1) as usize);
+        let fits = self
+            .targets
+            .get(&key)
+            .is_some_and(|t| t.width() == width && t.height() == height && t.pixelFormat() == format);
         if !fits {
-            let descriptor = metal::TextureDescriptor::new();
-            descriptor.set_width(size.width.0.max(1) as u64);
-            descriptor.set_height(size.height.0.max(1) as u64);
-            descriptor.set_pixel_format(format);
-            descriptor.set_storage_mode(metal::MTLStorageMode::Private);
-            descriptor.set_usage(metal::MTLTextureUsage::RenderTarget | metal::MTLTextureUsage::ShaderRead);
-            self.targets.insert(key, self.library_device.new_texture(&descriptor));
+            let descriptor = MTLTextureDescriptor::new();
+            // SAFETY: both dimensions are at least one and at most the frame's own.
+            unsafe {
+                descriptor.setWidth(width);
+                descriptor.setHeight(height);
+            }
+            descriptor.setPixelFormat(format);
+            descriptor.setStorageMode(MTLStorageMode::Private);
+            descriptor.setUsage(MTLTextureUsage::RenderTarget | MTLTextureUsage::ShaderRead);
+            let texture = self
+                .device
+                .newTextureWithDescriptor(&descriptor)
+                .context("allocating a chrome target")?;
+            self.targets.insert(key, texture);
         }
-        self.targets[&key].clone()
+        Ok(self.targets[&key].clone())
     }
 
-    fn compiled(&mut self, name: &str) -> Option<(Arc<ChromeOperator>, Vec<metal::RenderPipelineState>)> {
+    fn compiled(&mut self, name: &str) -> Option<(Arc<ChromeOperator>, Vec<Pipeline>)> {
         let operator = operator(name)?;
         if !self.compiled.contains_key(name) {
             let mut compiled = Vec::new();
             for graph in &operator.graphs {
-                let library = match self
-                    .library_device
-                    .new_library_with_source(&graph.msl, &metal::CompileOptions::new())
-                {
+                let library = match self.device.newLibraryWithSource_options_error(
+                    &NSString::from_str(&graph.msl),
+                    Some(&MTLCompileOptions::new()),
+                ) {
                     Ok(library) => library,
                     Err(error) => {
                         log::error!("chrome operator {name}'s graph {} didn't compile: {error}", graph.label);
                         return None;
                     }
                 };
-                let descriptor = metal::RenderPipelineDescriptor::new();
-                descriptor.set_label(&graph.label);
-                let vertex = library.get_function(&graph.vertex, None).ok()?;
-                let fragment = library.get_function(&graph.fragment, None).ok()?;
-                descriptor.set_vertex_function(Some(vertex.as_ref()));
-                descriptor.set_fragment_function(Some(fragment.as_ref()));
-                let attachment = descriptor.color_attachments().object_at(0).unwrap();
-                attachment.set_pixel_format(RUN_FORMAT);
-                attachment.set_blending_enabled(false);
-                compiled.push(self.library_device.new_render_pipeline_state(&descriptor).ok()?);
+                let descriptor = MTLRenderPipelineDescriptor::new();
+                descriptor.setLabel(Some(&NSString::from_str(&graph.label)));
+                let vertex = library.newFunctionWithName(&NSString::from_str(&graph.vertex))?;
+                let fragment = library.newFunctionWithName(&NSString::from_str(&graph.fragment))?;
+                descriptor.setVertexFunction(Some(vertex.as_ref()));
+                descriptor.setFragmentFunction(Some(fragment.as_ref()));
+                // SAFETY: index zero is within the pipeline's color attachment array.
+                let attachment = unsafe { descriptor.colorAttachments().objectAtIndexedSubscript(0) };
+                attachment.setPixelFormat(RUN_FORMAT);
+                attachment.setBlendingEnabled(false);
+                compiled.push(self.device.newRenderPipelineStateWithDescriptor_error(&descriptor).ok()?);
             }
             self.compiled.insert(name.to_string(), compiled);
         }
@@ -358,38 +356,131 @@ fn drawn(primitive: &ChromePrimitive, viewport: Size<DevicePixels>) -> Option<Bo
     })
 }
 
+/// How many of the scene's quads are ordered before its `nth` chrome primitive, or all of them when it has
+/// no such primitive: where the frame is cut.
+fn cut(scene: &Scene, nth: usize) -> usize {
+    if nth >= scene.chrome.len() {
+        return scene.quads.len();
+    }
+    let mut quads = 0;
+    for batch in scene.batches() {
+        match batch {
+            PrimitiveBatch::Quads(range) => quads += range.len(),
+            PrimitiveBatch::Chrome(index) if index == nth => return quads,
+            _ => {}
+        }
+    }
+    scene.quads.len()
+}
+
+/// The quads whose opaque rectangles the frame's pass draws before anything else: those ordered before the
+/// scene's first chrome primitive.
+pub(super) fn first_cut(scene: &Scene) -> usize {
+    cut(scene, 0)
+}
+
+fn viewport(size: Size<DevicePixels>, znear: f64, zfar: f64) -> MTLViewport {
+    MTLViewport {
+        originX: 0.0,
+        originY: 0.0,
+        width: i32::from(size.width) as f64,
+        height: i32::from(size.height) as f64,
+        znear,
+        zfar,
+    }
+}
+
+/// A pass into `texture` alone, with no depth buffer, every pixel of which the caller writes.
+fn pass_into(
+    command_buffer: &ProtocolObject<dyn MTLCommandBuffer>,
+    texture: &ProtocolObject<dyn MTLTexture>,
+    size: Size<DevicePixels>,
+) -> Result<Encoder> {
+    let descriptor = MTLRenderPassDescriptor::new();
+    // SAFETY: index zero is within the render pass's color attachment array.
+    let color = unsafe { descriptor.colorAttachments().objectAtIndexedSubscript(0) };
+    color.setTexture(Some(texture));
+    color.setLoadAction(MTLLoadAction::DontCare);
+    color.setStoreAction(MTLStoreAction::Store);
+    let encoder = command_buffer
+        .renderCommandEncoderWithDescriptor(&descriptor)
+        .context("creating a chrome pass")?;
+    encoder.setViewport(viewport(size, 0.0, 1.0));
+    Ok(encoder)
+}
+
 impl MetalRenderer {
-    /// Draws one chrome primitive at its order into `target`, ending `encoder` and returning the
-    /// encoder the frame goes on with.
-    pub(super) fn draw_chrome<'a>(
+    /// Writes the instances of every layer's scene in `scene`, and of the layers in those, with the frame's own.
+    pub(super) fn write_chrome_instances(&mut self, scene: &Scene, writer: &mut InstanceBufferWriter) -> Result<()> {
+        self.bgra_surfaces.chrome.layers.clear();
+        self.write_layers(scene, writer)
+    }
+
+    fn write_layers(&mut self, scene: &Scene, writer: &mut InstanceBufferWriter) -> Result<()> {
+        for primitive in &scene.chrome {
+            if let ChromeKind::Layer(_, layer) = &primitive.kind {
+                let bindings = write_instances(layer, writer)?;
+                self.bgra_surfaces.chrome.layers.insert(Arc::as_ptr(layer) as usize, bindings);
+                self.write_layers(layer, writer)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// The command buffer a scene draws in: `fresh`, or its frame's while it is a layer's scene.
+    pub(super) fn chrome_command_buffer(
+        &self,
+        fresh: Retained<ProtocolObject<dyn MTLCommandBuffer>>,
+    ) -> Retained<ProtocolObject<dyn MTLCommandBuffer>> {
+        self.bgra_surfaces.chrome.frame.clone().unwrap_or(fresh)
+    }
+
+    /// Draws the scene's chrome primitive `index` at its order into `target`, ending `encoder` and
+    /// returning the encoder the frame goes on with, the opaque rectangles painted between this
+    /// primitive and the next already drawn in it.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn draw_chrome(
         &mut self,
-        primitive: &ChromePrimitive,
-        writer: &mut InstanceBufferWriter,
-        target: &'a metal::TextureRef,
-        viewport: Size<DevicePixels>,
-        command_buffer: &'a metal::CommandBufferRef,
-        encoder: &'a metal::RenderCommandEncoderRef,
-    ) -> Result<&'a metal::RenderCommandEncoderRef> {
-        let Some(drawn) = drawn(primitive, viewport) else {
-            return Ok(encoder);
+        scene: &Scene,
+        index: usize,
+        instance_bindings: &InstanceBindings,
+        target: &ProtocolObject<dyn MTLTexture>,
+        viewport_size: Size<DevicePixels>,
+        command_buffer: &ProtocolObject<dyn MTLCommandBuffer>,
+        encoder: Encoder,
+        surface_textures: &mut Vec<CFRetained<CVMetalTexture>>,
+    ) -> Result<Encoder> {
+        let primitive = &scene.chrome[index];
+        let quads = cut(scene, index)..cut(scene, index + 1);
+        let skipped = |renderer: &Self, encoder: Encoder| {
+            renderer.draw_opaque_quads_between(quads.clone(), instance_bindings, viewport_size, &encoder);
+            Ok(encoder)
+        };
+        let Some(drawn) = drawn(primitive, viewport_size) else {
+            return skipped(self, encoder);
         };
         // A drawable vended before the window first read a backdrop can't be copied from; the
         // next one can.
         let reads = matches!(&primitive.kind, ChromeKind::Backdrop(..))
             || matches!(&primitive.kind, ChromeKind::Effect(e) if e.backdrop.is_some());
-        if reads && target.framebuffer_only() {
+        if reads && target.isFramebufferOnly() {
             log::warn!("a chrome backdrop skipped: this frame's drawable isn't readable");
-            return Ok(encoder);
+            return skipped(self, encoder);
         }
+        if let ChromeKind::Effect(effect) = &primitive.kind
+            && self.bgra_surfaces.chrome.compiled(&effect.operator).is_none()
+        {
+            log::warn!("chrome effect {}: no operator {} is registered", effect.name, effect.operator);
+            return skipped(self, encoder);
+        }
+        encoder.endEncoding();
         let source = match &primitive.kind {
             ChromeKind::Layer(layer, scene) => {
-                encoder.end_encoding();
-                let offscreen = self.render_layer(scene, writer, viewport, command_buffer)?;
+                let offscreen = self.render_layer(scene, viewport_size, command_buffer, surface_textures)?;
                 Some((offscreen, *layer, true))
             }
             ChromeKind::Backdrop(scale, key) => {
-                encoder.end_encoding();
-                let copy = self.copy_backdrop(*scale, drawn, target, command_buffer, Some(*key), None);
+                let copy = self.copy_backdrop(*scale, drawn, target, command_buffer, Some(*key), None)?;
                 if self.bgra_surfaces.chrome.captures.len() > 64 {
                     self.bgra_surfaces.chrome.captures.clear();
                 }
@@ -397,38 +488,118 @@ impl MetalRenderer {
                 None
             }
             ChromeKind::Effect(effect) => {
-                if self.bgra_surfaces.chrome.compiled(&effect.operator).is_none() {
-                    log::warn!("chrome effect {}: no operator {} is registered", effect.name, effect.operator);
-                    return Ok(encoder);
-                }
-                encoder.end_encoding();
-                self.run_effect(effect, drawn, target, command_buffer)?
-                    .map(|output| {
-                        let layer = ChromeLayer { opacity: 1., radii: effect.radii, edge: effect.edge };
-                        (output, layer, false)
-                    })
+                self.run_effect(effect, drawn, target, command_buffer)?.map(|output| {
+                    let layer = ChromeLayer { opacity: 1., radii: effect.radii, edge: effect.edge };
+                    (output, layer, false)
+                })
             }
         };
-        let encoder = new_command_encoder_for_texture(command_buffer, target, viewport, None);
+        let depth_scale = quad_depth_scale(scene.quads.len());
+        let encoder = self.resume_pass(target, viewport_size, depth_scale, command_buffer)?;
+        self.draw_opaque_quads_between(quads.clone(), instance_bindings, viewport_size, &encoder);
         if let Some((texture, layer, texel_for_texel)) = source {
             let origin = if texel_for_texel { [0., 0.] } else { [drawn.origin.x.0, drawn.origin.y.0] };
             let texel_for_texel = texel_for_texel || effect_at_full_scale(primitive);
-            self.composite(encoder, &texture, primitive.bounds, drawn, layer, texel_for_texel, origin, viewport);
+            // As every batch but the quads': at the depth of the quad the frame has reached.
+            let depth = quad_depth(quads.start as u32, depth_scale) as f64;
+            encoder.setViewport(viewport(viewport_size, depth, depth));
+            self.composite(&encoder, &texture, primitive.bounds, drawn, layer, texel_for_texel, origin);
         }
         Ok(encoder)
+    }
+
+    /// The frame's pass into `target` again, over what it holds, with a new depth buffer and the two
+    /// values every pipeline reads bound as the frame's first pass bound them.
+    fn resume_pass(
+        &mut self,
+        target: &ProtocolObject<dyn MTLTexture>,
+        viewport_size: Size<DevicePixels>,
+        depth_scale: f32,
+        command_buffer: &ProtocolObject<dyn MTLCommandBuffer>,
+    ) -> Result<Encoder> {
+        let depth_texture = self.depth_texture_matching(target)?;
+        let descriptor = MTLRenderPassDescriptor::new();
+        // SAFETY: index zero is within the render pass's color attachment array.
+        let color = unsafe { descriptor.colorAttachments().objectAtIndexedSubscript(0) };
+        color.setTexture(Some(target));
+        color.setLoadAction(MTLLoadAction::Load);
+        color.setStoreAction(MTLStoreAction::Store);
+        let depth = descriptor.depthAttachment();
+        depth.setTexture(Some(&depth_texture));
+        depth.setLoadAction(MTLLoadAction::Clear);
+        depth.setClearDepth(0.0);
+        depth.setStoreAction(MTLStoreAction::DontCare);
+        let encoder = command_buffer
+            .renderCommandEncoderWithDescriptor(&descriptor)
+            .context("creating the render command encoder a chrome primitive goes on with")?;
+        encoder.setViewport(viewport(viewport_size, 0.0, 1.0));
+        // SAFETY: Metal copies both values, which match every vertex shader's
+        // `GlobalInputIndex_ViewportSize` and `GlobalInputIndex_DepthScale` arguments.
+        unsafe {
+            encoder.setVertexBytes_length_atIndex(
+                NonNull::from(&viewport_size).cast(),
+                mem::size_of_val(&viewport_size),
+                GlobalInputIndex::ViewportSize as usize,
+            );
+            encoder.setVertexBytes_length_atIndex(
+                NonNull::from(&depth_scale).cast(),
+                mem::size_of_val(&depth_scale),
+                GlobalInputIndex::DepthScale as usize,
+            );
+        }
+        Ok(encoder)
+    }
+
+    /// Draws the opaque rectangles among `quads`, nearest first, as the frame's pass draws those before its
+    /// first chrome primitive, and leaves the pass testing depth.
+    fn draw_opaque_quads_between(
+        &self,
+        quads: Range<usize>,
+        instance_bindings: &InstanceBindings,
+        viewport_size: Size<DevicePixels>,
+        encoder: &ProtocolObject<dyn MTLRenderCommandEncoder>,
+    ) {
+        if !quads.is_empty() {
+            // The opaque quad shader walks back from the count it is given.
+            let quad_count = quads.end as u32;
+            encoder.setViewport(viewport(viewport_size, 0.0, 1.0));
+            encoder.setRenderPipelineState(&self.opaque_quads_pipeline_state);
+            encoder.setDepthStencilState(Some(&self.depth_write_state));
+            // SAFETY: the scene's quads and the copied count match the shader layouts and slots. Metal
+            // retains the buffer, whose writes the frame's writer publishes.
+            unsafe {
+                encoder.setVertexBuffer_offset_atIndex(
+                    Some(&instance_bindings.quads.buffer),
+                    instance_bindings.quads.offset,
+                    QuadInputIndex::Quads as usize,
+                );
+                encoder.setVertexBytes_length_atIndex(
+                    NonNull::from(&quad_count).cast(),
+                    mem::size_of_val(&quad_count),
+                    QuadInputIndex::QuadCount as usize,
+                );
+                encoder.drawPrimitives_vertexStart_vertexCount_instanceCount_baseInstance(
+                    MTLPrimitiveType::TriangleStrip,
+                    0,
+                    4,
+                    quads.len(),
+                    0,
+                );
+            }
+        }
+        encoder.setDepthStencilState(Some(&self.depth_test_state));
     }
 
     #[allow(clippy::too_many_arguments)]
     fn composite(
         &self,
-        encoder: &metal::RenderCommandEncoderRef,
-        texture: &metal::TextureRef,
+        encoder: &ProtocolObject<dyn MTLRenderCommandEncoder>,
+        texture: &ProtocolObject<dyn MTLTexture>,
         bounds: Bounds<ScaledPixels>,
         drawn: Bounds<ScaledPixels>,
         layer: ChromeLayer,
         texel_for_texel: bool,
         source_origin: [f32; 2],
-        viewport: Size<DevicePixels>,
     ) {
         let uniform = Composite {
             bounds,
@@ -445,88 +616,40 @@ impl MetalRenderer {
             Planted::StraightAlpha => &self.bgra_surfaces.chrome.composite_straight,
             Planted::None => &self.bgra_surfaces.chrome.composite,
         };
-        encoder.set_render_pipeline_state(pipeline);
-        encoder.set_vertex_buffer(0, Some(&self.unit_vertices), 0);
-        let bytes = |value: &Composite| (mem::size_of::<Composite>() as u64, value as *const Composite as *const _);
-        let (length, data) = bytes(&uniform);
-        encoder.set_vertex_bytes(1, length, data);
-        encoder.set_fragment_bytes(1, length, data);
-        encoder.set_vertex_bytes(
-            2,
-            mem::size_of_val(&viewport) as u64,
-            &viewport as *const Size<DevicePixels> as *const _,
-        );
-        encoder.set_fragment_texture(0, Some(texture));
-        encoder.draw_primitives(metal::MTLPrimitiveType::Triangle, 0, 6);
+        encoder.setRenderPipelineState(pipeline);
+        // SAFETY: Metal copies the uniform, which is `ChromeComposite` as both functions read it at
+        // this slot; the texture is the fragment's one texture.
+        unsafe {
+            encoder.setVertexBytes_length_atIndex(NonNull::from(&uniform).cast(), mem::size_of::<Composite>(), COMPOSITE);
+            encoder.setFragmentBytes_length_atIndex(NonNull::from(&uniform).cast(), mem::size_of::<Composite>(), COMPOSITE);
+            encoder.setFragmentTexture_atIndex(Some(texture), 0);
+            encoder.drawPrimitives_vertexStart_vertexCount(MTLPrimitiveType::TriangleStrip, 0, 4);
+        }
     }
 
-    /// Renders a layer's scene into an offscreen target the size of the frame.
+    /// Renders a layer's scene into an offscreen target the size of the frame, as the frame's own
+    /// scene is drawn, in the frame's command buffer and over clear.
     fn render_layer(
         &mut self,
-        scene: &Scene,
-        writer: &mut InstanceBufferWriter,
-        viewport: Size<DevicePixels>,
-        command_buffer: &metal::CommandBufferRef,
-    ) -> Result<metal::Texture> {
-        let offscreen = self.bgra_surfaces.chrome.target(0, viewport, MTLPixelFormat::BGRA8Unorm);
-        let bindings = write_instances(scene, writer)?;
-        self.swap_layer_pipelines();
-        self.bgra_surfaces.chrome.depth += 1;
-        let result = (|| -> Result<()> {
-            let clear = Some(metal::MTLClearColor::new(0., 0., 0., 0.));
-            let mut encoder = new_command_encoder_for_texture(command_buffer, &offscreen, viewport, clear);
-            for batch in scene.batches() {
-                match batch {
-                    PrimitiveBatch::Shadows(range) => self.draw_shadows(range, &bindings, viewport, encoder),
-                    PrimitiveBatch::Quads(range) => self.draw_quads(range, &bindings, viewport, encoder),
-                    PrimitiveBatch::Paths(range) => {
-                        let paths = &scene.paths[range];
-                        encoder.end_encoding();
-                        let did_draw = self.draw_paths_to_intermediate(paths, writer, viewport, command_buffer)?;
-                        encoder = new_command_encoder_for_texture(command_buffer, &offscreen, viewport, None);
-                        if did_draw {
-                            self.draw_paths_from_intermediate(paths, writer, viewport, encoder)?;
-                        }
-                    }
-                    PrimitiveBatch::Underlines(range) => {
-                        self.draw_underlines(range, &bindings, viewport, encoder)
-                    }
-                    PrimitiveBatch::MonochromeSprites { texture_id, range } => {
-                        self.draw_monochrome_sprites(texture_id, range, &bindings, viewport, encoder)
-                    }
-                    PrimitiveBatch::PolychromeSprites { texture_id, range } => {
-                        self.draw_polychrome_sprites(texture_id, range, &bindings, viewport, encoder)
-                    }
-                    PrimitiveBatch::Surfaces(range) => self.draw_surfaces(
-                        &scene.surfaces[range.clone()],
-                        range.start,
-                        &bindings,
-                        viewport,
-                        encoder,
-                    ),
-                    PrimitiveBatch::Chrome(index) => {
-                        encoder = self.draw_chrome(&scene.chrome[index], writer, &offscreen, viewport, command_buffer, encoder)?;
-                    }
-                    PrimitiveBatch::SubpixelSprites { .. } => unreachable!(),
-                }
-            }
-            encoder.end_encoding();
-            Ok(())
-        })();
+        scene: &Arc<Scene>,
+        viewport_size: Size<DevicePixels>,
+        command_buffer: &ProtocolObject<dyn MTLCommandBuffer>,
+        surface_textures: &mut Vec<CFRetained<CVMetalTexture>>,
+    ) -> Result<Texture> {
+        let chrome = &mut self.bgra_surfaces.chrome;
+        let offscreen = chrome.target(0, viewport_size, MTLPixelFormat::BGRA8Unorm)?;
+        let bindings = chrome
+            .layers
+            .remove(&(Arc::as_ptr(scene) as usize))
+            .context("a chrome layer's instances weren't written")?;
+        chrome.depth += 1;
+        let frame = chrome.frame.replace(command_buffer.retain());
+        let opaque = mem::replace(&mut self.opaque, false);
+        let drew = self.draw_primitives_to_texture(scene, &bindings, &offscreen, viewport_size, surface_textures);
+        self.opaque = opaque;
+        self.bgra_surfaces.chrome.frame = frame;
         self.bgra_surfaces.chrome.depth -= 1;
-        self.swap_layer_pipelines();
-        result.map(|()| offscreen)
-    }
-
-    fn swap_layer_pipelines(&mut self) {
-        let layer = &mut self.bgra_surfaces.chrome.layer;
-        mem::swap(&mut self.shadows_pipeline_state, &mut layer.shadows);
-        mem::swap(&mut self.quads_pipeline_state, &mut layer.quads);
-        mem::swap(&mut self.underlines_pipeline_state, &mut layer.underlines);
-        mem::swap(&mut self.monochrome_sprites_pipeline_state, &mut layer.monochrome_sprites);
-        mem::swap(&mut self.polychrome_sprites_pipeline_state, &mut layer.polychrome_sprites);
-        mem::swap(&mut self.path_sprites_pipeline_state, &mut layer.path_sprites);
-        mem::swap(&mut self.surfaces_pipeline_state, &mut layer.surfaces);
+        drew.map(|_| offscreen)
     }
 
     /// Copies the backdrop under `drawn` and runs the effect's operator on it; the last run's
@@ -535,9 +658,9 @@ impl MetalRenderer {
         &mut self,
         effect: &ChromeEffect,
         drawn: Bounds<ScaledPixels>,
-        target: &metal::TextureRef,
-        command_buffer: &metal::CommandBufferRef,
-    ) -> Result<Option<metal::Texture>> {
+        target: &ProtocolObject<dyn MTLTexture>,
+        command_buffer: &ProtocolObject<dyn MTLCommandBuffer>,
+    ) -> Result<Option<Texture>> {
         let Some((operator, pipelines)) = self.bgra_surfaces.chrome.compiled(&effect.operator) else {
             return Ok(None);
         };
@@ -546,9 +669,10 @@ impl MetalRenderer {
         let height = (drawn.size.height.0 * scale).ceil().max(1.0) as i32;
         let out_size = size(DevicePixels(width), DevicePixels(height));
         let captured = effect.captured.and_then(|key| self.bgra_surfaces.chrome.captures.remove(&key));
-        let backdrop = effect
-            .backdrop
-            .map(|scale| self.copy_backdrop(scale, drawn, target, command_buffer, None, captured));
+        let backdrop = match effect.backdrop {
+            Some(scale) => Some(self.copy_backdrop(scale, drawn, target, command_buffer, None, captured)?),
+            None => None,
+        };
         let frame = Frame {
             clip: IDENTITY,
             inverse_clip: IDENTITY,
@@ -557,85 +681,99 @@ impl MetalRenderer {
             time: [0.; 4],
             seed: [0; 4],
         };
-        let mut outputs: Vec<metal::Texture> = Vec::new();
+        let mut outputs: Vec<Texture> = Vec::new();
         for (index, run) in (operator.plan)(&effect.params).into_iter().enumerate() {
             let pipeline = pipelines
                 .get(run.graph)
                 .with_context(|| format!("chrome operator {} has no graph {}", effect.operator, run.graph))?;
-            let output = self.bgra_surfaces.chrome.target(2 + index as u32, out_size, RUN_FORMAT);
-            let encoder = new_command_encoder_for_texture(command_buffer, &output, out_size, None);
-            encoder.set_render_pipeline_state(pipeline);
-            encoder.set_fragment_bytes(0, mem::size_of::<Frame>() as u64, &frame as *const Frame as *const _);
-            let mut inputs = run.inputs;
-            inputs.resize(inputs.len().max(16), 0);
-            encoder.set_fragment_bytes(1, inputs.len() as u64, inputs.as_ptr() as *const _);
-            encoder.set_fragment_sampler_state(0, Some(&self.bgra_surfaces.chrome.sampler));
-            for (slot, input) in run.textures.iter().enumerate() {
+            let mut textures = Vec::with_capacity(run.textures.len());
+            for input in &run.textures {
                 let texture = match input {
                     ChromeInput::Backdrop => backdrop.as_ref(),
                     ChromeInput::Run(run) => outputs.get(*run),
                 }
                 .with_context(|| format!("chrome operator {}: run {index} reads no texture", effect.operator))?;
-                encoder.set_fragment_texture(slot as u64, Some(texture));
+                textures.push(texture.clone());
             }
-            encoder.draw_primitives(metal::MTLPrimitiveType::Triangle, 0, 3);
-            encoder.end_encoding();
+            let output = self.bgra_surfaces.chrome.target(2 + index as u32, out_size, RUN_FORMAT)?;
+            let encoder = pass_into(command_buffer, &output, out_size)?;
+            encoder.setRenderPipelineState(pipeline);
+            let mut inputs = run.inputs;
+            inputs.resize(inputs.len().max(16), 0);
+            // SAFETY: Metal copies the frame and the inputs, which the operator's binding contract puts
+            // at buffers 0 and 1, with the sampler at 0 and its textures from 0 in order.
+            unsafe {
+                encoder.setFragmentBytes_length_atIndex(NonNull::from(&frame).cast(), mem::size_of::<Frame>(), 0);
+                encoder.setFragmentBytes_length_atIndex(NonNull::from(inputs.as_slice()).cast(), inputs.len(), 1);
+                encoder.setFragmentSamplerState_atIndex(Some(&self.bgra_surfaces.chrome.sampler), 0);
+                for (slot, texture) in textures.iter().enumerate() {
+                    encoder.setFragmentTexture_atIndex(Some(texture), slot);
+                }
+                encoder.drawPrimitives_vertexStart_vertexCount(MTLPrimitiveType::Triangle, 0, 3);
+            }
+            encoder.endEncoding();
             outputs.push(output);
         }
         Ok(outputs.pop().or(backdrop))
     }
-}
 
-impl MetalRenderer {
     /// The backdrop under `drawn` at `scale`: `captured` if it was taken earlier at that size,
     /// else a copy of `target` now.
     fn copy_backdrop(
         &mut self,
         scale: BackdropScale,
         drawn: Bounds<ScaledPixels>,
-        target: &metal::TextureRef,
-        command_buffer: &metal::CommandBufferRef,
+        target: &ProtocolObject<dyn MTLTexture>,
+        command_buffer: &ProtocolObject<dyn MTLCommandBuffer>,
         key: Option<u64>,
-        captured: Option<metal::Texture>,
-    ) -> metal::Texture {
+        captured: Option<Texture>,
+    ) -> Result<Texture> {
         let width = (drawn.size.width.0 * scale.factor()).ceil().max(1.0) as i32;
         let height = (drawn.size.height.0 * scale.factor()).ceil().max(1.0) as i32;
-        if let Some(captured) = captured.filter(|c| c.width() == width as u64 && c.height() == height as u64) {
-            return captured;
+        if let Some(captured) =
+            captured.filter(|c| c.width() == width as usize && c.height() == height as usize)
+        {
+            return Ok(captured);
         }
         let origin = [drawn.origin.x.0 as u32, drawn.origin.y.0 as u32];
         // A capture keeps its copy until its effect reads it; a copy taken at the effect is its own.
         let kind = key.map_or(1, |key| 1000 + key.min(1 << 20) as u32);
-        let copy = self.bgra_surfaces.chrome.target(kind, size(DevicePixels(width), DevicePixels(height)), MTLPixelFormat::BGRA8Unorm);
+        let out_size = size(DevicePixels(width), DevicePixels(height));
+        let copy = self.bgra_surfaces.chrome.target(kind, out_size, MTLPixelFormat::BGRA8Unorm)?;
         if scale == BackdropScale::Full {
-            let blit = command_buffer.new_blit_command_encoder();
-            blit.copy_from_texture(
-                target,
-                0,
-                0,
-                metal::MTLOrigin { x: origin[0] as u64, y: origin[1] as u64, z: 0 },
-                metal::MTLSize { width: width as u64, height: height as u64, depth: 1 },
-                &copy,
-                0,
-                0,
-                metal::MTLOrigin { x: 0, y: 0, z: 0 },
-            );
-            blit.end_encoding();
+            let blit = command_buffer
+                .blitCommandEncoder()
+                .context("creating the blit encoder a backdrop is copied with")?;
+            // SAFETY: `drawn` lies inside the target, which is as wide and as high as the frame, and
+            // the copy is `drawn`'s size; both are BGRA8.
+            unsafe {
+                blit.copyFromTexture_sourceSlice_sourceLevel_sourceOrigin_sourceSize_toTexture_destinationSlice_destinationLevel_destinationOrigin(
+                    target,
+                    0,
+                    0,
+                    MTLOrigin { x: origin[0] as usize, y: origin[1] as usize, z: 0 },
+                    MTLSize { width: width as usize, height: height as usize, depth: 1 },
+                    &copy,
+                    0,
+                    0,
+                    MTLOrigin { x: 0, y: 0, z: 0 },
+                );
+            }
+            blit.endEncoding();
         } else {
-            let out_size = size(DevicePixels(width), DevicePixels(height));
-            let encoder = new_command_encoder_for_texture(command_buffer, &copy, out_size, None);
-            encoder.set_render_pipeline_state(&self.bgra_surfaces.chrome.downsample);
+            let encoder = pass_into(command_buffer, &copy, out_size)?;
+            encoder.setRenderPipelineState(&self.bgra_surfaces.chrome.downsample);
             let uniform = Downsample { origin, step: (1.0 / scale.factor()) as u32, pad: 0 };
-            encoder.set_fragment_bytes(
-                0,
-                mem::size_of::<Downsample>() as u64,
-                &uniform as *const Downsample as *const _,
-            );
-            encoder.set_fragment_texture(0, Some(target));
-            encoder.draw_primitives(metal::MTLPrimitiveType::Triangle, 0, 3);
-            encoder.end_encoding();
+            // SAFETY: Metal copies the uniform, which is `ChromeDownsample` at the fragment's buffer 0;
+            // the target is its one texture.
+            unsafe {
+                encoder.setFragmentBytes_length_atIndex(NonNull::from(&uniform).cast(), mem::size_of::<Downsample>(), 0);
+                encoder.setFragmentTexture_atIndex(Some(target), 0);
+                encoder.drawPrimitives_vertexStart_vertexCount(MTLPrimitiveType::Triangle, 0, 3);
+            }
+            encoder.endEncoding();
         }
-        copy
+        Ok(copy)
     }
 }
 

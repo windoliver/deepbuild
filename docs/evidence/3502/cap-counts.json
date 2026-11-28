@@ -1,0 +1,221 @@
+{
+  "release": "0.3.14",
+  "lists": [
+    {
+      "cap": "thermal",
+      "hz": 60,
+      "ticks": 600,
+      "jitter_us": 0,
+      "seed": null,
+      "presented": 600
+    },
+    {
+      "cap": "thermal",
+      "hz": 60,
+      "ticks": 600,
+      "jitter_us": 200,
+      "seed": 1,
+      "presented": 600
+    },
+    {
+      "cap": "thermal",
+      "hz": 60,
+      "ticks": 600,
+      "jitter_us": 200,
+      "seed": 2,
+      "presented": 600
+    },
+    {
+      "cap": "thermal",
+      "hz": 60,
+      "ticks": 600,
+      "jitter_us": 200,
+      "seed": 3,
+      "presented": 600
+    },
+    {
+      "cap": "thermal",
+      "hz": 60,
+      "ticks": 600,
+      "jitter_us": 200,
+      "seed": 4,
+      "presented": 600
+    },
+    {
+      "cap": "thermal",
+      "hz": 60,
+      "ticks": 600,
+      "jitter_us": 200,
+      "seed": 5,
+      "presented": 600
+    },
+    {
+      "cap": "thermal",
+      "hz": 120,
+      "ticks": 600,
+      "jitter_us": 0,
+      "seed": null,
+      "presented": 300
+    },
+    {
+      "cap": "thermal",
+      "hz": 120,
+      "ticks": 600,
+      "jitter_us": 200,
+      "seed": 1,
+      "presented": 300
+    },
+    {
+      "cap": "thermal",
+      "hz": 120,
+      "ticks": 600,
+      "jitter_us": 200,
+      "seed": 2,
+      "presented": 300
+    },
+    {
+      "cap": "thermal",
+      "hz": 120,
+      "ticks": 600,
+      "jitter_us": 200,
+      "seed": 3,
+      "presented": 300
+    },
+    {
+      "cap": "thermal",
+      "hz": 120,
+      "ticks": 600,
+      "jitter_us": 200,
+      "seed": 4,
+      "presented": 300
+    },
+    {
+      "cap": "thermal",
+      "hz": 120,
+      "ticks": 600,
+      "jitter_us": 200,
+      "seed": 5,
+      "presented": 300
+    },
+    {
+      "cap": "inactive",
+      "hz": 60,
+      "ticks": 600,
+      "jitter_us": 0,
+      "seed": null,
+      "presented": 300
+    },
+    {
+      "cap": "inactive",
+      "hz": 60,
+      "ticks": 600,
+      "jitter_us": 200,
+      "seed": 1,
+      "presented": 300
+    },
+    {
+      "cap": "inactive",
+      "hz": 60,
+      "ticks": 600,
+      "jitter_us": 200,
+      "seed": 2,
+      "presented": 300
+    },
+    {
+      "cap": "inactive",
+      "hz": 60,
+      "ticks": 600,
+      "jitter_us": 200,
+      "seed": 3,
+      "presented": 300
+    },
+    {
+      "cap": "inactive",
+      "hz": 60,
+      "ticks": 600,
+      "jitter_us": 200,
+      "seed": 4,
+      "presented": 300
+    },
+    {
+      "cap": "inactive",
+      "hz": 60,
+      "ticks": 600,
+      "jitter_us": 200,
+      "seed": 5,
+      "presented": 300
+    },
+    {
+      "cap": "inactive",
+      "hz": 120,
+      "ticks": 600,
+      "jitter_us": 0,
+      "seed": null,
+      "presented": 150
+    },
+    {
+      "cap": "inactive",
+      "hz": 120,
+      "ticks": 600,
+      "jitter_us": 200,
+      "seed": 1,
+      "presented": 150
+    },
+    {
+      "cap": "inactive",
+      "hz": 120,
+      "ticks": 600,
+      "jitter_us": 200,
+      "seed": 2,
+      "presented": 150
+    },
+    {
+      "cap": "inactive",
+      "hz": 120,
+      "ticks": 600,
+      "jitter_us": 200,
+      "seed": 3,
+      "presented": 150
+    },
+    {
+      "cap": "inactive",
+      "hz": 120,
+      "ticks": 600,
+      "jitter_us": 200,
+      "seed": 4,
+      "presented": 150
+    },
+    {
+      "cap": "inactive",
+      "hz": 120,
+      "ticks": 600,
+      "jitter_us": 200,
+      "seed": 5,
+      "presented": 150
+    },
+    {
+      "cap": "thermal",
+      "hz": 60,
+      "ticks": 6000,
+      "jitter_us": 0,
+      "seed": null,
+      "presented": 5999
+    },
+    {
+      "cap": "thermal",
+      "hz": 60,
+      "ticks": 60000,
+      "jitter_us": 0,
+      "seed": null,
+      "presented": 59981
+    },
+    {
+      "cap": "thermal",
+      "hz": 120,
+      "ticks": 60000,
+      "jitter_us": 0,
+      "seed": null,
+      "presented": 29996
+    }
+  ]
+}

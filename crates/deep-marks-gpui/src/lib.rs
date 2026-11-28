@@ -1,7 +1,10 @@
 //! The canvas's 2D marks where GPUI draws (issue #380): a mesh deep-canvas-marks tessellated, a
-//! path's fill or its stroke paint, painted as one GPUI path in one color. Issue #140: a stroke
-//! paint goes as a [`Strip`], whose edges GPUI's path shader antialiases analytically, since its
-//! 4x path MSAA moves a thin stroke's coverage centroid by up to half a pixel.
+//! path's fill or its stroke paint, painted as one GPUI path in one color. From gpui-pre 0.3.11 a
+//! GPUI path is an outline filled by its winding at each pixel, so a mesh goes as its triangles,
+//! each a closed contour wound one way and filled by the nonzero rule: the edges two triangles
+//! share cancel, and the outer edges take GPUI's own coverage. Issue #140: a stroke paint goes as
+//! a [`Strip`], which holds each corner's distance inside the stroke's edge; the part of it inside
+//! the edge is what is painted.
 
 use deep_canvas_marks::path::{self, Mesh, Polyline};
 use gpui_kit::*;
@@ -20,21 +23,46 @@ pub fn stroke(points: Vec<[f64; 2]>, width: f64) -> Mesh {
     mesh
 }
 
-/// The GPUI path `paint` paints for `mesh`, moved by `offset` px: its triangles in order, three
-/// vertices each; `None` for a mesh with no triangles.
-pub fn path(mesh: &Mesh, offset: [f32; 2]) -> Option<Path<Pixels>> {
-    let at = |p: [f32; 2]| point(px(p[0] + offset[0]), px(p[1] + offset[1]));
-    let mut triangles = mesh.triangles();
-    let first = triangles.next()?;
-    let solid = (point(0., 1.), point(0., 1.), point(0., 1.));
-    let mut path = Path::new(at(first[0]));
-    // Its three vertices a triangle, sized once (#2660).
-    path.vertices.reserve_exact(mesh.indices.len() / 3 * 3);
-    path.push_triangle((at(first[0]), at(first[1]), at(first[2])), solid);
-    for t in triangles {
-        path.push_triangle((at(t[0]), at(t[1]), at(t[2])), solid);
+fn fill() -> PathBuilder {
+    PathBuilder::fill().with_style(PathStyle::Fill(FillOptions {
+        fill_rule: FillRule::NonZero,
+    }))
+}
+
+fn contour(builder: &mut PathBuilder, corners: &[[f32; 2]], offset: [f32; 2]) -> bool {
+    let n = corners.len();
+    let area: f32 = (0..n)
+        .map(|i| {
+            let (a, b) = (corners[i], corners[(i + 1) % n]);
+            a[0] * b[1] - b[0] * a[1]
+        })
+        .sum();
+    if area == 0. || !area.is_finite() {
+        return false;
     }
-    Some(path)
+    for k in 0..n {
+        let p = corners[if area > 0. { k } else { n - 1 - k }];
+        let at = point(px(p[0] + offset[0]), px(p[1] + offset[1]));
+        if k == 0 {
+            builder.move_to(at);
+        } else {
+            builder.line_to(at);
+        }
+    }
+    builder.close();
+    true
+}
+
+pub fn path(mesh: &Mesh, offset: [f32; 2]) -> Option<Path> {
+    let mut builder = fill();
+    let mut any = false;
+    for t in mesh.triangles() {
+        any |= contour(&mut builder, &t, offset);
+    }
+    if !any {
+        return None;
+    }
+    builder.build().ok()
 }
 
 /// Paints `mesh`'s triangles, moved by `offset` px.
@@ -44,23 +72,12 @@ pub fn paint(mesh: &Mesh, offset: [f32; 2], color: Hsla, window: &mut Window) {
     }
 }
 
-/// How far past a stroke's edge its strip reaches, in device px: a pixel whose centre lies within
-/// half a pixel of the edge has coverage, and its corners reach √½ px past that, so the strip
-/// covers every such pixel whole and MSAA never cuts its coverage.
 const FRINGE_PX: f64 = 1.25;
-/// `s` over `t` in a strip's curve coordinates: GPUI's path shader takes a triangle whose `s`
-/// doesn't vary as solid, and `s²` stays a negligible part of the implicit `s² − t`.
 const S_PER_T: f32 = 0.05;
 /// A join whose half angle's cosine is below this breaks the strip: its miter would reach past
 /// the stroke paint's miter limit of 4.
 const SHARPEST: f64 = 0.25;
 
-/// A stroke as triangles in u, each corner with GPUI's curve coordinates `(s, t)`, `t` its
-/// distance inside the stroke's nearer edge in u (issue #140, criterion 6). GPUI's path shader
-/// divides the implicit `s² − t` by its screen-space gradient, so a pixel's coverage is
-/// `clamp(0.5 + d, 0, 1)` for its centre's distance `d` inside the edge in device px: a ramp one
-/// pixel wide centred on the edge, which keeps the stroke's area and its centroid where 4x MSAA
-/// moved them. Each side of the line is its own band, from the centreline out past the edge, its
 /// segments meeting at miter corners so no two triangles overlap; a join past the miter limit
 /// breaks the band and fills its outer corner solid, and a butt end is cut where the stroke ends.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -169,21 +186,39 @@ pub fn strip(lines: &[Polyline], width: f64, u_per_px: f64) -> Strip {
     out
 }
 
-/// Paints `strip`'s triangles with their curve coordinates, moved by `offset` px.
-pub fn paint_strip(strip: &Strip, offset: [f32; 2], color: Hsla, window: &mut Window) {
-    let at = |p: [f32; 2]| point(px(p[0] + offset[0]), px(p[1] + offset[1]));
-    let st = |c: [f32; 2]| point(c[0], c[1]);
-    let mut triangles = strip.corners.as_chunks::<3>().0.iter();
-    let Some(first) = triangles.next() else {
-        return;
-    };
-    let mut path = Path::new(at(first[0].0));
-    path.vertices.reserve_exact(strip.corners.len() / 3 * 3);
-    for t in std::iter::once(first).chain(triangles) {
-        path.push_triangle(
-            (at(t[0].0), at(t[1].0), at(t[2].0)),
-            (st(t[0].1), st(t[1].1), st(t[2].1)),
-        );
+fn inside_edge(triangle: &[([f32; 2], [f32; 2]); 3]) -> ([[f32; 2]; 4], usize) {
+    let mut out = ([[0.; 2]; 4], 0);
+    for i in 0..3 {
+        let ((p, [_, t]), (q, [_, u])) = (triangle[i], triangle[(i + 1) % 3]);
+        if t >= 0. {
+            out.0[out.1] = p;
+            out.1 += 1;
+        }
+        if (t >= 0.) != (u >= 0.) {
+            let ((a, ta), (b, tb)) = if t >= 0. {
+                ((p, t), (q, u))
+            } else {
+                ((q, u), (p, t))
+            };
+            let k = ta / (ta - tb);
+            out.0[out.1] = [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k];
+            out.1 += 1;
+        }
     }
-    window.paint_path(path, color);
+    out
+}
+
+pub fn paint_strip(strip: &Strip, offset: [f32; 2], color: Hsla, window: &mut Window) {
+    let mut builder = fill();
+    let mut any = false;
+    for triangle in strip.corners.as_chunks::<3>().0 {
+        let (corners, n) = inside_edge(triangle);
+        any |= contour(&mut builder, &corners[..n], offset);
+    }
+    if !any {
+        return;
+    }
+    if let Ok(path) = builder.build() {
+        window.paint_path(path, color);
+    }
 }

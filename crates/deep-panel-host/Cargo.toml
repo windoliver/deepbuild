@@ -10,9 +10,9 @@ rust-version = "1.95"
 # window for gpui-shell's view, and no screen, so it takes gpui-kit's headless context.
 [dependencies]
 deep-app = { path = "../deep-app" }
-gpui-kit = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49b90f4d7b6808b69924f58796f6f1", features = ["test-support"] }
-gpui-shell = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49b90f4d7b6808b69924f58796f6f1", default-features = false, features = ["quickjs", "components"] }
-quickjs-jit-runtime = { git = "https://github.com/longbridge/quickjs-jit", rev = "96593cd7a54440ac060a391b8baea7e9a3cf1393" }
+gpui-kit = { git = "https://github.com/longbridge/gpui-kit", rev = "e97fe438129c5e4ccab504f2e6fafd9a4e396bba", features = ["test-support"] }
+gpui-shell = { git = "https://github.com/longbridge/gpui-kit", rev = "e97fe438129c5e4ccab504f2e6fafd9a4e396bba", default-features = false, features = ["quickjs", "components"] }
+quickjs-jit-runtime = "=0.14.1"
 serde_json = "1"
 
 [[bin]]

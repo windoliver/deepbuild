@@ -6,8 +6,9 @@
 
 use std::{mem, ptr};
 
-use foreign_types::ForeignTypeRef;
+use anyhow::{Context as _, Result};
 use gpui::{DevicePixels, Size};
+use objc2::{rc::Retained, runtime::ProtocolObject};
 use objc2_core_foundation::CFRetained;
 use objc2_core_video::{
     kCVImageBufferYCbCrMatrixKey, kCVImageBufferYCbCrMatrix_ITU_R_2020,
@@ -16,11 +17,18 @@ use objc2_core_video::{
     CVMetalTextureCache, CVMetalTextureGetTexture, CVPixelBuffer, CVPixelBufferGetHeightOfPlane,
     CVPixelBufferGetPixelFormatType, CVPixelBufferGetWidthOfPlane,
 };
+use objc2_metal::{
+    MTLDevice, MTLLibrary, MTLPixelFormat, MTLPrimitiveType, MTLRenderCommandEncoder,
+    MTLRenderPipelineState,
+};
 
-use super::{MTLPixelFormat, MetalRenderer, SurfaceInputIndex, build_pipeline_state, gpu_surfaces};
+use super::{MetalRenderer, SurfaceInputIndex, build_pipeline_state, gpu_surfaces};
 
 /// The tagged pipeline.
-pub(super) fn pipeline(device: &metal::DeviceRef, library: &metal::LibraryRef) -> metal::RenderPipelineState {
+pub(super) fn pipeline(
+    device: &ProtocolObject<dyn MTLDevice>,
+    library: &ProtocolObject<dyn MTLLibrary>,
+) -> Result<Retained<ProtocolObject<dyn MTLRenderPipelineState>>> {
     build_pipeline_state(
         device,
         library,
@@ -28,6 +36,7 @@ pub(super) fn pipeline(device: &metal::DeviceRef, library: &metal::LibraryRef) -
         "surface_vertex",
         "surface_ycbcr_fragment",
         MTLPixelFormat::BGRA8Unorm,
+        true,
     )
 }
 
@@ -68,23 +77,25 @@ fn transform(limited: bool, kr: f32, kb: f32) -> [[f32; 4]; 4] {
 }
 
 impl MetalRenderer {
-    /// Draws an NV12 surface by its tags, leaving the encoder as it found it; false when the
-    /// stock fragment is planted or the buffer isn't NV12.
+    /// Draws an NV12 surface by its tags; false when the stock fragment is planted or the buffer
+    /// isn't NV12. The planes' textures join `surface_textures`, which the frame keeps until the GPU
+    /// has read them.
     pub(super) fn draw_ycbcr_surface(
         &mut self,
         image_buffer: &CVPixelBuffer,
         texture_size: Size<DevicePixels>,
         instance: usize,
-        command_encoder: &metal::RenderCommandEncoderRef,
-    ) -> bool {
+        command_encoder: &ProtocolObject<dyn MTLRenderCommandEncoder>,
+        surface_textures: &mut Vec<CFRetained<CVMetalTexture>>,
+    ) -> Result<bool> {
         let format = CVPixelBufferGetPixelFormatType(image_buffer);
         let limited = match format {
             f if f == kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange => true,
             f if f == kCVPixelFormatType_420YpCbCr8BiPlanarFullRange => false,
-            _ => return false,
+            _ => return Ok(false),
         };
         if gpu_surfaces::planted() == gpu_surfaces::Planted::StockFragment {
-            return false;
+            return Ok(false);
         }
         // SAFETY: the key is CoreVideo's own; the mode pointer may be null.
         let matrix = unsafe { image_buffer.attachment(kCVImageBufferYCbCrMatrixKey, ptr::null_mut()) };
@@ -107,52 +118,65 @@ impl MetalRenderer {
             }
         };
         let m = transform(limited, kr, kb);
-        let plane_texture = |plane, format| unsafe {
+        let plane_texture = |plane, format| -> Result<CFRetained<CVMetalTexture>> {
             let mut texture = ptr::null_mut();
-            let status = CVMetalTextureCache::create_texture_from_image(
-                None,
-                &self.core_video_texture_cache,
-                image_buffer,
-                None,
-                format,
-                CVPixelBufferGetWidthOfPlane(image_buffer, plane),
-                CVPixelBufferGetHeightOfPlane(image_buffer, plane),
-                plane,
-                ptr::NonNull::from(&mut texture),
+            // SAFETY: the buffer has two planes of these formats and sizes, and the output pointer is writable.
+            let status = unsafe {
+                CVMetalTextureCache::create_texture_from_image(
+                    None,
+                    &self.core_video_texture_cache,
+                    image_buffer,
+                    None,
+                    format,
+                    CVPixelBufferGetWidthOfPlane(image_buffer, plane),
+                    CVPixelBufferGetHeightOfPlane(image_buffer, plane),
+                    plane,
+                    ptr::NonNull::from(&mut texture),
+                )
+            };
+            anyhow::ensure!(
+                status == kCVReturnSuccess,
+                "creating CoreVideo Metal texture for plane {plane}: status {status}"
             );
-            assert_eq!(status, kCVReturnSuccess, "failed to create CoreVideo Metal texture");
-            CFRetained::<CVMetalTexture>::from_raw(
-                ptr::NonNull::new(texture).expect("CoreVideo returned a null texture"),
-            )
+            let texture = ptr::NonNull::new(texture).context("retrieving CoreVideo Metal texture")?;
+            // SAFETY: the successful create call transfers ownership of this non-null texture.
+            Ok(unsafe { CFRetained::from_raw(texture) })
         };
-        let y_texture = plane_texture(0, objc2_metal::MTLPixelFormat::R8Unorm);
-        let cb_cr_texture = plane_texture(1, objc2_metal::MTLPixelFormat::RG8Unorm);
-        command_encoder.set_render_pipeline_state(&self.bgra_surfaces.ycbcr);
-        command_encoder.set_vertex_bytes(
-            SurfaceInputIndex::TextureSize as u64,
-            mem::size_of_val(&texture_size) as u64,
-            &texture_size as *const Size<DevicePixels> as *const _,
-        );
-        command_encoder.set_fragment_bytes(0, mem::size_of_val(&m) as u64, m.as_ptr() as *const _);
-        for (index, texture) in [
-            (SurfaceInputIndex::YTexture, &y_texture),
-            (SurfaceInputIndex::CbCrTexture, &cb_cr_texture),
-        ] {
-            command_encoder.set_fragment_texture(index as u64, unsafe {
-                let texture = CVMetalTextureGetTexture(texture).expect("CoreVideo returned no Metal texture");
-                Some(metal::TextureRef::from_ptr(
-                    objc2::rc::Retained::as_ptr(&texture) as *mut _,
-                ))
-            });
+        let y_texture = plane_texture(0, MTLPixelFormat::R8Unorm)?;
+        let cb_cr_texture = plane_texture(1, MTLPixelFormat::RG8Unorm)?;
+        let y_metal = CVMetalTextureGetTexture(&y_texture).context("retrieving luma Metal texture")?;
+        let cb_cr_metal =
+            CVMetalTextureGetTexture(&cb_cr_texture).context("retrieving chroma Metal texture")?;
+        command_encoder.setRenderPipelineState(&self.bgra_surfaces.ycbcr);
+        // SAFETY: Metal copies the size and the transform, which match the shaders' arguments at these
+        // slots; both planes match their texture slots, and `surface_textures` keeps their CoreVideo
+        // wrappers until the GPU has read them. The draw is one instance of the uploaded surfaces.
+        unsafe {
+            command_encoder.setVertexBytes_length_atIndex(
+                ptr::NonNull::from(&texture_size).cast(),
+                mem::size_of_val(&texture_size),
+                SurfaceInputIndex::TextureSize as usize,
+            );
+            command_encoder.setFragmentBytes_length_atIndex(
+                ptr::NonNull::from(&m).cast(),
+                mem::size_of_val(&m),
+                0,
+            );
+            command_encoder
+                .setFragmentTexture_atIndex(Some(&y_metal), SurfaceInputIndex::YTexture as usize);
+            command_encoder.setFragmentTexture_atIndex(
+                Some(&cb_cr_metal),
+                SurfaceInputIndex::CbCrTexture as usize,
+            );
+            command_encoder.drawPrimitives_vertexStart_vertexCount_instanceCount_baseInstance(
+                MTLPrimitiveType::TriangleStrip,
+                0,
+                4,
+                1,
+                instance,
+            );
         }
-        command_encoder.draw_primitives_instanced_base_instance(
-            metal::MTLPrimitiveType::Triangle,
-            0,
-            6,
-            1,
-            instance as u64,
-        );
-        command_encoder.set_render_pipeline_state(&self.surfaces_pipeline_state);
-        true
+        surface_textures.extend([y_texture, cb_cr_texture]);
+        Ok(true)
     }
 }

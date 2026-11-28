@@ -61,6 +61,11 @@ pub(super) fn planted() -> Planted {
     }
 }
 
+/// Whether the planted twin that draws every surface after the rest of the scene is in.
+pub(super) fn surfaces_last() -> bool {
+    planted() == Planted::AfterScene
+}
+
 fn hook() -> Option<Hook> {
     HOOK.read().unwrap_or_else(|e| e.into_inner()).clone()
 }

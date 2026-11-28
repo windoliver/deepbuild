@@ -110,7 +110,7 @@ pub fn opening(kept: &Kept, cx: &App) -> (WindowBounds, Option<DisplayId>) {
     let s = sizes();
     let centred = || {
         (
-            WindowBounds::centered(size(s.window.0, s.window.1), cx),
+            WindowBounds::centered(None, size(s.window.0, s.window.1), cx),
             None,
         )
     };

@@ -58,6 +58,7 @@ One page per module topic. Each decision names the file and the symbol it govern
 - [0017](0017-logic-circuit-and-shell.md): the logic module's circuit judge and its course shell
 - [0018](0018-moved-for-size-canvas.md): what the canvas code moved for size said in comments: deep-show, deep-canvas, deep-gpu-layer and deep-scene3d-render
 - [0021](0021-a-budgets-work.md): the work a budget's run reports
+- [0022](0022-gpui-paths-are-outlines.md): how the app's crates hand a mesh, a stroke and a large glyph to GPUI's outline paths
 
 ## Open
 

@@ -55,6 +55,7 @@ const POLL: Duration = Duration::from_millis(10);
 /// How long after a wake its frame may present and still answer it (README #1551: `wakes`), and
 /// the span before it in which request-frame callbacks mean the window wasn't idle.
 const WAKE_ANSWER: i64 = 500_000_000;
+const WITHDRAWALS_DEADLINE: i64 = 180_000_000_000;
 /// #1551: a window settles once its frame source is quiet too (no request-frame callback for
 /// this long), or this long after the frames settle when a link never stops.
 const LINK_QUIET: i64 = 50_000_000;
@@ -361,19 +362,7 @@ impl State {
             .iter()
             .map(|a| {
                 let req = a.requested_ns;
-                let seq = a.frame_seq.or_else(|| {
-                    self.clock
-                        .latched
-                        .iter()
-                        .find(|f| f.document && f.latch > req)
-                        .map(|f| f.seq)
-                });
-                let answer = seq.and_then(|seq| {
-                    presented
-                        .iter()
-                        .find(|(s, at)| *s == seq && *at <= req + WAKE_ANSWER)
-                        .map(|(_, at)| (seq, *at))
-                });
+                let answer = self.answer(a, &presented);
                 json!({
                     "after_ms": a.after_ms, "by": a.by.name(), "requested_ns": req,
                     "request_frames_before": between(req - WAKE_ANSWER, req),
@@ -385,6 +374,25 @@ impl State {
         if !self.asked.is_empty() {
             live["wakes"] = json!(wakes);
         }
+    }
+
+    fn answer(&self, a: &Asked, presented: &[(u64, i64)]) -> Option<(u64, i64)> {
+        let (after, by) = match (a.by, a.heard_ns) {
+            (By::Withdrawals, None) => return None,
+            (By::Withdrawals, Some(heard)) => (heard, i64::MAX),
+            _ => (a.requested_ns, a.requested_ns + WAKE_ANSWER),
+        };
+        let seq = a.frame_seq.or_else(|| {
+            self.clock
+                .latched
+                .iter()
+                .find(|f| f.document && f.latch > after)
+                .map(|f| f.seq)
+        })?;
+        presented
+            .iter()
+            .find(|(s, at)| *s == seq && *at <= by)
+            .map(|(_, at)| (seq, *at))
     }
 
     /// Whether the document drawn at `t` changes after it (its `valid_until`).
@@ -562,7 +570,11 @@ impl Render for View {
             .on_mouse_move(cx.listener(|this, _: &MouseMoveEvent, _, cx| {
                 let mut st = this.state.borrow_mut();
                 if let Some(i) = st.pending_input.take() {
-                    st.asked[i].requested_ns = host_ns();
+                    if st.asked[i].by == By::Withdrawals {
+                        st.asked[i].heard_ns = Some(host_ns());
+                    } else {
+                        st.asked[i].requested_ns = host_ns();
+                    }
                     drop(st);
                     cx.notify();
                 }
@@ -588,6 +600,10 @@ fn ns_window(window: &Window) -> *mut AnyObject {
         Some(view) => unsafe { msg_send![&*view, window] },
         None => std::ptr::null_mut(),
     }
+}
+
+fn window_focused(window: &Window) -> bool {
+    unsafe { idle::window_focused(ns_window(window)) }
 }
 
 /// What AppKit shows of the window now (README #1551: `live.window`).
@@ -874,13 +890,23 @@ pub fn run(scenario: &'static Scenario, startup: &'static Startup, options: Opti
                     .observe_window_visibility(move |_, window, _| {
                         if let Some(track) = tracked.borrow_mut().track.as_mut() {
                             track.note(host_ns(), window_state(window));
+                            track.focus(window_focused(window));
                         }
                     })
                     .detach();
                 wait_visible(window, st, SHOW_FRAMES);
-                cx.new(|_| View {
-                    state: view_state,
-                    ground,
+                cx.new(|cx| {
+                    let focus = view_state.clone();
+                    cx.observe_window_activation(window, move |_, window, _| {
+                        if let Some(track) = focus.borrow_mut().track.as_mut() {
+                            track.focus(window.is_window_active());
+                        }
+                    })
+                    .detach();
+                    View {
+                        state: view_state,
+                        ground,
+                    }
                 })
             },
         );
@@ -999,11 +1025,17 @@ pub fn run(scenario: &'static Scenario, startup: &'static Startup, options: Opti
                     st.settled = true;
                     // SAFETY: null or the window's live NSWindow, on the main thread.
                     let shown = unsafe { idle::window_state(st.ns_window) };
-                    if options.wake.iter().any(|w| w.by == By::Input) {
+                    if options
+                        .wake
+                        .iter()
+                        .any(|w| matches!(w.by, By::Input | By::Withdrawals))
+                    {
                         // SAFETY: as above.
                         unsafe { idle::accept_posted_moves(st.ns_window) };
                     }
-                    st.track = Some(Track::new(host_ns(), shown));
+                    let mut track = Track::new(host_ns(), shown);
+                    track.focus(unsafe { idle::window_focused(st.ns_window) });
+                    st.track = Some(track);
                     st.hub.scenario.planted == Some(Planted::ArmsEachVsync)
                 };
                 if arms {
@@ -1119,6 +1151,18 @@ pub fn run(scenario: &'static Scenario, startup: &'static Startup, options: Opti
                 });
                 after_out.push(entry.unwrap_or(Value::Null));
             }
+            if options.watch.is_some() && state.borrow().track.is_none() {
+                let mut st = state.borrow_mut();
+                let (shown, focused) = unsafe {
+                    (
+                        idle::window_state(st.ns_window),
+                        idle::window_focused(st.ns_window),
+                    )
+                };
+                let mut track = Track::new(first, shown);
+                track.focus(focused);
+                st.track = Some(track);
+            }
             // #1551: the wakes, each `after_ms` after the window settled.
             let since = settled.unwrap_or(first);
             let mut wakes = options.wake;
@@ -1138,6 +1182,7 @@ pub fn run(scenario: &'static Scenario, startup: &'static Startup, options: Opti
                         by: w.by,
                         requested_ns: host_ns(),
                         frame_seq: None,
+                        heard_ns: None,
                     });
                     st.asked.len() - 1
                 };
@@ -1179,6 +1224,44 @@ pub fn run(scenario: &'static Scenario, startup: &'static Startup, options: Opti
                             drop(st);
                             window.request_present();
                         });
+                    }
+                    By::Withdrawals => {
+                        let posted = Arc::new(std::sync::atomic::AtomicI64::new(0));
+                        let stamp = posted.clone();
+                        let _ = handle.update(cx, |_, window, cx| {
+                            let mut st = state.borrow_mut();
+                            st.pending_input = Some(i);
+                            let panel = st.panel;
+                            drop(st);
+                            let height = panel[1] + panel[3] + f64::from(STRIP);
+                            let point = objc2_foundation::NSPoint::new(
+                                panel[0] + panel[2] / 2. + (i % 7) as f64,
+                                height - (panel[1] + panel[3] / 2.),
+                            );
+                            let ns_window = ns_window(window);
+                            let event = (!ns_window.is_null())
+                                .then(|| unsafe {
+                                    idle::pointer_move(ns_window, point, host_ns() as f64 / 1e9)
+                                })
+                                .flatten();
+                            let poster = std::thread::spawn(move || {
+                                if let Some(event) = event {
+                                    stamp.store(host_ns(), std::sync::atomic::Ordering::SeqCst);
+                                    event.post();
+                                }
+                            });
+                            for k in 0..w.count {
+                                cx.dismiss_system_notification(&format!(
+                                    "deep-show-withdrawal-{k}"
+                                ))
+                                .detach();
+                            }
+                            let _ = poster.join();
+                        });
+                        let at = posted.load(std::sync::atomic::Ordering::SeqCst);
+                        if at != 0 {
+                            state.borrow_mut().asked[i].requested_ns = at;
+                        }
                     }
                     By::Input => {
                         let _ = handle.update(cx, |_, window, _| {
@@ -1229,12 +1312,32 @@ pub fn run(scenario: &'static Scenario, startup: &'static Startup, options: Opti
                     .timer(Duration::from_nanos(wait as u64))
                     .await;
             }
+            loop {
+                let waiting = {
+                    let st = state.borrow();
+                    let presented = st.presented();
+                    let now = host_ns();
+                    st.asked.iter().any(|a| {
+                        a.by == By::Withdrawals
+                            && st.answer(a, &presented).is_none()
+                            && match a.heard_ns {
+                                Some(heard) => now < heard + WAKE_ANSWER,
+                                None => now < a.requested_ns + WITHDRAWALS_DEADLINE,
+                            }
+                    })
+                };
+                if !waiting {
+                    break;
+                }
+                cx.background_executor().timer(POLL).await;
+            }
             if watch.is_some() || last_wake.is_some() {
                 cx.background_executor().timer(FEEDBACK).await;
             }
             let _ = handle.update(cx, |_, window, _| {
                 if let Some(track) = state.borrow_mut().track.as_mut() {
                     track.note(host_ns(), window_state(window));
+                    track.focus(window_focused(window));
                 }
             });
             let reply = {
@@ -1242,6 +1345,8 @@ pub fn run(scenario: &'static Scenario, startup: &'static Startup, options: Opti
                 let (frames, wakeups) = match watch {
                     None => (Vec::new(), 0),
                     Some((from, to)) => {
+                        let waits: std::collections::HashMap<u64, u64> =
+                            presentation::take_waits().into_iter().collect();
                         let frames: Vec<Value> = st
                             .shown_frames()
                             .into_iter()
@@ -1250,6 +1355,7 @@ pub fn run(scenario: &'static Scenario, startup: &'static Startup, options: Opti
                                 json!({
                                     "frame_seq": f.seq, "rev": f.rev, "predicted_ns": f.predicted,
                                     "presented_ns": at, "refresh_ns": st.clock.pace_ns.round(),
+                                    "drawable_wait_ns": waits.get(&f.seq).copied().unwrap_or(0),
                                 })
                             })
                             .collect();

@@ -9,7 +9,7 @@
 //! and a line whose glyphs run out of text order (right-to-left text, a reordered vowel sign) has
 //! each row laid out on its own, so a row reads as its own line would.
 
-use super::{LineFragment, LineWrapper};
+use super::LineWrapper;
 use crate::{FontRun, LineLayout, Pixels, PlatformTextSystem, WrapBoundary, point, px};
 use icu_segmenter::{GraphemeClusterSegmenter, LineSegmenter};
 use smallvec::SmallVec;
@@ -33,21 +33,6 @@ impl Breaks {
         Self {
             starts: line_starts(text).into_iter().peekable(),
         }
-    }
-
-    /// The fragments as one text, an inline element standing in as letters so that it keeps to
-    /// the word beside it, as upstream's wrapper does.
-    pub(crate) fn of_fragments(fragments: &[LineFragment]) -> Self {
-        let mut text = String::new();
-        for fragment in fragments {
-            match fragment {
-                LineFragment::Text { text: part } => text.push_str(part),
-                LineFragment::Element { len_utf8, .. } => {
-                    text.extend(std::iter::repeat_n('a', *len_utf8))
-                }
-            }
-        }
-        Self::of(&text)
     }
 
     /// Whether a line may start at byte `ix`. Each call's `ix` is at least the last one's.

@@ -3,7 +3,8 @@
 //! canvas can show that a still view uses no GPU time. Every frame renders through one command
 //! buffer from `render_frame`, which this counts.
 
-use objc2::runtime::AnyObject;
+use objc2::runtime::ProtocolObject;
+use objc2_metal::MTLCommandBuffer;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 static COMMITTED: AtomicU64 = AtomicU64::new(0);
@@ -30,7 +31,7 @@ pub(super) fn committed() {
     COMMITTED.fetch_add(1, Ordering::SeqCst);
 }
 
-pub(super) fn completed(buffer: &AnyObject) -> u64 {
+pub(super) fn completed(buffer: &ProtocolObject<dyn MTLCommandBuffer>) -> u64 {
     // SAFETY: `GPUStartTime` and `GPUEndTime` are `MTLCommandBuffer` properties returning
     // `CFTimeInterval` (seconds as f64), read once the buffer completed.
     let (start, end): (f64, f64) = unsafe {

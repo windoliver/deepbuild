@@ -7,6 +7,10 @@ pub(crate) const INSTANCES: usize = 3;
 static HELD: [[AtomicU64; 2]; 5] = [const { [const { AtomicU64::new(0) }; 2] }; 5];
 static SEEN: Mutex<Vec<(usize, usize, u64)>> = Mutex::new(Vec::new());
 
+/// What the device allocated for a texture or a buffer.
+pub(crate) fn bytes<T: objc2_metal::MTLResource + objc2::Message>(resource: &T) -> u64 {
+    objc2_metal::MTLResource::allocatedSize(resource) as u64
+}
 pub(crate) fn atlas(kind: AtlasTextureKind) -> usize {
     usize::from(!matches!(kind, AtlasTextureKind::Monochrome))
 }

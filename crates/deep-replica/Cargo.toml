@@ -11,8 +11,8 @@ rust-version = "1.95"
 # so the app binary carries no test support.
 [dependencies]
 deep-app = { path = "../deep-app", features = ["fixtures"] }
-gpui-kit = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49b90f4d7b6808b69924f58796f6f1", features = ["test-support"] }
-gpui-shell = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49b90f4d7b6808b69924f58796f6f1", default-features = false, features = ["quickjs", "components"] }
+gpui-kit = { git = "https://github.com/longbridge/gpui-kit", rev = "e97fe438129c5e4ccab504f2e6fafd9a4e396bba", features = ["test-support"] }
+gpui-shell = { git = "https://github.com/longbridge/gpui-kit", rev = "e97fe438129c5e4ccab504f2e6fafd9a4e396bba", default-features = false, features = ["quickjs", "components"] }
 serde_json = "1"
 sha2 = "0.10"
 crc32fast = "1"

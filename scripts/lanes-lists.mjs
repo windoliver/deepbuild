@@ -957,3 +957,6 @@ for (const entry of laneFolders.filter((folder) => !unread.includes(folder))) {
   for (const file of lists?.timed ?? []) if (!timed.includes(file)) timed.push(file), fromLaneFiles.timed.push(file);
   for (const file of lists?.slow ?? []) if (!slow.includes(file)) slow.push(file), fromLaneFiles.slow.push(file);
 }
+
+timed.push('tests/acceptance/3502/animation.test.mjs', 'tests/acceptance/3502/withdrawals.test.mjs');
+byHand.push('tests/acceptance/3502/rows.test.mjs', 'tests/acceptance/3502/build.test.mjs', 'tests/acceptance/3502/pictures.test.mjs', 'tests/acceptance/3502/withdrawals.test.mjs');

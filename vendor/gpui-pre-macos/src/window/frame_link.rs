@@ -1,20 +1,19 @@
-//! DeepBuild patch (windoliver/deepbuild#1551): a still window stops its display link. Upstream
-//! keeps a shown window's link running and runs the request-frame callback every vsync, a wakeup
-//! of the main thread each refresh while nothing changes. Here a tick that neither drew nor was
-//! asked for another frame stops the link, and `schedule_frame` or the frame waker (which GPUI's
-//! invalidator calls when a view is notified, a next-frame callback is queued or the window is
-//! refreshed) starts it again. Starting it keeps upstream's rules: never while the window is
-//! occluded or has no screen.
+//! DeepBuild patch (windoliver/deepbuild#1551): what a still window's display link is heard and
+//! tested by. From gpui-pre-macos 0.3.11, on macOS 14 and later, a window's frames come from a
+//! Metal display link that upstream pauses after an update in which GPUI neither drew, presented
+//! nor asked for another frame, and that `schedule_frame` and the frame waker resume
+//! (zed-industries/zed#65472): the stopping and starting this file held at 0.3.9 is upstream's now.
+//! What stays ours has no upstream twin: the hook that hears each request-frame callback, a
+//! screen change that leaves a still window alone, and the planted twins.
 //!
 //! The planted twins exist for the acceptance tests that must catch them: a link that never
-//! stops (upstream's behavior), a waker that ignores `schedule_frame`, and a link that sits out
-//! one full refresh after it restarts before it runs a callback.
+//! pauses, a waker that ignores `schedule_frame`, and a link that sits out one full refresh after
+//! it resumes before it runs a callback.
 
-use super::MacWindowState;
-use dispatch2::DispatchQueue;
+use super::{FrameSource, MacWindowState};
 use parking_lot::Mutex;
 use std::rc::Rc;
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Arc, RwLock};
 
 /// A planted wrong frame link, for the tests that must catch it.
@@ -22,20 +21,22 @@ use std::sync::{Arc, RwLock};
 #[repr(u8)]
 pub enum Planted {
     None = 0,
-    /// The link keeps running while the window is still, as upstream's does.
+    /// The link keeps running while the window is still.
     NeverStops = 1,
-    /// `schedule_frame` doesn't restart a stopped link; only the frame waker does.
+    /// `schedule_frame` doesn't resume a paused link; only the frame waker does.
     IgnoresScheduleFrame = 2,
-    /// A restarted link lets one full refresh pass before it runs a callback.
+    /// A resumed link lets one full refresh pass before it runs a callback.
     RestartsAfterRefresh = 3,
 }
 
-/// What receives each request-frame callback, as it runs: a window's display-link tick, or
+/// What receives each request-frame callback, as it runs: a window's display-link update, or
 /// AppKit asking its layer to display or making it key.
 pub type Hook = Arc<dyn Fn() + Send + Sync>;
 
 static PLANTED: AtomicU8 = AtomicU8::new(Planted::None as u8);
 static HOOK: RwLock<Option<Hook>> = RwLock::new(None);
+/// Whether a link paused since its last update, so the planted late restart sits its next one out.
+static PAUSED: AtomicBool = AtomicBool::new(false);
 
 pub fn plant(planted: Planted) {
     PLANTED.store(planted as u8, Ordering::SeqCst);
@@ -64,130 +65,51 @@ pub(super) fn note_callback() {
     }
 }
 
-/// A window's link between ticks: whether the tick running drew or was asked for another frame,
-/// whether the link is stopped for being still, whether the last start went ahead, and ticks a
-/// planted restart sits out.
-#[derive(Default)]
-pub(super) struct Link {
-    asked: bool,
-    drew: bool,
-    stopped: bool,
-    started: bool,
-    skip: u32,
+/// The planted link that never pauses: every update reads as one that used its drawable.
+pub(super) fn never_stops() -> bool {
+    planted() == Planted::NeverStops
 }
 
-impl Link {
-    /// Whether a start is refused: a link stopped for being still starts only when woken, not
-    /// when AppKit reports the window shown, moved, made key or its layer to display again (the
-    /// layer keeps its last frame meanwhile).
-    pub(super) fn holds(&self) -> bool {
-        self.stopped
-    }
+/// The planted waker: `schedule_frame` resumes nothing.
+pub(super) fn ignores_schedule_frame() -> bool {
+    planted() == Planted::IgnoresScheduleFrame
+}
 
-    pub(super) fn started(&mut self) {
-        self.started = true;
+/// After an update: whether it paused the link.
+pub(super) fn ended(paused: bool) {
+    if paused {
+        PAUSED.store(true, Ordering::SeqCst);
     }
 }
 
-impl MacWindowState {
-    /// Before a display-link tick: whether it runs the request-frame callback.
-    pub(super) fn tick_begins(&mut self) -> bool {
-        if self.frame_link.skip > 0 {
-            self.frame_link.skip -= 1;
-            return false;
-        }
-        self.frame_link.asked = false;
-        self.frame_link.drew = false;
-        true
-    }
-
-    /// After a tick's callback: a tick that neither drew nor was asked again stops the link.
-    pub(super) fn tick_ends(&mut self) {
-        let link = &self.frame_link;
-        if link.asked || link.drew || planted() == Planted::NeverStops {
-            return;
-        }
-        self.stop_display_link();
-        self.frame_link.stopped = true;
-    }
-
-    pub(super) fn note_drawn(&mut self) {
-        self.frame_link.drew = true;
-    }
-
-    /// Starts a stopped link and runs its first callback now rather than at the next vsync, so
-    /// waking costs no refresh. Upstream's rules may still keep it off (an occluded window or no
-    /// screen); AppKit's own start then brings it back when the window shows again.
-    fn wake(&mut self) {
-        self.frame_link.asked = true;
-        if !self.frame_link.stopped {
-            return;
-        }
-        let late = planted() == Planted::RestartsAfterRefresh;
-        if late {
-            self.frame_link.skip = 1;
-        }
-        self.frame_link.stopped = false;
-        self.frame_link.started = false;
-        self.start_display_link();
-        if !late && self.frame_link.started {
-            if let Some(source) = self.frame_source.as_ref() {
-                source.request_frame();
-            }
-        }
-    }
+/// Before an update's callback: whether the planted late restart sits this one out, the first
+/// since the link paused.
+pub(super) fn sits_out() -> bool {
+    PAUSED.swap(false, Ordering::SeqCst) && planted() == Planted::RestartsAfterRefresh
 }
 
-/// Wakes the window's link. On the main thread with the window's state unlocked it starts the
-/// link at once; a call made while the state is locked (from inside one of the window's own
-/// handlers) is queued on the main queue rather than waiting on the lock it holds.
-fn wake(state: &Arc<Mutex<MacWindowState>>) {
-    if let Some(mut lock) = state.try_lock() {
-        lock.wake();
-        return;
-    }
-    let state = Arc::downgrade(state);
-    DispatchQueue::main().exec_async(move || {
-        if let Some(state) = state.upgrade() {
-            state.lock().wake();
-        }
-    });
-}
-
-/// AppKit's screen change: upstream resizes the window to the new screen's scale, which redraws
-/// it. AppKit also reports one, every few seconds, for a window on the screen it was on, its
-/// scale and size as they were; the layer's last frame is still right then, so nothing is
-/// resized or redrawn.
-pub(super) fn screen_changed(state: &Arc<Mutex<MacWindowState>>) {
-    let unchanged = {
-        let lock = state.lock();
+/// AppKit's screen change: upstream starts the window's link again and resizes the window to the
+/// new screen's scale, which redraws it. AppKit also reports one, every few seconds, for a window
+/// on the screen it was on, its scale and size as they were; a Metal link follows its layer and
+/// the layer's last frame is still right then, so a still window keeps its paused link and
+/// nothing is resized or redrawn.
+pub(super) fn screen_changed(state: &Rc<Mutex<MacWindowState>>) {
+    let mut lock = state.lock();
+    let attached = matches!(&lock.frame_source, FrameSource::Metal(frames) if frames.is_attached());
+    let unchanged = attached && {
         let scale = lock.scale_factor();
         let size = lock.content_size().to_device_pixels(scale);
         lock.renderer.layer().is_some_and(|layer| {
-            let drawable = layer.drawable_size();
-            layer.contents_scale() == f64::from(scale)
+            let drawable = layer.drawableSize();
+            layer.contentsScale() == f64::from(scale)
                 && drawable.width == f64::from(size.width.0)
                 && drawable.height == f64::from(size.height.0)
         })
     };
-    if !unchanged {
-        super::update_window_scale_factor(state);
+    if unchanged {
+        return;
     }
-}
-
-pub(super) fn schedule_frame(state: &Arc<Mutex<MacWindowState>>) {
-    if planted() != Planted::IgnoresScheduleFrame {
-        wake(state);
-    }
-}
-
-/// The waker GPUI's invalidator holds. It holds the window weakly: the invalidator lives in the
-/// window's request-frame callback, which the window's state owns.
-pub(super) fn waker(state: &Arc<Mutex<MacWindowState>>) -> Option<Rc<dyn Fn()>> {
-    let state = Arc::downgrade(state);
-    Some(Rc::new(move || {
-        if let Some(state) = state.upgrade() {
-            wake(&state);
-        }
-    }))
+    lock.start_display_link(state);
+    drop(lock);
+    super::update_window_scale_factor(state);
 }

@@ -62,6 +62,33 @@ fn context(name: &str) -> Option<&'static str> {
     }
 }
 
+pub fn host() -> gpui::OperatingSystem {
+    if cfg!(target_os = "macos") {
+        gpui::OperatingSystem::Mac
+    } else if cfg!(target_os = "windows") {
+        gpui::OperatingSystem::Windows
+    } else {
+        gpui::OperatingSystem::Linux
+    }
+}
+
+fn binding(
+    key: &str,
+    action: Box<dyn gpui::Action>,
+    context: Option<&str>,
+    cx: &App,
+) -> Option<KeyBinding> {
+    let predicate = match context {
+        Some(context) => Some(
+            gpui::KeyBindingContextPredicate::parse(context)
+                .ok()?
+                .into(),
+        ),
+        None => None,
+    };
+    KeyBinding::load(key, action, predicate, false, None, cx).ok()
+}
+
 /// The keymap file: your keys, by action name.
 pub fn keymap_path() -> std::path::PathBuf {
     crate::hub::root().join("keymap.json")
@@ -76,7 +103,7 @@ fn read_keymap() -> (String, HashMap<String, String>) {
             bindings
                 .into_iter()
                 .filter_map(|(name, key)| Some((name, key.as_str()?.to_owned())))
-                .filter(|(_, key)| Keystroke::parse(key).is_ok())
+                .filter(|(_, key)| Keystroke::parse_with_os(key, host()).is_ok())
                 .collect()
         })
         .unwrap_or_default();
@@ -125,13 +152,18 @@ fn bind(cx: &mut App) {
             continue;
         }
         if let Some(old) = before {
-            bindings.push(KeyBinding::new(&old, NoAction {}, context(&action.name)));
+            bindings.extend(binding(
+                &old,
+                Box::new(NoAction {}),
+                context(&action.name),
+                cx,
+            ));
         }
         if let Some(key) = &key {
             let run = Run {
                 name: action.name.clone().into(),
             };
-            bindings.push(KeyBinding::new(key, run, context(&action.name)));
+            bindings.extend(binding(key, Box::new(run), context(&action.name), cx));
         }
         now.insert(action.name.clone(), key);
     }
@@ -357,19 +389,19 @@ pub fn set_menus(cx: &mut App) {
 pub fn menu_key(action: &dyn gpui::Action, cx: &App) -> Option<String> {
     let keymap = cx.key_bindings();
     let keymap = keymap.borrow();
-    let context = [KeyContext::new_with_defaults()];
+    let context = [KeyContext::new_with_defaults(cx.platform_info().os)];
     let mut all = keymap.bindings_for_action(action).peekable();
     let first = all.peek().map(|binding| binding.keystrokes().to_vec());
     let chosen = all
         .find(|binding| binding.predicate().is_none_or(|p| p.eval(&context)))
         .map(|binding| binding.keystrokes().to_vec())
         .or(first)?;
-    (chosen.len() == 1).then(|| chosen[0].unparse())
+    (chosen.len() == 1).then(|| chosen[0].unparse(cx.platform_info().os))
 }
 
 /// A keystroke as a menu draws it: ⌃⌥⇧⌘ in that order, then the key, a letter in capitals.
 pub fn glyphs(key: &str) -> String {
-    let Ok(stroke) = Keystroke::parse(key) else {
+    let Ok(stroke) = Keystroke::parse_with_os(key, host()) else {
         return key.to_owned();
     };
     let m = stroke.modifiers;
@@ -582,7 +614,10 @@ mod tests {
         assert_eq!(names.len(), count, "a name is the action's, once");
         for action in table() {
             if let Some(key) = &action.key {
-                assert!(Keystroke::parse(key).is_ok(), "{key} parses");
+                assert!(
+                    Keystroke::parse_with_os(key, host()).is_ok(),
+                    "{key} parses"
+                );
                 assert!(!key.contains("ctrl"), "⌃ chords are the terminal's");
             }
         }

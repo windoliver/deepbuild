@@ -21,6 +21,7 @@ pub enum By {
     PresentOnly,
     /// A pointer move posted into AppKit's event queue for the window.
     Input,
+    Withdrawals,
 }
 
 impl By {
@@ -30,6 +31,7 @@ impl By {
             By::ThreadNotify => "thread_notify",
             By::PresentOnly => "present_only",
             By::Input => "input",
+            By::Withdrawals => "withdrawals",
         }
     }
 }
@@ -39,6 +41,7 @@ pub struct Wake {
     pub after_ms: u64,
     pub by: By,
     pub call: Option<(Call, i64)>,
+    pub count: u64,
 }
 
 /// Reads the `wake` list; `None` for one the README doesn't allow.
@@ -54,7 +57,13 @@ pub fn parse(
                 "thread_notify" => By::ThreadNotify,
                 "present_only" => By::PresentOnly,
                 "input" => By::Input,
+                "withdrawals" => By::Withdrawals,
                 _ => return None,
+            };
+            let count = match (by, w.get("count")) {
+                (By::Withdrawals, Some(count)) => count.as_u64().filter(|count| *count > 0)?,
+                (By::Withdrawals, None) | (_, Some(_)) => return None,
+                (_, None) => 0,
             };
             let played = match (by, w.get("call")) {
                 (By::HubEvent, Some(c)) => {
@@ -72,6 +81,7 @@ pub fn parse(
                 after_ms: w.get("after_ms")?.as_u64()?,
                 by,
                 call: played,
+                count,
             })
         })
         .collect()
@@ -83,6 +93,7 @@ pub struct Asked {
     pub by: By,
     pub requested_ns: i64,
     pub frame_seq: Option<u64>,
+    pub heard_ns: Option<i64>,
 }
 
 /// The window from the moment it settled to the end of the run: the first state other than
@@ -92,6 +103,7 @@ pub struct Track {
     shown: bool,
     shown_ns: i64,
     first_other: Option<&'static str>,
+    focused: bool,
 }
 
 impl Track {
@@ -101,6 +113,7 @@ impl Track {
             shown: false,
             shown_ns: 0,
             first_other: None,
+            focused: true,
         };
         track.note(at, state);
         track
@@ -118,10 +131,15 @@ impl Track {
         }
     }
 
+    pub fn focus(&mut self, focused: bool) {
+        self.focused &= focused;
+    }
+
     pub fn json(&self) -> Value {
         json!({
             "state": self.first_other.unwrap_or("shown"),
             "shown_ms": self.shown_ns as f64 / 1e6,
+            "focused": self.focused,
         })
     }
 }
@@ -165,11 +183,44 @@ pub unsafe fn window_state(ns_window: *mut AnyObject) -> &'static str {
     "shown"
 }
 
+pub unsafe fn window_focused(ns_window: *mut AnyObject) -> bool {
+    if ns_window.is_null() {
+        return false;
+    }
+    let app: *mut AnyObject = msg_send![class!(NSApplication), sharedApplication];
+    let active: bool = msg_send![&*app, isActive];
+    let key: bool = msg_send![&*ns_window, isKeyWindow];
+    active && key
+}
+
 /// Posts a pointer move over `point` (window coordinates, origin at the bottom left) into
 /// AppKit's event queue for the window, as `NSApplication.postEvent:atStart:` queues any event.
 ///
 /// SAFETY: `ns_window` is a live NSWindow; this runs on the main thread.
 pub unsafe fn post_pointer_move(ns_window: *mut AnyObject, point: NSPoint, uptime_s: f64) {
+    if let Some(event) = pointer_move(ns_window, point, uptime_s) {
+        event.post();
+    }
+}
+
+pub struct Posted(objc2::rc::Retained<AnyObject>);
+
+unsafe impl Send for Posted {}
+
+impl Posted {
+    pub fn post(self) {
+        unsafe {
+            let app: *mut AnyObject = msg_send![class!(NSApplication), sharedApplication];
+            let _: () = msg_send![&*app, postEvent: &*self.0, atStart: false];
+        }
+    }
+}
+
+pub unsafe fn pointer_move(
+    ns_window: *mut AnyObject,
+    point: NSPoint,
+    uptime_s: f64,
+) -> Option<Posted> {
     let number: isize = msg_send![&*ns_window, windowNumber];
     let nil: *mut AnyObject = std::ptr::null_mut();
     // NSEventTypeMouseMoved is 5.
@@ -185,11 +236,7 @@ pub unsafe fn post_pointer_move(ns_window: *mut AnyObject, point: NSPoint, uptim
         clickCount: 0isize,
         pressure: 0f32
     ];
-    if event.is_null() {
-        return;
-    }
-    let app: *mut AnyObject = msg_send![class!(NSApplication), sharedApplication];
-    let _: () = msg_send![&*app, postEvent: event, atStart: false];
+    objc2::rc::Retained::retain(event).map(Posted)
 }
 
 /// Has the window take pointer moves queued for it. GPUI's normal window hears the real cursor

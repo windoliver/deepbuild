@@ -105,7 +105,7 @@ pub fn run(wgpu_untagged: bool, cx: &mut App) {
     let placed = Rc::new(RefCell::new(Vec::new()));
     // Above every other window, so the platform reports it visible and hands out drawables.
     let options = WindowOptions {
-        window_bounds: Some(WindowBounds::centered(size(px(560.), px(160.)), cx)), // size-literal-exception: the --color-check probe window (#140), no page of the app; review 2027-04-30
+        window_bounds: Some(WindowBounds::centered(None, size(px(560.), px(160.)), cx)), // size-literal-exception: the --color-check probe window (#140), no page of the app; review 2027-04-30
         kind: WindowKind::PopUp,
         ..Default::default()
     };

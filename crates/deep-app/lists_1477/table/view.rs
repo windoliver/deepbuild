@@ -309,7 +309,7 @@ impl Render for TableView {
                     cx.stop_propagation();
                 }
             }))
-            .on_scroll_wheel(cx.listener(|this, e: &ScrollWheelEvent, _, cx| {
+            .on_scroll(cx.listener(|this, e: &ScrollEvent, _, cx| {
                 let dy = f64::from(f32::from(e.delta.pixel_delta(px(ROW as f32)).y)); // size-literal-exception: the table's row and lines, which #1477's suite reads; review 2027-04-30
                 this.scroll(-dy);
                 cx.notify();
@@ -321,13 +321,6 @@ impl Render for TableView {
 /// The table's one element.
 pub struct TableElement {
     view: Entity<TableView>,
-}
-
-impl IntoElement for TableElement {
-    type Element = Self;
-    fn into_element(self) -> Self {
-        self
-    }
 }
 
 pub struct Prepainted {

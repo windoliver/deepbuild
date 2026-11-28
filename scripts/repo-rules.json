@@ -94,11 +94,11 @@
           "why": "Issue #402: the cell grid's emulator and palette, whose screen the app paints row by row in the spike feeding a busy terminal's changes to it."
         },
         "gpui-kit": {
-          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1",
+          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=e97fe438129c5e4ccab504f2e6fafd9a4e396bba",
           "why": "Issue #337: the toolkit under trial, pinned to one commit since gpui-kit is unpublished at this milestone."
         },
         "gpui-shell": {
-          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1",
+          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=e97fe438129c5e4ccab504f2e6fafd9a4e396bba",
           "why": "Issue #337: runs the agents' JavaScript panels, quickjs and components only, no webview."
         },
         "serde_json": {
@@ -126,7 +126,7 @@
           "why": "Issue #326: every surface draws a state with the look's status-map entry, its glyph and color, from the shipped clean look."
         },
         "quickjs-jit-runtime": {
-          "spec": "* git+https://github.com/longbridge/quickjs-jit?rev=96593cd7a54440ac060a391b8baea7e9a3cf1393",
+          "spec": "=0.14.1",
           "why": "Issue #358: the switch that denies a process native code, in vendor/quickjs-jit-runtime; gpui-shell keeps the runtime it would be set on."
         },
         "sha2": {
@@ -172,7 +172,7 @@
       },
       "dev-dependencies": {
         "gpui-kit": {
-          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1",
+          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=e97fe438129c5e4ccab504f2e6fafd9a4e396bba",
           "why": "Issue #337: gpui-kit's test support, for the headless renders and clicks."
         },
         "deep-app": {
@@ -226,7 +226,7 @@
           "why": "Issue #339: the block the NSEvent local monitor takes. Already in gpui's tree."
         },
         "gpui-pre-apple": {
-          "spec": "=0.3.9",
+          "spec": "=0.3.14",
           "why": "Issue #377: the GPUI patch's surface reports, which release a GPU-layer slot once GPUI's command buffer completes."
         },
         "objc2-quartz-core": {
@@ -282,15 +282,15 @@
           "why": "Issue #358: the panel runtime, policy and mount the app's panels use, and the tree the host sends."
         },
         "gpui-kit": {
-          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1",
+          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=e97fe438129c5e4ccab504f2e6fafd9a4e396bba",
           "why": "Issue #358: the headless app context a gpui-shell view needs when no screen is in the process."
         },
         "gpui-shell": {
-          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1",
+          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=e97fe438129c5e4ccab504f2e6fafd9a4e396bba",
           "why": "Issue #358: runs the panel, with no JIT, on the host's main thread."
         },
         "quickjs-jit-runtime": {
-          "spec": "* git+https://github.com/longbridge/quickjs-jit?rev=96593cd7a54440ac060a391b8baea7e9a3cf1393",
+          "spec": "=0.14.1",
           "why": "Issue #358: the switch that denies a process native code, in vendor/quickjs-jit-runtime; gpui-shell keeps the runtime it would be set on."
         },
         "serde_json": {
@@ -306,11 +306,11 @@
           "why": "Issue #338: the app the replica is a headless copy of; its shell, views and fixture projection."
         },
         "gpui-kit": {
-          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1",
+          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=e97fe438129c5e4ccab504f2e6fafd9a4e396bba",
           "why": "Issue #338: the headless app context, the observed elements the snapshot reads, and the dock the slots live in."
         },
         "gpui-shell": {
-          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1",
+          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=e97fe438129c5e4ccab504f2e6fafd9a4e396bba",
           "why": "Issue #338: mounts the registry's script panels into the shell's slots and reads their trees back."
         },
         "serde_json": {
@@ -908,7 +908,7 @@
           "why": "Issue #390: the one shaper and the glyph atlas a label draws from."
         },
         "gpui-kit": {
-          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1",
+          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=e97fe438129c5e4ccab504f2e6fafd9a4e396bba",
           "why": "Issue #390: the window the mask sprites go into, through the GPUI patch's paint_mask_sprite."
         },
         "deep-canvas-marks": {
@@ -952,7 +952,7 @@
           "why": "Issue #390: paints each label through the atlas and reports what it drew."
         },
         "gpui-kit": {
-          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1",
+          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=e97fe438129c5e4ccab504f2e6fafd9a4e396bba",
           "why": "Issue #390: the headless window, its frames and its offscreen capture."
         },
         "serde_json": {
@@ -1080,7 +1080,7 @@
           "why": "Issue #391: shapes and paints each text mark through the canvas's atlas, never GPUI's text system."
         },
         "gpui-kit": {
-          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1",
+          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=e97fe438129c5e4ccab504f2e6fafd9a4e396bba",
           "why": "Issue #391: the headless windows, their frames through the GPUI patch's present_frame, and the offscreen capture."
         },
         "image": {
@@ -1138,7 +1138,7 @@
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
         "gpui-pre-apple": {
-          "spec": "=0.3.9",
+          "spec": "=0.3.14",
           "why": "Issue #391: the GPU ledger the GPUI patch adds to the Metal renderer (frame command buffers committed and their GPU time), which shows a still view uses none. Already in the tree under gpui-kit, as the vendored copy."
         },
         "libc": {
@@ -1470,7 +1470,7 @@
           "why": "Issue #393: paints the card's and outlines' labels through the canvas's atlas, never GPUI's text system."
         },
         "gpui-kit": {
-          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1",
+          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=e97fe438129c5e4ccab504f2e6fafd9a4e396bba",
           "why": "Issue #393: the headless window, its frames and the offscreen capture of the composed window."
         },
         "wgpu": {
@@ -1478,7 +1478,7 @@
           "why": "Issue #138: the kit's GPU backend on the reference Mac, Metal offscreen under the GPU lease: a module's GPU pass draws and its pixels are read back for the snapshot case."
         },
         "gpui-pre-apple": {
-          "spec": "=0.3.9",
+          "spec": "=0.3.14",
           "why": "Issue #854: the GPU ledger the GPUI patch adds to the Metal renderer, for a settled frame's GPU time; the vendored crate the app already uses."
         },
         "objc2": {
@@ -1490,7 +1490,7 @@
           "why": "Issue #140: reaches the shown window's NSView for its accessibility tree; already in GPUI's tree."
         },
         "gpui-pre-macos": {
-          "spec": "=0.3.9",
+          "spec": "=0.3.14",
           "why": "Issue #1551: a still window stops its display link, through the vendored gpui-pre-macos's frame-link hook and plants; already in the lockfile."
         },
         "objc2-foundation": {
@@ -1652,11 +1652,11 @@
           "why": "Issue #382: the shaper and glyph atlas the status layer's marks and legend are rasterized from, exact before the status colors composite them."
         },
         "gpui-kit": {
-          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1",
+          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=e97fe438129c5e4ccab504f2e6fafd9a4e396bba",
           "why": "Issue #377: the headless window, the page, the view and the question card the handoff is captured from."
         },
         "gpui-shell": {
-          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1",
+          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=e97fe438129c5e4ccab504f2e6fafd9a4e396bba",
           "why": "Issue #377: the ScriptView the plug-in fixture's panel runs in, read back as its described tree."
         },
         "bytemuck": {
@@ -1758,7 +1758,7 @@
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
         "gpui-pre-apple": {
-          "spec": "=0.3.9",
+          "spec": "=0.3.14",
           "why": "Issue #377: the GPUI patch's planted twins and its GPU ledger, which times GPUI's frames for handoff_ms."
         }
       }
@@ -2000,7 +2000,7 @@
           "why": "Issue #380: the stroke and fill tessellation a mark's mesh comes from."
         },
         "gpui-kit": {
-          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1",
+          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=e97fe438129c5e4ccab504f2e6fafd9a4e396bba",
           "why": "Issue #380: the window a mark's mesh is painted into, as one GPUI path."
         }
       }
@@ -3570,6 +3570,18 @@
       "kind": "API key",
       "sha256": "533983d7c2f80a6f023d94767711b12a3536d38aa44c3ed852052b69375b4e37",
       "why": "Issue #2651's blind suite: a made-up refresh token (dh2651FAKE) written into a temp home's credentials file; no real credential."
+    },
+    {
+      "path": "vendor/quickjs-jit-stdlib/src/llrt/llrt_path/lib.rs",
+      "kind": "home path",
+      "sha256": "96fced39b59cf5a273402dca1dce9b13e0c6c667fc6331126e319ad5b93902e3",
+      "why": "Issue #3502: a made-up Windows home (user User) in the path module's own test, in quickjs-jit-stdlib 0.14.1 as crates.io ships it; vendored unchanged, no real home."
+    },
+    {
+      "path": "vendor/quickjs-jit-stdlib/src/llrt/llrt_path/lib.rs",
+      "kind": "home path",
+      "sha256": "82f268405af510a3b84d0b66d163dce7575b87350ed62b0dce148b4927c6572a",
+      "why": "Issue #3502: a made-up Windows home (user User) in the path module's own test, in quickjs-jit-stdlib 0.14.1 as crates.io ships it; vendored unchanged, no real home."
     }
   ]
 }

@@ -263,14 +263,6 @@ pub(crate) fn outline(
     }
 }
 
-impl IntoElement for Outlined {
-    type Element = Self;
-
-    fn into_element(self) -> Self::Element {
-        self
-    }
-}
-
 impl Element for Outlined {
     type RequestLayoutState = TextSelectionHandle;
     type PrepaintState = Hitbox;

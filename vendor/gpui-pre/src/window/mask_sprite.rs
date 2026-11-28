@@ -46,7 +46,7 @@ impl Window {
         };
         self.next_frame.scene.insert_primitive(MonochromeSprite {
             order: 0,
-            pad: 0,
+            animation: Default::default(),
             bounds: bounds.scale(scale_factor),
             content_mask: self.snapped_content_mask(),
             color: color.opacity(element_opacity),

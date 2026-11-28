@@ -702,6 +702,7 @@ pub fn pop_out(address: Address, kind: Kind, cx: &mut App) {
     let options = WindowOptions {
         // A square as tall as the window the app opens at (#1458).
         window_bounds: Some(WindowBounds::centered(
+            None,
             size(
                 crate::chrome::sizes().window.1,
                 crate::chrome::sizes().window.1,
