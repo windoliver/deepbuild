@@ -483,9 +483,21 @@
     "text": "卡在只有你或某个服务才能解除的事情上（{0}）",
     "source": "55d6c89d037a7b5803f1a6cdd24d816db2717d92b196bea6e4ecccb145a85fcf"
   },
+  "hub.call_repeats": {
+    "text": "{0} 连续失败了 {1} 次，错误相同",
+    "source": "727f335ff1187de0f351af8df950f687ab21846255cf52cfd9360a7c92e2a650"
+  },
+  "hub.call_repeats_exit": {
+    "text": "{0} 连续失败了 {1} 次，错误相同（退出码 {2}）",
+    "source": "da32cf6ae8770b8a7a272c72169d474f505698d9acf1d9e14ed06035a1d42f3a"
+  },
+  "hub.call_repeats_fix": {
+    "text": "在它再次运行之前，先看看这个错误。",
+    "source": "f0d1bf188d4e338396137aca58ef5ae79737ba635d1b1c9c43660306c797d024"
+  },
   "hub.claim_passed": {
-    "text": "它的声明通过了检查",
-    "source": "91083626c0c58376d4bf686981947df833dc4ade8fedee3d359ab30f3754f2cc"
+    "text": "它说已完成，它的检查也认可",
+    "source": "da36f42aa7f5f4765aae87c041f0ae6ed824e5f12a5e1bb8611b0c1e98ca979a"
   },
   "hub.client_fix": {
     "text": "请把此应用或 CLI 更新到与正在运行的中枢匹配的版本。",
@@ -535,9 +547,49 @@
     "text": "中枢比此应用旧：它使用契约 {0}，而此应用需要 {1}。\n{2}",
     "source": "8609c9935c3fcfa9c8f00d56c7b9a63480c839f0cefb47acb1014913342362b5"
   },
+  "hub.limit_resets": {
+    "text": "用量限制让它停了下来；它可以在 {0} 继续",
+    "source": "519b63765edd357ef6f6afc0ac394cc775c46ad207762975abdd4616597544fa"
+  },
+  "hub.limit_resets_during": {
+    "text": "它在运行 {0} 时被用量限制停了下来；它可以在 {1} 继续",
+    "source": "cb52c4119207f0ae3397cf536b91da2dc2903a458cd0703d8d729f3482ab672a"
+  },
+  "hub.limit_resets_fix": {
+    "text": "在 {0} 限制重置后，再给它发一次提示。",
+    "source": "761a19a3bdce01cc8dbf922527ef7cdf17619637df2c6f0498666cf8e76654a3"
+  },
+  "hub.limit_stopped": {
+    "text": "用量限制让它停了下来；该限制没有说明何时重置",
+    "source": "93d2b531ae20f79ebde533eb1e39b796dd50327240413757c6482e6611880d16"
+  },
+  "hub.limit_stopped_during": {
+    "text": "它在运行 {0} 时被用量限制停了下来；该限制没有说明何时重置",
+    "source": "4b6f23646b66c25da632dacbbffec35e60411f76f8ec584931669ff7cf669839"
+  },
+  "hub.limit_stopped_fix": {
+    "text": "限制重置后，再给它发一次提示。",
+    "source": "abbff0503b1278473e6512e72ce323853301c5ebfb8c892513d82de42ddc7900"
+  },
+  "hub.link_down": {
+    "text": "到 {0} 的连接断开了",
+    "source": "974843b4e09f3c6df674fc1b5875b9c3c7771538bce786118cccecf859f071e7"
+  },
+  "hub.link_down_host": {
+    "text": "到它所在主机的连接断开了",
+    "source": "8bb67c5f791086b29ea2c05e104fc99a56927548779d70dc89d2022130bbb4cd"
+  },
+  "hub.model_retry": {
+    "text": "它的模型调用被拒绝，{0}：第 {1} 次重试",
+    "source": "c4dbd29cebc1387f4e5b6a9f1f4c3e8e6266e370a06f8629a1378f9ff69b590d"
+  },
+  "hub.model_retry_of": {
+    "text": "它的模型调用被拒绝，{0}：第 {1} 次重试，共 {2} 次",
+    "source": "9527db1bfd3cc7f11d05ca98f7d648ca106606c5edd46666982133aa4ce1c902"
+  },
   "hub.moved_commit": {
-    "text": "它的结论所针对的提交之后有了变动",
-    "source": "825dcca2f7c7994aae20f9bf929088f503cbc827cb0f27d94257c04d82982576"
+    "text": "它的结果针对的是某次已保存的更改，而之后工作又有了变动",
+    "source": "be7cfe4f45f9b1e1fc9d9d3d4a807683a09c535fbc5e97c1165200317b6f5492"
   },
   "hub.no_hook_since": {
     "text": "之后没有收到钩子",
@@ -551,6 +603,18 @@
     "text": "有一个权限提示在等你",
     "source": "e7c20072cc74041e2ef1e80261dc3f6876723cd608e4d14c66ca608822834211"
   },
+  "hub.process_exited": {
+    "text": "它的进程在这一轮中途退出了",
+    "source": "62fc6ff0eebe8134c1c6235a60fea5ccb20ec4173e32549402f94fe6b6a06e2b"
+  },
+  "hub.process_exited_during": {
+    "text": "它的进程在这一轮中途、运行 {0} 时退出了",
+    "source": "e03b77b339c5b7446a086ed2156311f0c2da8465b0c39fd48c1f914e5a81e217"
+  },
+  "hub.process_exited_fix": {
+    "text": "恢复它，从停下的地方继续。",
+    "source": "bbb5b43d1de7a44acf35c04db3cd6b6d1291336d85e59c8a18628f36902e9e90"
+  },
   "hub.process_gone": {
     "text": "它的进程在一轮中途消失了",
     "source": "db44d096ca9dc75d9cb36cab1946cdde37a78acdf0c9d9e1af3adb568b5122e2"
@@ -560,24 +624,24 @@
     "source": "e3d297175e7ccc8c54042dc122c0d7ff0311e46c5868563ddb6734c2b7aef78e"
   },
   "hub.says_done": {
-    "text": "它说已完成，而它的检查还没有给出结论",
-    "source": "725a76c9339c3600d582cf94edc52d612a14773cf6298022bca6b0ec0f374080"
+    "text": "它说已完成，而它的检查还没有给出结果",
+    "source": "fa270cb9d43f154ad1e3c76cc59b24a69197d6788e18daa122e046a276a98bab"
   },
   "hub.sent_back_round": {
-    "text": "它的检查退回了它的声明，第 {0} 轮，共 {1} 轮",
-    "source": "df500220c7d48e3722c4d0fa84b913864c03bec2bab63311a45a07e2ef05cc9f"
+    "text": "它的检查把它退回给了它的智能体，第 {0} 轮，共 {1} 轮",
+    "source": "ad515c30398658856733a43760e4376c03fe4ffcb16fb854c832db854ddf13f6"
   },
   "hub.task_queued": {
     "text": "它的任务在排队，它的智能体还没有开始",
     "source": "2bdd453afb1e5e8f8f4656b26955e1482daf9b284a67c324bfdea01be3325437"
   },
   "hub.turn_failed": {
-    "text": "这一轮以失败结束，没有声明",
-    "source": "e2986bb7a3738f861e57d12aa4eac7de2f601a257540bef40d14e985396698da"
+    "text": "这一轮以失败结束，它还没有说已完成",
+    "source": "348084c6276f5e33429674c9ebd65f6d632d54e8338fe17833ec65e668b03e34"
   },
   "hub.turn_failed_cause": {
-    "text": "这一轮以失败结束，没有声明（{0}）",
-    "source": "3830dc266395f6b2dcf11c25f6f050faee365b4baa0e34c6b16f32d64a767bc7"
+    "text": "这一轮以失败结束，它还没有说已完成（{0}）",
+    "source": "436c3a29c0bd3899ad241e4a9ba48d35ddf552c63ec65dc9fc0e3591c1dac4e1"
   },
   "hub.turn_interrupted": {
     "text": "这一轮被中断了",
@@ -587,13 +651,77 @@
     "text": "这一轮已停止",
     "source": "a98e7e404ac7e49bd9c11847e2cb94e8ce3d80c73d2ffcba6baadc8bfdc5799e"
   },
+  "hub.unpushed_fix": {
+    "text": "推送这份草稿，或说明它为什么留在这里。",
+    "source": "83dd8e08c9ca95cc41fbfff8b60784839bc9573051ac1bd798d9ee4f58012f6d"
+  },
+  "hub.unpushed_many": {
+    "text": "{0} 处已保存的更改，尚未共享",
+    "source": "812e67a5f53375468824471cb384fb1bce2f45c98e25ba263553ec586dfcc7db"
+  },
+  "hub.unpushed_many_on": {
+    "text": "{1} 上有 {0} 处已保存的更改，尚未共享",
+    "source": "9f3500f55a8eb3fd5cba63c6bb8e09bf7856f3b39bdf87b7ac23e608fb10a50c"
+  },
+  "hub.unpushed_one": {
+    "text": "1 处已保存的更改，尚未共享",
+    "source": "302843cc79f85dac0b3adbf683aa3696a4c4efcd29bad0882b0731c277b6f502"
+  },
+  "hub.unpushed_one_on": {
+    "text": "{0} 上有 1 处已保存的更改，尚未共享",
+    "source": "4b6f83381c04c1298bbc08cb3be0ec853f771ca476e497a44cc2b87beb93346f"
+  },
   "hub.waits_for": {
     "text": "等待 {0}：{1}",
     "source": "76496a2e2c8c9652fec617dda204ca0a9ec041f1a272bb996163016cc3846503"
   },
+  "hub.waits_for_no_evidence": {
+    "text": "等待 {0}：它的结果没有指出证据",
+    "source": "d9ddffeb16cbf2ccd9a7dcb13b3c3d3bc877b6ac7df28445d3a8dff21791c10f"
+  },
   "hub.waits_for_you": {
     "text": "等你处理：{0}",
     "source": "bf1092db167905b8f985b6f28d93fb36444aecc44122ff7fec634ebb6cbdc113"
+  },
+  "hub.waits_for_you_no_evidence": {
+    "text": "等你处理：它的结果没有指出证据",
+    "source": "fe687c43216963a051e57975a6052b1a88e2f5930b2d36a8a344e97bc5a2db57"
+  },
+  "hub.watch_checks": {
+    "text": "这个项目的检查尚未批准，所以它说已完成时，既不会被拦住，也不会通过",
+    "source": "026f35d94a7ef492d209521a547f023e7846d8b45eac192540afd14d0540fc15"
+  },
+  "hub.watch_checks_fix": {
+    "text": "在“待你处理”中信任这个项目，或在 Claude Code 或 Codex 中信任它。",
+    "source": "813091f1e50292442b1f2709427b8f3fba9e6eab88b5a8c565a3f2a27a685ca5"
+  },
+  "hub.watch_hooks": {
+    "text": "它的钩子连不上 DeepBuild",
+    "source": "e55e7007f1e0ba0578e7e6f6a64d98301d0d6cb15114a38b1674ac5e31e47a60"
+  },
+  "hub.watch_off": {
+    "text": "`deep off` 关闭了拦截：不会拦住任何停止，也没有结果会阻止它",
+    "source": "f2635c8cd3649b82a6bf4b20effd73f0376157d070b86592bbe3d4cecccf2275"
+  },
+  "hub.watch_off_fix": {
+    "text": "运行 `deep on`。",
+    "source": "d6ea795b9d6289fe5c809df69f172696d3ea9025b761b44ba911cbb39014f4bc"
+  },
+  "hub.watch_version": {
+    "text": "它运行的是 {0}，不是其事实所涵盖的版本",
+    "source": "1d2e1c061f98924e3f8c48f051b6a0cec60f071cde1a58668e3db3aedc9b7d29"
+  },
+  "hub.watch_version_fix": {
+    "text": "安装事实所涵盖的版本，或更新 DeepBuild。",
+    "source": "d92d2fca3af5f2f439e397843663e7df3edd091a7042b6f7e8474289ccb8de29"
+  },
+  "hub.watch_version_unnamed": {
+    "text": "它运行的智能体不是其事实所涵盖的版本",
+    "source": "f616a7c0c5daca81091f572d5eeb5c5cb59a17759bd17893d90a798a8926bb3c"
+  },
+  "hub.watch_version_unnamed_at": {
+    "text": "它运行的智能体是 {0}，不是其事实所涵盖的版本",
+    "source": "dca95ded75d8c6a7447b10d45602d5073e9acad3b33619a671c37a7f92439736"
   },
   "hub.words_stalled": {
     "text": "你的话没有送达：投递卡住了",
