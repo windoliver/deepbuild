@@ -1,0 +1,42 @@
+# By hand, Linux (spark), 2026-11-22: a real installed hub and a second hub run with --root, the real deep-app --hub-check.
+# deep-app.fix = head 327635e34 build, deep-app.base = 58b4a8cb2 build. $T is the temp dir; hubs stopped by PID afterwards.
+# installed hub only, no config
+
+$ deep hub run   (HOME=$T/h)
+  ~/.deepbuild/control.token
+  ~/.deepbuild/hub.sock
+
+$ deep-app(deep-app.fix) --hub-check
+hub ok: contract 1.0
+exit 0
+
+$ deep-app(deep-app.base) --hub-check
+hub ok: contract 1.0
+exit 0
+
+# second hub with --root $T/r, hub.address pointing at it
+
+$ deep hub run --root $T/r
+  $T/r/control.token
+  $T/r/hub.sock
+
+$ cat ~/.deepbuild/config.json
+{"hub":{"address":"unix:$T/r/hub.sock"}}
+
+$ deep-app(deep-app.fix) --hub-check
+hub ok: contract 1.0
+exit 0
+
+$ deep-app(deep-app.base) --hub-check
+hub ok: contract 1.0
+deep-app: the hub refused a call: Refused(Object {"code": String("credential"), "retryable": Bool(false), "remediation": String("Present the control token this hub wrote to control.token at its launch; an earlier launch's token no longer counts."), "path": String("/token"), "actual": String(""), "evidence": Array []})
+exit 0
+
+# hub.address pointing at a forwarded socket with no token beside it (a symlink to the installed hub's socket)
+
+$ cat ~/.deepbuild/config.json
+{"hub":{"address":"unix:$T/fwd/hub.sock"}}
+
+$ deep-app(deep-app.fix) --hub-check
+hub ok: contract 1.0
+exit 0

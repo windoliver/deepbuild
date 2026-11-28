@@ -40,14 +40,14 @@ mod panel {
         };
         let _ = std::fs::create_dir_all(&out);
         let root = deep_app::hub::root();
-        let mut hub =
-            match Presentations::open(&deep_app::hub::address(), &root.join("control.token")) {
-                Ok(hub) => hub,
-                Err(error) => {
-                    println!("{}", json!({"ready": false, "error": format!("{error:?}")}));
-                    return 1;
-                }
-            };
+        let socket = deep_app::hub::address();
+        let mut hub = match Presentations::open(&socket, &deep_app::hub::token(&socket)) {
+            Ok(hub) => hub,
+            Err(error) => {
+                println!("{}", json!({"ready": false, "error": format!("{error:?}")}));
+                return 1;
+            }
+        };
         let mut cx = deep_replica::headless_context();
         let panel = CanvasPanel::new(root.join("evidence"));
         let Ok((handle, entity)) = cx.update(|cx| {

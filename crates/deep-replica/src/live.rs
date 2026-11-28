@@ -217,10 +217,7 @@ mod live {
                     return 1;
                 }
             };
-            record::install(RecordReader::unopened_folded(
-                &hub::address(),
-                &hub::root().join("control.token"),
-            ));
+            record::install(RecordReader::unopened_folded(&hub::address()));
             let (layout, view) = (Layout::shipped(view), view.to_owned());
             gpui_kit::application().run(move |cx| {
                 gpui_kit::init(cx);

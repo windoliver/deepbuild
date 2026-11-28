@@ -449,7 +449,7 @@ impl View {
 #[derive(Default)]
 pub struct RecordReader {
     socket: PathBuf,
-    token_file: PathBuf,
+    token_file: Option<PathBuf>,
     client: Option<HubClient>,
     view: View,
     /// The notification setting the hub should hold.
@@ -469,7 +469,7 @@ impl RecordReader {
     pub fn unopened(socket: &Path, token_file: &Path) -> RecordReader {
         RecordReader {
             socket: socket.to_path_buf(),
-            token_file: token_file.to_path_buf(),
+            token_file: Some(token_file.to_path_buf()),
             ..RecordReader::default()
         }
     }
@@ -477,11 +477,12 @@ impl RecordReader {
     /// Issue #1172: as [`RecordReader::unopened`], for the window: its sidebar and session pages read the folded
     /// record, so each new read also folds what the record held before the app or the hub started. Issue #41: it
     /// calls nothing on a hub whose hello doesn't cover what the app calls.
-    pub fn unopened_folded(socket: &Path, token_file: &Path) -> RecordReader {
+    pub fn unopened_folded(socket: &Path) -> RecordReader {
         RecordReader {
+            socket: socket.to_path_buf(),
             folds: true,
             checks: true,
-            ..RecordReader::unopened(socket, token_file)
+            ..RecordReader::default()
         }
     }
 
@@ -494,7 +495,11 @@ impl RecordReader {
 
     /// As [`RecordReader::open`], folded as [`RecordReader::unopened_folded`] is.
     pub fn open_folded(socket: &Path, token_file: &Path) -> Result<RecordReader, HubError> {
-        let mut reader = RecordReader::unopened_folded(socket, token_file);
+        let mut reader = RecordReader {
+            folds: true,
+            checks: true,
+            ..RecordReader::unopened(socket, token_file)
+        };
         reader.connect()?;
         Ok(reader)
     }
@@ -591,7 +596,9 @@ impl RecordReader {
     /// Connects, redoing the reads when the hub's start ID isn't the view's, and subscribes after the view's
     /// `log_pos`.
     fn connect(&mut self) -> Result<(), HubError> {
-        let token = std::fs::read_to_string(&self.token_file)?;
+        let token_file =
+            (self.token_file.clone()).unwrap_or_else(|| crate::hub::token(&self.socket));
+        let token = std::fs::read_to_string(token_file)?;
         let mut client = HubClient::connect(&self.socket)?;
         if self.checks {
             let covered = client.covers_app();
@@ -1057,6 +1064,8 @@ pub fn history() -> Vec<Value> {
     })
 }
 
+#[cfg(test)]
+mod token_test;
 #[cfg(test)]
 mod tests {
     use super::*;
