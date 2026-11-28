@@ -20,6 +20,58 @@ fn main() {
     }
 }
 
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn ready(active: bool, key: bool, appkit: Option<&str>, app: Option<&str>) -> Result<(), String> {
+    if !(active && key) {
+        return Err(format!(
+            "the window to be key (GPUI says active {active}, AppKit says key {key})"
+        ));
+    }
+    if appkit != app {
+        return Err(format!(
+            "AppKit's focused element ({appkit:?}) to be the one the app focused ({app:?})"
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ready;
+
+    #[test]
+    fn captures_only_a_key_window_whose_focus_appkit_reports_as_the_apps() {
+        assert_eq!(
+            ready(true, true, Some("card-option:yes"), Some("card-option:yes")),
+            Ok(())
+        );
+        assert_eq!(
+            ready(true, true, None, None),
+            Ok(()),
+            "a window that focused nothing is captured as it is"
+        );
+        for (active, key) in [(false, true), (true, false), (false, false)] {
+            assert!(
+                ready(
+                    active,
+                    key,
+                    Some("card-option:yes"),
+                    Some("card-option:yes")
+                )
+                .is_err(),
+                "GPUI says active {active}, AppKit says key {key}"
+            );
+        }
+        let none =
+            ready(true, true, None, Some("card-option:yes")).expect_err("AppKit reports no focus");
+        assert!(
+            none.contains("card-option:yes"),
+            "the wait names the app's focus: {none}"
+        );
+        assert!(ready(true, true, Some("session:01A"), Some("card-option:yes")).is_err());
+    }
+}
+
 #[cfg(target_os = "macos")]
 mod live {
     use std::path::PathBuf;
@@ -37,6 +89,10 @@ mod live {
     use serde_json::Value;
 
     const FRAMES: usize = 8;
+    const REACTIVATE: usize = 60;
+    const WAIT: std::time::Duration = std::time::Duration::from_secs(120);
+    static WAITING: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
+    static CAPTURING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
     pub fn run() -> i32 {
         let (view, out, ..) = match deep_replica::view_args("deep-live", "file", false) {
@@ -52,6 +108,23 @@ mod live {
         }
         deep_app::views::set_state(deep_replica::load_state());
         let layout = Layout::shipped(&view);
+        std::thread::spawn(|| {
+            std::thread::sleep(WAIT);
+            if CAPTURING.load(std::sync::atomic::Ordering::SeqCst) {
+                return;
+            }
+            let waiting = WAITING.lock().map(|w| w.clone()).unwrap_or_default();
+            let waiting = if waiting.is_empty() {
+                "its first frames".to_owned()
+            } else {
+                waiting
+            };
+            eprintln!(
+                "deep-live: no capture in {} s, still waiting for {waiting}",
+                WAIT.as_secs()
+            );
+            std::process::exit(1);
+        });
         gpui_kit::application().run(move |cx| {
             gpui_kit::init(cx);
             deep_app::init(cx);
@@ -84,22 +157,52 @@ mod live {
             }
             activate_accessibility();
         }
-        if frame < FRAMES {
+        let waiting = if frame < FRAMES {
+            None
+        } else {
+            match content_view() {
+                Err(error) => Some(error),
+                Ok((ns_window, view)) => {
+                    let (appkit, app) =
+                        (focused_identifier(&view), deep_app::views::focus_id(window));
+                    super::ready(
+                        window.is_window_active(),
+                        ns_window.isKeyWindow(),
+                        appkit.as_deref(),
+                        app.as_deref(),
+                    )
+                    .err()
+                }
+            }
+        };
+        if frame < FRAMES || waiting.is_some() {
+            if let Some(waiting) = waiting {
+                if let Ok(mut last) = WAITING.lock() {
+                    *last = waiting;
+                }
+                if (frame - FRAMES) % REACTIVATE == 0 {
+                    cx.activate(true);
+                }
+            }
             deep_app::canvas::clear_items();
             window.refresh();
             window.on_next_frame(move |window, cx| settle(window, cx, out, frame + 1));
             return;
         }
+        CAPTURING.store(true, std::sync::atomic::Ordering::SeqCst);
+        eprintln!("deep-live: captured at settle frame {frame}");
         match capture(window) {
             Ok(snapshot) => {
                 if let Some(parent) = out.parent() {
                     std::fs::create_dir_all(parent).expect("the output directory");
                 }
+                let partial = out.with_extension("json.partial");
                 std::fs::write(
-                    &out,
+                    &partial,
                     serde_json::to_string_pretty(&snapshot.to_json()).expect("JSON"),
                 )
                 .expect("the live tree is written");
+                std::fs::rename(&partial, &out).expect("the live tree is in place");
                 println!(
                     "live {}: {} nodes, {} canvas items",
                     out.display(),
