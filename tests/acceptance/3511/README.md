@@ -170,3 +170,8 @@ tried:
 - Makefile and justfile targets, declared fixtures and runner configs, and untracked files of the claim are in Scope
   but in no criterion; they aren't read.
 - The words matched in readings 5 and 9 are the design's and the issue's; a verdict that says the same in others fails.
+
+## Comments removed
+
+The comments of `helpers.ts`, `code-only.test.ts`, `failed-read.test.ts` and `own-files.test.ts` were taken out in
+place under #3455 and `docs/adr/0001-code-carries-no-comments.md`. Their code tokens are unchanged.

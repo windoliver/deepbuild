@@ -1,12 +1,3 @@
-// AC1 #3511.18fa26af: a session on a host whose claim edits the test file its approved check runs, or the package
-// script it runs, so that the check exits 0 there, does not read PASS; the verdict names the check as the agent's own
-// and the edited file.
-//
-// Each scene (README, The scenes): the session changes price.txt to 18.00, which leaves the coupon on, and then edits
-// the check's own file so the check passes anyway: the test file, emptied of its comparison, or package.json, its
-// `test` script replaced. It stops saying done. The check runs on the host and exits 0. Read: no verdict of the claim
-// is PASS, and its newest verdict names the check as the agent's own and names the edited file. A gate that never
-// reads what the claim changed on the host passes the claim, and the test fails naming the check.
 import { afterEach, describe, expect, test } from 'vitest';
 import { CHECK, cleanup, LIMIT } from '../999/helpers.ts';
 import { AC, AGENTS_OWN, begin, CODE, edits, exitedZeroThere, PACKAGE, PACKAGE_GUTTED, proof, said, shownClaim, stopAndClaim, TEST_FILE, TEST_GUTTED, type Via } from './helpers.ts';
