@@ -487,9 +487,6 @@ static void open_rule(int nr, int flags_arg) {
 #ifndef __NR_removexattrat
 #define __NR_removexattrat 466
 #endif
-#ifndef AT_EMPTY_PATH
-#define AT_EMPTY_PATH 0x1000
-#endif
 
 static struct sock_fprog build_filter(void) {
   prog_n = 0;
@@ -498,6 +495,7 @@ static struct sock_fprog build_filter(void) {
   RET(SECCOMP_RET_KILL_PROCESS);
   LD_NR;
 #if defined(__x86_64__)
+  JGE(0x80000000, 2, 0);
   JGE(0x40000000, 0, 1);
   RET(SECCOMP_RET_KILL_PROCESS);
 #endif
@@ -681,12 +679,12 @@ static void answer(Server *v, long val, int err, int cont) {
 #define RESULT(v, rc) answer(v, (rc) < 0 ? -1 : (rc), (rc) < 0 ? errno : 0, 0)
 static int still_waiting(Server *v) { return ioctl(v->listener, SECCOMP_IOCTL_NOTIF_ID_VALID, &v->req->id) == 0; }
 
-/** Whether a path the process names may be written; a refusal is recorded. */
 static void refuse_unfound(Server *v) {
   int e = errno ? errno : ENOENT;
   REFUSE(v, e);
 }
 
+/** Whether a path the process names may be written; a refusal is recorded. */
 static int write_allowed(Server *v, int dirfd, uint64_t path_addr, int nofollow, int parent_ok, const char *operation) {
   char path[PATH_MAX], real[PATH_MAX];
   if (read_str(v->req->pid, path_addr, path, sizeof path) != 0) { REFUSE(v, EFAULT); return 0; }
@@ -711,6 +709,17 @@ static int port_granted(const Ports *p, int port) {
   if (p->any) return 1;
   for (int i = 0; i < p->n; i++) if (p->ports[i] == port) return 1;
   return 0;
+}
+
+static mode_t umask_of(pid_t tid) {
+  char path[64], line[128];
+  snprintf(path, sizeof path, "/proc/%d/status", tid);
+  FILE *f = fopen(path, "r");
+  unsigned mask = 022;
+  if (!f) return (mode_t)mask;
+  while (fgets(line, sizeof line, f)) if (sscanf(line, "Umask: %o", &mask) == 1) break;
+  fclose(f);
+  return (mode_t)(mask & 0777);
 }
 
 static void bind_unix(Server *v, const struct sockaddr_storage *a, socklen_t len) {
@@ -750,11 +759,12 @@ static void bind_unix(Server *v, const struct sockaddr_storage *a, socklen_t len
   memset(&mine, 0, sizeof mine);
   mine.sun_family = AF_UNIX;
   memcpy(mine.sun_path, name, strlen(name));
+  mode_t was = umask(umask_of(v->req->pid));
   int rc = bind(sock, (struct sockaddr *)&mine, (socklen_t)(offsetof(struct sockaddr_un, sun_path) + strlen(name) + 1));
   e = errno;
-  int back = fchdir(here);
+  umask(was);
+  if (fchdir(here) != 0) { rc = -1; e = errno; }
   errno = e;
-  (void)back;
   RESULT(v, rc);
   close(here);
   close(sock);
@@ -768,8 +778,10 @@ static void handle_listen(Server *v) {
   memset(&a, 0, sizeof a);
   socklen_t len = sizeof a;
   if (getsockname(sock, (struct sockaddr *)&a, &len) != 0) { int e = errno; close(sock); REFUSE(v, e); return; }
-  int ok = a.ss_family == AF_UNIX;
-  if (a.ss_family == AF_INET || a.ss_family == AF_INET6) {
+  struct sockaddr_storage peer;
+  socklen_t peer_len = sizeof peer;
+  int ok = a.ss_family == AF_UNIX || getpeername(sock, (struct sockaddr *)&peer, &peer_len) == 0;
+  if (!ok && (a.ss_family == AF_INET || a.ss_family == AF_INET6)) {
     int port = port_of(&a);
     ok = port != 0 && port_granted(&v->spec->listen, port);
     if (!ok) {
@@ -879,7 +891,7 @@ static void handle_meta(Server *v, int nr) {
   int fd = -1;
   int xat = nr == __NR_setxattrat || nr == __NR_removexattrat;
   if (xat && (a[2] & ~(__u64)(AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH))) { REFUSE(v, EINVAL); return; }
-  int by_fd = nr == __NR_fchmod || nr == __NR_fchown || nr == __NR_fsetxattr || nr == __NR_fremovexattr || (nr == __NR_utimensat && a[1] == 0);
+  int by_fd = nr == __NR_fchmod || nr == __NR_fchown || nr == __NR_fsetxattr || nr == __NR_fremovexattr || ((nr == __NR_utimensat || nr == __NR_futimesat) && a[1] == 0);
   if (by_fd) {
     fd = take_fd(tid, (int)a[0]);
     if (fd < 0 || real_of_fd(fd, real) != 0) { if (fd >= 0) close(fd); REFUSE(v, EBADF); return; }
@@ -941,8 +953,8 @@ static void handle_meta(Server *v, int nr) {
       struct { __u64 value; __u32 size; __u32 flags; } args;
       size_t usize = (size_t)a[5];
       if (usize < sizeof args) { close(fd); REFUSE(v, EINVAL); return; }
-      if (usize > 4096) { close(fd); REFUSE(v, E2BIG); return; }
-      unsigned char whole[4096];
+      static unsigned char whole[65536];
+      if (usize > (size_t)sysconf(_SC_PAGESIZE) || usize > sizeof whole) { close(fd); REFUSE(v, E2BIG); return; }
       if (read_mem(tid, a[4], whole, usize) != 0 || read_str(tid, a[3], name, sizeof name) != 0) { close(fd); REFUSE(v, EFAULT); return; }
       for (size_t i = sizeof args; i < usize; i++) if (whole[i]) { close(fd); REFUSE(v, E2BIG); return; }
       memcpy(&args, whole, sizeof args);
@@ -973,10 +985,6 @@ static void handle_meta(Server *v, int nr) {
       rc = utimensat(AT_FDCWD, via, tp ? ts : NULL, 0);
       break;
     }
-    default:
-      close(fd);
-      REFUSE(v, ENOSYS);
-      return;
   }
   RESULT(v, rc);
   close(fd);
