@@ -1,0 +1,4 @@
+motion needs-you: PASS, 0 finding(s), recording 5feb1678334428aa88ef0ef8ffe9c41461df3fabee0f53e3faf7a8f544ff7dc6 (361 steps)
+motion session: PASS, 0 finding(s), recording d7e7986c502c1094f78c1d517d1e1f52d7faecd6a8a20f66a2f52ee9b46c4862 (361 steps)
+motion project: PASS, 0 finding(s), recording 51eff526fab8f65997a464a9a8bf6f9ff30d8309330c4e8c49006aa7fa8efac3 (361 steps)
+motion: PASS; pacing not measured: virtual time proves the shape of motion, not native pacing
