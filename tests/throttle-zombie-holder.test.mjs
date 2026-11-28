@@ -4,13 +4,13 @@ import { existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, realpathSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { setTimeout as pause } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 
 const throttle = fileURLToPath(new URL('../scripts/throttle.mjs', import.meta.url));
 
 const until = async (found, ms) => {
-  for (const end = Date.now() + ms; Date.now() < end; await pause(100)) if (found()) return true;
+  // deadline: a look each 100 ms, for at most the bound a loaded machine's slowest step takes.
+  for (const end = Date.now() + ms; Date.now() < end; await new Promise((look) => setTimeout(look, 100))) if (found()) return true;
   return found();
 };
 
