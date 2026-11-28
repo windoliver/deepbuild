@@ -1,0 +1,12 @@
+{
+  "scripts/doc-ceilings.json": [
+    {
+      "find": [
+        "  \"docs/canvas-primitives.md#one-word-per-idea\": 40672,"
+      ],
+      "wrong": [
+        "  \"docs/canvas-primitives.md#one-word-per-idea\": 40702,"
+      ]
+    }
+  ]
+}
