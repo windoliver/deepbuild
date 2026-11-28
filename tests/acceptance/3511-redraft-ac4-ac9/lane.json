@@ -1,0 +1,1 @@
+{ "alone": true, "why": "shared: the Lima VMs, as #999's suite: every host file starts a hub of its own, runs `deep host add` on this Mac's deep-ubuntu VM and plays a session there, whose one home holds the installed deep-hook, Claude Code's hooks and, while login.test.ts runs, its planted login files; local.test.ts alone needs none of this and takes seconds" }
