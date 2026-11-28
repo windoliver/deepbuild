@@ -164,7 +164,10 @@ pub fn numbers(doc: &Map<String, Value>) -> (Vec<Value>, Vec<Issue>) {
                 Some(row) => format!("{id}#{row}"),
                 None => id.clone(),
             };
-            if binds && agents_word(&n["source"]["origin"]) && !named.contains(&name) {
+            if binds
+                && (agents_word(&n["source"]["origin"]) || n["source"]["weakest"] == "agent")
+                && !named.contains(&name)
+            {
                 issues.push(Issue::error(
                     "number_unsourced",
                     &name,

@@ -82,6 +82,7 @@ export interface JobDeps {
   /** Your yes to a paid run's ask, approving a budget of that run's price for its tool (#509). */
   approve(ask: string, budget: BudgetInput): Promise<unknown>;
   fetched?(sha: string): { url: string; fetched: number } | undefined;
+  readTable?(sha: string): Obj | undefined;
   table?(sha: string, record: Record<string, unknown>): Promise<void>;
   plant?: string | undefined;
 }
@@ -232,6 +233,24 @@ export class Jobs {
     }
     const missing = declared.filter((n) => !bytes[n]);
     if (missing.length) return refused(`${kind} takes the inputs ${declared.join(', ')}; give ${missing.join(', ')}`);
+    const tables = held.descriptor.schema.tables;
+    if (tables !== undefined) {
+      const named = params[tables];
+      if (given.length) return refused(`${kind} reads its tables by hash from its params' ${tables}, never as inputs; nothing was read`);
+      if (!isObj(named) || !Object.keys(named).length) return refused(`${kind}'s params name its tables in ${tables}, {name: SHA-256}`);
+      const meta: Record<string, { key: unknown; units: Record<string, unknown> }> = {};
+      for (const name of Object.keys(named).sort()) {
+        const sha = named[name];
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) || typeof sha !== 'string' || !HASH.test(sha)) return refused(`${kind}'s ${tables} names each table by a name of letters, digits and _, and its SHA-256`);
+        const probed = this.d.readTable?.(sha)?.probe;
+        const probe = isObj(probed) && isObj(probed.table) ? probed.table : undefined;
+        if (!probe) return refused(`the input ${name} names ${sha}, which is no table asset the evidence store holds a record of`);
+        try { bytes[name] = await this.d.read(sha); } catch (e) { return refused(`the input ${name}: ${message(e)}`); }
+        const columns = Array.isArray(probe.columns) ? probe.columns.filter(isObj) : [];
+        meta[name] = { key: probe.key, units: Object.fromEntries(columns.filter((c) => typeof c.unit === 'string').map((c) => [String(c.name), c.unit])) };
+      }
+      bytes['#tables'] = new TextEncoder().encode(JSON.stringify(meta));
+    }
     const weights = pinned.descriptor.weights;
     const key = this.keyOf(kind, tool, String(text ?? ''), params, bytes, weights);
     let sent: { sha256: string; host: string }[] = [];
@@ -414,20 +433,29 @@ export class Jobs {
     if (absent.length) return { status: 'failed', reason: `${tool} wrote no ${absent.join(', ')}, which ${kind} declares; nothing was kept`, receipt: receipt(pinned.build, 'miss') };
     // Its outputs are held here until every output check passes: before that, no store, no cache, nothing an item can name.
     const encoded = Object.fromEntries(outputs.map((n) => [n, Buffer.from(wrote[n]!).toString('base64')]));
+    const read = Object.fromEntries(Object.entries(bytes).map(([n, b]) => [n, Array.isArray(b) ? b.map((x) => Buffer.from(x).toString('base64')) : Buffer.from(b).toString('base64')]));
     for (const check of held.descriptor.output_checks) {
-      const spec = { kind: check, runner: tool, inputs: [], depth: 'job', oracle: 'code', contract: null, outputs: encoded } as CheckSpec;
+      const spec = { kind: check, runner: tool, inputs: [], depth: 'job', oracle: 'code', contract: null, outputs: encoded, job: { params, inputs: read } } as CheckSpec;
       const ran = await host.runCheck(check, spec, { checkout: this.dir(), deadline: CHECK_MS });
       if (ran.outcome !== 'passed') {
         const why = ran.failures.map((f) => f.message).join('; ');
         return { status: 'failed', check, outcome: ran.outcome, reason: `${tool}'s output fails ${kind}'s output check ${check} (${ran.outcome}${why ? `: ${why}` : ''}); nothing was kept, so no item can name it`, receipt: receipt(pinned.build, 'miss') };
       }
     }
+    const tables = held.descriptor.schema.tables;
+    let record: unknown;
+    if (tables !== undefined) {
+      try { record = JSON.parse(Buffer.from(wrote.record!).toString('utf8')); } catch { record = undefined; }
+      if (!isObj(record)) return { status: 'failed', reason: `${tool}'s record of its table isn't a JSON object; nothing was kept`, receipt: receipt(pinned.build, 'miss') };
+    }
     const kept: Record<string, string> = {};
     for (const n of outputs) kept[n] = await this.d.keep(wrote[n]!, `job:${kind}/${tool}#${n}`);
-    if (kept['table']) {
+    if (tables !== undefined && isObj(record)) {
+      await this.d.table?.(kept.table!, { ...record, sha256: kept.table!, kind: 'table', source: { job: { kind, tool, input: params[tables] ?? null } }, lineage: kept.lineage! });
+    } else if (kept['table']) {
       const input = Object.fromEntries(Object.entries(hashes(bytes)).map(([n, h]) => [n, (Array.isArray(h) ? h : [h]).map((sha) => ({ sha256: sha, ...(this.d.fetched?.(sha) ?? { origin: 'agent' }) }))]));
-      const record = tableRecord(kept['table'], wrote['table']!, params['key'], { job: { kind, tool, input } });
-      if (record) await this.d.table?.(kept['table'], record);
+      const tableRec = tableRecord(kept['table'], wrote['table']!, params['key'], { job: { kind, tool, input } });
+      if (tableRec) await this.d.table?.(kept['table'], tableRec);
     }
     this.saved.cache[key] = { outputs: kept, build: pinned.build };
     this.save();

@@ -12,7 +12,7 @@ type FixtureFile = string | { base64: string };
 export interface JobFixture { name: string; params: Record<string, JsonValue>; inputs: Record<string, FixtureFile>; expect: Texts }
 export interface JobKind {
   /** Each input by name; one declared `many` (#154) takes zero or more files, in order, all of them in the key. */
-  schema: { params: Schema; inputs: Record<string, { media?: string; many?: boolean }> };
+  schema: { params: Schema; inputs: Record<string, { media?: string; many?: boolean }>; tables?: string };
   outputs: Record<string, { media?: string }>;
   key: string[];
   output_checks: string[];
@@ -124,6 +124,8 @@ export function kindOf(kind: string, raw: unknown): JobKind {
   if (!isPlain(k.schema) || !isPlain(k.schema.params) || !isPlain(k.schema.inputs)) throw Error(`the job kind ${kind} declares no params schema and inputs`);
   if (!Object.values(k.schema.inputs).every((i) => isPlain(i) && (i.many === undefined || typeof i.many === 'boolean'))) throw Error(`the job kind ${kind}'s inputs are {name: {media, many}}, many true or false`);
   if (!isPlain(k.outputs) || !Object.keys(k.outputs).length) throw Error(`the job kind ${kind} declares no outputs`);
+  const tables = k.schema.tables;
+  if (tables !== undefined && (typeof tables !== 'string' || !['table', 'lineage', 'record'].every((o) => Object.hasOwn(k.outputs!, o)))) throw Error(`the job kind ${kind}'s schema.tables names its params' field of tables by hash, and the kind writes table, lineage and record`);
   if (!Array.isArray(k.key) || KEY_PARTS.some((p) => !k.key!.includes(p)) || k.key.some((p) => !KEY_PARTS.includes(p))) throw Error(`the job kind ${kind}'s key is hash(tool@version, params, input hashes): its key lists tool, params and inputs`);
   if (!Array.isArray(k.output_checks) || !k.output_checks.every((c) => typeof c === 'string' && c)) throw Error(`the job kind ${kind} lists its output checks by check kind`);
   const core = isPlain(k.qualification) ? k.qualification.core : undefined;
