@@ -1,0 +1,12 @@
+{
+  "crates/deep-app/src/hub.rs": [
+    {
+      "find": [
+        "    configured_address().unwrap_or_else(|| root().join(\"hub.sock\"))"
+      ],
+      "wrong": [
+        "    configured_address().unwrap_or_else(|| root().join(\"app\").join(\"hub.sock\"))"
+      ]
+    }
+  ]
+}
