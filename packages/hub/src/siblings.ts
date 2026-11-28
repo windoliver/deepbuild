@@ -107,7 +107,7 @@ const MERGE_POLL_MS = 2_000;
 const LOOP_TURNS = 20;
 const LOOP_MS = 10 * 60_000;
 /** What a prompt held because you answered to hold the loop says. */
-const HOLDING = "DeepBuild held this prompt: you said to hold this session's turns that another session's messages start until you prompt it.";
+const HOLDING = "DeepBuild held this prompt: as answered, this session's turns that another session's messages start wait for a typed prompt.";
 /** What a prompt held because its loop ask closed with no answer says. */
 const CLOSED = "DeepBuild held this prompt: the ask about this session's turns that another session's messages start closed with no answer, so they wait until you prompt it.";
 /** How long after a session is first seen its issue is compared, so its process's lead is linked first. */

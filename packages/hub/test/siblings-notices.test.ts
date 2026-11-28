@@ -173,7 +173,7 @@ it('after a restart, a "hold" you gave a pair of sessions still holds the other 
   const question = "Sessions a (claude-code) and b (claude-code) started 21 of a's turns with each other's messages in the last 10 minutes, with no prompt from you. Let them go on?";
   // The core raises every ask with its key hashed, so the record names the pair only in the question.
   const toB = await restarted([{ id: '03', key: '5f2c8e0d9a7b4c1e3f6a8d2b0c4e7f9a1b3d5c7e9f0a2b4c6d8e0f1a3b5c7d9e', session_id: 'a', created: now - 30_000, status: 'answered', answer: '"hold"', question }], [], 'b');
-  expect(toB.told).toContain('you said to hold');
+  expect(toB.told).toContain('as answered, this session');
   expect(toB.asked).toHaveLength(0);
 });
 
@@ -198,7 +198,7 @@ it('a "hold" for two sessions stops holding the one you prompted, even when the 
   await settle();
   Object.assign(ask, { status: 'answered', answer: '"hold"' });
   siblings.turn('b', 'you', 'person', now);
-  expect(await held('a')).toContain('you said to hold');
+  expect(await held('a')).toContain('as answered, this session');
   expect(await held('b')).toBeUndefined();
   siblings.stop();
 });
@@ -208,7 +208,7 @@ it('a "go on" given after a "hold" lets the sessions go on', async () => {
   const { siblings, held, settle } = looping(ask);
   expect(await held('a')).toContain('held');
   await settle();
-  expect(await held('a')).toContain('you said to hold');
+  expect(await held('a')).toContain('as answered, this session');
   // You undid the default and answered "go on".
   Object.assign(ask, { status: 'answered', answer: '"go-on"' });
   expect(await held('a')).toBeUndefined();
@@ -224,7 +224,7 @@ it('a loop ask closed with no answer holds until you prompt the session, never s
   const told = await held('a');
   await settle();
   expect(told).toContain('closed with no answer');
-  expect(told).not.toContain('you said');
+  expect(told).not.toContain('as answered');
   expect(asked).toHaveLength(1);
   siblings.turn('a', 'you', 'person', now);
   expect(await held('a')).toBeUndefined();

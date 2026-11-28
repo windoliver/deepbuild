@@ -114,8 +114,7 @@ export const SLEPT = 10_000;
 /** How soon after a hook's reply the transcript is read for the answers it carried (#906). */
 export const SHOWN_SOON = 2_000;
 
-/** What only an answer's own text says, as the transcript shows it in a turn (#906). */
-export const said = (ask: string) => `Your answer to ask:${ask}`;
+export { said } from './answers.js';
 
 /** The most transcript entries of one turn the core keeps for its stop's records. */
 export const TURN_ENTRIES = 5_000;

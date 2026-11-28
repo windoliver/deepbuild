@@ -529,7 +529,7 @@ export class StopJudging {
       const n = named.get(q.req);
       if (!n) return [];
       const on = standing.filter((c) => c.covers.includes(q.req) && c.result !== 'PASS');
-      return [`${n.id} ("${n.text}") waits for ${on.length ? on.map((c) => `${c.result === 'INCONCLUSIVE' ? 'another run' : 'a run'} of ${c.check}`).join(' and ') : 'your answer'}`];
+      return [`${n.id} ("${n.text}") waits for ${on.length ? on.map((c) => `${c.result === 'INCONCLUSIVE' ? 'another run' : 'a run'} of ${c.check}`).join(' and ') : 'the person\'s answer'}`];
     });
   }
 
@@ -1313,7 +1313,7 @@ export class StopJudging {
     // Nor while what its task left open stays open (#323): an item closes on evidence, your answer or a rule, never the agent's word.
     if (v.outcome === 'PASS') {
       const open = (await this.options.services.record.raw(`SELECT text FROM open_items WHERE closed IS NULL AND task_ref = (SELECT subject_ref FROM claims WHERE id = ?)`, [claim.slice(6)])) as { text: string }[];
-      const left = `open items: ${open.length} still open, each closed only by evidence, your answer or a rule: ${open.slice(0, 3).map((o) => `“${o.text.slice(0, 200)}”`).join('; ')}${open.length > 3 ? '; …' : ''}`;
+      const left = `open items: ${open.length} still open, each closed only by evidence, a rule or the person: ${open.slice(0, 3).map((o) => `“${o.text.slice(0, 200)}”`).join('; ')}${open.length > 3 ? '; …' : ''}`;
       if (open.length) v = { ...v, outcome: 'BLOCKED', reasons: [...v.reasons, left], why: [...(v.why ?? []), ...coded('open_items', [left])] };
     }
     // You chose another option after the agent went on with one (#84): the claim can't pass until a check of yours runs.

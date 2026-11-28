@@ -126,7 +126,7 @@
     "common": { "session": "session_id" },
     "session_start": { "kind": "session.start", "data": { "source": "source", "parent": "parent" } },
     "session_shutdown": { "kind": "session.end", "data": { "reason": "reason" } },
-    "input": { "kind": "user.ask", "data": { "text": "prompt", "disposition": "disposition" }, "origin": { "rules": [{ "prompt": "DeepBuild delivers your answers", "from": "continuation" }], "otherwise": "person" } },
+    "input": { "kind": "user.ask", "data": { "text": "prompt", "disposition": "disposition" }, "origin": { "rules": [{ "prompt": "DeepBuild delivers answers", "from": "continuation" }], "otherwise": "person" } },
     "tool_call": { "kind": "tool.before", "data": { "call": "tool_use_id", "tool": "tool_name" }, "call": "kind" },
     "tool_result": { "kind": "tool.after", "data": { "call": "tool_use_id", "tool": "tool_name", "outcome": "outcome", "nested": "nested_calls" } },
     "agent_start": { "kind": "session.activity", "data": { "activity": "=agent_start" } },

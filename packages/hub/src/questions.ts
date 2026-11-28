@@ -10,7 +10,7 @@ import type { Asks, PlanInput } from '@deepbuild/asks';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { leftOpen } from '@deepbuild/gate';
 import type { Connection } from '@deepbuild/record';
-import type { Holds } from './holds.js';
+import { address, type Holds } from './holds.js';
 import { repoRoot } from './rules.js';
 import type { HookMeta, Plant } from './wire.js';
 import { couldDo, SECRET_NAME, struck, type Found, type Reach } from './could-do.js';
@@ -218,7 +218,7 @@ export class Questions {
     } else if (read.sort === 'choice') {
       const handle = await this.choice(meta, read.choice);
       const label = read.choice.options.find((o) => o.id === read.choice.recommended)?.label;
-      if (label && !read.choice.own) sorted.back.push(`DeepBuild: go on with ${label}, marked as undoable; ${handle} waits for your answer, and only steps that leave the machine wait with it.`);
+      if (label && !read.choice.own) sorted.back.push(`DeepBuild: go on with ${label}, marked as undoable; only steps that leave the machine wait for the person's answer at ${address(handle)}.`);
     } else if (read.sort === 'offer') {
       const asked = await this.offered(meta, read.question, read.effect);
       if (!asked) sorted.noHold = true;
@@ -227,7 +227,7 @@ export class Questions {
       if (this.o.plant === 'keys-ask-from-words') {
         await this.choice(meta, { question: read.question, options: [{ id: 'yes', label: 'Yes' }, { id: 'no', label: 'No' }], recommended: null, requirement: read.question, own: false });
       }
-      sorted.back.push(`DeepBuild: nothing in this turn fills a question to you from what you ended on: "${read.question}". If it needs an answer, raise it through deep_ask with its options and what it is pinned to; otherwise decide it and go on.`);
+      sorted.back.push(`DeepBuild: nothing in this turn fills the question for the person you ended on: "${read.question}". If it needs an answer, raise it through deep_ask with its options and what it is pinned to; otherwise decide it and go on.`);
     }
     return sorted;
   }
@@ -280,7 +280,7 @@ export class Questions {
         const handle = await this.choice(meta, { question: text, options, recommended, requirement: named, own: false });
         const { option } = await this.o.holds.applied(handle);
         const decided = option && labels[options.findIndex((o) => o.id === option)];
-        if (decided) { answers[text] = decided; said.push(`DeepBuild: your saved decision answers this: ${decided}.`); continue; }
+        if (decided) { answers[text] = decided; said.push(`DeepBuild: a saved decision answers this: ${decided}.`); continue; }
         const label = recommended && labels[options.findIndex((o) => o.id === recommended)];
         said.push(label ? `DeepBuild answered this card: go on with ${label}, marked as undoable; ${handle} waits for the person, and a different answer undoes it.` : `DeepBuild: ${handle} waits for the person's answer.`);
         continue;

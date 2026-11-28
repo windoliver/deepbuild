@@ -26,6 +26,12 @@ import { AUTHORITY, type Gated, type HookMeta, type Plant } from './wire.js';
 
 type Obj = Record<string, unknown>;
 const key = (v: unknown) => sha256Hex(canonicalize(v as JsonValue));
+/** An ask's address, `ask/<id>`, which `deep open` and a click open (#1460): where the person answers it. */
+export const address = (handle: string): string => `ask/${handle.replace(/^ask:/, '')}`;
+/** A held call's line to its agent (#1813): the ask's question first, then where the person answers it, the ID last. */
+export const holding = (question: string, handle: string): string => `DeepBuild is holding this: ${question} Run the same call again once the person says yes at ${address(handle)}.`;
+/** A held line after a guard's own `DeepBuild denied this` lead, which needs no second one. */
+const unled = (line: string): string => line.replace(/^DeepBuild is holding this: /, '');
 
 
 interface HoldOptions {
@@ -147,7 +153,7 @@ export class Holds {
     if (await this.askOf(k)) return;
     const source = effect === 'spend' ? 'budget.raise' : `effect.${effect}`;
     const yes = ANSWERS[effect] ?? ['Go ahead', 'Hold it'];
-    await this.raise(meta.session, meta.agent, meta.cwd, source, k, `The agent offers: "${question}" It needs your authority.`, yes, offerPlan(source, `Let the agent do what it offered: ${question}`));
+    await this.raise(meta.session, meta.agent, meta.cwd, source, k, `The agent offers: "${question}" The person decides.`, yes, offerPlan(source, `Let the agent do what it offered: ${question}`));
   }
 
   /**
@@ -194,19 +200,20 @@ export class Holds {
     try {
       const ask = await this.raise(meta.session, meta.agent, meta.cwd, 'command.unstageable', k, question, ['Run it unstaged', 'Don\'t run it'],
         planFor('command.unstageable', `Run \`${label}\` unstaged, ${reach ? `reaching ${reach}` : 'with its reach unknown'}`, [label]));
-      return `DeepBuild is holding this: ${question} It waits for your answer to ${ask}; once you say yes, run the same call again.`;
+      return holding(question, ask);
     } catch (error) {
       if (!(error instanceof AskRefused)) throw error;
       return `DeepBuild held this: \`${label}\`'s reach ${reach ? `goes ${reach}` : 'is unknown'} and it can't be staged, and no ask could be raised for it (${error.message}).`;
     }
   }
-  /** Why a call held by `handle` doesn't run: still waiting, or you said no. */
+  /** Why a call held by `handle` doesn't run: still waiting, on the ask's question, or the person said no; each ends with the ask's address. */
   async waiting(handle: string, label: string): Promise<string> {
-    const row = await this.askOf((await this.o.raw(`SELECT key FROM asks WHERE id = ?`, [handle.slice(4)]) as { key: string }[])[0]?.key ?? '');
-    if (row?.status === 'held') return `DeepBuild is holding this: you said yes to \`${label}\` (${handle}), and since it can't be undone it starts only once its 10 s hold is over, with Undo on its card until then. Run the same call again after that.`;
+    const [asked] = await this.o.raw(`SELECT key, question FROM asks WHERE id = ?`, [handle.slice(4)]) as { key: string; question: string | null }[];
+    const row = await this.askOf(asked?.key ?? '');
+    if (row?.status === 'held') return `DeepBuild is holding this: the person said yes to \`${label}\`, and since it can't be undone it starts only once its 10 s hold is over, with Undo on its card until then. Run the same call again after that. ${address(handle)}`;
     return row && row.status !== 'open' && row.status !== 'later'
-      ? `DeepBuild held this: you said no to \`${label}\` (${handle}, ${row.status}); it doesn't run.`
-      : `DeepBuild is holding this: \`${label}\` needs your authority and waits for ${handle}. Once you say yes, run the same call again.`;
+      ? `DeepBuild held this: the person said no to \`${label}\` (${row.status}); it doesn't run. ${address(handle)}`
+      : holding(asked?.question ?? `\`${label}\` needs the person's yes.`, handle);
   }
 
   /** The sessions of `session`'s thread, as a SQL list's values. */
@@ -267,7 +274,7 @@ export class Holds {
       if (rule === 'merge-names-head' || every || named.has(effect)) continue;
       const offer = await this.askOf(this.offerKey(effect, sessions[0]!));
       if (offer?.decision === 'allow') continue;
-      if (offer) return `DeepBuild denied this (guard ${rule}): ${await this.waiting(`ask:${offer.id}`, call.label)}`;
+      if (offer) return `DeepBuild denied this (guard ${rule}): ${unled(await this.waiting(`ask:${offer.id}`, call.label))}`;
       open.push({ rule, effect });
     }
     if (open.length) {
@@ -279,7 +286,7 @@ export class Holds {
       if (asked?.decision !== 'allow') {
         const handle = asked ? `ask:${asked.id}` : await this.raise(meta.session, meta.agent, meta.cwd, source, k,
           `Run \`${call.label}\`? It ${does}, and no request in this thread names that.`, ANSWERS[effect]!, planFor(source, `Run \`${call.label}\`, which ${does}`, [call.label], await this.placed(meta, open.some((o) => o.effect === 'push') ? pushTargets(call.label) : [])));
-        return `DeepBuild denied this (guard ${rule}): no request you typed in this thread names it. ${await this.waiting(handle, call.label)}`;
+        return `DeepBuild denied this (guard ${rule}): ${unled(await this.waiting(handle, call.label))}`;
       }
     }
     if (every) return undefined;
@@ -325,7 +332,7 @@ export class Holds {
       return held && await this.waiting(held, call.label);
     } catch (error) {
       if (!(error instanceof AskRefused)) throw error;
-      return `DeepBuild held this: \`${call.label}\` needs your authority, and no ask could be raised for it (${error.message}).`;
+      return `DeepBuild held this: \`${call.label}\` needs the person's yes, and no ask could be raised for it (${error.message}).`;
     }
   }
   /**
@@ -350,8 +357,8 @@ export class Holds {
     const asked = await this.askOf(k);
     if (asked) return asked.decision === 'allow' ? undefined : `ask:${asked.id}`;
     const question = turn
-      ? `Run \`${call.label}\`? It ${classes.map((c) => DOES[c]).join(' and ')}, in the turn a "proceed" started for "${turn.question}" (rule ${turn.rule}); no proceed covers a call that needs your authority.`
-      : `Run \`${call.label}\`? It replies in your name to a reviewer's thread on the pull request, a send that needs your authority.`;
+      ? `Run \`${call.label}\`? It ${classes.map((c) => DOES[c]).join(' and ')}, in the turn a "proceed" started for "${turn.question}" (rule ${turn.rule}); no proceed covers a call only the person allows.`
+      : `Run \`${call.label}\`? It replies as the person to a reviewer's thread on the pull request, a send only they allow.`;
     const targets = await this.placed(meta, classes.includes('push') ? pushTargets(call.label) : []);
     return this.raise(meta.session, meta.agent, meta.cwd, source, k, question, ANSWERS[classes[0]!]!, planFor(source, `Run \`${call.label}\`, which ${classes.map((c) => DOES[c]).join(' and ')}`, [call.label], targets));
   }
@@ -402,13 +409,13 @@ export class Holds {
   /** A call a standing rule decides: allowed or denied by your rule, naming it; held by an ask when none covers it. */
   async decide(meta: HookMeta, about: About): Promise<{ held?: string; allow?: string; deny?: string }> {
     const { ask, decision, option, answered } = await this.asked(meta, about);
-    const why = this.o.plant === 'rule-without-reason' ? '' : ` by your standing rule ${decision}`;
+    const why = this.o.plant === 'rule-without-reason' ? '' : ` by the person's standing rule ${decision}`;
     if (decision && option === 'approve') {
       if (answered) await this.o.heard?.(answered);
       return { allow: `DeepBuild allowed this${why}: ${about.question.replace(/\? No plan names it\.$/, '.')}` };
     }
-    if (decision) return { deny: `DeepBuild denied this${why}: you said no to it. ${about.question}` };
-    return { held: `DeepBuild is holding this: ${about.question} It waits for your answer to ${ask}; once you say yes, run the same call again.` };
+    if (decision) return { deny: `DeepBuild denied this${why}, a no. ${about.question}` };
+    return { held: holding(about.question, ask) };
   }
 
   /** Every list recorded for `server`, oldest first. */
