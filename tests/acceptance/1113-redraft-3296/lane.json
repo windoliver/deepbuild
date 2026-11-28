@@ -1,0 +1,1 @@
+{ "alone": true, "why": "timing: each test runs a whole preflight or perf in a scratch repository, its fill starting Vitest, node --test and scripts/affected.mjs, and reads its elapsed seconds and its waits on stub holders in a sandboxed throttle table to 100 ms" }

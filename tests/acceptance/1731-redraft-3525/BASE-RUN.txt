@@ -1,0 +1,123 @@
+$ NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/1731-redraft-3525/ --testTimeout=600000 --no-file-parallelism
+# base b134dd38f + d9b9015ff, macOS, Node 24.22.0; load at start: 165.48 139.19 109.40; at end: 384.15 252.77 161.95
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/festive-dijkstra-c49494
+
+ ❯ tests/acceptance/1731-redraft-3525/fetch.test.ts (2 tests | 2 failed) 78055ms
+   ❯ #1731.e4d0ddba Fetching a CC-BY chair raises one authority ask naming the library, its bytes and CC-BY 4.0. After the yes, the asset is in the store by hash, with its license and upstream URL, and an `asset.game@1` `from: {asset}` names it with that license (#1066). The same fetch under a standing rule for that library and CC0 only is refused, naming the license. (2)
+     × fetching the CC-BY oak chair raises one authority ask naming the library, its bytes and CC-BY 4.0; after the yes it is stored by hash with its license and upstream, and an asset.game@1 item names it with that license 29231ms
+     × under a standing rule for the library and CC0 only, the same fetch is refused naming CC-BY 4.0, while a CC0 chair fetches under it with no ask 45656ms
+ ❯ tests/acceptance/1731-redraft-3525/offline.test.ts (1 test | 1 failed) 24062ms
+   ❯ #1731.19849fe1 Offline, a search answers from cached thumbnails with a `stale` flag and the cache's age, and a fetch is BLOCKED with one unblock ask, as the pack fetch is. (1)
+     × offline, the search answers from its cache, stale with its age, and a fetch is BLOCKED with one unblock ask 23543ms
+ ❯ tests/acceptance/1731-redraft-3525/unknown.test.ts (2 tests | 1 failed) 31689ms
+   ❯ #1731.0d3831dc The unknown-license model is BLOCKED at fetch with one unblock ask, and no item can name it. A planted fill that reports it as CC0 fails, because the license is read from the fixture's own record, naming the row. (2)
+     × the unknown-license armchair is BLOCKED at fetch with one unblock ask, and an asset.game@1 item naming it is refused 13375ms
+ ❯ tests/acceptance/1731-redraft-3525/off.test.ts (1 test | 1 failed) 23712ms
+   ❯ #1731.826a5cb7 With the library turned off, the same search returns installed packs' rows only, and a fetch by its old id is refused, naming the library. (1)
+     × turned off, the library leaves the search and a fetch by an id it gave is refused, naming it, with no request to it 23224ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1731-redraft-3525/fetch.test.ts > #1731.e4d0ddba Fetching a CC-BY chair raises one authority ask naming the library, its bytes and CC-BY 4.0. After the yes, the asset is in the store by hash, with its license and upstream URL, and an `asset.game@1` `from: {asset}` names it with that license (#1066). The same fetch under a standing rule for that library and CC0 only is refused, naming the license. > fetching the CC-BY oak chair raises one authority ask naming the library, its bytes and CC-BY 4.0; after the yes it is stored by hash with its license and upstream, and an asset.game@1 item names it with that license
+AssertionError: the fetch waits on your answer: {"code":"unlisted_field","retryable":false,"remediation":"Leave out library: the schema lists only op, kind, tool, params, inputs.","path":"/params/arguments/library","actual":"library","evidence":[]}: expected undefined to be 'held' // Object.is equality
+
+- Expected:
+"held"
+
++ Received:
+undefined
+
+ ❯ tests/acceptance/1731-redraft-3525/fetch.test.ts:36:95
+     34|
+     35|     const first = await job(w, fetchArgs(ID));
+     36|     expect(first.value.status, `the fetch waits on your answer: ${firs…
+       |                                                                                               ^
+     37|     const raised = (await asks(w)).slice(before);
+     38|     proof('ac2-ask.json', raised);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  tests/acceptance/1731-redraft-3525/fetch.test.ts > #1731.e4d0ddba Fetching a CC-BY chair raises one authority ask naming the library, its bytes and CC-BY 4.0. After the yes, the asset is in the store by hash, with its license and upstream URL, and an `asset.game@1` `from: {asset}` names it with that license (#1066). The same fetch under a standing rule for that library and CC0 only is refused, naming the license. > under a standing rule for the library and CC0 only, the same fetch is refused naming CC-BY 4.0, while a CC0 chair fetches under it with no ask
+AssertionError: the rule lets a CC0 chair fetch: {"code":"unlisted_field","retryable":false,"remediation":"Leave out library: the schema lists only op, kind, tool, params, inputs.","path":"/params/arguments/library","actual":"library","evidence":[]}: expected undefined to be 'fetched' // Object.is equality
+
+- Expected:
+"fetched"
+
++ Received:
+undefined
+
+ ❯ tests/acceptance/1731-redraft-3525/fetch.test.ts:76:92
+     74|
+     75|     const cc0 = await fetchUntilDone(w, 'pine-chair');
+     76|     expect(cc0.value.status, `the rule lets a CC0 chair fetch: ${cc0.t…
+       |                                                                                            ^
+     77|     expect(await stored(w, fileHash('pine-chair')), 'the CC0 chair is …
+     78|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  tests/acceptance/1731-redraft-3525/off.test.ts > #1731.826a5cb7 With the library turned off, the same search returns installed packs' rows only, and a fetch by its old id is refused, naming the library. > turned off, the library leaves the search and a fetch by an id it gave is refused, naming it, with no request to it
+AssertionError: the refusal names the library: expected '{"code":"unlisted_field","retryable":…' to contain 'ext.shelf.library'
+
+Expected: "ext.shelf.library"
+Received: "{"code":"unlisted_field","retryable":false,"remediation":"Leave out library: the schema lists only op, kind, tool, params, inputs.","path":"/params/arguments/library","actual":"library","evidence":[]}"
+
+ ❯ tests/acceptance/1731-redraft-3525/off.test.ts:27:57
+     25|     expect(rows.filter((r) => typeof r.from?.pack !== 'string'), 'the …
+     26|     expect(refusal(o), `the fetch by its old id is refused: ${o.text.s…
+     27|     expect(refusal(o), 'the refusal names the library').toContain(LIB);
+       |                                                         ^
+     28|     expect((await asks(w)).length, 'nothing was asked').toBe(asked);
+     29|     expect(w.library.quote(from), 'no request reached the library once…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  tests/acceptance/1731-redraft-3525/offline.test.ts > #1731.19849fe1 Offline, a search answers from cached thumbnails with a `stale` flag and the cache's age, and a fetch is BLOCKED with one unblock ask, as the pack fetch is. > offline, the search answers from its cache, stale with its age, and a fetch is BLOCKED with one unblock ask
+AssertionError: offline, the fetch is BLOCKED: {"code":"unlisted_field","retryable":false,"remediation":"Leave out library: the schema lists only op, kind, tool, params, inputs.","path":"/params/arguments/library","actual":"library","evidence":[]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/1731-redraft-3525/offline.test.ts:47:109
+     45|     const raised = (await asks(w)).slice(before);
+     46|     proof('ac5-offline-fetch.json', { first: first.value, second: seco…
+     47|     expect(blocked(first) && blocked(second), `offline, the fetch is B…
+       |                                                                                                             ^
+     48|     expect(raised.map((a) => a.kind), 'two offline fetches raised one …
+     49|     expect(await stored(w, fileHash('oak-chair')), 'nothing was stored…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  tests/acceptance/1731-redraft-3525/unknown.test.ts > #1731.0d3831dc The unknown-license model is BLOCKED at fetch with one unblock ask, and no item can name it. A planted fill that reports it as CC0 fails, because the license is read from the fixture's own record, naming the row. > the unknown-license armchair is BLOCKED at fetch with one unblock ask, and an asset.game@1 item naming it is refused
+AssertionError: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the fetch of shelf-armchair isn't BLOCKED: {\"code\":\"unlisted_field\",\"retryable\":false,\"remediation\":\"Leave out library: the schema lists only op, kind, tool, params, inputs.\",\"path\":\"/params/arguments/library\",\"actual\":\"library\",\"evidence\":[]}",
++   "two fetches of shelf-armchair raised 0 unblock asks, not one",
++ ]
+
+ ❯ tests/acceptance/1731-redraft-3525/unknown.test.ts:23:22
+     21|     const failures = await judgeUnknown(w, ID);
+     22|     proof('ac3-unknown.json', { failures, requests: w.library.log });
+     23|     expect(failures).toEqual([]);
+       |                      ^
+     24|     const { ran, reply } = await show(w, gameDoc('armchair', fileHash(…
+     25|     proof('ac3-show.json', reply ?? { ran });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  5 failed | 1 passed (6)
+   Start at  23:11:56
+   Duration  160.27s (tests 99%)
+
+

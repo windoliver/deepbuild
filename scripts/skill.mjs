@@ -103,7 +103,7 @@ const HINTS = {
   deep_run: ['Run a check', 'O'],
   deep_show: ['Draw a canvas document', ''],
   deep_drive: ['Drive a replica', ''],
-  deep_kinds: ['Look up what the canvas can draw', 'O'],
+  deep_kinds: ['Look up what the canvas can draw', 'RIO'],
   deep_query: ['Read a document as data', 'RI'],
   deep_job: ['List or run a job', 'IO'],
   deep_env: ['Bring the worktree\'s stack up or down', ''],

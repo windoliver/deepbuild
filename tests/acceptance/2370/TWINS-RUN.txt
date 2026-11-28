@@ -1,0 +1,78 @@
+The wrong-program tests of #2370, from two runs of the whole suite:
+node node_modules/vitest/vitest.mjs run --root tests/acceptance/2370 --no-file-parallelism --testTimeout=600000 --reporter=verbose
+
+1. On the base commit 254bdc87c, its host unmodified (the run in BASE-FAILURE.txt).
+2. On a scratch right host: the base's `serve` with one line added first, answering 403 to a request with an
+   Origin or a Sec-Fetch-Site header or a Host other than 127.0.0.1:<the listener's port>. That line was this job's
+   own check of the suite, reverted after the run and never committed. All 9 tests passed there.
+
+Each planted host sits in front of the real listener, so each fails the same way on both.
+
+== 1. Base
+
+AC3, refusesAnySecFetchHeader
+GET /status Host 127.0.0.1:51058 Sec-Fetch-Site cross-site -> 403
+GET /status Host 127.0.0.1:51058 Sec-Fetch-Site same-site -> 403
+GET /status Host 127.0.0.1:51058 Sec-Fetch-Site none -> 403
+package count before 0, after the three Sec-Fetch-Site requests 0
+GET /status Host 127.0.0.1:51058 Sec-Fetch-Mode cors -> 403, package count 0
+planted host failure: GET /status carrying only the header Sec-Fetch-Mode: cors, as a tool's own fetch sends, reaches the package: expected { status: 403, seen: +0 } to deeply equal { status: 200, seen: 1 }
+ ✓ ac3-sec-fetch.test.ts > ... > AC3 #2370 (wrong program) a planted host that refuses any Sec-Fetch header refuses the tool's GET, and the test fails naming Sec-Fetch-Mode
+
+AC4, matchesTheRouteFirst
+POST /never-registered (a path the package never registered) Origin https://example.test -> 404
+planted host failure: POST /never-registered, a path the package never registered, carrying an Origin is answered as a chosen route is: expected 404 to be 403 // Object.is equality
+ ✓ ac4-before-route.test.ts > ... > AC4 #2370 (wrong program) a planted host that matches the route first answers 404 to the path never registered, and the test fails naming the path 1376ms
+
+AC5, appendsAnEventPerRefusal
+record event count before 8, after 1000 refused requests 1008; added by kind {"ext.counter.refused":1000}; answers {"403":1000}
+planted host failure: the record after 1000 refused requests holds no new event, where it gained {"ext.counter.refused":1000}: expected 1000 to be +0 // Object.is equality
+ ✓ ac5-record.test.ts > ... > AC5 #2370 (wrong program) a planted host that appends an event per refusal grows the record by 1,000, and the test fails naming the kind 2367ms
+
+== 2. Scratch right host
+
+AC3: the criterion's test passes, and the planted host fails it
+GET /status Host 127.0.0.1:65195 Sec-Fetch-Site cross-site -> 403
+GET /status Host 127.0.0.1:65195 Sec-Fetch-Site same-site -> 403
+GET /status Host 127.0.0.1:65195 Sec-Fetch-Site none -> 403
+package count before 0, after the three Sec-Fetch-Site requests 0
+GET /status Host 127.0.0.1:65195 Sec-Fetch-Mode cors -> 200, package count 1
+ ✓ ac3-sec-fetch.test.ts > ... > AC3 #2370 GET /status with the listener's Host and Sec-Fetch-Site cross-site, same-site or none is answered 403 and the count stays; ...
+GET /status Host 127.0.0.1:65207 Sec-Fetch-Mode cors -> 403, package count 0
+planted host failure: GET /status carrying only the header Sec-Fetch-Mode: cors, as a tool's own fetch sends, reaches the package: expected { status: 403, seen: +0 } to deeply equal { status: 200, seen: 1 }
+ ✓ ac3-sec-fetch.test.ts > ... > AC3 #2370 (wrong program) ...
+
+AC4: the criterion's test passes, and the planted host fails it
+POST /never-registered (a path the package never registered) Origin https://example.test -> 403
+POST /admin/exec (a route the package registered and you didn't choose) Origin https://example.test -> 403
+POST /v1/traces (the route you chose) Origin https://example.test -> 403
+package count after the three: 0
+ ✓ ac4-before-route.test.ts > ... > AC4 #2370 a POST carrying an Origin to a path never registered, ...
+POST /never-registered (a path the package never registered) Origin https://example.test -> 404
+planted host failure: POST /never-registered, a path the package never registered, carrying an Origin is answered as a chosen route is: expected 404 to be 403 // Object.is equality
+ ✓ ac4-before-route.test.ts > ... > AC4 #2370 (wrong program) ...
+
+AC5: the criterion's test passes, and the planted host fails it
+record event count before 8, after 1000 refused requests 8; added by kind {}; answers {"403":1000}
+package count after 1000 refused requests: 0
+ ✓ ac5-record.test.ts > ... > AC5 #2370 1,000 refused requests in a row leave the record's event count as it was and the package's count at 0 2319ms
+record event count before 8, after 1000 refused requests 1008; added by kind {"ext.counter.refused":1000}; answers {"403":1000}
+planted host failure: the record after 1000 refused requests holds no new event, where it gained {"ext.counter.refused":1000}: expected 1000 to be +0 // Object.is equality
+ ✓ ac5-record.test.ts > ... > AC5 #2370 (wrong program) ...
+
+AC1, AC2 and AC6 on the scratch right host
+POST /v1/traces Host 127.0.0.1:65231 Origin https://example.test -> 403, package count 0
+POST /v1/traces Host 127.0.0.1:65231 no Origin -> 200, package count 1
+ ✓ ac1-origin.test.ts > ...
+GET /status Host example.test:65252 -> 403
+POST /set Host example.test:65252 -> 403
+package count after Host example.test:65252: 0
+GET /status Host 127.0.0.1:65252 -> 200
+POST /set Host 127.0.0.1:65252 -> 200
+package count after Host 127.0.0.1:65252: 2
+GET /status no Host -> 400
+POST /set no Host -> 400
+package count after no Host: 2
+ ✓ ac2-host.test.ts > ...
+ ✓ ac6-348-ac12.test.ts > ...
+      Tests  9 passed (9)

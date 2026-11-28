@@ -1,0 +1,53 @@
+{
+  "planted": "sources_leaves_out_uncredited",
+  "errors": [
+    {
+      "check": "document.validate",
+      "code": "data.sources",
+      "severity": "error",
+      "ids": [
+        "first"
+      ],
+      "path": "items/first",
+      "actual": {
+        "title": "County to metro area crosswalk",
+        "url": "https://127.0.0.1:59419/fixture/tables1/b-crosswalk.csv",
+        "sha256": "e6f20c1ae8aa0c5397f3ef7581b984dfad06b3cfd03dd1c6cc7d20cf182b83f1"
+      },
+      "what": "shows a number from County to metro area crosswalk, a fetched file no sources list holds",
+      "fix": "Widen a sources list's `of` to this item, or to the document."
+    },
+    {
+      "check": "document.validate",
+      "code": "data.sources",
+      "severity": "error",
+      "ids": [
+        "second"
+      ],
+      "path": "items/second",
+      "actual": {
+        "title": "Metro area population",
+        "url": "https://127.0.0.1:59419/fixture/tables1/c-population.csv",
+        "sha256": "ed4e2cf0b9710f7a7393fb2f900252c8cfab991fc1df5f3bdc729691ca9654c6"
+      },
+      "what": "shows a number from Metro area population, a fetched file no sources list holds",
+      "fix": "Widen a sources list's `of` to this item, or to the document."
+    }
+  ],
+  "sources": [
+    {
+      "item": "sources",
+      "rows": [
+        {
+          "group": null,
+          "fields": {
+            "title": "County employment",
+            "license": "CC-BY-4.0",
+            "credit": "The county returns of Tarn Vale",
+            "url": "https://127.0.0.1:59419/fixture/tables1/a-counties.csv"
+          }
+        }
+      ]
+    }
+  ]
+}

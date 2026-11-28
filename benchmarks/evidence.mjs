@@ -28,7 +28,8 @@ const workloads = {
     const rows = randomBytes((1200 * 3 + 1) * 1400);
     for (let y = 0; y < 1400; y++) rows[y * (1200 * 3 + 1)] = 0;
     const png = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(rows, { level: 0 })), chunk('IEND', Buffer.alloc(0))]);
-    await store.connect({ role: 'deepbuild', via: 'journey' }).put({ bytes: png, kind: 'screenshot', source: 'bench', redaction: 'complete', license, declares: 'png' });
+    const put = await store.connect({ role: 'deepbuild', via: 'journey' }).put({ bytes: png, kind: 'screenshot', source: 'bench', redaction: 'complete', license, declares: 'png' });
+    return { bytes: (await store.get(put.evidence.sha256)).size };
   },
   // 8 MB of build output with 16 held values and a run's env, in 64 KB chunks.
   async 'redact-8mb'(store) {
@@ -49,7 +50,7 @@ const workloads = {
     const cited = new Set();
     for (let n = 0; n < 36 * 500; n++) if (n % 10 === 0) cited.add(n.toString(16).padStart(64, '0'));
     clock.now = 36 * DAY;
-    await store.retain({ cited, archived: new Set() });
+    return { records: (await store.retain({ cited, archived: new Set() })).removed.length };
   },
 };
 
@@ -66,7 +67,8 @@ try {
     writeFileSync(join(root, 'records.jsonl'), `${records.join('\n')}\n`);
   }
   const store = await openEvidenceStore({ root, now: () => clock.now });
-  await workloads[task](store, clock);
+  const work = await workloads[task](store, clock);
+  if (work) console.log(JSON.stringify({ work }));
 } finally {
   rmSync(root, { recursive: true, force: true });
 }

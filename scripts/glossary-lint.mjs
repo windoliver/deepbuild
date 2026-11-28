@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { anchors, prose, targets } from './doc-links.mjs';
+import { DOCS, anchors, prose, targets } from './doc-links.mjs';
 
 process.chdir(fileURLToPath(new URL('../', import.meta.url)));
 const FILE = 'GLOSSARY.md';
@@ -10,10 +10,14 @@ const STATES = 'States people see';
 const PLAIN = 'contracts/plain-words.json';
 const REPO = 'https://github.com/windoliver/deepbuild/blob/main/';
 
+const WORDED = ['docs/technical-design.md', 'docs/canvas-primitives.md', 'docs/parallel-proof.md'];
 const findings = [];
 const fail = (at, why, fix) => findings.push(`FAIL glossary: ${at}: ${why}\n  Fix: ${fix}`);
 const finish = () => {
   for (const line of findings) console.log(line);
+  const named = findings.flatMap((finding) => WORDED.some((doc) => finding.startsWith(`FAIL glossary: ${doc}:`)) ? finding.match(/^FAIL glossary: ([^:\s]+:\d+):/)?.slice(1) ?? [] : []);
+  const places = new Set(named).size;
+  if (named.length) console.log(`FAIL glossary: ${named.length} finding${named.length === 1 ? '' : 's'} name${named.length === 1 ? 's' : ''} ${places} line${places === 1 ? '' : 's'} of ${WORDED.join(', ')}`);
   process.exit(findings.length ? 1 : 0);
 };
 const seen = new Map();
@@ -30,6 +34,41 @@ for (const { line } of prose(readFileSync('docs/technical-design.md', 'utf8'))) 
   }
 }
 for (const word of Object.values(JSON.parse(readFileSync(PLAIN, 'utf8')).words)) see(word, PLAIN);
+
+const OLD = { 'ask-task': 'task', 'unblock task': 'unblock ask', 'standing grant': 'standing rule', 'session run': 'attempt', 'lease grant': 'acquired lease' };
+const PHRASE = new RegExp(`(?<![\\p{L}\\p{N}_-])(${Object.keys(OLD).map((phrase) => phrase.replace(' ', '\\s+')).join('|')})(s?)(?![\\p{L}\\p{N}_-])`, 'giu');
+const ASK_DONE = /definition of done of (?:each |every |the |an? |that |this |its )?(?:open )?asks?(?![\p{L}\p{N}_-])|(?<![\p{L}\p{N}_-])asks?['’]s? definition of done/iu;
+const before = findings.length;
+const replaced = new Set();
+for (const doc of DOCS) {
+  const lines = [...prose(readFileSync(doc, 'utf8'))];
+  for (const { number, line } of lines) {
+    const text = line.replace(/(`+).+?\1|<[^>]*>|\]\([^)]*\)/g, ' ');
+    for (const [, phrase, plural] of text.matchAll(PHRASE)) {
+      const old = phrase.toLowerCase().replace(/\s+/, ' ');
+      if (old === 'session run' && plural) continue;
+      replaced.add(`${doc}:${number}`);
+      fail(`${doc}:${number}`, `the prose says "${phrase}${plural}"`, `Say ${OLD[old]}, as GLOSSARY.md has it; inside code the name may stay.`);
+    }
+    if (ASK_DONE.test(text)) fail(`${doc}:${number}`, 'the prose gives an ask a definition of done', 'Only a task has a definition of done: say task, as GLOSSARY.md has it.');
+  }
+  if (doc !== 'docs/technical-design.md') continue;
+  const entry = (name) => {
+    const start = lines.findIndex(({ line }) => line.trim() === `#### ${name}`);
+    const end = lines.findIndex(({ line }, i) => i > start && /^#{1,4}\s/.test(line));
+    if (start < 0) fail(`${doc} #### ${name}`, `the design has no ${name} entry under The contract`, `Give The contract its #### ${name} entry back.`);
+    return start < 0 ? [] : lines.slice(start + 1, end < 0 ? lines.length : end);
+  };
+  for (const { number, line } of entry('Check')) {
+    if (/^\s*[-*]\s/.test(line) && /validity gate/i.test(line)) fail(`${doc}:${number}`, 'the list of check kinds names the validity gate', 'Leave the validity gate to the Claim entry: it is the gate a claim passes before any check runs, not a check.');
+  }
+  const claim = entry('Claim');
+  if (claim.length && !claim.some(({ line }) => /before any check runs, a validity gate/i.test(line))) {
+    fail(`${doc} #### Claim`, "the Claim entry doesn't say a validity gate runs before any check", 'Say in the Claim entry that before any check runs, a validity gate looks at the claim.');
+  }
+}
+const worded = findings.length - before;
+if (worded) findings.push(`FAIL glossary: the design docs' prose holds ${worded} finding${worded === 1 ? '' : 's'} against GLOSSARY.md, a word it replaces in ${replaced.size} place${replaced.size === 1 ? '' : 's'}`);
 
 if (!existsSync(FILE)) {
   fail(FILE, 'there is no glossary at the repo root', `Write ${FILE}: the real names in their eight groups, each a term in bold and one or two sentences.`);
@@ -87,7 +126,6 @@ for (const { at, term, text, avoid } of entries) {
   }
 }
 
-const WORDED = ['docs/technical-design.md', 'docs/canvas-primitives.md', 'docs/parallel-proof.md'];
 const OTHER_KERNELS = [
   { file: 'docs/technical-design.md', words: "such as a kernel's output against", why: 'a numeric kernel, code that computes numbers' },
   { file: 'docs/technical-design.md', words: "such as a kernel's output, gets", why: 'a numeric kernel, code that computes numbers' },
@@ -168,5 +206,14 @@ if (places.every(Boolean)) {
 const pointers = readFileSync('AGENTS.md', 'utf8').split(/\r?\n/).filter((line) => line.includes(FILE)).length;
 if (pointers !== 1) fail('AGENTS.md', `names ${FILE} in ${pointers} lines, not one`, `Point to ${FILE} from AGENTS.md in one line.`);
 
-if (!findings.length) console.log(`PASS glossary: ${FILE} lists ${entries.length} terms in ${groups.length} groups, its links land, AGENTS.md points to it, ${WORDED.join(", ")} say kernel only in the ${OTHER_KERNELS.length} places listed as another kind, and the scope section, Building blocks and the diagram name the core's same ${places[0].parts.length} parts`);
+const GUIDE = 'docs/extension-guide.md';
+for (const doc of ['docs/technical-design.md', 'docs/canvas-primitives.md', GUIDE]) {
+  for (const { number, line } of prose(readFileSync(doc, 'utf8'))) {
+    const text = targets(line).reduce((rest, target) => rest.replaceAll(target, ''), line.replace(/(`+).+?\1/g, '').replace(/<\/?[a-z][^>]*>/gi, ''));
+    const said = text.replace(/\u00ad/g, '').match(/\bplug[-\u2010\u2011]ins?\b/i);
+    if (said) fail(`${doc}:${number}`, `says "${said[0]}"`, `Say extension, the word ${FILE} gives it${doc === GUIDE ? '; the guide is written by scripts/guide.mjs, so change it there and run node scripts/guide.mjs' : ''}.`);
+  }
+}
+
+if (!findings.length) console.log(`PASS glossary: ${FILE} lists ${entries.length} terms in ${groups.length} groups, its links land, AGENTS.md points to it, ${WORDED.join(", ")} say kernel only in the ${OTHER_KERNELS.length} places listed as another kind, and the scope section, Building blocks and the diagram name the core's same ${places[0].parts.length} parts, and the docs say extension, never plug-in`);
 finish();

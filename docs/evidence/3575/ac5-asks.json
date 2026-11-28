@@ -1,0 +1,155 @@
+[
+  {
+    "file": "counties",
+    "ask": {
+      "handle": "ask:01M8FZNJRP16KPHM8TDEGD0ZVD",
+      "inbox": "Fetch a-counties.csv from pack:fixture/tables1@1.0.0 (https://127.0.0.1:59357/fixture/tables1/a-counties.csv; terms CC-BY-4.0: reuse is allowed with credit to the publisher.): 42 bytes in 1 file, under CC-BY-4.0 (credit: The county returns of Tarn Vale); title: County employment, publisher: Tarn Vale Census Office, edition: 2019?  authority  no repo    0s  If you don't answer: Don't fetch it, tomorrow at 21:27  ask:01M8FZNJRP16KPHM8TDEGD0ZVD\n    answer with fetch (Fetch it), decline (Don't fetch it)\n    plan 432497b1d2b9: 1 step, 1 can't be undone\n    1. Download a-counties.csv from pack:fixture/tables1@1.0.0 (https://127.0.0.1:59357/fixture/tables1/a-counties.csv; terms CC-BY-4.0: reuse is allowed with credit to the publisher.), 42 bytes, into the evidence store under CC-BY-4.0 (credit: The county returns of Tarn Vale); title: County employment, publisher: Tarn Vale Census Office, edition: 2019, then import it  changes evidence:dedd545c812edc4936cda2bb619a696880d994026b272755df917627b00c4622  undo: can't undo  cost $0.00",
+      "created": {
+        "kind": "authority",
+        "may_answer": "trusted_path",
+        "question": "Fetch a-counties.csv from pack:fixture/tables1@1.0.0 (https://127.0.0.1:59357/fixture/tables1/a-counties.csv; terms CC-BY-4.0: reuse is allowed with credit to the publisher.): 42 bytes in 1 file, under CC-BY-4.0 (credit: The county returns of Tarn Vale); title: County employment, publisher: Tarn Vale Census Office, edition: 2019?",
+        "options": [
+          {
+            "id": "fetch",
+            "label": "Fetch it",
+            "decision": "allow"
+          },
+          {
+            "id": "decline",
+            "label": "Don't fetch it",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1795919259413,
+        "fallback": "you",
+        "default": "decline",
+        "provisional": false,
+        "owner": "you",
+        "key": "7b3570f8bc4e8ac19a3b5dbd3c2545893631aefa924bf5df3ae49010c52cf102",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "7b3570f8bc4e8ac19a3b5dbd3c2545893631aefa924bf5df3ae49010c52cf102"
+        }
+      },
+      "plan": {
+        "ask": "ask:01M8FZNJRP16KPHM8TDEGD0ZVD",
+        "steps": [
+          {
+            "does": "Download a-counties.csv from pack:fixture/tables1@1.0.0 (https://127.0.0.1:59357/fixture/tables1/a-counties.csv; terms CC-BY-4.0: reuse is allowed with credit to the publisher.), 42 bytes, into the evidence store under CC-BY-4.0 (credit: The county returns of Tarn Vale); title: County employment, publisher: Tarn Vale Census Office, edition: 2019, then import it",
+            "changes": [
+              "evidence:dedd545c812edc4936cda2bb619a696880d994026b272755df917627b00c4622"
+            ],
+            "undo": "can't undo",
+            "public": false,
+            "cost": 0
+          }
+        ],
+        "diff": "7b3570f8bc4e8ac19a3b5dbd3c2545893631aefa924bf5df3ae49010c52cf102",
+        "hash": "432497b1d2b931feaf79578f1c2b01c51db182ba588c4b8023aa34cf23f4d06d"
+      }
+    }
+  },
+  {
+    "file": "crosswalk",
+    "ask": {
+      "handle": "ask:01M8FZNKMXD56YW4Y3NQ50SW4X",
+      "inbox": "Fetch b-crosswalk.csv from pack:fixture/tables1@1.0.0 (https://127.0.0.1:59357/fixture/tables1/b-crosswalk.csv; terms CC0-1.0: a public domain dedication.): 78 bytes in 1 file, under CC0-1.0; title: County to metro area crosswalk, publisher: Tarn Vale Mapping Board, edition: 2020?  authority  no repo    0s  If you don't answer: Don't fetch it, tomorrow at 21:27  ask:01M8FZNKMXD56YW4Y3NQ50SW4X\n    answer with fetch (Fetch it), decline (Don't fetch it)\n    plan 4ff7cd70c016: 1 step, 1 can't be undone\n    1. Download b-crosswalk.csv from pack:fixture/tables1@1.0.0 (https://127.0.0.1:59357/fixture/tables1/b-crosswalk.csv; terms CC0-1.0: a public domain dedication.), 78 bytes, into the evidence store under CC0-1.0; title: County to metro area crosswalk, publisher: Tarn Vale Mapping Board, edition: 2020, then import it  changes evidence:e6f20c1ae8aa0c5397f3ef7581b984dfad06b3cfd03dd1c6cc7d20cf182b83f1  undo: can't undo  cost $0.00",
+      "created": {
+        "kind": "authority",
+        "may_answer": "trusted_path",
+        "question": "Fetch b-crosswalk.csv from pack:fixture/tables1@1.0.0 (https://127.0.0.1:59357/fixture/tables1/b-crosswalk.csv; terms CC0-1.0: a public domain dedication.): 78 bytes in 1 file, under CC0-1.0; title: County to metro area crosswalk, publisher: Tarn Vale Mapping Board, edition: 2020?",
+        "options": [
+          {
+            "id": "fetch",
+            "label": "Fetch it",
+            "decision": "allow"
+          },
+          {
+            "id": "decline",
+            "label": "Don't fetch it",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1795919260317,
+        "fallback": "you",
+        "default": "decline",
+        "provisional": false,
+        "owner": "you",
+        "key": "add6d462e520a9d5da55fefe1fc1ac3ec3636c5c89333c7467ec42eefaec3ad2",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "add6d462e520a9d5da55fefe1fc1ac3ec3636c5c89333c7467ec42eefaec3ad2"
+        }
+      },
+      "plan": {
+        "ask": "ask:01M8FZNKMXD56YW4Y3NQ50SW4X",
+        "steps": [
+          {
+            "does": "Download b-crosswalk.csv from pack:fixture/tables1@1.0.0 (https://127.0.0.1:59357/fixture/tables1/b-crosswalk.csv; terms CC0-1.0: a public domain dedication.), 78 bytes, into the evidence store under CC0-1.0; title: County to metro area crosswalk, publisher: Tarn Vale Mapping Board, edition: 2020, then import it",
+            "changes": [
+              "evidence:e6f20c1ae8aa0c5397f3ef7581b984dfad06b3cfd03dd1c6cc7d20cf182b83f1"
+            ],
+            "undo": "can't undo",
+            "public": false,
+            "cost": 0
+          }
+        ],
+        "diff": "add6d462e520a9d5da55fefe1fc1ac3ec3636c5c89333c7467ec42eefaec3ad2",
+        "hash": "4ff7cd70c01629a9cc11f20ac3862bc56fa07a782b9e33c13f5d7af68123cbc7"
+      }
+    }
+  },
+  {
+    "file": "population",
+    "ask": {
+      "handle": "ask:01M8FZNMGZ51KANZHRE4AVKP50",
+      "inbox": "Fetch c-population.csv from pack:fixture/tables1@1.0.0 (https://127.0.0.1:59357/fixture/tables1/c-population.csv; terms CC0-1.0: a public domain dedication.): 29 bytes in 1 file, under CC0-1.0; title: Metro area population, publisher: Tarn Vale Residents Register, edition: 2022?  authority  no repo    0s  If you don't answer: Don't fetch it, tomorrow at 21:27  ask:01M8FZNMGZ51KANZHRE4AVKP50\n    answer with fetch (Fetch it), decline (Don't fetch it)\n    plan 222e8c6b9eb0: 1 step, 1 can't be undone\n    1. Download c-population.csv from pack:fixture/tables1@1.0.0 (https://127.0.0.1:59357/fixture/tables1/c-population.csv; terms CC0-1.0: a public domain dedication.), 29 bytes, into the evidence store under CC0-1.0; title: Metro area population, publisher: Tarn Vale Residents Register, edition: 2022, then import it  changes evidence:ed4e2cf0b9710f7a7393fb2f900252c8cfab991fc1df5f3bdc729691ca9654c6  undo: can't undo  cost $0.00",
+      "created": {
+        "kind": "authority",
+        "may_answer": "trusted_path",
+        "question": "Fetch c-population.csv from pack:fixture/tables1@1.0.0 (https://127.0.0.1:59357/fixture/tables1/c-population.csv; terms CC0-1.0: a public domain dedication.): 29 bytes in 1 file, under CC0-1.0; title: Metro area population, publisher: Tarn Vale Residents Register, edition: 2022?",
+        "options": [
+          {
+            "id": "fetch",
+            "label": "Fetch it",
+            "decision": "allow"
+          },
+          {
+            "id": "decline",
+            "label": "Don't fetch it",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1795919261215,
+        "fallback": "you",
+        "default": "decline",
+        "provisional": false,
+        "owner": "you",
+        "key": "b5f12ce1f815d6b1cb19283b509a2e3e66b699b2c3121cb30c5c968544b51276",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "b5f12ce1f815d6b1cb19283b509a2e3e66b699b2c3121cb30c5c968544b51276"
+        }
+      },
+      "plan": {
+        "ask": "ask:01M8FZNMGZ51KANZHRE4AVKP50",
+        "steps": [
+          {
+            "does": "Download c-population.csv from pack:fixture/tables1@1.0.0 (https://127.0.0.1:59357/fixture/tables1/c-population.csv; terms CC0-1.0: a public domain dedication.), 29 bytes, into the evidence store under CC0-1.0; title: Metro area population, publisher: Tarn Vale Residents Register, edition: 2022, then import it",
+            "changes": [
+              "evidence:ed4e2cf0b9710f7a7393fb2f900252c8cfab991fc1df5f3bdc729691ca9654c6"
+            ],
+            "undo": "can't undo",
+            "public": false,
+            "cost": 0
+          }
+        ],
+        "diff": "b5f12ce1f815d6b1cb19283b509a2e3e66b699b2c3121cb30c5c968544b51276",
+        "hash": "222e8c6b9eb011d11ff2fa76dfea113516bde1e64e299b843fa37784e1f0fc28"
+      }
+    }
+  }
+]

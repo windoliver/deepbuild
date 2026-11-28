@@ -25,7 +25,6 @@ pub trait Screens {
     fn frame(&mut self, doc: &Value, size: [f64; 2], veil: f64) -> Option<String>;
     /// Frames kept by `frame`, as one recording: its sha256.
     fn recording(&mut self, frames: &[String]) -> Option<String>;
-    /// #3605: each text item the document draws at `size`, with the string it shows.
     fn texts(&mut self, doc: &Value, size: [f64; 2]) -> Result<BTreeMap<String, String>, Value>;
 }
 
@@ -36,11 +35,8 @@ pub struct Plants {
     pub pause_runs_clock: bool,
     pub focus_stays_disabled: bool,
     pub prompts_keep_keys: bool,
-    /// #3605: a level marked done when it is entered.
     pub done_on_enter: bool,
-    /// #3605: `done` kept in a run's save, not the profile record.
     pub done_in_save: bool,
-    /// #3605: a setting handed through the level's read region with no entry on its track.
     pub setting_in_read_region: bool,
 }
 
@@ -95,25 +91,19 @@ pub struct LevelRun {
     /// Touch zones in the view's pixels: the action each writes and its box.
     pub zones: Vec<(String, Box4)>,
     pending: Vec<(String, f64)>,
-    /// #3605: each setting the level takes that the shell declares: its place in `custom` and the
-    /// value its track last gave it.
     given: Vec<(String, usize, f64)>,
-    /// Planted: the setting entries it read are left off the track it gives.
     hides_settings: bool,
 }
 
 impl LevelRun {
-    /// `{level, entries, steps}`: the load's track and the steps it ran.
     pub fn given_track(&self) -> Value {
         json!({"level": self.index, "entries": self.track(), "steps": self.steps})
     }
 
-    /// The level's input track, every entry in time order, as a piece's replay reads it.
     pub fn track(&self) -> Vec<Value> {
         self.world
             .entries()
             .iter()
-            // Planted: the settings the shell handed the level kept off the track it gives.
             .filter(|e| !(self.hides_settings && e.control.starts_with("settings.")))
             .map(Entry::to_json)
             .collect()
@@ -175,11 +165,8 @@ pub struct Run<'a> {
     pub frames: Vec<String>,
     /// The document the last frame outside a transition drew, which a fade draws out of.
     drawn: Option<Value>,
-    /// #3605: the shell's profile record, where its saves are kept.
     pub keeper: super::profile::Keeper,
-    /// Each level load's input track, `{level, entries, steps}`, in the order levels were left.
     pub tracks: Vec<Value>,
-    /// #3605: each completion, `{level, step}`: the shell step at which the level's own `done` turned true.
     pub completions: Vec<Value>,
 }
 
@@ -249,7 +236,6 @@ impl<'a> Run<'a> {
         if let Some(b) = self.boxes.get(&s) {
             return Ok(b.clone());
         }
-        // The screen as it draws, the shell's arrays baked in, so its drivers and flips over them evaluate.
         let doc = self.prompted(s);
         let b = self.screens.boxes(&doc, self.size)?;
         self.boxes.insert(s, b.clone());
@@ -365,7 +351,6 @@ impl<'a> Run<'a> {
                 .iter()
                 .position(|t| t == a)
                 .map_or(0.0, |i| f64::from(u8::from(self.state.toggle[i]))),
-            // #3605: a choice's value is its option's index; a slider's and a toggle's the setting.
             Some(("custom", n)) => self.shell.custom(n).map_or(0.0, |i| {
                 let now = self.state.custom[i];
                 match c.kind {
@@ -610,7 +595,6 @@ impl<'a> Run<'a> {
             .iter()
             .map(|(_, _, h, r)| crate::carry::entry(h, r))
             .collect();
-        // #3605: each setting the level lists that the shell declares enters its track at step 0.
         let mut given: Vec<(String, usize, f64)> = Vec::new();
         for item in &piece.items {
             for (name, _) in &item.settings {
@@ -667,8 +651,6 @@ impl<'a> Run<'a> {
             return Ok(());
         };
         let k = level.steps;
-        // #3605: a setting changed since its last entry, on a screen the pause menu opened, enters the track at
-        // this, the level's next step.
         for (name, i, last) in &mut level.given {
             let now = self.state.custom[*i];
             if now != *last {
@@ -736,7 +718,6 @@ impl<'a> Run<'a> {
         Ok(())
     }
 
-    /// The loaded level left: its input track kept for the reply, as a piece's replay reads it.
     fn unload(&mut self) {
         if let Some(l) = self.level.take() {
             self.tracks.push(l.given_track());
@@ -761,7 +742,6 @@ impl<'a> Run<'a> {
         match then {
             Then::Load(l) => {
                 self.load(l)?;
-                // Planted: a level marked done when it is entered.
                 if self.plants.done_on_enter {
                     self.state.done[l] = true;
                 }
@@ -903,7 +883,6 @@ impl<'a> Run<'a> {
     pub fn prompted(&self, s: usize) -> Value {
         let screen = &self.shell.screens[s];
         let mut doc = screen.doc.clone();
-        // #3605: the shell's arrays as the screen's flips, keyed copy and drivers read them, by `<shell ID>.<array>`.
         if let Some(d) = doc.as_object_mut() {
             let arrays = d.entry("arrays").or_insert_with(|| json!({}));
             if let Some(a) = arrays.as_object_mut() {
@@ -920,8 +899,6 @@ impl<'a> Run<'a> {
 }
 
 impl Run<'_> {
-    /// The shell's arrays baked as a logic item's are (Logic `logic@1`; the column view): each element held from
-    /// step 0, a bool as 0 or 1.
     pub fn baked(&self) -> Map<String, Value> {
         self.state
             .arrays()
@@ -952,7 +929,6 @@ impl Run<'_> {
     }
 }
 
-/// #3605: a shell setting's entry on a level's track, as a number control's.
 fn setting_entry(name: &str, t: i64, seq: u32, v: f64) -> Entry {
     Entry {
         t,

@@ -1,0 +1,96 @@
+#3460 acceptance tests at the base, b134dd38f (origin/main), before any implementation.
+Run on 2026-11-26, Node 24.22.0, vitest 5.0.5, macOS 27.2 (darwin, arm64), 1-minute load 98 from other sessions, with
+the base's packages built (npm ci && npm run build --workspaces) and deep-hook built (cargo build -p deep-hook).
+Command:
+
+  npx vitest run tests/acceptance/3460 --no-file-parallelism
+
+Source excerpts and stack frames are left out, and the checkout's path reads <checkout>; nothing else is. 13 tests:
+7 fail, each at the assertion named below (an expect, never a thrown Error, a TypeError or a timeout); 5 pass, each
+holding what must not change; 1 is skipped (the writer of fixtures/base-hits.json, which runs only when asked).
+
+ RUN  v5.0.5
+
+ ❯ tests/acceptance/3460/reading.test.ts (1 test | 1 failed) 9402ms
+   × AC7 #3460.7cd4a1ff the reading prints, for each search and each form, the queries found over the queries asked and each query not found with its claim, the same bytes twice, and never counts another claim's hit as found
+ ❯ tests/acceptance/3460/scope.test.ts (1 test | 1 failed) 4803ms
+   × AC3 #3460.8dffa8bf with ports held only by a claim scoped to another session, a call bound to this session is told that nothing holds ports
+ ❯ tests/acceptance/3460/note.test.ts (4 tests | 3 failed) 2482ms
+   × AC1 #3460.67d53f5f deep_search for "api ports" over the one claim about ports returns no hit and a note that names ports and not api
+   × AC2 #3460.74f4978c deep_search for "port redis", each held by its own claim, returns no hit and a note saying no one source holds every word, naming no word
+   × AC4 #3460.fd277010 a query of 40 words that no source holds gets a note naming its first 16 and saying 24 were left unread, under its client's cap
+   ✓ AC5 #3460.c0d74b68 a query with no word still gets today's note, word for word, and a query with hits gets no note
+ ❯ tests/acceptance/3460/order.test.ts (1 test | 1 failed) 2448ms
+   × AC8 #3460.6ad8cdef with 25 wiki claims and one decision of yours all holding billing, the decision is the first hit of the first page, and the 25 claims keep their order
+ ❯ tests/acceptance/3460/find.test.ts (2 tests | 1 failed) 1004ms
+   × AC6 #3460.deebb776 deep find "port api" prints one sentence saying it looked for the query as one run of characters, exits as today, and with --json prints empty hits and the note
+   ✓ AC6 #3460.deebb776 deep find port, which finds the claim, prints what the merge base prints, byte for byte, and one word that finds nothing keeps today's sentence
+ ✓ tests/acceptance/3460/hits.test.ts (4 tests | 1 skipped) 48s
+   ✓ AC9 #3460.e44187b3 every query of #884's suite that finds a hit returns the merge base's set of hits
+   ✓ AC9 #3460.e44187b3 every query of #26's search suite that finds a hit returns the merge base's set of hits
+   ✓ AC9 #3460.e44187b3 every query of #1515's suite that finds a hit returns the merge base's set of hits
+   ↓ records the merge base's hits on #1515's fixture at b134dd38f
+
+ FAIL  note.test.ts > AC1 #3460.67d53f5f …
+AssertionError: deep_search "api ports" returns no hit and says nothing of why: its reply {"hits":[],"more":0} carries no note: expected 'undefined' to be 'string' // Object.is equality
+ ❯ tests/acceptance/3460/note.test.ts:38:137
+   The assertions before passed: "api port" finds wiki:repos/api#port, and "api ports" returns no hit.
+
+ FAIL  note.test.ts > AC2 #3460.74f4978c …
+AssertionError: deep_search "port redis" returns no hit and says nothing of why: its reply {"hits":[],"more":0} carries no note: expected 'undefined' to be 'string' // Object.is equality
+ ❯ tests/acceptance/3460/note.test.ts:51:137
+   Before it: "port" finds wiki:repos/api#port, "redis" finds wiki:setup#cache, and "port redis" returns no hit.
+
+ FAIL  note.test.ts > AC4 #3460.fd277010 …
+AssertionError: deep_search for 40 words no source holds returns no hit and says nothing of why: its reply {"hits":[],"more":0} carries no note: expected 'undefined' to be 'string' // Object.is equality
+ ❯ tests/acceptance/3460/note.test.ts:69:155
+
+ FAIL  scope.test.ts > AC3 #3460.8dffa8bf …
+AssertionError: session B's deep_search "ports" returns no hit and says nothing of why: its reply {"hits":[],"more":0} carries no note: expected 'undefined' to be 'string' // Object.is equality
+ ❯ tests/acceptance/3460/scope.test.ts:48:172
+   Before it: the wiki wrote wiki:repos/web#preview-ports at session A's scope, the claim is a line on its page,
+   session B's "api port" finds wiki:repos/api#port, and its "ports" returns no hit.
+
+ FAIL  find.test.ts > AC6 #3460.deebb776 deep find "port api" …
+AssertionError: deep find "port api" finds nothing ("port" and "api" are in wiki:repos/api#port, never as the one run "port api") and prints one sentence saying it looked for the query as one run of characters: expected 'Nothing in the record holds "port api…' to be 'Nothing in the record holds "port api…' // Object.is equality
+- Nothing in the record holds "port api" as one run of characters.
++ Nothing in the record holds "port api".
+ ❯ tests/acceptance/3460/find.test.ts:31:215
+   Before it: the command exits 0. With --json the base prints {"hits":[]}, with no note.
+
+ FAIL  order.test.ts > AC8 #3460.6ad8cdef …
+AssertionError: your decision decision:01M8DS875F0000000000AB4QGC ("Move billing to monthly invoices?") is the first hit of the first page of deep_search "billing"; it is hit 26 of 26, after 25 wiki claims, and the first page starts ["wiki:notes/billing#c01","wiki:notes/billing#c02","wiki:notes/billing#c03"]: expected 'wiki:notes/billing#c01' to be 'decision:01M8DS875F0000000000AB4QGC' // Object.is equality
+ ❯ tests/acceptance/3460/order.test.ts:46:299
+   Before it: the pages hold the 25 claims and the decision, each once; the claims are in the order c01 to c25; the
+   first page holds 20 hits.
+
+ FAIL  reading.test.ts > AC7 #3460.7cd4a1ff …
+AssertionError: node scripts/search-reading.mjs tests/acceptance/3460/fixtures/reading.json exits 0, a reading with no threshold; it exited 1: node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+Error: Cannot find module '<checkout>/scripts/search-reading.mjs': expected 1 to be +0 // Object.is equality
+ ❯ tests/acceptance/3460/reading.test.ts:68:129
+   The base has no reading. Before it: the test asked every query of the fixture through both searches itself, and
+   each search has a query that finds its claim and a query whose reply holds only another claim's hit.
+
+ Test Files  5 failed | 1 passed (6)
+      Tests  7 failed | 5 passed | 1 skipped (13)
+   Duration  71.91s
+
+What passes on the base, and so needs a planted wrong program (twins.json, twins/README.md): AC5; AC6's second test
+(deep find port prints three lines: the decision the claim rests on, wiki:questions/api/start#port and
+wiki:repos/api#port, each with the claim's text as its context; deep find ports prints today's sentence); AC9's three.
+
+fixtures/base-hits.json was written on this base by `DH3460_GOLDEN=write npx vitest run
+tests/acceptance/3460/hits.test.ts` (48 s; that run passed #884's and #26's tests too): twelve queries of #1515's
+fixture, from 1 hit to 610.
+
+Whether the tests can pass. No product file was touched and no implementation was run, so the passing side of AC1 to
+AC4, AC6's first test and AC8 is unverified until one exists. reading.test.ts was run on a throwaway copy of itself
+that started a stand-in in place of scripts/search-reading.mjs (a script outside the checkout printing a file the copy
+wrote from the test's own asking of both searches; the copy is not kept):
+  the stand-in printing each query found only by its own claim: PASS.
+  the stand-in counting a reply holding any hit as found: FAIL at the trap's assertion, "the reading counts "web
+    preview port" as found by deep_search: its reply holds ["wiki:repos/web#preview-port"] and not
+    wiki:repos/web#previews, the claim it is tied to, so the reading names it as not found under "deep_search, form"".
+What the reading must print on the fixture, by the merge base's two rules, is in README.md.

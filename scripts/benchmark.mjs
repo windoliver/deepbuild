@@ -5,8 +5,9 @@ import { availableParallelism, homedir, loadavg, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
-import { readApprovals } from './proof-approvals.mjs';
-import { named, watchTree } from './proof-stop.mjs';
+const beside = (file) => existsSync(new URL(file, import.meta.url));
+const approvals = beside('./proof-approvals.mjs') ? await import('./proof-approvals.mjs') : null;
+const stop = beside('./proof-stop.mjs') ? await import('./proof-stop.mjs') : null;
 
 const metrics = ['p50Ms', 'p95Ms', 'peakBytes'];
 // What a budget runs and builds is bare by this module's own setting, never by the machine's: an empty RUSTC_WRAPPER is no
@@ -216,7 +217,7 @@ export function measureOnce(command, cwd, stream = false, timeoutMs = 300_000, f
   const build = follow ? counterBuild() : null;
   // A captured run's stop reaches every process it started, a detached one too, and names them (#3433). The watcher
   // lists the run's tree twice a second while it runs.
-  const watch = stream ? null : watchTree();
+  const watch = stream || !stop ? null : stop.watchTree();
   try {
     watch?.arm();
     if (build) writeFileSync(counted, '');
@@ -238,7 +239,7 @@ export function measureOnce(command, cwd, stream = false, timeoutMs = 300_000, f
       } catch (error) {
         if (error.code !== 'ESRCH') throw error;
       }
-      if (stopped) result.error.message += `; ${named(stopped)}`;
+      if (stopped) result.error.message += `; ${stop.named(stopped)}`;
       throw result.error;
     }
     const report = readFileSync(timing, 'utf8');
@@ -268,10 +269,10 @@ export function measure(command, cwd, base) {
       const [argv, directory] = sides[side];
       const result = measureOnce(argv, directory);
       if (result.status !== 0) throw Error(`${argv[0]} exited ${result.status}: ${result.output}`);
-      if (round) samples[side].push({ ms: result.elapsedMs, peakBytes: result.peakBytes, instructions: result.instructions, load: { start: result.loadStart, end: result.loadEnd }, uncounted: result.uncounted, qos: result.qos });
+      if (round) samples[side].push({ ms: result.elapsedMs, peakBytes: result.peakBytes, instructions: result.instructions, load: { start: result.loadStart, end: result.loadEnd }, uncounted: result.uncounted, qos: result.qos, work: workOf(result.stdout) });
     }
   }
-  return samples.map((side) => ({ ...summarize(side), samples: side.length, instructions: side.map(({ instructions }) => instructions), loads: side.map(({ load }) => load), uncounted: [...new Set(side.flatMap(({ uncounted }) => uncounted))], qos: sumQos(side.map(({ qos }) => qos)) }));
+  return samples.map((side) => ({ ...summarize(side), samples: side.length, instructions: side.map(({ instructions }) => instructions), loads: side.map(({ load }) => load), uncounted: [...new Set(side.flatMap(({ uncounted }) => uncounted))], qos: sumQos(side.map(({ qos }) => qos)), work: workOfRuns(side.map(({ work }) => work)) }));
 }
 
 // A rise in instructions retired is judged against 2%, by 10,000 sign flips decided at p under 0.01.
@@ -536,7 +537,7 @@ export function validateBudgets(current, base, approved = []) {
 /** The items of the approvals on the commits from `base` to `head` (#1326), which may hold a budget's proposal. */
 export function approvedItems(root, base, head) {
   const commits = execFileSync('git', ['rev-list', `${base}..${head}`], { cwd: root, encoding: 'utf8' }).split('\n').filter(Boolean).map((sha) => ({ sha }));
-  return [...readApprovals(root, { base, commits }, null).values()].flat();
+  return approvals ? [...approvals.readApprovals(root, { base, commits }, null).values()].flat() : [];
 }
 
 // p95 has only absolute caps: between identical binaries on a shared machine, the tail of 20
@@ -564,14 +565,46 @@ export function judgeCount({ limit, runs }) {
   return { status: 'INCONCLUSIVE', limit, runs, reason: `the readings straddle ${limit}: ${runs.join(', ')}` };
 }
 
-/** The number `name` in a run's report, its last stdout line that is a JSON object; null when it can't be read. */
-function reported(stdout, name) {
+function reportOf(stdout) {
   try {
-    const value = JSON.parse(stdout.trim().split('\n').filter((line) => line.trim().startsWith('{')).at(-1))[name];
-    return Number.isFinite(value) ? value : null;
+    return JSON.parse(stdout.trim().split('\n').filter((line) => line.trim().startsWith('{')).at(-1));
   } catch {
     return null;
   }
+}
+
+/** The number `name` in a run's report, its last stdout line that is a JSON object; null when it can't be read. */
+function reported(stdout, name) {
+  const value = reportOf(stdout)?.[name];
+  return Number.isFinite(value) ? value : null;
+}
+
+function workOf(stdout) {
+  const report = reportOf(stdout);
+  if (!report || !('work' in report)) return undefined;
+  const counts = report.work && typeof report.work === 'object' && !Array.isArray(report.work) ? Object.values(report.work) : [];
+  return counts.length && counts.every(Number.isFinite) ? report.work : null;
+}
+
+const workOfRuns = (runs) => (runs.every((work) => isDeepStrictEqual(work, runs[0])) ? runs[0] : null);
+
+const workSaid = (work) => (work === undefined ? 'no work' : work === null ? "work that can't be read" : Object.entries(work).map(([count, value]) => `${count} ${value}`).join(', '));
+
+export function judgeWork(id, change, base, approved = []) {
+  if (base === undefined && change !== null) return null;
+  if (!change || !base) return { status: 'INCONCLUSIVE', reason: `the change's runs report ${workSaid(change)} and the merge base's ${workSaid(base)}: work that can't be read on one side is missing, never equal` };
+  const unlike = [...new Set([...Object.keys(base), ...Object.keys(change)])].filter((count) => change[count] !== base[count]).map((count) => ({ field: `work.${count}`, before: base[count], after: change[count] }));
+  const refused = unlike.filter((count) => !approved.includes(proposal(id, count)));
+  if (!refused.length) return { status: 'PASS' };
+  return { status: 'INCONCLUSIVE', reason: `${refused.map(({ field, before, after }) => `${field.slice('work.'.length)} is ${shown(after)} on the change and ${shown(before)} on the merge base`).join(', ')}, so the two sides did unlike work and don't compare. A change that means it is judged once the maintainer approves the commit with a signed tag under deep/approved/ holding ${refused.map((count) => `Approves: ${proposal(id, count)}`).join(', ')}` };
+}
+
+function refusedLowering(budget, established, now, then, runs) {
+  const refused = Object.keys(established.limits).filter((metric) => budget.limits?.[metric] < established.limits[metric]).flatMap((metric) => {
+    const work = metric === 'instructions' ? now.work : workOfRuns(runs.map(({ stdout }) => workOf(stdout)));
+    return work && isDeepStrictEqual(work, then.work) ? [] : [`${budget.id} lowers its ${metric} ceiling from ${established.limits[metric]} to ${budget.limits[metric]} on runs that report ${workSaid(work)}, where the merge base's runs report ${workSaid(then.work)}`];
+  });
+  return refused.length ? { status: 'BLOCKED', reason: `${refused.join('; ')}. A ceiling is lowered only on a task that reports work, by runs that report what the merge base's runs report` } : null;
 }
 
 // One task judged against its merge base, as perf and the budget window judge it: 20 alternated rounds a side, its
@@ -581,9 +614,11 @@ function reported(stdout, name) {
 // never moves its own budget (#2665), except an estimate moved once with its reason (#12). A command that won't run throws.
 // The machine is read after the runs through `machineOf`, the caller's own fingerprint(), so a lane whose benchmark.mjs
 // answers for the machine is judged on that answer (#1838).
-export function judgeTask(budget, established, cwd, baseCwd, machineOf = fingerprint) {
+export function judgeTask(budget, established, cwd, baseCwd, machineOf = fingerprint, approved = []) {
   const held = established && !movedOnce(definition(budget), definition(established)) ? established : budget;
   const [now, then = null] = measure(budget.command, cwd, established && { command: established.command, cwd: baseCwd });
+  const work = then && judgeWork(budget.id, now.work, then.work, approved);
+  const unlike = work?.status === 'INCONCLUSIVE';
   const once = () => {
     const result = measureOnce(budget.command, cwd, false, undefined, false);
     if (result.status !== 0) throw Error(`${budget.command[0]} exited ${result.status}: ${result.output}`);
@@ -603,11 +638,11 @@ export function judgeTask(budget, established, cwd, baseCwd, machineOf = fingerp
   let outcome, regression = null;
   try {
     // compare holds only the merge-base regression here; the limits are judged above.
-    outcome = compare({ ...budget, margin: held.margin, limits: {} }, now, then);
+    outcome = unlike ? { status: 'INCONCLUSIVE', reason: work.reason } : compare({ ...budget, margin: held.margin, limits: {} }, now, then);
   } catch (error) {
     regression = error.message;
   }
-  return { now, then, machine, loads, limits, instructions, outcome, regression };
+  return { now, then, machine, loads, limits, instructions: unlike ? null : instructions, work, lowering: held === established ? refusedLowering(budget, established, now, then, runs) : null, outcome, regression };
 }
 
 // A task's report is its command's last stdout line; `<bench> judge` reads it on stdin and prints its verdict.
