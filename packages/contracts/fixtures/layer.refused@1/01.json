@@ -1,0 +1,16 @@
+{
+  "v": 1,
+  "id": "01KB3517RF0000000000000001",
+  "kind": "layer.refused",
+  "subject": "doc:01JB3517D00000000000000001",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1800000000000,
+  "data": {
+    "doc": "doc:01JB3517D00000000000000001",
+    "rev": 1,
+    "layer": "you-0123456789ab",
+    "reason": "module_missing: physics"
+  }
+}

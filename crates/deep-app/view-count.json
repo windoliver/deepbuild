@@ -1,0 +1,45 @@
+{
+  "counted": 34,
+  "refused": {
+    "feature_absent: look/drawn": [
+      "tests/acceptance/3517/fixtures/look-box.json"
+    ],
+    "feature_absent: overlay.frame@1": [
+      "tests/acceptance/378/fixtures/anchored.json"
+    ],
+    "module_missing: data": [
+      "tests/acceptance/1162/fixtures/piece.json"
+    ],
+    "module_missing: physics": [
+      "tests/acceptance/3517/fixtures/needs-physics.json"
+    ],
+    "out_of_range: items/x1/params/outline": [
+      "tests/acceptance/202/fixtures/packs/shelf-1.0.3-slab/examples/defaults.json"
+    ],
+    "ref_unresolved: items/a-near/params/paint/fill/role": [
+      "tests/acceptance/378/fixtures/city-depth-oblique.json",
+      "tests/acceptance/378/fixtures/city-depth.json"
+    ],
+    "ref_unresolved: items/avatar-13/params/paint/fill/role": [
+      "tests/acceptance/381/fixtures/depth-3d.json"
+    ],
+    "ref_unresolved: items/band-00/params/paint/fill/role": [
+      "tests/acceptance/378/fixtures/grey-bands.json"
+    ],
+    "ref_unresolved: items/box-0/params/paint/fill/role": [
+      "tests/acceptance/378/fixtures/move.json"
+    ],
+    "ref_unresolved: items/floor/params/paint/fill/role": [
+      "tests/acceptance/140/view/fixtures/parity/gpu/live-headless/glow-shadows.json"
+    ],
+    "ref_unresolved: items/label-up/params/paint/fill/role": [
+      "tests/acceptance/378/fixtures/upright.json"
+    ],
+    "ref_unresolved: items/quarter/params/paint/fill/role": [
+      "tests/acceptance/378/fixtures/thin-lines.json"
+    ],
+    "ref_unresolved: items/wire-strip/params/paint/fill/role": [
+      "tests/acceptance/378/fixtures/wires.json"
+    ]
+  }
+}

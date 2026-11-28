@@ -49,6 +49,7 @@ One page per module topic. Each decision names the file and the symbol it govern
 - [0007](0007-kept-pack-checks.md): a pack check's result kept in the store, what a taken row gives a core, and its counts
 - [0008](0008-scene-relations.md): the `scene.relations` check kind
 - [0010](0010-lane-lists-reasons.md): the lane lists in `scripts/lanes-lists.mjs`: why each entry runs alone, slow, timed or by hand
+- [0011](0011-app-3d-view.md): what the app's 3D view draws, what the hub hands it, and the count of what it refuses
 
 ## Open
 
