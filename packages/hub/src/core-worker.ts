@@ -13,6 +13,7 @@ import { Refused, refusal, type CoreOptions, type Draft, type Gated, type HookMe
 export type CoreRequest =
   | { op: 'call'; method: string; params: unknown; context: CallContext }
   | { op: 'mcp-hello'; fd?: number | undefined; parent: { pid: number; start: string } | undefined; paseo?: string }
+  | { op: 'waiter-hello'; fd?: number | undefined; session: string; at: number }
   | { op: 'health'; role: string }
   // The call's event ID, session and agent name it on the record when a handler fails it (#2402).
   | { op: 'extension-hook'; data: unknown; meta?: { id: string; session: string; agent: string } }
@@ -54,6 +55,7 @@ export async function answer(core: Core | ReadOnlyCore, request: CoreRequest): P
   switch (request.op) {
     case 'call': return core.call(request.method, request.params, request.context);
     case 'mcp-hello': return core.mcpHello(request.fd, request.parent, request.paseo);
+    case 'waiter-hello': return core.waiterHello(request.fd, request.session, request.at);
     case 'health': return core.health(request.role);
     case 'extension-hook': return core.extensionHook(request.data, request.meta);
     case 'hook-reply': return core.hookReply(request.meta, request.until);

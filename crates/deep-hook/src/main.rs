@@ -32,6 +32,7 @@ mod remote;
 mod session_start;
 mod spool_file;
 mod tool_paths;
+mod waiter;
 
 use cow::clone;
 use heavy_entry::heavy_entry;
@@ -1619,10 +1620,7 @@ fn send(line: &str) {
     }
 }
 
-// ---- The waiter (#25).
-
-/// How often a waiter looks whether its session's agent still runs, and how long it waits to ask a hub that is away.
-const WAITER_LOOK: Duration = Duration::from_millis(500);
+// ---- The waiter (#25): what it reads of its agent here, its wait in waiter.rs.
 
 extern "C" {
     fn kill(pid: i32, sig: i32) -> i32;
@@ -1723,118 +1721,6 @@ fn alive(pid: u32) -> bool {
     sent == 0 || io::Error::last_os_error().raw_os_error() == Some(1)
 }
 
-enum Waited {
-    /// The hub handed over an answer for the session: exit 2 with it, which wakes the session.
-    Answer(String),
-    /// The hub said this waiter is done: a newer one replaced it, the stop hold took the answer, or the session ended.
-    Done,
-    /// The hub is away, or went: ask again once it is back.
-    Away,
-}
-
-/// One wait on the hub's socket as the cli role: the call is answered when the session has an answer for it.
-fn wait_once(request: &str, gone: &dyn Fn() -> bool) -> Waited {
-    let Ok(token) = fs::read_to_string(home().join("control.token")) else {
-        return Waited::Away;
-    };
-    let Ok(stream) = UnixStream::connect(address()) else {
-        return Waited::Away;
-    };
-    let mut reader = BufReader::new(stream);
-    let soon = || Some(Instant::now() + SEND_BUDGET);
-    if !matches!(read_line(&mut reader, soon()), Got::Line(_)) {
-        return Waited::Away;
-    }
-    let hello = format!(
-        "{{\"v\":1,\"hello\":\"cli\",\"token\":{}}}\n",
-        quoted(token.trim())
-    );
-    if reader.get_mut().write_all(hello.as_bytes()).is_err()
-        || !matches!(read_line(&mut reader, soon()), Got::Line(_))
-        || reader.get_mut().write_all(request.as_bytes()).is_err()
-    {
-        return Waited::Away;
-    }
-    loop {
-        match read_line(&mut reader, Some(Instant::now() + WAITER_LOOK)) {
-            Got::Timeout if gone() => return Waited::Done,
-            Got::Timeout => {}
-            Got::Closed => return Waited::Away,
-            Got::Line(text) => {
-                let Ok(reply) = parse(text.trim_end()) else {
-                    return Waited::Away;
-                };
-                return match member(&reply, "result") {
-                    Some(result) => match member(result, "text") {
-                        Some(Value::String(answer)) => Waited::Answer(answer.clone()),
-                        _ => Waited::Done,
-                    },
-                    None => Waited::Away,
-                };
-            }
-        }
-    }
-}
-
-/// `deep-hook <agent> waiter`: waits, as long as Claude Code lets the entry run, for an answer to the session the
-/// payload names, and exits 2 with it on stderr. Its life is its session's: it exits when the agent that started it
-/// does, and waits across the hub's restarts. It uses no CPU while it waits but a look at its agent twice a second.
-fn waiter() -> ExitCode {
-    let since = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis();
-    let mut input = String::new();
-    let _ = io::stdin().read_to_string(&mut input);
-    let payload = parse(&input).ok();
-    let field = |key: &str| match payload.as_ref().and_then(|p| member(p, key)) {
-        Some(Value::String(text)) => text.clone(),
-        _ => String::new(),
-    };
-    let session = field("session_id");
-    if session.is_empty() {
-        return ExitCode::SUCCESS;
-    }
-    // #824's planted wrong program: a copy of the session's transcript in the waiter's own memory while it waits.
-    let kept = if hub_plant().as_deref() == Some("waiter-keeps-transcript") {
-        fs::read(field("transcript_path")).unwrap_or_default()
-    } else {
-        Vec::new()
-    };
-    let request = format!(
-        "{{\"v\":1,\"id\":1,\"method\":\"session.wait\",\"params\":{{\"session\":{},\"cwd\":{},\"since\":{since}}}}}\n",
-        quoted(&session),
-        quoted(&field("cwd"))
-    );
-    let agent = agent_pid();
-    // A print run (`claude -p`) has no later turn to wake, and it waits for its async Stop entries before it exits,
-    // while this waits for it to exit: under one, the waiter is done at once (#668).
-    if args_of(agent)
-        .iter()
-        .skip(1)
-        .any(|arg| arg == "-p" || arg == "--print")
-    {
-        return ExitCode::SUCCESS;
-    }
-    // Only the planted wrong program waiter-outlives-session doesn't watch its session's agent.
-    let watched = hub_plant().as_deref() != Some("waiter-outlives-session");
-    let gone = || watched && (agent_pid() != agent || !alive(agent));
-    loop {
-        std::hint::black_box(&kept);
-        if gone() {
-            return ExitCode::SUCCESS;
-        }
-        match wait_once(&request, &gone) {
-            Waited::Answer(text) => {
-                eprintln!("{text}");
-                return ExitCode::from(2);
-            }
-            Waited::Done => return ExitCode::SUCCESS,
-            Waited::Away => std::thread::sleep(WAITER_LOOK),
-        }
-    }
-}
-
 fn main() -> ExitCode {
     let args: Vec<String> = env::args().skip(1).collect();
     match args.as_slice() {
@@ -1861,7 +1747,7 @@ fn main() -> ExitCode {
         }
         [arg, hub] if arg == "spool-send" => return remote::send_spool(&home(), hub),
         [arg, server] if arg == "mcp" && server == "actions" => return actions::serve(),
-        [agent, event] if !agent.starts_with('-') && event == "waiter" => return waiter(),
+        [agent, event] if !agent.starts_with('-') && event == "waiter" => return waiter::waiter(),
         [agent, event] if !agent.starts_with('-') => return forward(agent, event),
         _ => {
             eprintln!("Usage: deep-hook <agent> <event>, with the hook's JSON on stdin. Run deep-hook --help.");

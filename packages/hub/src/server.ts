@@ -28,6 +28,7 @@ import { shedStartup, YOUNG } from './settle.js';
 import { processHealth } from './process-health.js';
 import { replay, type Replaying } from './replay.js';
 import { Waits, type HookSeen, type OpenCall, type Restored } from './waits.js';
+import { waiterHello } from './waiter-hello.js';
 import { People } from './people.js';
 import { identityAt, idOf, type Identity } from './identity.js';
 import { plantedStart } from './plant.js';
@@ -113,7 +114,7 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['canvas.show', ['cli']], ['canvas.export', ['cli']], ['canvas.revisions', ['app', 'cli']], ['canvas.messages', ['app', 'cli']], ['canvas.user', ['app']], ['canvas.drawn', ['app']],
   // Our waiter, run by Claude Code's Stop entry as you, holds until an answer for its session is ready (#18, #25).
   // The pi package holds the same wait on its own connection, and says what became of each answer it took (#40).
-  ['session.wait', ['cli', 'mcp']], ['session.delivered', ['mcp']], ['session.stop_waiting', ['mcp']],
+  ['session.wait', ['cli', 'mcp', 'waiter']], ['session.delivered', ['mcp']], ['session.stop_waiting', ['mcp']],
   // Your words into a session from the app, a note or a page's box, recorded from: app by their request ID (#340).
   ['session.note', ['app']], ['ask.later', ['app']], ['session.pause', ['app']],
   // A session's name from the Session menu's Rename, and why a session reads as it does, for `deep status <session> --why` (#2018).
@@ -1205,8 +1206,7 @@ class Hub {
       if (!this.coreUp) void asked.then(bind);
       return conn.write({ role: conn.name });
     }
-    conn.write({ id: null, error: refusal('enum', '/hello', 'Say hello as app, cli or mcp.', value.hello) });
-    conn.end();
+    return waiterHello(conn, value, (request) => this.core.request(request));
   }
 
   private method(given: Conn, value: Obj): void {
@@ -1333,7 +1333,7 @@ class Hub {
       }
       case 'session.wait':
         conn.waiter = true;
-        return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name, waiter: conn.id, session: conn.session } }));
+        return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name, waiter: conn.id, session: conn.session, ...(conn.parent ? { parent: conn.parent } : {}) } }));
       default:
         if (method === 'events.read') {
           // The page's events come as one JSON array's text, written as it is, with the start ID beside its log_pos.

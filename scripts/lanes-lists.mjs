@@ -859,7 +859,7 @@ Object.assign(redrafted, {
   'tests/acceptance/1492/helpers.ts': 'tests/acceptance/1492/redraft-3300/',
   'tests/acceptance/1551/lane.test.ts': 'tests/acceptance/1551/redraft-3300/',
 });
-byHand.push('tests/acceptance/1492/idle-energy.test.ts', 'tests/acceptance/1551/lane.test.ts');
+byHand.push('tests/acceptance/1492/idle-energy.test.ts', 'tests/acceptance/1551/lane.test.ts', 'tests/acceptance/1851/waiter.test.ts');
 
 timed.push('tests/acceptance/1815/budget.test.ts');
 byHand.push('tests/acceptance/1815/shown.test.ts');

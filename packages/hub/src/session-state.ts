@@ -1064,6 +1064,32 @@ export class SessionState {
     });
   }
 
+  async waiterHello(fd: number | undefined, session: string, at: number): Promise<{ session: string; parent?: { pid: number; start: string } } | { refused: string }> {
+    if (this.waiterUnbound(session, undefined)?.ended) return { session };
+    let hook: string | undefined;
+    try { hook = deepHook(); } catch {}
+    const peer = hook && fd !== undefined && fd >= 0 ? await peerOf(hook, fd) : undefined;
+    if (peer === undefined) return { refused: `The OS reports no process at the other end of this connection, so it can't be bound as session ${session}'s waiter: a waiter binds by its agent's process.` };
+    const began = Date.parse((await startOf(peer)) ?? '');
+    if (!(began <= at)) return { refused: `Process ${peer} started after this connection was made, or is gone: the process that connected is no longer there to bind as session ${session}'s waiter.` };
+    const above = await parentOf(peer);
+    const start = above === undefined ? undefined : await startOf(above);
+    if (Date.parse((await startOf(peer)) ?? '') !== began) return { refused: `Process ${peer} changed while the hub looked at it, so it isn't bound as session ${session}'s waiter.` };
+    const unbound = this.waiterUnbound(session, above === undefined || !start ? undefined : { pid: above, start });
+    if (unbound?.ended) return { session };
+    return unbound ? { refused: `Process ${peer} can't wait as session ${session}'s waiter: ${unbound.why}` } : { session, parent: { pid: above!, start: start! } };
+  }
+
+  waiterUnbound(session: string, parent: { pid: number; start: string } | undefined): { why: string; ended?: true } | undefined {
+    const known = this.sessions.get(session);
+    if (known?.ended) return { why: `session ${session} has ended.`, ended: true };
+    const agent = known ? { pid: known.pid, start: known.start, agent: known.agent } : this.options.transcripts().cursors.get(session)?.watch;
+    if (!agent) return { why: `the hub knows no live session ${session} to bind it to.` };
+    if (!parent || parent.pid !== agent.pid || parent.start !== agent.start) return { why: `it isn't a child of session ${session}'s agent, process ${agent.pid} started ${agent.start}: its parent is ${parent ? `process ${parent.pid} started ${parent.start}` : 'gone'}.` };
+    if (manyThreads(agent.agent)) return { why: `its agent, process ${agent.pid}, is ${agent.agent}'s, which runs several threads, so no waiter is bound to one of them by that process.` };
+    return undefined;
+  }
+
   /**
    * The sessions' rows as a phone can afford them (#1576): every live one, then the 25 newest settled, by where each
    * settled (its last turn stopped, or it ended since its state last moved), with `rest` and `next` as the inbox's. One

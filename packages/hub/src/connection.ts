@@ -3,7 +3,7 @@ import type net from 'node:net';
 import { line } from './wire.js';
 
 /** A person's connection (#1337) reads only what that person may see. */
-export type Role = 'hook' | 'app' | 'cli' | 'mcp' | 'person';
+export type Role = 'hook' | 'app' | 'cli' | 'mcp' | 'person' | 'waiter';
 
 export class Conn {
   role: Role | undefined;
@@ -35,6 +35,7 @@ export class Conn {
   readonly subs = new Set<string>();
   /** Its deep mcp calls in flight, each `<connection>:<call ID>`: a cancel or the connection's close tells the core their caller is gone (#1923). */
   readonly calls = new Set<string>();
+  readonly at = Date.now();
   constructor(readonly id: number, readonly sock: net.Socket) {}
   write(o: object): void {
     if (!this.done && this.sock.writable) this.sock.write(line(o));

@@ -1,0 +1,67 @@
+Acceptance tests for #1851 (redraft) on the base c740dede7 (main: deep-hook's waiter reads ~/.deepbuild/control.token
+and says hello as the CLI, and the hub serves session.wait to that role for any session, from any process), run on
+2026-11-17 on Linux arm64 (20 cores), Node v24.22.0, after `npm ci --no-audit --no-fund`,
+`npm run build --workspaces --if-present` and
+`CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked -q -p deep-hook --features env-plants`:
+
+  node node_modules/vitest/vitest.mjs run --no-file-parallelism tests/acceptance/1851/redraft/waiter.test.ts
+  node node_modules/typescript/bin/tsc -p tests/acceptance/1851/redraft/tsconfig.json   -> no errors
+
+The base is the wrong program of AC1, AC2 and AC3 (the issue's Proof): each fails on its first criterion assertion, the
+message naming the ask (AC1), both sessions, both processes and the ask (AC2), and the process (AC3). Trimmed to each
+test's first failure. The machine's 1-minute load was 147.8 on 20 cores at the start; no assertion that failed is a
+timing bound (AC1's 2 s reading is never reached: the waiter never delivers).
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Duration  84.41s
+
+FAIL waiter.test.ts  #1851.35ae3eb0 AC1 with control.token removed after the hub starts, the answer to an idle Claude Code session is delivered by its waiter within 2 s
+  AssertionError: with ~/.deepbuild/control.token removed after the hub started, your answer "Green header 6aaf87ad" to
+  ask:01M7NWT1B1EAN31VB0WAZKP25E ("Which header colour for 6aaf87ad?"), the ask of idle session
+  707ca62b-b8c0-412f-ac63-049fd56bac53, is delivered by the session's waiter (process 2947228: exit 2 with the answer on
+  stderr); 30 s after the answer was accepted the waiter was still running, stderr "": expected { exit: null,
+  carriesTheAnswer: false } to deeply equal { exit: 2, carriesTheAnswer: true }
+  (Expected: wait_once reads control.token before it connects; with the file gone it reads the hub as away and asks
+  again every 500 ms, for ever. `deep inbox answer` from your own home exited 0: the answer was accepted.)
+
+FAIL waiter.test.ts  #1851.bbec9b71 AC2 a waiter started under session A's agent that asks to wait on session B is refused, naming the binding, and B's answer never reaches A
+  AssertionError: B's answer "Green header 343dea21" to ask:01M7NWV9YP7XAWYEPF4K6V6JMS never reaches the waiter (process
+  2961040) session A c6c20ccb-76e7-4f52-915e-2befb3934815's agent 2958987 started with a Stop payload naming session B
+  2df73b67-589c-4bea-912c-1f4944f9c114: 5000 ms after the answer was accepted it was exited 2, stderr "DeepBuild
+  delivers your answers:\nYour answer to ask:01M7NWV9YP7XAWYEPF4K6V6JMS (\"Which header colour for 343dea21?\"): Green
+  header 343dea21 (green343dea21).\n"; B's own waiter was exited 0, stderr "": expected { tookTheAnswer: true } to deeply
+  equal { tookTheAnswer: false }
+  (Expected: the waiter holds the cli role, whose session.wait is served for whatever session it names; as the newest
+  waiter for B it replaced B's own, which exited 0, and took B's answer.)
+
+FAIL waiter.test.ts  #1851.c13ec84e AC3 a process that isn't a child of the session's agent, run as that session's waiter, is refused, naming the process
+  AssertionError: the answer "Green header a5825113" to ask:01M7NWVVPS0B52BKRVPJASSAEH never reaches process 2967073, a
+  waiter this test started for session 0f593b29-1f68-44b6-96df-5b2c192c63ac (no child of its agent 2966371): 5000 ms
+  after the answer was accepted it was exited 2, stderr "DeepBuild delivers your answers:\nYour answer to
+  ask:01M7NWVVPS0B52BKRVPJASSAEH (\"Which header colour for a5825113?\"): Green header a5825113 (greena5825113).\n"; the
+  session's own waiter was exited 0, stderr "": expected { tookTheAnswer: true } to deeply equal { tookTheAnswer: false }
+  (Expected: any process that can read the token file is served; the outsider replaced the session's own waiter and
+  took the answer.)
+
+Not reached on the base, so unverified until a fix exists: AC1's token file still gone after the delivery and its 2 s
+reading; AC2's and AC3's refusal naming the binding or the process, and the own waiter's delivery.
+
+Earlier runs of this file on the base, before the run above, and why they don't count:
+- The first (load 52 at its start, 167 at its end): AC1 and AC2 failed as above. AC3 read BLOCKED before its criterion:
+  the session's deep_ask answered `unavailable` ("The DeepBuild hub is unreachable (no answer on its socket)") and no
+  ask was filed in 60 s, in the delivery suite's own asking session (../../25/routes/helpers.ts, beginAsk). It did not
+  recur in the two runs after it; nothing was changed for it.
+- The second: AC1 and AC2 failed as above. AC3 showed a fault of this suite, not of the base: the outsider's command
+  was run as `exec <command>`, and setup's entry already begins with `exec`, so the shell printed "exec: exec: not
+  found" and no waiter ran. The outsider now runs the entry as written when it begins with `exec`, and the test reads
+  BLOCKED if the entry doesn't run.
+
+How cargo was run here: this worktree sits inside another checkout's folder, whose `.cargo/config.toml` (a later
+commit's) cargo merges into any build started below it, and the base's lockfile doesn't resolve under that. So cargo
+was run from a folder outside both, with `--manifest-path` and `--config` naming this worktree's `Cargo.toml` and
+`.cargo/config.toml` and the pinned toolchain 1.99.1, through a `cargo` first on the PATH of the build and of the test
+run (the delivery suite's setup calls `cargo build` itself). Nothing of the other checkout was read, and the binary
+built is the base's `crates/deep-hook` alone. Every build and run was in a memory-capped unit.
+
+No processes of this run were left afterwards; its temp folders under /tmp were removed by the suite's cleanup.
