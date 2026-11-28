@@ -24,6 +24,7 @@ export { compareReplay, foldText, parseClaimLine, planHash, PROJECTIONS, testSto
 export type { FoundMessage };
 export { openTrust, type ProjectTrust } from './trust.js';
 export { recordSize } from './storage.js';
+export { SWITCHES_OFF, switchOffIn, type SwitchOff } from './switches-off.js';
 export { RecordError, writerGeneration, type RecordErrorCode } from './meta.js';
 export type { Comparison, Measure, MeasureResult, ReplayPlan, ReplayResult, ReplayRun, TaskPair, Variant } from './replay.js';
 export type { Backend, ClaimLine, HeldAtLoad, LearnedLoad, Message, Resolved, SliceEntry, Storage, SyncCall, TestStorage };

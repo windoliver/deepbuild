@@ -22,7 +22,7 @@ import { fileURLToPath } from 'node:url';
 import { readFacts } from '@deepbuild/adapters';
 import { scrubText } from '@deepbuild/evidence';
 import { CANT_UNDO } from '@deepbuild/asks';
-import { ulid } from '@deepbuild/record';
+import { switchOffIn, ulid } from '@deepbuild/record';
 import { keepOriginal, noteWritten, saveRecord, setupRecord, strictObject, target } from './agent-files.js';
 import { tomlTables } from './codex-settings.js';
 import { hubSecrets as secretStore } from './held.js';
@@ -51,6 +51,7 @@ interface AgentFacts {
   mcp?: { file: string; format: 'json' | 'toml'; key: string; perProject?: string; transports: Record<'stdio' | 'http', Transport>; refused: { transport: string; field: string; reason?: string }[] };
   skills?: { write: string; readFrom: string[] };
   daemon?: { restart?: string[]; picksUp?: Record<string, Obj> };
+  skipping: Record<string, string[]>;
 }
 let factsCache: AgentFacts[] | undefined;
 function agentFacts(): AgentFacts[] {
@@ -58,7 +59,8 @@ function agentFacts(): AgentFacts[] {
     let f: Obj;
     try { f = readFacts<Obj>(`${id}.facts.json`); } catch { return []; }
     const e = isObj(f.entries) ? f.entries : {};
-    const out: AgentFacts = { id, name: typeof e.name === 'string' ? e.name : id, binary: String(f.agent), versions: (f.versions ?? []) as string[] };
+    const versions = (f.versions ?? []) as string[];
+    const out: AgentFacts = { id, name: typeof e.name === 'string' ? e.name : id, binary: String(f.agent), versions, skipping: skippingOf(f, versions) };
     if (typeof e.home === 'string') out.home = e.home;
     if (isObj(e.mcp)) out.mcp = e.mcp as unknown as NonNullable<AgentFacts['mcp']>;
     if (isObj(e.skills)) out.skills = e.skills as unknown as NonNullable<AgentFacts['skills']>;
@@ -67,6 +69,21 @@ function agentFacts(): AgentFacts[] {
   }));
 }
 const factsOf = (id: string): AgentFacts | undefined => agentFacts().find((a) => a.id === id);
+function skippingOf(f: Obj, versions: string[]): Record<string, string[]> {
+  const started = isObj(f.launch) && isObj(f.launch.started) ? f.launch.started : undefined;
+  const launch: string[] = [];
+  if (started && Array.isArray(started.args) && isObj(started.modes) && Array.isArray(started.skipping)) {
+    const args = started.args.map(String);
+    const at = args.findIndex((a) => a.includes('{mode}'));
+    for (const mode of started.skipping) {
+      const value = String((started.modes as Obj)[String(mode)] ?? mode).replace(/^["']|["']$/g, '');
+      if (at > 0 && args[at] === '{mode}') launch.push(`${args[at - 1]} ${value}`);
+      else if (at >= 0) launch.push(`${args[at]!.replace(/=?\{mode\}.*$/, '')} ${value}`);
+    }
+  }
+  const by = started && isObj(started.skippingBy) && isObj(started.skippingBy.versions) ? started.skippingBy.versions : {};
+  return Object.fromEntries(versions.map((v) => [v, [...launch, ...(Array.isArray(by[v]) ? by[v].map(String) : [])]]));
+}
 let hookedCache: readonly { id: string; name: string }[] | undefined;
 /**
  * The agents whose sessions reach DeepBuild through hooks, by their facts: those that map hook events and name the
@@ -322,6 +339,48 @@ const AUDIT: { why: string; re: RegExp }[] = [
   { why: 'fetches a remote file and runs it', re: /\beval\s+["']?\$\(\s*(curl|wget)\b/ },
   { why: 'sends a secret away', re: /\b(curl|wget|nc)\b[^\n]*(\$\{?[A-Z0-9_]*(TOKEN|SECRET|PASSWORD|API_KEY)\b|~\/\.ssh|\.aws\/credentials|id_rsa|id_ed25519|\.netrc)/ },
 ];
+const escaped = (w: string): string => w.replace(/[.*+?^$()|[\]\\{}]/g, '\\$&');
+const wordsPattern = (words: string): RegExp => new RegExp(`(?<![\\w-])${words.trim().split(/\s+/).map(escaped).join(`["']?(?:\\s*[=:]\\s*|\\s+)["']?`)}(?![\\w-])`);
+let skipCache: { name: string; words: string; re: RegExp }[] | undefined;
+function skipPatterns(): { name: string; words: string; re: RegExp }[] {
+  return (skipCache ??= agentFacts().flatMap((a) => [...new Set(Object.values(a.skipping).flat())].map((words) => ({ name: a.name, words, re: wordsPattern(words) }))));
+}
+const SWITCHES = 'switches approval or checks off';
+function switchesIn(line: string): string | undefined {
+  const skip = skipPatterns().find((p) => p.re.test(line));
+  if (skip) return `${SWITCHES}: starts ${skip.name} in a mode that skips its prompts, ${skip.words}`;
+  const off = switchOffIn(line);
+  return off ? `${SWITCHES}: ${off.name}` : undefined;
+}
+const isPage = (rel: string): boolean => /\.(md|markdown|mdx|txt)$/i.test(rel);
+function codeLines(rel: string, lines: string[]): boolean[] {
+  if (!isPage(rel)) return lines.map(() => true);
+  let fence: string | undefined;
+  return lines.map((line) => {
+    const m = /^\s{0,3}(`{3,}|~{3,})/.exec(line);
+    if (m && (!fence || (m[1]![0] === fence[0] && m[1]!.length >= fence.length && !line.trim().slice(m[1]!.length).trim()))) {
+      fence = fence ? undefined : m[1];
+      return false;
+    }
+    return fence !== undefined;
+  });
+}
+function audited(rel: string, text: string): string[] {
+  const lines = text.split('\n').map((l) => l.replace(/\r$/, ''));
+  const code = codeLines(rel, lines);
+  const findings: string[] = [];
+  lines.forEach((line, i) => {
+    const why = AUDIT.find((a) => a.re.test(line))?.why ?? (code[i] ? switchesIn(line.trimEnd()) : undefined);
+    if (!why) return;
+    const quoted = [i - 1, i, i + 1].filter((n) => n >= 0 && n < lines.length).map((n) => `line ${n + 1} "${lines[n]!.trim()}"`);
+    findings.push(`${rel} line ${i + 1} (${why}): ${quoted.join(', ')}`);
+  });
+  return findings;
+}
+function unread(): string | undefined {
+  const none = agentFacts().flatMap((a) => a.versions.filter((v) => !a.skipping[v]?.length).map((v) => `${a.name} ${v}`));
+  return none.length ? `The facts name no flag or setting that skips prompts for ${none.join(', ')}, so the audit can't say whether this skill starts one of those in such a mode.` : undefined;
+}
 const gitEnv = (): NodeJS.ProcessEnv => ({ PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: homedir(), GIT_CONFIG_NOSYSTEM: '1', GIT_TERMINAL_PROMPT: '0', LC_ALL: 'C' });
 /** A skill at a commit of a repository on disk: its files, pin, license, scripts and what the audit found. */
 function readSkill(source: Obj, staged: string): SkillItem {
@@ -352,10 +411,7 @@ function readSkill(source: Obj, staged: string): SkillItem {
     const text = bytes.toString('utf8');
     if (mode === 0o755 || /\.(sh|bash|zsh|py|js|mjs|ts|rb|pl)$/.test(rel)) scripts.push(rel);
     if (/^LICEN[CS]E/i.test(basename(rel))) license = text.split('\n').find((l) => l.trim())?.trim() ?? license;
-    text.split('\n').forEach((line, i) => {
-      const hit = AUDIT.find((a) => a.re.test(line));
-      if (hit) findings.push(`${rel} line ${i + 1}: ${line.trim()} (${hit.why})`);
-    });
+    findings.push(...audited(rel, text));
   }
   if (!files.some((f) => f.rel === 'SKILL.md')) throw refuse('not_found', '/params/skill/path', `${path} at ${commit} holds no SKILL.md, so it is no skill.`, source);
   files.sort((a, b) => a.rel.localeCompare(b.rel));
@@ -597,7 +653,10 @@ export class Agents {
     if (s.item.kind === 'skill') {
       const k = s.item.skill;
       lines.push(`Install ${what} from ${k.repo} at ${k.commit.slice(0, 12)}, ${k.path} (pinned to ${k.digest.slice(0, 12)}; license: ${k.license}; scripts: ${k.scripts.length ? k.scripts.join(', ') : 'none'})?`);
-      if (k.findings.length) lines.push(`The audit stopped it: ${k.findings.join('; ')}. It goes in only if you apply it. The audit is a reading, never proof.`);
+      if (k.findings.length) lines.push(`The audit stopped it: ${k.findings.join('; ')}. It goes in only if you apply it.`);
+      lines.push('The audit reads code only, the fenced code of a page and the scripts: a sentence that asks an agent to go on without asking is not read. It is a reading, never proof.');
+      const none = unread();
+      if (none) lines.push(none);
       const installed = this.skillState()[k.name];
       if (installed) {
         const differs = this.differs(installed);
@@ -886,6 +945,21 @@ export class Agents {
   // ---- The page's model.
 
   private skillState(): Record<string, Obj & { files: { path: string; after: string }[] }> { return this.readJson('skills.json') as never; }
+  private readonly pinnedAudits = new Map<string, string[]>();
+  private pinnedFindings(name: string, skill: { files: { path: string; after: string }[] }): string[] {
+    const pinned = new Map<string, Buffer>();
+    for (const f of skill.files) {
+      const at = f.path.indexOf(`/${name}/`);
+      const rel = at < 0 ? basename(f.path) : f.path.slice(at + name.length + 2);
+      const bytes = pinned.has(rel) ? undefined : read(f.path);
+      if (bytes && sha(bytes) === f.after) pinned.set(rel, bytes);
+    }
+    const rels = [...pinned.keys()].sort();
+    const key = sha(canonical(rels.map((rel) => [rel, sha(pinned.get(rel)!)])));
+    let found = this.pinnedAudits.get(key);
+    if (!found) this.pinnedAudits.set(key, (found = rels.flatMap((rel) => audited(rel, pinned.get(rel)!.toString('utf8')))));
+    return found;
+  }
   private differs(skill: { files: { path: string; after: string }[] }): string[] { return skill.files.filter((f) => digestOf(read(f.path)) !== f.after).map((f) => f.path); }
   read(): Obj {
     const installed = new Set(this.installed().map((a) => a.id));
@@ -901,7 +975,7 @@ export class Agents {
       const ours = new Set(Object.keys(file ? managed[file] ?? {} : {}).map((k) => k.slice(k.indexOf(':') + 1)));
       return { id: a.id, name: a.name, installed: installed.has(a.id), versions: a.versions, servers: names.filter((n) => ours.has(n)), yours: names.filter((n) => !ours.has(n)) };
     });
-    const skills = Object.entries(this.skillState()).map(([name, k]) => ({ name, repo: k.repo, commit: k.commit, path: k.path, digest: k.digest, agents: k.agents, differs: this.differs(k).length > 0, differing: this.differs(k) }));
+    const skills = Object.entries(this.skillState()).map(([name, k]) => ({ name, repo: k.repo, commit: k.commit, path: k.path, digest: k.digest, agents: k.agents, differs: this.differs(k).length > 0, differing: this.differs(k), findings: this.pinnedFindings(name, k) }));
     const syncs = this.all().map((s) => ({ id: `sync:${s.id}`, kind: s.item.kind, name: itemName(s.item), via: s.via, status: s.status, ask: s.ask, ...(s.reason ? { reason: s.reason } : {}), refused: s.refused, files: s.targets.map((t) => ({ path: t.path, agents: t.agents, status: t.status, before: t.before, after: t.after, diff: t.diff })) }));
     return { agents, servers: Object.entries(servers).map(([name, v]) => ({ name, ...(v as Obj) })), skills, syncs };
   }

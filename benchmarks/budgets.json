@@ -2534,6 +2534,19 @@
       "criteria": [
         "#3529.50c3d51b"
       ]
+    },
+    {
+      "id": "skill-audit-200",
+      "command": [
+        "node",
+        "benchmarks/skill-audit.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #3235 first measurement (#3235.8aac6e47): the merge base's skill audit reads two reasons, and this change adds a third read from each page's fenced code and every script, with the agents' facts' prompt-skipping flags. One process makes a git repository holding a 200-file skill (a SKILL.md, 150 notes pages of 40 lines each with fenced code and 49 scripts of 40 lines), starts the hub in a temp home and times six agents.propose calls for it as the app, the first a warm-up; each plan must name all 200 files. p50 includes the repository's making and the hub's start. p50 and peak memory get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#3235.8aac6e47"
+      ]
     }
   ]
 }
