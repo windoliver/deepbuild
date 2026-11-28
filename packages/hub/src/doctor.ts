@@ -377,11 +377,6 @@ async function codexItems(codex: string | undefined, env: NodeJS.ProcessEnv, add
   else add('codex.sign_in', agent, 'signed_out', 'fail', signedIn === 'signed_out' ? 'codex login status exits non-zero: not signed in' : "codex login status couldn't be read: not signed in", 'Run codex login.');
   billing(agent, 'Codex', env, add);
 }
-/**
- * paseo's items (#3428), only with a paseo on your PATH: its version against the versions the facts cover, DeepBuild's
- * plugin installed, enabled and loaded as paseo lists it (one paseo refused with paseo's own reason), and the source
- * setup installs it from.
- */
 async function paseoItems(paseo: string, add: (...a: [string, string, Item['code'], Item['level'], string, string]) => void): Promise<void> {
   const agent = 'paseo';
   const [read, listed, unresolved] = await Promise.all([paseoVersion(paseo, 30_000), listedPlugin(paseo, 30_000), sourceProblem(30_000)]);

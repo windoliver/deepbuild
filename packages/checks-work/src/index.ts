@@ -34,7 +34,6 @@ export function workFill(kind: WorkKind): WorkFill {
 /** The kind's own check.kind@1 kit, run by the conformance package's runKit. */
 export const workKit = (kind: WorkKind): ReturnType<typeof kitFor> => kitFor(kind, () => workFill(kind));
 
-/** The plug-in: registers each kind it holds. */
 export default function register(deep: { registerCheck(type: string, runner: WorkFill['run']): void }): void {
   for (const kind of workKinds()) deep.registerCheck(kind, workFill(kind).run);
 }

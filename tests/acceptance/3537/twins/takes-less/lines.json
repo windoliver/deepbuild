@@ -1,0 +1,12 @@
+{
+  "scripts/benchmark.mjs": [
+    {
+      "find": [
+        "    return work && isDeepStrictEqual(work, then.work) ? [] : [`${budget.id} lowers its ${metric} ceiling from ${established.limits[metric]} to ${budget.limits[metric]} on runs that report ${workSaid(work)}, where the merge base's runs report ${workSaid(then.work)}`];"
+      ],
+      "wrong": [
+        "    return work ? [] : [`${budget.id} lowers its ${metric} ceiling from ${established.limits[metric]} to ${budget.limits[metric]} on runs that report ${workSaid(work)}, where the merge base's runs report ${workSaid(then.work)}`];"
+      ]
+    }
+  ]
+}
