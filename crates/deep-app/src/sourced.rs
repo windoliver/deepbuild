@@ -20,12 +20,15 @@ pub(crate) fn placed(listed: &Value) -> Vec<Placed> {
         .collect()
 }
 
-struct SourceLine(SharedString);
+struct SourceLine {
+    line: SharedString,
+    below: Pixels,
+}
 
 impl Render for SourceLine {
     fn render(&mut self, window: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         let (chrome, s) = (chrome::of(window), sizes());
-        observed("source-line")
+        let line = observed("source-line")
             .role(Role::Tooltip)
             .typed(s.small)
             .px(s.space(1))
@@ -35,7 +38,8 @@ impl Render for SourceLine {
             .border(s.hairline)
             .border_color(chrome.divider)
             .text_color(chrome.ink_primary)
-            .child(self.0.clone())
+            .child(self.line.clone());
+        div().pt(self.below).child(line)
     }
 }
 
@@ -62,7 +66,11 @@ pub(crate) fn nodes(
             let place = at(*rect);
             let line = SharedString::from(line.clone());
             let number = over(format!("{}-source-{n}", item.id), place)
-                .tooltip(move |_, cx| cx.new(|_| SourceLine(line.clone())).into())
+                .tooltip(move |window, cx| {
+                    let below = (place.bottom() - window.mouse_position().y).max(px(0.));
+                    let line = line.clone();
+                    cx.new(|_| SourceLine { line, below }).into()
+                })
                 .tooltip_show_delay(SOURCE_LINE_DELAY);
             out.push((place, number.into_any_element()));
         }
