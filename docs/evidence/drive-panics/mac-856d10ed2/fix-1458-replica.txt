@@ -1,0 +1,117 @@
+
+ RUN  v5.0.5 /private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-admiring-murdock-db036d/b1b75f9e-129e-48ed-8060-0c5db00e6a52/scratchpad/fix
+
+ ❯ tests/acceptance/1458/replica.test.ts (8 tests | 3 failed) 235954ms
+   ❯ #1458 what the shipped pages draw (8)
+     ✓ AC1 #1458.dd02bb24: every string the shipped pages draw is 11, 13 or 15 pt; a planted view with a fourth size fails, naming the view and the size 175918ms
+     ✓ AC4 #1458.a98be9c0: every shipped page at 960×640 has no clipped text and nothing wider than its pane; a planted 600 pt wide element fails, naming the element and the window 876ms
+     × AC7 #1458.0c2959d0: every chrome string draws in the chrome face, named in the clean look; a planted label in the canvas face on a row fails, naming the view 54244ms
+     × AC8 #1458.52c35293: a time ticking from 9 s to 10 s moves no other glyph in its row 372ms
+     ✓ AC9 #1458.a3834e1a: a kit tooltip on a shipped page draws in one of the three sizes 2462ms
+     ✓ AC10 #1458.889098b6: a planted 250 ms transition on a page change fails, naming the view 622ms
+     × AC11 #1458.5350b8ad: no row reads "… ago" or "in …", a planted one fails naming the string, and an ask's row, card and notification show one moment in one form 1101ms
+     ✓ AC12 #1458.be1a2dad: a step's switch on a card has the switch role with its state as a value; a planted switch whose state is a word in its label fails, naming it 320ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1458/replica.test.ts > #1458 what the shipped pages draw > AC7 #1458.0c2959d0: every chrome string draws in the chrome face, named in the clean look; a planted label in the canvas face on a row fails, naming the view
+AssertionError: the planted row label in Inter wasn't caught: []: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/1458/replica.test.ts:44:136
+     42|     expect.soft(faceFailures(await pages(), faces), 'every string draw…
+     43|     const planted = faceFailures(await renderPages({ plant: 'row-label…
+     44|     expect(caught(planted, SIDEBAR, CANVAS_FACE), `the planted row lab…
+       |                                                                                                                                        ^
+     45|   }, T);
+     46|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  tests/acceptance/1458/replica.test.ts > #1458 what the shipped pages draw > AC8 #1458.52c35293: a time ticking from 9 s to 10 s moves no other glyph in its row
+AssertionError: "Checkout page"'s row as its time ticks: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "at 9 s the row draws its time as 0 strings reading \"9 s\", not one of its own; it draws [\"Checkout…\",\"quiet · last seen 9 s\"]",
++   "at 10 s the row draws its time as 0 strings reading \"10 s\", not one of its own; it draws [\"Checkout…\",\"quiet · last seen 10 s\"]",
++ ]
+
+ ❯ tests/acceptance/1458/replica.test.ts:58:75
+     56|       }
+     57|     };
+     58|     expect.soft(await tick(), '"Checkout page"\'s row as its time tick…
+       |                                                                           ^
+     59|     const planted = await tick('time-flows-inline');
+     60|     expect(caught(planted, 'moved'), `the planted row whose time pushe…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  tests/acceptance/1458/replica.test.ts > #1458 what the shipped pages draw > AC8 #1458.52c35293: a time ticking from 9 s to 10 s moves no other glyph in its row
+AssertionError: the planted row whose time pushes its neighbours wasn't caught: ["at 9 s the row draws its time as 0 strings reading \"9 s\", not one of its own; it draws [\"Checkout…\",\"quiet · last seen 9 s\"]","at 10 s the row draws its time as 0 strings reading \"10 s\", not one of its own; it draws [\"Checkout…\",\"quiet · last seen 10 s\"]"]: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/1458/replica.test.ts:60:132
+     58|     expect.soft(await tick(), '"Checkout page"\'s row as its time tick…
+     59|     const planted = await tick('time-flows-inline');
+     60|     expect(caught(planted, 'moved'), `the planted row whose time pushe…
+       |                                                                                                                                    ^
+     61|   }, T);
+     62|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  tests/acceptance/1458/replica.test.ts > #1458 what the shipped pages draw > AC11 #1458.5350b8ad: no row reads "… ago" or "in …", a planted one fails naming the string, and an ask's row, card and notification show one moment in one form
+AssertionError: the ask's row, card and notification show one moment in one form: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the ask's notification names no moment, not 12:00 alone, in \"\"",
++ ]
+
+ ❯ tests/acceptance/1458/replica.test.ts:147:102
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  tests/acceptance/1458/replica.test.ts > #1458 what the shipped pages draw > AC11 #1458.5350b8ad: no row reads "… ago" or "in …", a planted one fails naming the string, and an ask's row, card and notification show one moment in one form
+AssertionError: the planted row reading "in 4 h" wasn't caught: []: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/1458/replica.test.ts:150:123
+    148|     for (const [plant, words] of [['row-says-ago', '2 min ago'], ['row…
+    149|       const planted = (await shownAll(plant)).failures;
+    150|       expect.soft(caught(planted, words), `the planted row reading "${…
+       |                                                                                                                           ^
+    151|     }
+    152|   }, T);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 5 passed (8)
+   Start at  12:29:48
+   Duration  236.11s (tests 100%)
+

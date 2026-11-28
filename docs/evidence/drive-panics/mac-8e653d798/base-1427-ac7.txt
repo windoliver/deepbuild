@@ -1,0 +1,83 @@
+
+ RUN  v5.0.5 ~/mac-runs/mb-base
+
+ ❯ tests/acceptance/1427/ac7-shipped.test.ts (4 tests | 4 failed) 26112ms
+   ❯ #1427 AC7 the check runs on the shipped journeys for Needs you, a session page and the project page, one report each (3)
+     × a report for each of the three, from a real recording of the journey: its steps, its inputs and the ids the record gave its rows 8754ms
+     × the same shipped journeys in another process give the same recordings and findings, byte for byte 6102ms
+     × a replica planted with a jump on every action fails all three, naming the jump, and the report says which journey 6212ms
+   ❯ #1427 AC7 the lane (1)
+     × scripts/lanes.mjs has a motion lane, and running its commands reports each shipped journey with its recording's hash 4979ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1427/ac7-shipped.test.ts > #1427 AC7 the check runs on the shipped journeys for Needs you, a session page and the project page, one report each > a report for each of the three, from a real recording of the journey: its steps, its inputs and the ids the record gave its rows
+AssertionError: BLOCKED: deep-drive gave no JSON reply to motion_check: {"exited":true,"stderr":"ard::Card>>::update::<(), gpui::app::App, deep_app::card::tick::{closure#3}>\n             at ./vendor/gpui-pre/src/app/entity_map.rs:502:12\n   9: deep_app::card::tick\n             at ./crates/deep-app/src/card.rs:336:11\n  10: deep_app::views::tick\n             at ./crates/deep-app/src/views.rs:4723:5\n  11: <deep_replica::drive::Replica>::tick_by::{closure#2}\n             at ./crates/deep-replica/src/drive/mod.rs:975:29\n  12: <gpui::app::headless_app_context::HeadlessAppContext>::update::<(), <deep_replica::drive::Replica>::tick_by::{closure#2}>\n             at
+ ❯ Drive.call tests/acceptance/124/helpers.ts:162:80
+    160|     const reply = await answer;
+    161|     const ms = performance.now() - at;
+    162|     if (reply.exited || reply.timedOut || reply.unparsed !== undefined…
+       |                                                                                ^
+    163|     return { reply, ms };
+    164|   }
+ ❯ motionCheck tests/acceptance/1427/helpers.ts:174:11
+ ❯ checked tests/acceptance/1427/helpers.ts:178:17
+ ❯ shipped tests/acceptance/1427/ac7-shipped.test.ts:32:12
+ ❯ tests/acceptance/1427/ac7-shipped.test.ts:41:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  tests/acceptance/1427/ac7-shipped.test.ts > #1427 AC7 the check runs on the shipped journeys for Needs you, a session page and the project page, one report each > the same shipped journeys in another process give the same recordings and findings, byte for byte
+AssertionError: BLOCKED: deep-drive gave no JSON reply to motion_check: {"exited":true,"stderr":"ard::Card>>::update::<(), gpui::app::App, deep_app::card::tick::{closure#3}>\n             at ./vendor/gpui-pre/src/app/entity_map.rs:502:12\n   9: deep_app::card::tick\n             at ./crates/deep-app/src/card.rs:336:11\n  10: deep_app::views::tick\n             at ./crates/deep-app/src/views.rs:4723:5\n  11: <deep_replica::drive::Replica>::tick_by::{closure#2}\n             at ./crates/deep-replica/src/drive/mod.rs:975:29\n  12: <gpui::app::headless_app_context::HeadlessAppContext>::update::<(), <deep_replica::drive::Replica>::tick_by::{closure#2}>\n             at
+ ❯ Drive.call tests/acceptance/124/helpers.ts:162:80
+    160|     const reply = await answer;
+    161|     const ms = performance.now() - at;
+    162|     if (reply.exited || reply.timedOut || reply.unparsed !== undefined…
+       |                                                                                ^
+    163|     return { reply, ms };
+    164|   }
+ ❯ motionCheck tests/acceptance/1427/helpers.ts:174:11
+ ❯ checked tests/acceptance/1427/helpers.ts:178:17
+ ❯ shipped tests/acceptance/1427/ac7-shipped.test.ts:32:12
+ ❯ tests/acceptance/1427/ac7-shipped.test.ts:64:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  tests/acceptance/1427/ac7-shipped.test.ts > #1427 AC7 the check runs on the shipped journeys for Needs you, a session page and the project page, one report each > a replica planted with a jump on every action fails all three, naming the jump, and the report says which journey
+AssertionError: BLOCKED: deep-drive gave no JSON reply to motion_check: {"exited":true,"stderr":"ard::Card>>::update::<(), gpui::app::App, deep_app::card::tick::{closure#3}>\n             at ./vendor/gpui-pre/src/app/entity_map.rs:502:12\n   9: deep_app::card::tick\n             at ./crates/deep-app/src/card.rs:336:11\n  10: deep_app::views::tick\n             at ./crates/deep-app/src/views.rs:4723:5\n  11: <deep_replica::drive::Replica>::tick_by::{closure#2}\n             at ./crates/deep-replica/src/drive/mod.rs:975:29\n  12: <gpui::app::headless_app_context::HeadlessAppContext>::update::<(), <deep_replica::drive::Replica>::tick_by::{closure#2}>\n             at
+ ❯ Drive.call tests/acceptance/124/helpers.ts:162:80
+    160|     const reply = await answer;
+    161|     const ms = performance.now() - at;
+    162|     if (reply.exited || reply.timedOut || reply.unparsed !== undefined…
+       |                                                                                ^
+    163|     return { reply, ms };
+    164|   }
+ ❯ motionCheck tests/acceptance/1427/helpers.ts:174:11
+ ❯ checked tests/acceptance/1427/helpers.ts:178:17
+ ❯ shipped tests/acceptance/1427/ac7-shipped.test.ts:32:12
+ ❯ tests/acceptance/1427/ac7-shipped.test.ts:70:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  tests/acceptance/1427/ac7-shipped.test.ts > #1427 AC7 the lane > scripts/lanes.mjs has a motion lane, and running its commands reports each shipped journey with its recording's hash
+AssertionError: BLOCKED: deep-drive gave no JSON reply to motion_check: {"exited":true,"stderr":"ard::Card>>::update::<(), gpui::app::App, deep_app::card::tick::{closure#3}>\n             at ./vendor/gpui-pre/src/app/entity_map.rs:502:12\n   9: deep_app::card::tick\n             at ./crates/deep-app/src/card.rs:336:11\n  10: deep_app::views::tick\n             at ./crates/deep-app/src/views.rs:4723:5\n  11: <deep_replica::drive::Replica>::tick_by::{closure#2}\n             at ./crates/deep-replica/src/drive/mod.rs:975:29\n  12: <gpui::app::headless_app_context::HeadlessAppContext>::update::<(), <deep_replica::drive::Replica>::tick_by::{closure#2}>\n             at
+ ❯ Drive.call tests/acceptance/124/helpers.ts:162:80
+    160|     const reply = await answer;
+    161|     const ms = performance.now() - at;
+    162|     if (reply.exited || reply.timedOut || reply.unparsed !== undefined…
+       |                                                                                ^
+    163|     return { reply, ms };
+    164|   }
+ ❯ motionCheck tests/acceptance/1427/helpers.ts:174:11
+ ❯ checked tests/acceptance/1427/helpers.ts:178:17
+ ❯ shipped tests/acceptance/1427/ac7-shipped.test.ts:32:12
+ ❯ tests/acceptance/1427/ac7-shipped.test.ts:90:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed (4)
+   Start at  00:18:39
+   Duration  26.35s (tests 99%)
+

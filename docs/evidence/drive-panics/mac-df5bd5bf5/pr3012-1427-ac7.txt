@@ -1,0 +1,106 @@
+
+ RUN  v5.0.5 /private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-issue-2399-egress-refusal-once-8892c8/b1989361-ea39-4165-9c29-ac0db12d467f/scratchpad/clone
+
+ ❯ tests/acceptance/1427/ac7-shipped.test.ts (4 tests | 4 failed) 72153ms
+   ❯ #1427 AC7 the check runs on the shipped journeys for Needs you, a session page and the project page, one report each (3)
+     × a report for each of the three, from a real recording of the journey: its steps, its inputs and the ids the record gave its rows 11220ms
+     × the same shipped journeys in another process give the same recordings and findings, byte for byte 8021ms
+     × a replica planted with a jump on every action fails all three, naming the jump, and the report says which journey 7584ms
+   ❯ #1427 AC7 the lane (1)
+     × scripts/lanes.mjs has a motion lane, and running its commands reports each shipped journey with its recording's hash 45269ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1427/ac7-shipped.test.ts > #1427 AC7 the check runs on the shipped journeys for Needs you, a session page and the project page, one report each > a report for each of the three, from a real recording of the journey: its steps, its inputs and the ids the record gave its rows
+AssertionError: needs-you's recording keys a session row by the session's ID, not its place: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/1427/ac7-shipped.test.ts:54:152
+     52|       const ids = j.recording.elements as string[];
+     53|       expect(Array.isArray(ids) && ids.length > 0, `${name} lists the …
+     54|       expect(ids.some((id) => [...SESSIONS].some((s) => id.includes(s)…
+       |                                                                                                                                                        ^
+     55|       expect(ids.filter((id) => /(^|[-_:/])(row|item|child|node|cell)[…
+     56|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  tests/acceptance/1427/ac7-shipped.test.ts > #1427 AC7 the check runs on the shipped journeys for Needs you, a session page and the project page, one report each > the same shipped journeys in another process give the same recordings and findings, byte for byte
+AssertionError: expected '[["needs-you",[],"PASS","0c8baa8ea3df…' to be '[["needs-you",[],"PASS","d218a154fda8…' // Object.is equality
+
+Expected: "[["needs-you",[],"PASS","d218a154fda81e08f60bd3ad6e0adc3280ab5c5f2755d1f7c3c5caa60d4696aa",361],["session",[],"INCONCLUSIVE","17291dad9184150e7fd8f5f70b705dda9d8401a4b42b85fe0367dd1e820017e0",601],["project",[],"INCONCLUSIVE","b62e2a9570fc9c542db2ae919b76746109ab1aaca03016d6f3c179d319df652b",601]]"
+Received: "[["needs-you",[],"PASS","0c8baa8ea3df830f7591b6eed3d6fff8cf300655579587f356f18929ddbb05b6",361],["session",[],"INCONCLUSIVE","17291dad9184150e7fd8f5f70b705dda9d8401a4b42b85fe0367dd1e820017e0",601],["project",[],"INCONCLUSIVE","b62e2a9570fc9c542db2ae919b76746109ab1aaca03016d6f3c179d319df652b",601]]"
+
+ ❯ tests/acceptance/1427/ac7-shipped.test.ts:66:25
+     64|     const again = await shipped();
+     65|     const view = (r: Obj) => JSON.stringify(journeys(r).map((j) => [j.…
+     66|     expect(view(again)).toBe(view(plain ?? await shipped()));
+       |                         ^
+     67|   }, 1_800_000);
+     68|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  tests/acceptance/1427/ac7-shipped.test.ts > #1427 AC7 the check runs on the shipped journeys for Needs you, a session page and the project page, one report each > a replica planted with a jump on every action fails all three, naming the jump, and the report says which journey
+AssertionError: project fails: expected 'INCONCLUSIVE' to be 'FAIL' // Object.is equality
+
+Expected: "FAIL"
+Received: "INCONCLUSIVE"
+
+ ❯ tests/acceptance/1427/ac7-shipped.test.ts:74:40
+     72|     for (const name of NAMES) {
+     73|       const j = named(planted, name);
+     74|       expect(j.claim, `${name} fails`).toBe('FAIL');
+       |                                        ^
+     75|       const jumps = (j.findings as Obj[]).filter((f) => f.finding === …
+     76|       expect(jumps.length, `${name} has a jump, naming its element and…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  tests/acceptance/1427/ac7-shipped.test.ts > #1427 AC7 the lane > scripts/lanes.mjs has a motion lane, and running its commands reports each shipped journey with its recording's hash
+AssertionError: /Users/<user>/.nvm/versions/node/v24.22.0/bin/node scripts/motion.mjs on the shipped journeys, which have no finding: 01/-Users-<user>-private-deepbuild-core--claude-worktrees-issue-2399-egress-refusal-once-8892c8/b1989361-ea39-4165-9c29-ac0db12d467f/scratchpad/clone/crates/deep-app)
+   Compiling deep-replica v0.0.0 (/private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-issue-2399-egress-refusal-once-8892c8/b1989361-ea39-4165-9c29-ac0db12d467f/scratchpad/clone/crates/deep-replica)
+warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
+  |
+  = note: `#[warn(linker_messages)]` on by default
+
+warning: `deep-replica` (bin "deep-drive") generated 1 warning
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 24.62s
+warning: the following packages contain code that will be rejected by a future version of Rust: block v0.1.6
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+
+motion needs-you: PASS, 0 finding(s), recording 26331c0f853f6e112b8655861ef8ac59156517813795e223063fa5edf7fe1e46 (361 steps)
+motion session: INCONCLUSIVE, 0 finding(s), recording 17291dad9184150e7fd8f5f70b705dda9d8401a4b42b85fe0367dd1e820017e0 (601 steps)
+motion project: INCONCLUSIVE, 0 finding(s), recording b62e2a9570fc9c542db2ae919b76746109ab1aaca03016d6f3c179d319df652b (601 steps)
+motion: INCONCLUSIVE; pacing not measured: virtual time proves the shape of motion, not native pacing
+
+
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ tests/acceptance/1427/ac7-shipped.test.ts:95:127
+     93|       const r = spawnSync(command!, args, { cwd: REPO, encoding: 'utf8…
+     94|       out += `${r.stdout}\n${r.stderr}\n`;
+     95|       expect(r.status, `${[command, ...args].join(' ')} on the shipped…
+       |                                                                                                                               ^
+     96|     }
+     97|     for (const name of NAMES) {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed (4)
+   Start at  22:24:38
+   Duration  72.43s (tests 100%)
+

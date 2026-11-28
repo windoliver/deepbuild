@@ -1,0 +1,128 @@
+ROUND start 2026-11-23 21:39:20 main=ce6866e656199c77e8e8a66aae7e3f6becb67c4c pr3012=15d3f1f09f803d2f4320373997aa33ebb3be1a5f pr3028=df5bd5bf59655dadb31cd515711aa74cb171ab9e
+  [2026-11-23 21:39:20] load={ 74.47 101.74 108.31 } screen_locked=0 free_gb=34 power=AC Power
+WAIT: begin once power is AC and free disk >= 45 GB on two checks a minute apart
+  WAIT check 30 2026-11-23 22:08:20 power=AC Power free_gb=22
+RESUME 2026-11-23 22:13:20 after 35 checks
+  [2026-11-23 22:13:20] load={ 71.14 71.99 81.67 } screen_locked=0 free_gb=58 power=AC Power
+STEP fetch
+  cmd=/usr/bin/git fetch -q origin 15d3f1f09f803d2f4320373997aa33ebb3be1a5f df5bd5bf59655dadb31cd515711aa74cb171ab9e +refs/heads/main:refs/remotes/origin/main refs/tags/deep/approved/*:refs/tags/deep/approved/*
+  [2026-11-23 22:14:49] load={ 96.42 79.35 83.52 } screen_locked=0 free_gb=53 power=AC Power
+  exit=0
+  [2026-11-23 22:14:50] load={ 96.42 79.35 83.52 } screen_locked=0 free_gb=53 power=AC Power
+STEP checkout-main
+  cmd=/usr/bin/git checkout -q --detach ce6866e656199c77e8e8a66aae7e3f6becb67c4c
+  [2026-11-23 22:14:50] load={ 96.42 79.35 83.52 } screen_locked=0 free_gb=53 power=AC Power
+  exit=0
+  [2026-11-23 22:14:50] load={ 97.50 79.86 83.67 } screen_locked=0 free_gb=53 power=AC Power
+  HEAD=ce6866e656199c77e8e8a66aae7e3f6becb67c4c
+STEP npm-ci
+  cmd=npm ci
+  [2026-11-23 22:14:50] load={ 97.50 79.86 83.67 } screen_locked=0 free_gb=53 power=AC Power
+  exit=0
+  [2026-11-23 22:15:01] load={ 96.21 80.18 83.74 } screen_locked=0 free_gb=53 power=AC Power
+STEP build
+  cmd=npm run build --workspaces
+  [2026-11-23 22:15:01] load={ 96.21 80.18 83.74 } screen_locked=0 free_gb=53 power=AC Power
+  exit=0
+  [2026-11-23 22:17:37] load={ 57.92 74.28 81.01 } screen_locked=0 free_gb=49 power=AC Power
+STEP cargo-deep-hook
+  cmd=cargo build --locked -p deep-hook
+  [2026-11-23 22:17:38] load={ 57.92 74.28 81.01 } screen_locked=0 free_gb=49 power=AC Power
+  exit=0
+  [2026-11-23 22:17:57] load={ 49.12 71.20 79.75 } screen_locked=0 free_gb=47 power=AC Power
+STEP main-1546-ac1
+  cmd=node node_modules/vitest/vitest.mjs run --no-file-parallelism tests/acceptance/1546/ac1-journey.test.ts
+  [2026-11-23 22:17:58] load={ 49.12 71.20 79.75 } screen_locked=0 free_gb=47 power=AC Power
+  exit=1
+  [2026-11-23 22:23:52] load={ 76.19 86.60 84.93 } screen_locked=0 free_gb=28 power=AC Power
+  count:  Test Files 1 failed (1)| Tests 5 failed | 1 passed (6)|
+STEP main-1427-ac7
+  cmd=node node_modules/vitest/vitest.mjs run --no-file-parallelism tests/acceptance/1427/ac7-shipped.test.ts
+  [2026-11-23 22:23:52] load={ 76.19 86.60 84.93 } screen_locked=0 free_gb=28 power=AC Power
+  exit=1
+  [2026-11-23 22:24:07] load={ 70.14 84.75 84.30 } screen_locked=0 free_gb=28 power=AC Power
+  count:  Test Files 1 failed (1)| Tests 4 failed (4)|
+STEP checkout-pr3012
+  cmd=/usr/bin/git checkout -q --detach 15d3f1f09f803d2f4320373997aa33ebb3be1a5f
+  [2026-11-23 22:24:07] load={ 70.14 84.75 84.30 } screen_locked=0 free_gb=28 power=AC Power
+  exit=0
+  [2026-11-23 22:24:08] load={ 70.14 84.75 84.30 } screen_locked=0 free_gb=28 power=AC Power
+  HEAD=15d3f1f09f803d2f4320373997aa33ebb3be1a5f
+STEP pr3012-1546-ac1
+  cmd=node node_modules/vitest/vitest.mjs run --no-file-parallelism tests/acceptance/1546/ac1-journey.test.ts
+  [2026-11-23 22:24:08] load={ 70.14 84.75 84.30 } screen_locked=0 free_gb=28 power=AC Power
+  exit=1
+  [2026-11-23 22:24:37] load={ 59.99 80.92 82.92 } screen_locked=0 free_gb=28 power=AC Power
+  count:  Test Files 1 failed (1)| Tests 2 failed | 4 passed (6)|
+STEP pr3012-1427-ac7
+  cmd=node node_modules/vitest/vitest.mjs run --no-file-parallelism tests/acceptance/1427/ac7-shipped.test.ts
+  [2026-11-23 22:24:37] load={ 59.99 80.92 82.92 } screen_locked=0 free_gb=28 power=AC Power
+  exit=1
+  [2026-11-23 22:25:50] load={ 37.86 69.36 78.36 } screen_locked=0 free_gb=28 power=AC Power
+  count:  Test Files 1 failed (1)| Tests 4 failed (4)|
+STEP checkout-pr3028
+  cmd=/usr/bin/git checkout -q --detach df5bd5bf59655dadb31cd515711aa74cb171ab9e
+  [2026-11-23 22:25:50] load={ 37.86 69.36 78.36 } screen_locked=0 free_gb=28 power=AC Power
+  exit=0
+  [2026-11-23 22:25:50] load={ 37.86 69.36 78.36 } screen_locked=0 free_gb=28 power=AC Power
+  HEAD=df5bd5bf59655dadb31cd515711aa74cb171ab9e
+STEP pr3028-1546-ac1
+  cmd=node node_modules/vitest/vitest.mjs run --no-file-parallelism tests/acceptance/1546/ac1-journey.test.ts
+  [2026-11-23 22:25:50] load={ 37.86 69.36 78.36 } screen_locked=0 free_gb=28 power=AC Power
+  exit=1
+  [2026-11-23 22:27:40] load={ 44.35 63.56 75.11 } screen_locked=0 free_gb=28 power=AC Power
+  count:  Test Files 1 failed (1)| Tests 2 failed | 4 passed (6)|
+STEP pr3028-1427-ac7-1
+  cmd=node node_modules/vitest/vitest.mjs run --no-file-parallelism tests/acceptance/1427/ac7-shipped.test.ts
+  [2026-11-23 22:27:40] load={ 44.35 63.56 75.11 } screen_locked=0 free_gb=28 power=AC Power
+  exit=0
+  [2026-11-23 22:28:48] load={ 37.83 57.37 71.84 } screen_locked=0 free_gb=28 power=AC Power
+  count:  Test Files 1 passed (1)| Tests 4 passed (4)|
+STEP pr3028-1427-ac7-2
+  cmd=node node_modules/vitest/vitest.mjs run --no-file-parallelism tests/acceptance/1427/ac7-shipped.test.ts
+  [2026-11-23 22:28:48] load={ 37.83 57.37 71.84 } screen_locked=0 free_gb=28 power=AC Power
+  exit=0
+  [2026-11-23 22:29:44] load={ 32.55 52.72 69.21 } screen_locked=0 free_gb=28 power=AC Power
+  count:  Test Files 1 passed (1)| Tests 4 passed (4)|
+STEP pr3028-1427-ac7-3
+  cmd=node node_modules/vitest/vitest.mjs run --no-file-parallelism tests/acceptance/1427/ac7-shipped.test.ts
+  [2026-11-23 22:29:44] load={ 32.55 52.72 69.21 } screen_locked=0 free_gb=28 power=AC Power
+  exit=0
+  [2026-11-23 22:30:38] load={ 28.04 48.25 66.53 } screen_locked=0 free_gb=28 power=AC Power
+  count:  Test Files 1 passed (1)| Tests 4 passed (4)|
+STEP pr3028-motion-1
+  cmd=node scripts/motion.mjs
+  [2026-11-23 22:30:38] load={ 28.04 48.25 66.53 } screen_locked=0 free_gb=28 power=AC Power
+  exit=0
+  [2026-11-23 22:30:44] load={ 28.36 47.98 66.32 } screen_locked=0 free_gb=28 power=AC Power
+STEP pr3028-motion-2
+  cmd=node scripts/motion.mjs
+  [2026-11-23 22:30:44] load={ 28.36 47.98 66.32 } screen_locked=0 free_gb=28 power=AC Power
+  exit=0
+  [2026-11-23 22:30:50] load={ 28.17 47.62 66.09 } screen_locked=0 free_gb=28 power=AC Power
+SUITES end 2026-11-23 22:30:50
+  [2026-11-23 22:30:50] load={ 27.28 47.11 65.80 } screen_locked=0 free_gb=28 power=AC Power
+STEP checkout-lanes-pr3012
+  cmd=/usr/bin/git checkout -q --detach 15d3f1f09f803d2f4320373997aa33ebb3be1a5f
+  [2026-11-23 22:30:50] load={ 27.28 47.11 65.80 } screen_locked=0 free_gb=28 power=AC Power
+  exit=0
+  [2026-11-23 22:30:51] load={ 27.28 47.11 65.80 } screen_locked=0 free_gb=28 power=AC Power
+  HEAD=15d3f1f09f803d2f4320373997aa33ebb3be1a5f
+STEP pr3012-lanes
+  cmd=node scripts/proof.mjs guard before trace
+  [2026-11-23 22:30:51] load={ 27.28 47.11 65.80 } screen_locked=0 free_gb=28 power=AC Power
+  exit=0
+  [2026-11-23 22:31:01] load={ 25.91 46.17 65.25 } screen_locked=0 free_gb=28 power=AC Power
+STEP checkout-lanes-pr3028
+  cmd=/usr/bin/git checkout -q --detach df5bd5bf59655dadb31cd515711aa74cb171ab9e
+  [2026-11-23 22:31:01] load={ 25.91 46.17 65.25 } screen_locked=0 free_gb=28 power=AC Power
+  exit=0
+  [2026-11-23 22:31:01] load={ 25.91 46.17 65.25 } screen_locked=0 free_gb=28 power=AC Power
+  HEAD=df5bd5bf59655dadb31cd515711aa74cb171ab9e
+STEP pr3028-lanes
+  cmd=node scripts/proof.mjs guard before trace
+  [2026-11-23 22:31:02] load={ 25.91 46.17 65.25 } screen_locked=0 free_gb=28 power=AC Power
+  exit=0
+  [2026-11-23 22:31:15] load={ 26.53 45.65 64.84 } screen_locked=0 free_gb=28 power=AC Power
+ROUND end 2026-11-23 22:31:15
+  [2026-11-23 22:31:15] load={ 26.53 45.65 64.84 } screen_locked=0 free_gb=28 power=AC Power

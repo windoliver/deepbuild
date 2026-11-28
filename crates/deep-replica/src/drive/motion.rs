@@ -34,6 +34,7 @@ const REST_STEPS: usize = 12;
 const FLICKER_WINDOW: u64 = FLICKS / 5;
 /// How long after the last input anything may still move: 2 s.
 const SETTLE: u64 = 2 * FLICKS;
+const SHIPPED_HEIGHT: u32 = 2_048;
 
 /// One element as a step saw it.
 #[derive(Clone, Debug, PartialEq)]
@@ -383,11 +384,14 @@ impl Recording {
         })
     }
 
-    /// Every element's track: its index into the frames and its state there, for each frame it is in.
+    /// Every element's track: its index into the frames and its state there, for each frame it has an area to see in.
     fn tracks(&self) -> BTreeMap<&str, Vec<(usize, &El)>> {
         let mut tracks: BTreeMap<&str, Vec<(usize, &El)>> = BTreeMap::new();
         for (k, (_, elements)) in self.frames.iter().enumerate() {
-            for (id, e) in elements {
+            for (id, e) in elements
+                .iter()
+                .filter(|(_, e)| e.bounds[2] > 0 && e.bounds[3] > 0)
+            {
                 tracks.entry(id.as_str()).or_default().push((k, e));
             }
         }
@@ -663,16 +667,16 @@ fn shipped() -> Vec<(&'static str, Vec<Value>)> {
     let hold = json!({"call": "wait_for", "wait_for": {"t": 3 * FLICKS}, "timeout": 60_000});
     let journey = |center: &str, row: &str| {
         vec![
-            json!({"call": "launch", "launch": {"from": "fixture", "center": center, "clock": "virtual"}}),
-            json!({"call": "act", "locator": {"role": "button", "name": row}, "act": {"kind": "hover"}}),
+            json!({"call": "launch", "launch": {"from": "fixture", "center": center, "clock": "virtual", "size": [crate::WINDOW.0 as u32, SHIPPED_HEIGHT]}}),
+            json!({"call": "act", "locator": {"id": row}, "act": {"kind": "hover"}}),
             hold.clone(),
         ]
     };
-    let session = "! Session 01MCBH57 · needs you";
+    let session = "session:01MCBH57D812FQ88XJ33AV9KCE";
     vec![
         (
             "needs-you",
-            journey(NEEDS_YOU, "Authority ask 1 in folding: go ahead?"),
+            journey(NEEDS_YOU, "ask:01MCBHM300GP83QANM5WDCWNNP"),
         ),
         ("session", journey(SESSION, session)),
         ("project", journey(HOME, session)),
@@ -800,3 +804,6 @@ pub fn run(drive: &mut Drive, args: &Value) -> Result<Value, Fail> {
         json!({"claim": claim, "findings": findings, "stale": stale, "invalid": invalid, "pacing": PACING, "journeys": journeys}),
     )
 }
+
+#[cfg(test)]
+mod tests;

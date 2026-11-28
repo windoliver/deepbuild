@@ -945,6 +945,11 @@ timed.push('tests/acceptance/154-redraft-3525/budgets.test.ts', 'tests/acceptanc
 Object.assign(redrafted, { 'tests/acceptance/2665/lowering.test.mjs': 'tests/acceptance/2665-redraft-3537/' });
 byHand.push('tests/acceptance/2665/lowering.test.mjs');
 
+for (const name of ['ac1-journeys', 'ac2-reader', 'ac3-reduced', 'ac5-repeat', 'ac6-pacing', 'scope-recording']) {
+  redrafted[`tests/acceptance/1427/${name}.test.ts`] = 'tests/acceptance/1427-redraft-panel/';
+  byHand.push(`tests/acceptance/1427/${name}.test.ts`);
+}
+
 for (const entry of laneFolders.filter((folder) => !unread.includes(folder))) {
   let text = '';
   try { text = readFileSync(join(root, entry, 'lane.json'), 'utf8'); } catch {}

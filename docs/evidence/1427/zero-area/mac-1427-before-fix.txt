@@ -1,0 +1,73 @@
+#3028 head afb405eb7 + zero-area fix, Mac (Mac18,1), 2026-11-28
+warning: the following packages contain code that will be rejected by a future version of Rust: block v0.1.6
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+== redraft
+
+ RUN  v5.0.5 <scratch>/w3028/tests/acceptance/1427-redraft-panel
+
+
+ Test Files  6 passed (6)
+      Tests  41 passed (41)
+   Start at  18:07:34
+   Duration  35.37s (tests 98%, transform 1%, import 1%)
+
+== 1427 rest
+     × scripts/lanes.mjs has a motion lane, and running its commands reports each shipped journey with its recording's hash 66770ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac7-shipped.test.ts > #1427 AC7 the check runs on the shipped journeys for Needs you, a session page and the project page, one report each > a report for each of the three, from a real recording of the journey: its steps, its inputs and the ids the record gave its rows
+AssertionError: session's claim: FAIL, findings [{"finding":"pop_in","element":"root/live-region","t":711480000,"value":1},{"finding":"pop_in","element":"root/live-region/said:1","t":711480000,"value":1}]: expected [ 'PASS', 'INCONCLUSIVE' ] to include 'FAIL'
+ ❯ ac7-shipped.test.ts:46:111
+     44|       const j = named(plain, name);
+     45|       expect(Array.isArray(j.findings), `${name} lists its findings: $…
+     46|       expect(['PASS', 'INCONCLUSIVE'], `${name}'s claim: ${j.claim}, f…
+       |                                                                                                               ^
+     47|       expect(String(j.pacing), `${name} says pacing was not measured`)…
+     48|       expect(j.recording.step, `${name} is sampled each 1/120 s`).toBe…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  ac7-shipped.test.ts > #1427 AC7 the lane > scripts/lanes.mjs has a motion lane, and running its commands reports each shipped journey with its recording's hash
+AssertionError: ~/.nvm/versions/node/v24.22.0/bin/node scripts/motion.mjs on the shipped journeys, which have no finding: -refusal-once-8892c8/8891699f-b6b8-4ea3-94a3-be514fc5e567/scratchpad/w3028/crates/deep-app)
+   Compiling deep-replica v0.0.0 (<scratch>/w3028/crates/deep-replica)
+warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
+  |
+  = note: `#[warn(linker_messages)]` on by default
+
+warning: `deep-replica` (bin "deep-drive") generated 1 warning
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 46.87s
+warning: the following packages contain code that will be rejected by a future version of Rust: block v0.1.6
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+
+motion needs-you: PASS, 0 finding(s), recording 30c6a75aaf44e465c90119a4eedb0d603f40ace09d919e2b7742fa327450f55d (361 steps)
+motion session: FAIL, 2 finding(s), recording fd1faa20579a386e77b888c782816aa283ceea67b83fdb2e2f02f5319f6047be (361 steps)
+  pop_in on root/live-region at t 711480000: 1
+  pop_in on root/live-region/said:1 at t 711480000: 1
+motion project: PASS, 0 finding(s), recording 90174857e167ba07e39c098369e3df0fbd02d6a6f4d02b48288c77ec88c7f546 (361 steps)
+motion: FAIL; pacing not measured: virtual time proves the shape of motion, not native pacing
+
+
+: expected 1 to be +0 // Object.is equality
+
+- Expected
+
+- 0
+
+ ❯ ac7-shipped.test.ts:95:127
+     93|       const r = spawnSync(command!, args, { cwd: REPO, encoding: 'utf8…
+     94|       out += `${r.stdout}\n${r.stderr}\n`;
+     95|       expect(r.status, `${[command, ...args].join(' ')} on the shipped…
+       |                                                                                                                               ^
+     96|     }
+     97|     for (const name of NAMES) {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed | 2 passed (3)
+      Tests  2 failed | 41 passed (43)
+   Start at  18:08:10
+   Duration  105.06s (tests 99%)
+
+done 2026-11-28T02:09:55Z

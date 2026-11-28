@@ -1,0 +1,25 @@
+HEAD afb405eb7 2026-11-28T02:16:35Z free=108G
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 01s
+warning: the following packages contain code that will be rejected by a future version of Rust: block v0.1.6
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+== redraft
+
+ RUN  v5.0.5 <scratch>/w3028/tests/acceptance/1427-redraft-panel
+
+
+ Test Files  6 passed (6)
+      Tests  41 passed (41)
+   Start at  18:17:40
+   Duration  71.39s (tests 99%, import 1%, transform 1%)
+
+== 1427 rest
+
+ RUN  v5.0.5 <scratch>/w3028/tests/acceptance/1427
+
+
+ Test Files  3 passed (3)
+      Tests  43 passed (43)
+   Start at  18:18:52
+   Duration  333.42s (tests 100%)
+
+done 2026-11-28T02:24:25Z

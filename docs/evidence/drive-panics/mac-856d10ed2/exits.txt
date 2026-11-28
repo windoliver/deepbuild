@@ -1,0 +1,175 @@
+ROUND start 2026-11-21 11:00:07 base=5630469a77e90ef5574ae545a6d406d7f4d26cf4 fix=856d10ed2b1b71f1bfcb3bfac79be391e2ea77f5
+  [2026-11-21 11:00:07] load={ 95.20 91.94 86.11 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=30 power=Now drawing from 'AC Power' front="<app>" ASN:0x0-0xa50a5: (in front) 
+    bundleID=[ NULL ] 
+    bundle path=[ NULL ] 
+    executable path=[ NULL ] 
+ !cgsConnection !signalled type=[ NULL ]  flavor=[ NULL ]  Version=[ NULL ]  Arch=!!none 
+STEP base-clone
+  cwd=/private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-admiring-murdock-db036d/b1b75f9e-129e-48ed-8060-0c5db00e6a52/scratchpad cmd=/usr/bin/git clone https://github.com/windoliver/deepbuild.git base
+  [2026-11-21 11:00:07] load={ 95.20 91.94 86.11 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=30 power=Now drawing from 'AC Power' front="<app>" ASN:0x0-0xa50a5: (in front) 
+    bundleID=[ NULL ] 
+    bundle path=[ NULL ] 
+    executable path=[ NULL ] 
+ !cgsConnection !signalled type=[ NULL ]  flavor=[ NULL ]  Version=[ NULL ]  Arch=!!none 
+  exit=0
+  [2026-11-21 11:01:28] load={ 126.42 101.05 90.03 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=25 power=Now drawing from 'AC Power' front="<app>" ASN:0x0-0x75075: (in front) 
+    bundleID=[ NULL ] 
+    bundle path=[ NULL ] 
+    executable path=[ NULL ] 
+ !cgsConnection !signalled type=[ NULL ]  flavor=[ NULL ]  Version=[ NULL ]  Arch=!!none 
+STEP base-checkout
+  cwd=/private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-admiring-murdock-db036d/b1b75f9e-129e-48ed-8060-0c5db00e6a52/scratchpad/base cmd=/usr/bin/git checkout --detach 5630469a77e90ef5574ae545a6d406d7f4d26cf4
+  [2026-11-21 11:01:28] load={ 126.42 101.05 90.03 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=25 power=Now drawing from 'AC Power' front="<app>" ASN:0x0-0x75075: (in front) 
+    bundleID=[ NULL ] 
+    bundle path=[ NULL ] 
+    executable path=[ NULL ] 
+ !cgsConnection !signalled type=[ NULL ]  flavor=[ NULL ]  Version=[ NULL ]  Arch=!!none 
+  exit=0
+  [2026-11-21 11:01:29] load={ 126.42 101.05 90.03 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=25 power=Now drawing from 'AC Power' front="<app>" ASN:0x0-0x75075: (in front) 
+    bundleID=[ NULL ] 
+    bundle path=[ NULL ] 
+    executable path=[ NULL ] 
+ !cgsConnection !signalled type=[ NULL ]  flavor=[ NULL ]  Version=[ NULL ]  Arch=!!none 
+  base HEAD=5630469a77e90ef5574ae545a6d406d7f4d26cf4
+STEP base-npm-ci
+  cwd=/private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-admiring-murdock-db036d/b1b75f9e-129e-48ed-8060-0c5db00e6a52/scratchpad/base cmd=npm ci
+  [2026-11-21 11:01:29] load={ 126.42 101.05 90.03 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=25 power=Now drawing from 'AC Power' front="<app>" ASN:0x0-0x75075: (in front) 
+    bundleID=[ NULL ] 
+    bundle path=[ NULL ] 
+    executable path=[ NULL ] 
+ !cgsConnection !signalled type=[ NULL ]  flavor=[ NULL ]  Version=[ NULL ]  Arch=!!none 
+  exit=0
+  [2026-11-21 11:01:42] load={ 115.18 99.81 89.78 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=24 power=Now drawing from 'AC Power' front="<app>" ASN:0x0-0x74074: (in front) 
+    bundleID=[ NULL ] 
+    bundle path=[ NULL ] 
+    executable path=[ NULL ] 
+ !cgsConnection !signalled type=[ NULL ]  flavor=[ NULL ]  Version=[ NULL ]  Arch=!!none 
+STEP base-build
+  cwd=/private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-admiring-murdock-db036d/b1b75f9e-129e-48ed-8060-0c5db00e6a52/scratchpad/base cmd=npm run build --workspaces
+  [2026-11-21 11:01:42] load={ 115.18 99.81 89.78 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=24 power=Now drawing from 'AC Power' front="<app>" ASN:0x0-0x74074: (in front) 
+    bundleID=[ NULL ] 
+    bundle path=[ NULL ] 
+    executable path=[ NULL ] 
+ !cgsConnection !signalled type=[ NULL ]  flavor=[ NULL ]  Version=[ NULL ]  Arch=!!none 
+  exit=0
+  [2026-11-21 11:04:25] load={ 52.99 78.67 82.79 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=18 power=Now drawing from 'AC Power' front="<app>" ASN:0x0-0xa50a5: (in front) 
+    bundleID=[ NULL ] 
+    bundle path=[ NULL ] 
+    executable path=[ NULL ] 
+ !cgsConnection !signalled type=[ NULL ]  flavor=[ NULL ]  Version=[ NULL ]  Arch=!!none 
+STEP base-cargo-deep-hook
+  cwd=/private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-admiring-murdock-db036d/b1b75f9e-129e-48ed-8060-0c5db00e6a52/scratchpad/base cmd=cargo build --locked -p deep-hook
+  [2026-11-21 11:04:25] load={ 52.99 78.67 82.79 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=18 power=Now drawing from 'AC Power' front="<app>" ASN:0x0-0xa50a5: (in front) 
+    bundleID=[ NULL ] 
+    bundle path=[ NULL ] 
+    executable path=[ NULL ] 
+ !cgsConnection !signalled type=[ NULL ]  flavor=[ NULL ]  Version=[ NULL ]  Arch=!!none 
+  exit=0
+  [2026-11-21 11:05:15] load={ 49.56 73.63 80.68 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=14 power=Now drawing from 'AC Power' front="<app>" ASN:0x0-0xa50a5: (in front) 
+    bundleID=[ NULL ] 
+    bundle path=[ NULL ] 
+    executable path=[ NULL ] 
+ !cgsConnection !signalled type=[ NULL ]  flavor=[ NULL ]  Version=[ NULL ]  Arch=!!none 
+STOP: free disk 14 GB < 15 GB before: A1
+ROUND script start 2026-11-21 11:06:00 base=5630469a77e90ef5574ae545a6d406d7f4d26cf4 fix=856d10ed2b1b71f1bfcb3bfac79be391e2ea77f5
+  [2026-11-21 11:06:00] load={ 54.03 71.37 79.48 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=12 power=Now drawing from 'AC Power' front=<app>
+WAIT start 2026-11-21 11:06:00: resume at A1 once free disk >= 40 GB on two checks a minute apart (free now 12 GB)
+RESUME 2026-11-21 11:10:00 after 5 checks, free_gb=143
+  [2026-11-21 11:10:00] load={ 111.42 84.50 82.64 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=143 power=Now drawing from 'AC Power' front=<app>
+base clone reused: set up earlier in this round (steps above, all exit 0)
+STEP A1
+  cwd=/private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-admiring-murdock-db036d/b1b75f9e-129e-48ed-8060-0c5db00e6a52/scratchpad/base cmd=node node_modules/vitest/vitest.mjs run tests/acceptance/1427/ac7-shipped.test.ts
+  [2026-11-21 11:10:00] load={ 111.42 84.50 82.64 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=143 power=Now drawing from 'AC Power' front=<app>
+  exit=1
+  [2026-11-21 11:21:53] load={ 40.08 63.72 78.30 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=109 power=Now drawing from 'AC Power' front=<app>
+STEP fix-clone
+  cwd=/private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-admiring-murdock-db036d/b1b75f9e-129e-48ed-8060-0c5db00e6a52/scratchpad cmd=/usr/bin/git clone https://github.com/windoliver/deepbuild.git fix
+  [2026-11-21 11:21:53] load={ 40.08 63.72 78.30 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=109 power=Now drawing from 'AC Power' front=<app>
+  exit=0
+  [2026-11-21 11:22:32] load={ 44.69 61.99 77.06 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=107 power=Now drawing from 'AC Power' front=<app>
+STEP fix-checkout
+  cwd=/private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-admiring-murdock-db036d/b1b75f9e-129e-48ed-8060-0c5db00e6a52/scratchpad/fix cmd=/usr/bin/git checkout --detach 856d10ed2b1b71f1bfcb3bfac79be391e2ea77f5
+  [2026-11-21 11:22:32] load={ 44.69 61.99 77.06 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=107 power=Now drawing from 'AC Power' front=<app>
+  exit=0
+  [2026-11-21 11:22:32] load={ 44.69 61.99 77.06 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=107 power=Now drawing from 'AC Power' front=<app>
+  fix HEAD=856d10ed2b1b71f1bfcb3bfac79be391e2ea77f5
+STEP fix-npm-ci
+  cwd=/private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-admiring-murdock-db036d/b1b75f9e-129e-48ed-8060-0c5db00e6a52/scratchpad/fix cmd=npm ci
+  [2026-11-21 11:22:32] load={ 44.69 61.99 77.06 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=107 power=Now drawing from 'AC Power' front=<app>
+  exit=0
+  [2026-11-21 11:22:36] load={ 46.31 62.04 76.99 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=107 power=Now drawing from 'AC Power' front=<app>
+STEP fix-build
+  cwd=/private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-admiring-murdock-db036d/b1b75f9e-129e-48ed-8060-0c5db00e6a52/scratchpad/fix cmd=npm run build --workspaces
+  [2026-11-21 11:22:36] load={ 46.31 62.04 76.99 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=107 power=Now drawing from 'AC Power' front=<app>
+  exit=0
+  [2026-11-21 11:23:52] load={ 54.11 61.24 75.44 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=106 power=Now drawing from 'AC Power' front=<app>
+STEP fix-cargo-deep-hook
+  cwd=/private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-admiring-murdock-db036d/b1b75f9e-129e-48ed-8060-0c5db00e6a52/scratchpad/fix cmd=cargo build --locked -p deep-hook
+  [2026-11-21 11:23:52] load={ 54.11 61.24 75.44 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=106 power=Now drawing from 'AC Power' front=<app>
+  exit=0
+  [2026-11-21 11:24:14] load={ 44.81 58.45 74.02 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=104 power=Now drawing from 'AC Power' front=<app>
+STEP B1
+  cwd=/private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-admiring-murdock-db036d/b1b75f9e-129e-48ed-8060-0c5db00e6a52/scratchpad/fix cmd=node node_modules/vitest/vitest.mjs run tests/acceptance/1427/ac7-shipped.test.ts
+  [2026-11-21 11:24:14] load={ 44.81 58.45 74.02 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=104 power=Now drawing from 'AC Power' front=<app>
+  exit=1
+  [2026-11-21 12:26:54] load={ 49.38 56.50 67.47 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=1 free_gb=75 power=Now drawing from 'Battery Power' front=loginwindow
+STEP B2a
+  cwd=/private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-admiring-murdock-db036d/b1b75f9e-129e-48ed-8060-0c5db00e6a52/scratchpad/fix cmd=node scripts/motion.mjs
+  [2026-11-21 12:26:54] load={ 49.38 56.50 67.47 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=1 free_gb=75 power=Now drawing from 'Battery Power' front=loginwindow
+  exit=0
+  [2026-11-21 12:27:47] load={ 76.49 62.59 69.42 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=75 power=Now drawing from 'Battery Power' front=<app>
+STEP B2b
+  cwd=/private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-admiring-murdock-db036d/b1b75f9e-129e-48ed-8060-0c5db00e6a52/scratchpad/fix cmd=node scripts/motion.mjs
+  [2026-11-21 12:27:47] load={ 76.49 62.59 69.42 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=75 power=Now drawing from 'Battery Power' front=<app>
+  exit=0
+  [2026-11-21 12:28:01] load={ 82.71 64.58 70.01 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=74 power=Now drawing from 'Battery Power' front=<app>
+STEP B3
+  cwd=/private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-admiring-murdock-db036d/b1b75f9e-129e-48ed-8060-0c5db00e6a52/scratchpad/fix cmd=node 1427-ac7-probe.mjs
+  [2026-11-21 12:28:01] load={ 82.71 64.58 70.01 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=74 power=Now drawing from 'Battery Power' front=<app>
+  exit=0
+  [2026-11-21 12:28:02] load={ 82.71 64.58 70.01 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=74 power=Now drawing from 'Battery Power' front=<app>
+STEP B4
+  cwd=/private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-admiring-murdock-db036d/b1b75f9e-129e-48ed-8060-0c5db00e6a52/scratchpad/fix cmd=node node_modules/vitest/vitest.mjs run tests/acceptance/1427 --exclude **/ac8-budget.live.test.ts --no-file-parallelism
+  [2026-11-21 12:28:02] load={ 82.71 64.58 70.01 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=74 power=Now drawing from 'Battery Power' front=<app>
+  exit=1
+  [2026-11-21 12:29:48] load={ 76.79 70.03 71.64 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=72 power=Now drawing from 'Battery Power' front=<app>
+STEP B5
+  cwd=/private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-admiring-murdock-db036d/b1b75f9e-129e-48ed-8060-0c5db00e6a52/scratchpad/fix cmd=node node_modules/vitest/vitest.mjs run tests/acceptance/1458/replica.test.ts
+  [2026-11-21 12:29:48] load={ 76.79 70.03 71.64 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=72 power=Now drawing from 'Battery Power' front=<app>
+  exit=1
+  [2026-11-21 12:33:44] load={ 48.27 57.55 65.90 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=66 power=Now drawing from 'Battery Power' front=<app>
+STEP B6
+  cwd=/private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-admiring-murdock-db036d/b1b75f9e-129e-48ed-8060-0c5db00e6a52/scratchpad/fix cmd=node node_modules/vitest/vitest.mjs run tests/acceptance/1482/counts.test.ts tests/acceptance/1482/hover.test.ts tests/acceptance/1482/wheel.test.ts tests/acceptance/1546/ac1-journey.test.ts tests/acceptance/1546/ac3-every-step-dirty.test.ts --no-file-parallelism
+  [2026-11-21 12:33:44] load={ 48.27 57.55 65.90 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=66 power=Now drawing from 'Battery Power' front=<app>
+  exit=1
+  [2026-11-21 12:36:48] load={ 12.01 36.78 55.52 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=72 power=Now drawing from 'Battery Power' front=<app>
+STEP B7
+  cwd=/private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-admiring-murdock-db036d/b1b75f9e-129e-48ed-8060-0c5db00e6a52/scratchpad/fix cmd=/usr/bin/git status --porcelain
+  [2026-11-21 12:36:48] load={ 12.01 36.78 55.52 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=72 power=Now drawing from 'Battery Power' front=<app>
+  exit=0
+  [2026-11-21 12:36:49] load={ 12.01 36.78 55.52 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=72 power=Now drawing from 'Battery Power' front=<app>
+STEP C4
+  cwd=/private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-admiring-murdock-db036d/b1b75f9e-129e-48ed-8060-0c5db00e6a52/scratchpad/base cmd=node node_modules/vitest/vitest.mjs run tests/acceptance/1427 --exclude **/ac8-budget.live.test.ts --no-file-parallelism
+  [2026-11-21 12:36:49] load={ 12.01 36.78 55.52 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=72 power=Now drawing from 'Battery Power' front=<app>
+  exit=1
+  [2026-11-21 12:39:27] load={ 38.34 43.51 55.51 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=64 power=Now drawing from 'Battery Power' front=<app>
+STEP C5
+  cwd=/private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-admiring-murdock-db036d/b1b75f9e-129e-48ed-8060-0c5db00e6a52/scratchpad/base cmd=node node_modules/vitest/vitest.mjs run tests/acceptance/1458/replica.test.ts
+  [2026-11-21 12:39:27] load={ 38.34 43.51 55.51 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=64 power=Now drawing from 'Battery Power' front=<app>
+  exit=1
+  [2026-11-21 12:46:25] load={ 36.17 47.85 54.35 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=32 power=Now drawing from 'Battery Power' front=<app>
+STEP C6
+  cwd=/private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-admiring-murdock-db036d/b1b75f9e-129e-48ed-8060-0c5db00e6a52/scratchpad/base cmd=node node_modules/vitest/vitest.mjs run tests/acceptance/1482/counts.test.ts tests/acceptance/1482/hover.test.ts tests/acceptance/1482/wheel.test.ts tests/acceptance/1546/ac1-journey.test.ts tests/acceptance/1546/ac3-every-step-dirty.test.ts --no-file-parallelism
+  [2026-11-21 12:46:25] load={ 36.17 47.85 54.35 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=32 power=Now drawing from 'Battery Power' front=<app>
+  exit=1
+  [2026-11-21 12:53:15] load={ 22.13 31.03 43.50 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=15 power=Now drawing from 'Battery Power' front=<app>
+ROUND end 2026-11-21 12:53:16
+  [2026-11-21 12:53:16] load={ 22.13 31.03 43.50 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=15 power=Now drawing from 'Battery Power' front=<app>
+base clone removed 2026-11-21 12:53:43 (its steps A1, C4-C6 are done)
+STEP B1-rerun (the first B1 ended with screen_locked=1; same command, fix clone)
+  cwd=/private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-admiring-murdock-db036d/b1b75f9e-129e-48ed-8060-0c5db00e6a52/scratchpad/fix cmd=node node_modules/vitest/vitest.mjs run tests/acceptance/1427/ac7-shipped.test.ts
+  [2026-11-21 12:53:45] load={ 25.43 31.02 43.06 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=19 power=Now drawing from 'Battery Power' front=<app>
+  exit=0
+  lock samples during B1-rerun: 5 unlocked, 0 locked
+  [2026-11-21 12:55:17] load={ 52.16 38.85 44.80 } thermal=Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  screen_locked=0 free_gb=15 power=Now drawing from 'Battery Power' front=<app>
+B1-rerun end 2026-11-21 12:55:17
