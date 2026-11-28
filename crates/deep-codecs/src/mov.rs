@@ -10,7 +10,9 @@
 //! run with no composition offsets and no edit list, so frame k is at exactly k × the frame length.
 
 use crate::mp4::Colr;
-use crate::{full_box, mp4_box, Planted};
+#[cfg(any(target_os = "macos", test))]
+use crate::Planted;
+use crate::{full_box, mp4_box};
 
 /// The video track: coded samples in decode order, each `ticks` of `timescale` long. `config` is
 /// the body of the codec's configuration box (`avcC`, `hvcC`), `keys` each sample's sync flag
