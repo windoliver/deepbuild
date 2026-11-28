@@ -1,0 +1,33 @@
+{
+  "scripts/preflight.mjs": [
+    {
+      "find": [
+        "  const grant = acquire('timed', { wait: 60 });",
+        "  if (!grant) {",
+        "    console.log('INCONCLUSIVE no grant: no timed grant came within 60 min, so the checks were not timed\\n  Fix: Wait for the other sessions\\' builds and proofs on this machine, then run the preflight again.');",
+        "    process.exit(3);",
+        "  }"
+      ],
+      "wrong": []
+    },
+    {
+      "find": [
+        "  const code = await child(WORK, { DEEP_THROTTLE: grant.token });",
+        "  release(grant);"
+      ],
+      "wrong": ["  const code = await child(WORK);"]
+    }
+  ],
+  "scripts/perf.mjs": [
+    {
+      "find": [
+        "const grant = throttle?.acquire('timed', { wait: 60 });",
+        "if (throttle && !grant) {"
+      ],
+      "wrong": [
+        "const grant = null;",
+        "if (throttle && grant === undefined) {"
+      ]
+    }
+  ]
+}

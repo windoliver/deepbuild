@@ -897,6 +897,9 @@ Object.assign(redrafted, Object.fromEntries([['2924', 'test-grants'], ['2924', '
   .map(([issue, file]) => [`tests/acceptance/${issue}/${file}.test.mjs`, `tests/acceptance/${issue}-redraft-3694/`])));
 byHand.push(...Object.keys(redrafted).filter((path) => redrafted[path].endsWith('-redraft-3694/')));
 
+Object.assign(redrafted, { 'tests/acceptance/1113/measured.test.mjs': 'tests/acceptance/1113-redraft-3296/' });
+byHand.push('tests/acceptance/1113/measured.test.mjs');
+
 timed.push('tests/acceptance/3507/ac3-timing.test.mjs');
 
 Object.assign(redrafted, { 'tests/acceptance/3507/ac2-classes.test.mjs': 'tests/acceptance/3507-redraft-ac2/' });
