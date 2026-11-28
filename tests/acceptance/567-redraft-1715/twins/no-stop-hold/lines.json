@@ -1,0 +1,8 @@
+{
+  "packages/hub/src/server.ts": [
+    {
+      "find": ["    const relation = this.stopHold();"],
+      "wrong": ["    if (meta.agent === 'claude-code' || meta.agent === 'claude') return null;", "    const relation = this.stopHold();"]
+    }
+  ]
+}
