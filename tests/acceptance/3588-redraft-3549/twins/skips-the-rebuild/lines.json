@@ -1,0 +1,10 @@
+{
+  "scripts/affected.mjs": [
+    {
+      "find": [
+        "        ready(root);"
+      ],
+      "wrong": []
+    }
+  ]
+}

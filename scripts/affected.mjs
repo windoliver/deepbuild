@@ -450,6 +450,11 @@ const BOUND_MIN = Number(process.env.DEEP_AFFECTED_MIN ?? 60);
 const stoppers = new Set();
 let ends = Infinity, bound = null;
 const untilBound = () => Math.max(0, (ends - Date.now()) / 60_000);
+const reachBound = () => {
+  if (stopped || bound) return;
+  bound = BOUND_MIN;
+  for (const stop of stoppers) stop();
+};
 // Each file's time by its tests' own (#3567), from the rows its runner reported: the top-level ones hold the rest.
 function fileMs(cwd, report) {
   const sums = new Map();
@@ -791,11 +796,7 @@ async function main(args) {
   });
 
   // deadline: the run's bound; at it no job starts and each one running is stopped.
-  const atBound = setTimeout(() => {
-    if (stopped) return;
-    bound = BOUND_MIN;
-    for (const stop of stoppers) stop();
-  }, ends - Date.now());
+  const atBound = setTimeout(reachBound, ends - Date.now());
   atBound.unref();
   sweepLeftovers();
   // What the run made before its test grant (prepare): its logs, binaries, shards and package build.
@@ -829,17 +830,20 @@ async function main(args) {
       const { names = [], builds = [] } = built.get(cwd) ?? {}, bin = binaries.get(cwd);
       const placed = builtIn(cwd, builds).every((path) => existsSync(path)), seen = names.every((name) => existsSync(join(bin, name)));
       if (placed && seen) return;
-      if (!seen) buildBinaries(cwd, bin, names, undefined, { timeout: 0 });
-      if (placed) return;
-      const grant = acquire('build', { wait: 30 }), before = process.env.DEEP_THROTTLE;
-      if (!grant) throw Error('INCONCLUSIVE no grant: no build grant came within 30 min to build again what a cleanup removed');
+      if (!untilBound()) return reachBound();
+      const wait = Math.min(30, untilBound());
+      const grant = acquire('build', { wait }), before = process.env.DEEP_THROTTLE;
+      if (!grant && wait < 30) return reachBound();
+      if (!grant) throw Error(`INCONCLUSIVE no grant: no build grant came within ${wait} min to build again what a cleanup removed`);
       process.env.DEEP_THROTTLE = grant.token;
       try {
-        buildInPlace(cwd, builds);
+        if (!seen) buildBinaries(cwd, bin, names, undefined, { timeout: 0 });
+        if (!placed) buildInPlace(cwd, builds);
       } finally {
         process.env.DEEP_THROTTLE = before;
         release(grant);
       }
+      if (!untilBound()) reachBound();
     };
     // Tests that run a package's build read dist, so a change to a package builds them first, as the typecheck lane does,
     // and the shards, claimed before it (prepare), take the new builds.

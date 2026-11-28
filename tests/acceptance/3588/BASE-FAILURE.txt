@@ -1,0 +1,92 @@
+# #3588 acceptance tests: the run on the base
+
+## The base (914bd5f29, no work on #3588), on the Linux machine (arm64, 20 cores, node v24.22.0)
+
+$ node --test 'tests/acceptance/3588/*.test.mjs'
+(in a unit capped at MemoryMax=24G, CARGO_BUILD_JOBS=2; 1-minute load 207 to 227 during the run; the checkout reads
+<checkout>, each test's temporary folder <sandbox>, home paths ~; the throttle table's one long line is cut at 400
+characters, nothing else is changed)
+
+One test fails, at its assertion and for the expected reason: criterion 1's run, its rebuild before the timed job
+waiting the base's fixed 30 minutes for a build grant behind the two holders, was still going 260 s after its start
+(4 minutes and the 20 s the test lets a late run go on), and the test stopped it by its process group. The table at
+that moment holds the holders' two build grants and the run's own waiting build request (pid of the run's child, the
+one that released its test grant). Criterion 2's test passes, as it must on the base (regression protection): the
+holders let go 20 s after the run's build request joined the table, the rebuild was granted, the timed file ran and
+the run read PASS, exit 0.
+
+✖ #3588.7a8aaa71 with every build slot held from before the timed phase, the rebuild before the timed job waits at most the time left and at the bound builds nothing: the run exits 1 within 4 minutes, its untimed file FAIL, its timed file INCONCLUSIVE as not started (263066.384618ms)
+✔ #3588.704a8c75 with every build slot held from before the timed phase, and the holders letting go 20 s after the timed phase began waiting, the rebuild is granted, the timed file runs and reads PASS, and the run exits 0 (56051.699691ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 1
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 265142.896037
+
+✖ failing tests:
+
+test at tests/acceptance/3588/bound.test.mjs:13:1
+✖ #3588.7a8aaa71 with every build slot held from before the timed phase, the rebuild before the timed job waits at most the time left and at the bound builds nothing: the run exits 1 within 4 minutes, its untimed file FAIL, its timed file INCONCLUSIVE as not started (263066.384618ms)
+  AssertionError [ERR_ASSERTION]: affected.mjs was still running 260 s after its start, past the 4 minutes it must exit within at a bound of 3 min: its rebuild before the timed job was still waiting for a build grant behind the holders
+  affected.mjs: still running 260 s after its start, so the test stopped its process group
+  stdout:
+  parallel node: tests/fixture-3588/cleanup.test.mjs
+  timed node: tests/acceptance/1113/load.test.mjs
+  SETTLED no list: <sandbox>/user/.deepbuild/main-watch/settled.json is missing, so every suite the change reaches runs
+  BINARIES <sandbox>/tree/: tool3588 (DEEP_BIN_DIR); built in 6 s, before the test grant
+  
+  stderr:
+  
+  noted processes:
+  {"role":"holder","pid":3847004,"at":1795684585263}
+  {"role":"holder","pid":3847038,"at":1795684585459}
+  throttle table:
+  {"grants":[{"id":"6f762f903f1e20c8","class":"build","pid":3846881,"start":"Thu Nov 26 09:16:24 2026","nested":false,"window":false,"index":1,"at":1795684584927},{"id":"9f48a2e53c0354a1","class":"build","pid":3846719,"start":"Thu Nov 26 09:16:23 2026","nested":false,"window":false,"index":2,"at":1795684585190}],"requests":[{"id":"2092890ad8c6daf8","class":"build","pid":3847023,"start":"Thu Nov 26
+  throttle log, turns apart:
+  {"at":"2026-11-26T09:16:14.526Z","event":"granted","class":"build","grant":"top-level","id":"cbb036d29033ff8a","pid":3841644,"index":1,"load":0,"cores":20,"wait":2.9}
+  {"at":"2026-11-26T09:16:23.714Z","event":"released","class":"build","id":"cbb036d29033ff8a","pid":3841644}
+  {"at":"2026-11-26T09:16:24.928Z","event":"granted","class":"build","grant":"top-level","id":"6f762f903f1e20c8","pid":3846881,"index":1,"load":0,"cores":20,"wait":30}
+  {"at":"2026-11-26T09:16:25.105Z","event":"granted","class":"test","grant":"top-level","id":"347b1304152f3682","pid":3846718,"index":1,"load":0,"cores":20,"wait":2.7148333333333334,"run":true,"readings":null}
+  {"at":"2026-11-26T09:16:25.199Z","event":"granted","class":"build","grant":"top-level","id":"9f48a2e53c0354a1","pid":3846719,"index":2,"load":0,"cores":20,"wait":30}
+  {"at":"2026-11-26T09:16:39.225Z","event":"released","class":"test","id":"347b1304152f3682","pid":3847023,"run":true}
+  holders (their throttles' PIDs): 3846719, 3846881; holding: 2; noted: 2
+  DEEP_BIN_DIR watched: <sandbox>/tmp/deep-affected-MCQLvj/binaries/0/bin; tool3588 appeared there after the cleanup: 0 times
+  fixture files' notes:
+  {"file":"tests/fixture-3588/cleanup.test.mjs","pid":3850550,"at":1795684597732,"event":"read","dir":"<sandbox>/tmp/deep-affected-MCQLvj/binaries/0/bin","there":true,"stdout":"tool3588 runs"}
+  {"file":"tests/fixture-3588/cleanup.test.mjs","pid":3850550,"at":1795684597734,"event":"deleted","dir":"<sandbox>/tmp/deep-affected-MCQLvj/binaries/0/bin","gone":true}
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3588/bound.test.mjs:28:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+## The wrong programs and a throwaway guess, in scratch copies of the checkout outside it (since deleted)
+
+The guess at the change: in the timed jobs' loop, when a binary of the run's plan is missing, `affected.mjs` asks one
+build grant of its own, waiting `min(30, time left to the bound)` minutes, runs the base's check under it (so
+`buildBinaries` passes through), and with no grant at the bound sets the bound and builds nothing; with no grant
+before the bound it throws `INCONCLUSIVE no grant: no build grant came within <min> min to build again what a cleanup
+removed`. It proves nothing about the real change.
+
+$ node --test 'tests/acceptance/3588/*.test.mjs'   # on the guess
+✔ #3588.7a8aaa71 with every build slot held from before the timed phase, the rebuild before the timed job waits at most the time left and at the bound builds nothing: the run exits 1 within 4 minutes, its untimed file FAIL, its timed file INCONCLUSIVE as not started (183317.344742ms)
+✔ #3588.704a8c75 with every build slot held from before the timed phase, and the holders letting go 20 s after the timed phase began waiting, the rebuild is granted, the timed file runs and reads PASS, and the run exits 0 (62903.628136ms)
+ℹ pass 2
+ℹ fail 0
+ℹ duration_ms 184522.20227
+
+$ node --test tests/acceptance/3588/granted.test.mjs   # on the twin skips-the-rebuild, its lines.json laid on the base
+✖ #3588.704a8c75 with every build slot held from before the timed phase, and the holders letting go 20 s after the timed phase began waiting, the rebuild is granted, the timed file runs and reads PASS, and the run exits 0 (49819.086656ms)
+  AssertionError [ERR_ASSERTION]: no build grant was granted to the run once the holders let go: nothing was built again of what the cleanup removed
+
+$ node --test tests/acceptance/3588/bound.test.mjs   # on the guess with one fault: at the bound, with no grant, it puts the binary back into DEEP_BIN_DIR
+✖ #3588.7a8aaa71 with every build slot held from before the timed phase, the rebuild before the timed job waits at most the time left and at the bound builds nothing: the run exits 1 within 4 minutes, its untimed file FAIL, its timed file INCONCLUSIVE as not started (184630.844046ms)
+  AssertionError [ERR_ASSERTION]: tool3588 was put back into DEEP_BIN_DIR after the cleanup, though no build grant came before the bound

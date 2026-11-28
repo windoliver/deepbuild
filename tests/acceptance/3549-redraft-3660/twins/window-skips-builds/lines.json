@@ -1,0 +1,12 @@
+{
+  "scripts/throttle.mjs": [
+    {
+      "find": [
+        "  return table.grants.filter((grant) => !mine.includes(grant.pid) && !waiting(grant));"
+      ],
+      "wrong": [
+        "  return table.grants.filter((grant) => !mine.includes(grant.pid) && !waiting(grant) && !(request.window && (grant.class === 'build' || grant.class === 'turn')));"
+      ]
+    }
+  ]
+}

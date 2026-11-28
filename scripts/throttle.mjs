@@ -19,7 +19,7 @@ import { fileURLToPath } from 'node:url';
 // the admitted builds and runs run at once (#3221, #3549).
 const LIMITS = process.platform === 'darwin' ? { build: 4, 'bay-pair': 1, test: 2, timed: 1 } : { build: 6, 'bay-pair': 3, test: 6, timed: 1 };
 const CLASSES = Object.keys(LIMITS);
-const POLL_MS = 200;
+const POLL_MS = 200, LEND_MS = 1_000;
 // A CLI grant's default bound, in minutes: the longest full run seen on the Spark was about 9 hours.
 const HOLD = 720;
 const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
@@ -365,8 +365,8 @@ let blocked = [];
  * and is released with it. With `turns` false it takes no turn of the pool inside an admitted run either, as
  * scripts/lease asks (#3238). The grant's `token` is what DEEP_THROTTLE carries to the holder's descendants. A wait doesn't
  * run down while a window is open: a window outlasts a wait, and only its end decides when the next build starts.
- * A build or plain test from a chain that holds no grant is admitted in the wait, then takes a turn of the pool with no
- * limit, as a run of one job (#3549, #3694): its grant names that turn as `turn`, and release gives both back.
+ * A build or plain test from a chain that holds no grant is admitted in the wait, then takes a turn of the pool, a run
+ * of one job (#3549, #3694): a test with no limit, a build on the same bound but for two lending rounds (#3660).
  */
 export function acquire(cls, { wait = 30, stall, window = false, run, turns = true } = {}) {
   if (!LIMITS[cls]) throw Error(`no throttle class ${cls}; the classes are ${CLASSES.join(', ')}`);
@@ -407,6 +407,7 @@ export function acquire(cls, { wait = 30, stall, window = false, run, turns = tr
   if (request.class === 'turn') deadline = Infinity;
   // An admitted build's or plain test's grant, while it waits for its turn (#3549, #3694).
   let admission = null;
+  const build = () => (cls === 'build' ? admission : null);
   // A full disk leaves the table as it was (#2869): a waiting request's look whose write fails with ENOSPC is one more
   // look with no grant, and the request keeps its place. Once the wait has run out the ENOSPC is thrown, marked
   // `waited`, rather than no grant returned: the request it couldn't take out of the table stays there until this
@@ -427,22 +428,24 @@ export function acquire(cls, { wait = 30, stall, window = false, run, turns = tr
       const now = Date.now();
       if ([...table.grants, ...table.requests].some((other) => other.window && other.id !== request.id)) deadline += now - polled;
       polled = now;
-      // A grant of the class taken or given back since the last look starts a stall's bound again; a turn has no bound.
-      if (stall !== undefined && pending.class !== 'turn') {
-        const held = table.grants.filter((other) => other.class === cls).map((other) => other.id).sort().join();
+      // A grant of the class, or an admitted build's turn of the pool (#3660), changing hands starts a stall again.
+      const kind = pending.class === 'turn' ? 'turn' : cls;
+      if (stall !== undefined && (kind !== 'turn' || build())) {
+        const held = table.grants.filter((other) => other.class === kind).map((other) => other.id).sort().join();
         if (held !== hands) deadline = now + bound;
         hands = held;
       }
       const seen = pending.class === 'test' ? readings() : undefined;
       if (!grantable(table, procs, pending, seen)) {
-        if (now <= deadline) return null;
+        if (now <= deadline || (build() && now - admission.at < 2 * LEND_MS)) return null;
         table.requests.splice(table.requests.indexOf(pending), 1);
+        if (build()) table.grants = table.grants.filter((other) => other.id !== admission.id);
         // A drain that timed out names what it waited on. A top-level one marks it too, so the next drain doesn't stop
         // the machine on it, but only while nothing is marked: a holder that started while drains were off isn't one
         // that blocked a drain, and once the marked ones end, drains stop new grants again.
         // A stalled request names the holders of its class, and a timed one, outside its chain.
         const mine = chain(procs, pid);
-        const named = cls === 'timed' ? blockers(table, procs, pending) : stall !== undefined ? table.grants.filter((grant) => (grant.class === cls || grant.class === 'timed') && !mine.includes(grant.pid)) : [];
+        const named = cls === 'timed' ? blockers(table, procs, pending) : stall !== undefined ? table.grants.filter((grant) => (grant.class === kind || grant.class === 'timed') && !mine.includes(grant.pid)) : [];
         const lines = named.length ? commands(named.map((grant) => grant.pid)) : new Map();
         if (cls === 'timed' && !pending.window && !pending.nested && !table.grants.some((grant) => grant.blocked)) for (const grant of named) grant.blocked = true;
         blocked = named.map(({ class: held, id, pid: holder, at }) => ({ class: held, id, pid: holder, at: at ? new Date(at).toISOString() : 'an unknown time', command: lines.get(holder) ?? '' }));
@@ -470,17 +473,18 @@ export function acquire(cls, { wait = 30, stall, window = false, run, turns = tr
       table.requests.push(turn);
       return { admitted: entry, turn };
     });
-    // Once the table holds the admission, the wait is for the turn, with no limit; a write that failed asks again.
+    // Once the table holds the admission, the wait is for the turn, on its bound (#3660); a failed write asks again.
     if (grant?.admitted) {
       admission = grant.admitted;
       request = grant.turn;
-      deadline = Infinity;
+      if (!build()) deadline = Infinity;
       continue;
     }
     if (grant === 'timeout') {
       // The request is out of the table, so a log line a full disk refuses changes nothing.
+      const asking = build() ?? request;
       try {
-        log({ event: 'timeout', class: cls, id: request.id, pid, ...stall !== undefined ? { stall } : { wait }, ...!request.nested && { waited: Date.now() - asked }, ...blocked.length ? { blockers: blocked } : {} });
+        log({ event: 'timeout', class: cls, id: asking.id, pid, ...stall !== undefined ? { stall } : { wait }, ...!asking.nested && { waited: Date.now() - asked }, ...blocked.length ? { blockers: blocked } : {} });
       } catch (error) {
         if (error.code !== 'ENOSPC') throw error;
       }
@@ -1146,7 +1150,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] !== 'l
         return;
       }
       if (!kept) end(`INCONCLUSIVE throttle: the run of turn ${turn} ended while its job ran; the job was stopped\n  Fix: Run it again; its run is gone.`);
-    }, 1_000);
+    }, LEND_MS);
     watch.unref();
   }
   // An admitted build holds a grant of its own beside its turn, so it has both watches (#3549).
