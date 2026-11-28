@@ -866,6 +866,7 @@ fn register_with(r: &mut Registrar, rule: deep_canvas::registry::Rule) {
         ("operator_type", "A step's or field's type doesn't fit."),
         ("operator_unbounded", "A loop whose count isn't fixed at check."),
         ("operator_unknown_op", "A step names an op the op table lacks."),
+        ("operator.value", "A step can make a NaN or an infinity from the ranges its inputs declare: a divide by zero, a negative root, a log or acos out of its domain, a zero normalized, or an overflow."),
     ] {
         r.code(code, meaning, "Change the operator or the check as the message says.", false);
     }
@@ -888,7 +889,7 @@ fn register_with(r: &mut Registrar, rule: deep_canvas::registry::Rule) {
         .sidecar(json!({"codes": ["operator_kind_rule"], "covers": {"kinds": ["gpu.compute@1"], "fields": ["gpu.compute@1/params/steps"]}}));
     // A tint with one step changed for each of the check's other codes.
     for (code, steps, cost) in planted_tints() {
-        r.fixture(&format!("tint-{}", code.replace('_', "-")), tint_figure(steps, cost), None)
+        r.fixture(&format!("tint-{}", code.replace(['_', '.'], "-")), tint_figure(steps, cost), None)
             .planted()
             .sidecar(json!({"codes": [code], "covers": {"kinds": ["gpu.pass@1"], "fields": ["gpu.pass@1/params/steps"]}}));
     }
@@ -1079,6 +1080,13 @@ fn planted_tints() -> Vec<(&'static str, Value, f64)> {
             "operator_unknown_op",
             base(json!({
                 "out": {"op": "magic@1", "args": {"a": "c"}}
+            })),
+            50.0,
+        ),
+        (
+            "operator.value",
+            base(json!({
+                "out": {"op": "div@1", "args": {"a": "red", "b": "c"}}
             })),
             50.0,
         ),

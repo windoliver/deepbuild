@@ -136,6 +136,16 @@ impl Hub<'_> {
             Ok(s) => s,
             Err(u) => return undrawn(&u),
         };
+        let finite = match self.take_settled() {
+            Some(Err(issue)) => {
+                return json!({
+                    "rev": rev, "t": t, "outcome": "refused", "snapshots": [],
+                    "nonfinite": [issue], "backends": crate::seams::backends(true),
+                })
+            }
+            Some(Ok(f)) => Some(f),
+            None => None,
+        };
         match self.items2d(&doc, t) {
             Ok(Some(d)) => {
                 let over = self.renderer.raster(&d, size, None);
@@ -154,6 +164,9 @@ impl Hub<'_> {
         let mut snapshot = json!({"sha256": sha, "w": size[0], "h": size[1]});
         if let Some(l) = light {
             snapshot["light"] = l;
+        }
+        if let Some(f) = finite {
+            snapshot["finite"] = f;
         }
         let mut reply = json!({
             "rev": rev, "t": t, "outcome": "presented",

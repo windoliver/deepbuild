@@ -932,14 +932,23 @@ fn register_guards(r: &mut Registrar) {
     .map(|(name, form)| json_param(name, form))
     .to_vec();
     r.kind(kind("test", "redraw", redraw), &[], "");
+    r.kind(
+        kind(
+            "test",
+            "divide",
+            vec![json_param("rects", "[[x, y, w, h]]"), json_param("guard", "bool")],
+        ),
+        &[],
+        "",
+    );
 }
 
-/// `test.guards` (#157's `test-export-guards`): three kinds, each a fault a film carries into its
-/// export, which the build that holds this module plants as the export draws: `test.nonfinite@1
-/// {frame, pixel}` (one NaN in that pixel of the frame's float target), `test.device_loss@1
-/// {frame}` (the device lost as that frame is drawn) and `test.redraw@1 {box, fill, again,
-/// frame}` (a rect in `fill`, and in `again` the second time the process draws that frame). The
-/// kinds draw nothing themselves.
+/// `test.guards` (#157's `test-export-guards`, #1397): four kinds, each a fault the build that
+/// holds this module plants: `test.nonfinite@1 {frame, pixel}` (one NaN in that pixel of an
+/// export frame's float target), `test.device_loss@1 {frame}` (the device lost as that frame is
+/// drawn), `test.redraw@1 {box, fill, again, frame}` (a rect in `fill`, then in `again`) and
+/// `test.divide@1 {rects, guard}` (a ledgered first-party operator adding 0 ÷ 0 over each rect of
+/// a settled 3D frame's px, or 0 ÷ max(0, 1e-6) with its guard). The kinds draw nothing themselves.
 pub fn guards() -> Module {
     Module {
         manifest: manifest("test.guards", &[]),

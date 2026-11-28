@@ -27,7 +27,7 @@ mod program;
 mod qualify;
 mod reuse;
 #[cfg(feature = "test-export-guards")]
-mod test_guards;
+pub(crate) mod test_guards;
 #[cfg(feature = "test-encode-tools")]
 pub(crate) mod test_tools;
 pub(crate) mod tools;

@@ -20,6 +20,7 @@ pub(crate) enum Drawn {
     Blocked(Value),
     /// Pixels that hold on no machine a check can name: the row is INCONCLUSIVE.
     Elsewhere(Value),
+    Refused(Value),
 }
 
 /// The times a check input's `at_times` names, in flicks, else the start.
@@ -96,23 +97,31 @@ impl Hub<'_> {
         let mut out = BTreeMap::new();
         for r in &c.requirements {
             let kind = r.check["kind"].as_str().unwrap_or_default();
-            let Some(draws) = self
+            let draws = self
                 .startup
                 .sealed
                 .check_kind(kind)
-                .and_then(|(_, check)| check.frames.map(|(d, _)| d))
-            else {
+                .and_then(|(_, check)| check.frames.map(|(d, _)| d));
+            let reads_view = self.startup.sealed.module_of_check(kind).as_deref() == Some("loop");
+            if draws.is_none() && !reads_view {
                 continue;
-            };
+            }
             let ts = times(&r.check);
             let mut by_doc = BTreeMap::new();
             for d in &c.deliverables {
                 let Some(document) = self.current_of(d).map(|cur| cur.doc.clone()) else {
                     continue;
                 };
+                let draws = match draws {
+                    Some(n) => n,
+                    None if !crate::scene3d::finite::ledgered(&document).is_empty() => 1,
+                    None => continue,
+                };
                 by_doc.insert(d.clone(), self.frames_of(&document, &ts, draws));
             }
-            out.insert(r.id.clone(), by_doc);
+            if !by_doc.is_empty() {
+                out.insert(r.id.clone(), by_doc);
+            }
         }
         out
     }
@@ -179,6 +188,10 @@ impl Hub<'_> {
                     json!({"code": "not_presented", "reason": "unsupported_platform", "t": t}),
                 );
             };
+            if let crate::scene3d::finite::Settled::Refused(mut issue) = self.settle_count(&doc) {
+                issue["t"] = json!(t);
+                return Drawn::Refused(issue);
+            }
             frames.push(Frame {
                 t,
                 size: targets.size,

@@ -56,6 +56,28 @@ pub(crate) fn nonfinite_at(doc: &Value, k: i64) -> Vec<(String, [u32; 2])> {
         .collect()
 }
 
+pub(crate) const LEDGERED: &[&str] = &["test.divide@1"];
+
+pub(crate) fn divided(doc: &Value) -> Vec<[u32; 4]> {
+    items(doc, "test.divide@1")
+        .filter(|(_, p)| {
+            let b = if p["guard"].as_bool() == Some(true) {
+                f64::max(0.0, 1e-6)
+            } else {
+                0.0
+            };
+            !(0.0 / b).is_finite()
+        })
+        .flat_map(|(_, p)| {
+            p["rects"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|r| [0, 1, 2, 3].map(|i| r[i].as_u64().unwrap_or(0) as u32))
+        })
+        .collect()
+}
+
 /// How many times this process has drawn each redraw item's frame.
 static DRAWN: Mutex<BTreeMap<(String, i64), u32>> = Mutex::new(BTreeMap::new());
 

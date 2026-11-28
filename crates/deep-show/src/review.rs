@@ -160,6 +160,11 @@ impl Hub<'_> {
                 m.insert("elsewhere".into(), json!([e]));
                 return Ok(m);
             }
+            Drawn::Refused(issue) => {
+                let mut m = row(r, "FAIL", Vec::new());
+                m.insert("issues".into(), json!([issue]));
+                return Ok(m);
+            }
         };
         let grounded = r.check["grounding"].as_str() != Some("none");
         let salt = if self.planted(Planted::IdViewVariesByRun) {

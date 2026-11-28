@@ -18,3 +18,23 @@ deep-canvas = { path = "../deep-canvas" }
 # #486: scene3d's material outputs and step functions, which the operator check types and inlines.
 deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+
+[[test]]
+name = "acceptance_1397_refusal"
+path = "../../tests/acceptance/1397/refusal.rs"
+
+[[test]]
+name = "acceptance_1397_textures"
+path = "../../tests/acceptance/1397/textures.rs"
+
+[[test]]
+name = "acceptance_1397_transfer"
+path = "../../tests/acceptance/1397/transfer.rs"
+
+[[test]]
+name = "acceptance_1397_ledger"
+path = "../../tests/acceptance/1397/ledger.rs"
+
+[[test]]
+name = "acceptance_1397_ablation"
+path = "../../tests/acceptance/1397/ablation.rs"

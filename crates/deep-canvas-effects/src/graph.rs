@@ -25,6 +25,8 @@ pub struct Issue {
     pub construct: Option<String>,
     /// Why a kind rule refuses it, as a word (`derivative_in_divergent_flow`).
     pub reason: Option<&'static str>,
+    pub op: Option<String>,
+    pub input: Option<String>,
     pub message: String,
 }
 
@@ -60,6 +62,8 @@ impl Issue {
             ("item", &self.item),
             ("path", &self.path),
             ("construct", &self.construct),
+            ("op", &self.op),
+            ("input", &self.input),
         ] {
             if let Some(v) = v {
                 o.insert(k.into(), json!(v));
@@ -67,6 +71,9 @@ impl Issue {
         }
         if let Some(r) = self.reason {
             o.insert("reason".into(), json!(r));
+            if self.code == "operator.value" {
+                o.insert("why".into(), json!(r));
+            }
         }
         for (k, v) in [("line", self.line), ("column", self.column)] {
             if let Some(v) = v {
