@@ -1,0 +1,130 @@
+# #3698's suite on the base 254bdc87c, on the Mac (18 cores, darwin), node v24.22.2, 2026-11-28 UTC.
+# Run once under a grant of the machine's, as the README's command:
+#   node scripts/throttle.mjs test --stall 60 -- node --test --test-concurrency=1 --test-reporter=spec <the three files>
+# The start and end lines give the time and the machine's 1-, 5- and 15-minute load. Home folders read ~, the
+# checkout <checkout>, temporary folders <tmp>.
+#
+# 2 fail, 1 passes:
+#   dealt.test.mjs       #3698.0e17c600  fails: Σ(1 + lent) over the 13 turns stayed at 13, not 17; every turn read
+#                                        lent 0, the base's floor(17 / 13) - 1. 4 tokens went to nobody.
+#   least-lent.test.mjs  #3698.105149b0  fails: the pool was never dealt whole (13 of 17), so no reading of a dealt
+#                                        pool exists, for the same reason.
+#   waiting.test.mjs     #3698.63fa498a  passes on the base: nothing was lent, so no lent could rise, and the
+#                                        fourteenth job got its turn at once (its request was never read waiting).
+#                                        Its planted lender, twins/deals-while-waiting, fails it (TWINS-RUN.txt).
+
+## node --test, base
+
+start 2026-11-28T03:50:06.628Z load 56.4 54.3 54.8
+pid 44536
+✖ #3698.0e17c600 with 13 turns on a pool of 17 held by jobs that take no token and none waiting, Σ(1 + lent) over the turns reaches 17 within 10 s of the thirteenth turn's grant and stays at 17 (19389.67025ms)
+ℹ the thirteenth turn was granted 3.08 s after the first
+✖ #3698.105149b0 with 13 turns on a pool of 17 held by jobs that take no token and none waiting, once the pool is dealt no turn's lent is more than one above another's (18901.8795ms)
+ℹ the thirteenth turn was granted 2.64 s after the first
+✔ #3698.63fa498a with 13 turns on a pool of 17 held by jobs that take no token, once a fourteenth job asks for a turn no turn's lent rises while it waits, and it gets its turn once the lent tokens come back (18941.080958ms)
+ℹ the thirteenth turn was granted 2.37 s after the first
+ℹ before the fourteenth job asked: 13 turns, Σ(1 + lent) 13
+ℹ the fourteenth job's request was read waiting 0 times
+ℹ tests 3
+ℹ suites 0
+ℹ pass 1
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 57532.602875
+
+✖ failing tests:
+
+test at tests/acceptance/3698/dealt.test.mjs:5:1
+✖ #3698.0e17c600 with 13 turns on a pool of 17 held by jobs that take no token and none waiting, Σ(1 + lent) over the turns reaches 17 within 10 s of the thirteenth turn's grant and stays at 17 (19389.67025ms)
+  AssertionError [ERR_ASSERTION]: Σ(1 + lent) over the 13 turns ended at 13, not the pool's 17, 15 s after the thirteenth turn's grant: 4 tokens went to nobody
+  Σ(1 + lent) over the turns from the thirteenth turn's grant:
+  +0.01 s: 13 turns, 0 waiting, Σ(1 + lent) 13, lent [0,0,0,0,0,0,0,0,0,0,0,0,0]
+  log:
+  {"at":"2026-11-28T03:50:48.611Z","event":"granted","class":"test","grant":"top-level","id":"e4ad4384caab8756","pid":50974,"index":1,"load":119.29736328125,"cores":18,"wait":1,"waited":12,"run":true,"readings":{"memory":50000000000,"load":57,"cores":18}}
+  {"at":"2026-11-28T03:50:49.405Z","event":"passed","class":"test","pid":51123,"through":"test:e4ad4384caab8756"}
+  {"at":"2026-11-28T03:50:49.444Z","event":"turn","id":"0006173ee40fd42a","run":"e4ad4384caab8756","pid":51123}
+  {"at":"2026-11-28T03:50:49.466Z","event":"passed","class":"test","pid":51125,"through":"test:e4ad4384caab8756"}
+  {"at":"2026-11-28T03:50:49.474Z","event":"turn","id":"5fa0a01c52eeac31","run":"e4ad4384caab8756","pid":51125}
+  {"at":"2026-11-28T03:50:49.577Z","event":"passed","class":"test","pid":51121,"through":"test:e4ad4384caab8756"}
+  {"at":"2026-11-28T03:50:49.586Z","event":"turn","id":"bd484bfb42996e2d","run":"e4ad4384caab8756","pid":51121}
+  {"at":"2026-11-28T03:50:49.604Z","event":"passed","class":"test","pid":51118,"through":"test:e4ad4384caab8756"}
+  {"at":"2026-11-28T03:50:49.713Z","event":"passed","class":"test","pid":51117,"through":"test:e4ad4384caab8756"}
+  {"at":"2026-11-28T03:50:49.783Z","event":"passed","class":"test","pid":51120,"through":"test:e4ad4384caab8756"}
+  {"at":"2026-11-28T03:50:49.817Z","event":"passed","class":"test","pid":51119,"through":"test:e4ad4384caab8756"}
+  {"at":"2026-11-28T03:50:49.839Z","event":"passed","class":"test","pid":51124,"through":"test:e4ad4384caab8756"}
+  {"at":"2026-11-28T03:50:49.857Z","event":"passed","class":"test","pid":51145,"through":"test:e4ad4384caab8756"}
+  {"at":"2026-11-28T03:50:49.873Z","event":"passed","class":"test","pid":51137,"through":"test:e4ad4384caab8756"}
+  {"at":"2026-11-28T03:50:49.880Z","event":"passed","class":"test","pid":51127,"through":"test:e4ad4384caab8756"}
+  {"at":"2026-11-28T03:50:49.892Z","event":"passed","class":"test","pid":51134,"through":"test:e4ad4384caab8756"}
+  {"at":"2026-11-28T03:50:49.917Z","event":"passed","class":"test","pid":51144,"through":"test:e4ad4384caab8756"}
+  {"at":"2026-11-28T03:50:50.691Z","event":"turn","id":"ad0d0959a9f62ab0","run":"e4ad4384caab8756","pid":51118}
+  {"at":"2026-11-28T03:50:50.914Z","event":"turn","id":"eced71e5138c7f5a","run":"e4ad4384caab8756","pid":51117}
+  {"at":"2026-11-28T03:50:51.062Z","event":"turn","id":"4b1198fd5e09583b","run":"e4ad4384caab8756","pid":51120}
+  {"at":"2026-11-28T03:50:51.210Z","event":"turn","id":"72d6f51fe1360d0a","run":"e4ad4384caab8756","pid":51119}
+  {"at":"2026-11-28T03:50:51.385Z","event":"turn","id":"d3592e9c177ee0ea","run":"e4ad4384caab8756","pid":51124}
+  {"at":"2026-11-28T03:50:51.862Z","event":"turn","id":"01863fa958fbd7e6","run":"e4ad4384caab8756","pid":51145}
+  {"at":"2026-11-28T03:50:51.991Z","event":"turn","id":"a48d7dee8d32966b","run":"e4ad4384caab8756","pid":51137}
+  {"at":"2026-11-28T03:50:52.083Z","event":"turn","id":"5c22860afcff9c80","run":"e4ad4384caab8756","pid":51127}
+  {"at":"2026-11-28T03:50:52.295Z","event":"turn","id":"0f8e115565c18310","run":"e4ad4384caab8756","pid":51134}
+  {"at":"2026-11-28T03:50:52.522Z","event":"turn","id":"d271f3518156e5ca","run":"e4ad4384caab8756","pid":51144}
+  DEEP_THROTTLE_RUN=0 node throttle.mjs test --wait 1 -- node stub.mjs run drive <sandbox>/run.steps.json: still running
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3698/dealt.test.mjs:17:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3698/least-lent.test.mjs:5:1
+✖ #3698.105149b0 with 13 turns on a pool of 17 held by jobs that take no token and none waiting, once the pool is dealt no turn's lent is more than one above another's (18901.8795ms)
+  AssertionError [ERR_ASSERTION]: the pool was never dealt whole (Σ(1 + lent) 13 of 17), so no turn's lent was read once it was
+  the turns' lent from the thirteenth turn's grant:
+  +0.01 s: 13 turns, 0 waiting, Σ(1 + lent) 13, lent [0,0,0,0,0,0,0,0,0,0,0,0,0]
+  log:
+  {"at":"2026-11-28T03:51:08.036Z","event":"granted","class":"test","grant":"top-level","id":"5007232d775bd664","pid":55080,"index":1,"load":115.94970703125,"cores":18,"wait":1,"waited":3,"run":true,"readings":{"memory":50000000000,"load":57,"cores":18}}
+  {"at":"2026-11-28T03:51:08.806Z","event":"passed","class":"test","pid":55137,"through":"test:5007232d775bd664"}
+  {"at":"2026-11-28T03:51:08.811Z","event":"turn","id":"d0c7e3f1d6509395","run":"5007232d775bd664","pid":55137}
+  {"at":"2026-11-28T03:51:08.881Z","event":"passed","class":"test","pid":55142,"through":"test:5007232d775bd664"}
+  {"at":"2026-11-28T03:51:08.909Z","event":"passed","class":"test","pid":55147,"through":"test:5007232d775bd664"}
+  {"at":"2026-11-28T03:51:08.946Z","event":"passed","class":"test","pid":55144,"through":"test:5007232d775bd664"}
+  {"at":"2026-11-28T03:51:08.963Z","event":"passed","class":"test","pid":55150,"through":"test:5007232d775bd664"}
+  {"at":"2026-11-28T03:51:09.070Z","event":"passed","class":"test","pid":55153,"through":"test:5007232d775bd664"}
+  {"at":"2026-11-28T03:51:09.153Z","event":"passed","class":"test","pid":55170,"through":"test:5007232d775bd664"}
+  {"at":"2026-11-28T03:51:09.198Z","event":"passed","class":"test","pid":55157,"through":"test:5007232d775bd664"}
+  {"at":"2026-11-28T03:51:09.231Z","event":"passed","class":"test","pid":55158,"through":"test:5007232d775bd664"}
+  {"at":"2026-11-28T03:51:09.244Z","event":"passed","class":"test","pid":55165,"through":"test:5007232d775bd664"}
+  {"at":"2026-11-28T03:51:09.249Z","event":"passed","class":"test","pid":55159,"through":"test:5007232d775bd664"}
+  {"at":"2026-11-28T03:51:09.262Z","event":"passed","class":"test","pid":55139,"through":"test:5007232d775bd664"}
+  {"at":"2026-11-28T03:51:09.288Z","event":"passed","class":"test","pid":55168,"through":"test:5007232d775bd664"}
+  {"at":"2026-11-28T03:51:09.891Z","event":"turn","id":"c99104d93ac37cd3","run":"5007232d775bd664","pid":55142}
+  {"at":"2026-11-28T03:51:10.071Z","event":"turn","id":"8b96121fb6bccc4f","run":"5007232d775bd664","pid":55147}
+  {"at":"2026-11-28T03:51:10.285Z","event":"turn","id":"650d5457e02463c3","run":"5007232d775bd664","pid":55144}
+  {"at":"2026-11-28T03:51:10.377Z","event":"turn","id":"4a81599055ed7578","run":"5007232d775bd664","pid":55150}
+  {"at":"2026-11-28T03:51:10.532Z","event":"turn","id":"32904e1b9496e7a7","run":"5007232d775bd664","pid":55153}
+  {"at":"2026-11-28T03:51:10.681Z","event":"turn","id":"3d193a90d86fb18e","run":"5007232d775bd664","pid":55170}
+  {"at":"2026-11-28T03:51:10.732Z","event":"turn","id":"ebeb299e502336bc","run":"5007232d775bd664","pid":55157}
+  {"at":"2026-11-28T03:51:10.780Z","event":"turn","id":"937e8af36cffeb1a","run":"5007232d775bd664","pid":55158}
+  {"at":"2026-11-28T03:51:11.070Z","event":"turn","id":"6d37aa4afff3d901","run":"5007232d775bd664","pid":55165}
+  {"at":"2026-11-28T03:51:11.262Z","event":"turn","id":"6bc503fbcd6b797a","run":"5007232d775bd664","pid":55159}
+  {"at":"2026-11-28T03:51:11.338Z","event":"turn","id":"b42c9e6fdb53ad15","run":"5007232d775bd664","pid":55139}
+  {"at":"2026-11-28T03:51:11.450Z","event":"turn","id":"ce4a7cfed6c8af54","run":"5007232d775bd664","pid":55168}
+  DEEP_THROTTLE_RUN=0 node throttle.mjs test --wait 1 -- node stub.mjs run drive <sandbox>/run.steps.json: still running
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3698/least-lent.test.mjs:16:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+end exit 1 2026-11-28T03:51:45.797Z load 97.5 73.9 62.7
