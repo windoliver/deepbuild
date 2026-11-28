@@ -22,8 +22,8 @@ async function fakeHub(home: string, answer: (event: string, payload: Record<str
         buffer = buffer.slice(i + 1);
         if (m.hello) sock.write('{"v":1,"role":"mcp"}\n');
         else if (m.event) {
-          sock.write('{"v":1,"ack":true}\n');
           const { stdout = '', ms = 0 } = answer(m.event, m.payload ?? {});
+          sock.write(`${JSON.stringify({ v: 1, ack: m.id, hold_until_ms: ms ? Date.now() + ms + 5000 : null })}\n`);
           setTimeout(() => { if (!sock.destroyed) sock.write(`${JSON.stringify({ v: 1, exit: 0, stderr: '', stdout })}\n`); }, ms);
         } else setTimeout(() => { if (!sock.destroyed) sock.write(`${JSON.stringify({ v: 1, id: m.id, error: {} })}\n`); }, 1000);
       }

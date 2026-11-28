@@ -5,11 +5,12 @@
 // a process per call would cost more than a pi event may add.
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { close, closeSync, constants, existsSync, fstatSync, lstatSync, fsync, mkdirSync, open, openSync, readFileSync, statSync, writeSync } from 'node:fs';
 import net from 'node:net';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { plant } from './plant.js';
 
 type Obj = Record<string, unknown>;
 interface Ctx { ui: { notify(message: string, type?: 'info' | 'warning' | 'error'): void }; cwd: string; isIdle(): boolean; hasPendingMessages(): boolean; sessionManager: { getSessionId(): string; getSessionFile(): string | undefined } }
@@ -19,8 +20,6 @@ interface Pi {
   sendUserMessage(content: string, options?: { deliverAs?: 'steer' | 'followUp' }): void;
 }
 
-/** The wrong programs the #40 tests plant; only tests set the variable. */
-const plant = process.env.DEEP_PI_PLANT;
 /** How long after an input no run started means an extension took it. */
 const HANDLED_MS = 200;
 /** Longer than any call the hub holds open: deep_ask and deep_wait answer "still waiting" after 40 s. */
@@ -101,8 +100,7 @@ class Matcher {
 }
 
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
-function ulid(): string {
-  let time = Date.now();
+function ulid(time = Date.now()): string {
   let head = '';
   for (let i = 0; i < 10; i++) { head = CROCKFORD[time % 32]! + head; time = Math.floor(time / 32); }
   return head + [...randomBytes(16)].map((b) => CROCKFORD[b % 32]).join('');
@@ -111,42 +109,99 @@ const startOf = (pid: number): Promise<string> => new Promise((done) => {
   execFile('ps', ['-o', 'lstart=', '-p', String(pid)], { env: { ...process.env, LC_ALL: 'C' } }, (error, out) => done(error ? '' : out.trim()));
 });
 
+const ACK_MS = 50;
+interface Fired { at: number; start: number }
+const fired = (): Fired => ({ at: Date.now(), start: performance.now() });
+let lastSeq = 0n;
+/** A stop sends a run back at most this many times in a row, from its last tool call: Claude Code's own cap, which pi lacks. */
+const CONTINUE_CAP = 8;
+const ANNOUNCE_MS = 30_000;
+type Reply = { exit: number; stdout: string; stderr: string };
+
+function spool(request: string): void {
+  const folder = join(process.env.HOME ?? homedir(), '.deepbuild', 'spool');
+  const path = join(folder, 'spool.jsonl');
+  try {
+    for (let tries = 0; tries < 3; tries++) {
+      let made = true;
+      try { mkdirSync(folder, { mode: 0o700 }); } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'EEXIST') made = false;
+        else mkdirSync(folder, { recursive: true, mode: 0o700 });
+      }
+      const dir = lstatSync(folder);
+      if (!dir.isDirectory() || dir.mode & 0o022) throw Error('the spool folder is a link, or others can write it');
+      let fd: number;
+      let fresh = true;
+      try { fd = openSync(path, constants.O_WRONLY | constants.O_APPEND | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600); } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+        fresh = false;
+        try { fd = openSync(path, constants.O_WRONLY | constants.O_APPEND | constants.O_NOFOLLOW); } catch (again) {
+          if ((again as NodeJS.ErrnoException).code === 'ENOENT') continue;
+          throw again;
+        }
+      }
+      try {
+        const file = fstatSync(fd);
+        if (!file.isFile() || file.nlink !== 1) throw Error('the spool file is a link to another file');
+        if (writeSync(fd, request) < Buffer.byteLength(request)) continue;
+        const now = lstatSync(path, { throwIfNoEntry: false });
+        if (now?.dev !== file.dev || now.ino !== file.ino) continue;
+      } finally { closeSync(fd); }
+      for (const name of made ? [path, folder, dirname(folder)] : fresh ? [path, folder] : [path]) open(name, 'r', (error, synced) => { if (!error) fsync(synced, () => close(synced, () => undefined)); });
+      return;
+    }
+    throw Error('the spool line was cut or moved in each of three tries');
+  } catch (error) {
+    process.stderr.write(`deepbuild: could not spool ${request.slice(0, 200)}: ${error instanceof Error ? error.message : String(error)}\n`);
+  }
+}
+
 /**
  * One hook request on its own connection: the hub's hello, the request, its acknowledgement, its reply. `undefined`
  * when the hub can't be reached or doesn't answer in time. The hub posts a hook in the step it acknowledges it, so the
  * next one, sent only after this acknowledgement, lands after it.
  */
-const HELD_MS = 70_000;
-/** A stop sends a run back at most this many times in a row, from its last tool call: Claude Code's own cap, which pi lacks. */
-const CONTINUE_CAP = 8;
-const ANNOUNCE_MS = 30_000;
-function sendHook(socket: string, event: string, payload: Obj, acked: () => void, ruling?: Ruling): Promise<{ exit: number; stdout: string; stderr: string } | undefined> {
+function sendHook(socket: string, request: string, id: string, when: Fired, acked: () => void): Promise<Reply | undefined> {
   return new Promise((resolve) => {
-    const sock = net.connect(socket);
+    const due = when.start + ACK_MS;
+    let done = false;
+    let timer: NodeJS.Timeout | undefined;
+    let sock: net.Socket | undefined;
+    let connected = false;
+    let expired = false;
+    const end = (value: Reply | undefined, late: boolean) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      acked();
+      sock?.destroy();
+      if (!value) spool(late && plant !== 'late-unmarked' ? `${request.slice(0, -2)},"late":true}\n` : request);
+      resolve(value);
+    };
+    sock = net.connect(socket);
+    sock.on('connect', () => { connected = true; if (expired) end(undefined, true); });
+    timer = setTimeout(() => { if (connected) end(undefined, true); else expired = true; }, Math.max(0, due - performance.now()));
     let buffer = '';
     let greeted = false;
-    let ack = false;
-    const end = (value?: { exit: number; stdout: string; stderr: string }) => { clearTimeout(timer); if (!ack) acked(); sock.destroy(); resolve(value); };
-    let timer = setTimeout(() => end(), 15_000);
-    sock.on('error', () => end());
-    sock.on('close', () => end());
+    sock.on('error', () => end(undefined, false));
+    sock.on('close', () => end(undefined, false));
     sock.setEncoding('utf8').on('data', (chunk: string) => {
       buffer += chunk;
-      for (let i = buffer.indexOf('\n'); i >= 0; i = buffer.indexOf('\n')) {
+      for (let i = buffer.indexOf('\n'); i >= 0 && !done; i = buffer.indexOf('\n')) {
         const message = parse(buffer.slice(0, i));
         buffer = buffer.slice(i + 1);
         if (!message) continue;
         if (!greeted) {
           greeted = true;
-          const seq = (BigInt(Date.now()) * 1_000_000n).toString();
-          sock.write(line({ agent: 'pi', event, seq, id: ulid(), pid: process.pid, ppid: process.pid, matched: ruling?.matched ?? [], ...(ruling?.notes ? { notes: ruling.notes } : {}), ...(ruling?.stage ? { stage: ruling.stage } : {}), payload }));
+          sock!.write(request);
         } else if ('ack' in message) {
-          ack = true;
+          if (message.ack !== id) return end(undefined, false);
           acked();
-          // Acknowledged, it may be held: the hub keeps a stop for its checks up to a minute.
+          const hold = message.hold_until_ms;
           clearTimeout(timer);
-          timer = setTimeout(() => end(), HELD_MS);
-        } else if ('exit' in message) end(message as { exit: number; stdout: string; stderr: string });
+          const left = typeof hold === 'number' && plant !== 'hold-cut-at-50ms' ? hold - Date.now() : due - performance.now();
+          timer = setTimeout(() => end(undefined, true), Math.max(0, Math.min(left, 2 ** 31 - 1)));
+        } else if ('exit' in message) end(message as Reply, false);
       }
     });
   });
@@ -250,12 +305,16 @@ export default function deepbuild(pi: Pi): void {
   }
 
   /** In the order pi fired them: each goes once the one before is acknowledged, so the handler that sent it doesn't wait. */
-  function hook(event: string, fields: Obj, ruling?: Ruling): Promise<{ exit: number; stdout: string; stderr: string } | undefined> {
+  function hook(event: string, fields: Obj, ruling?: Ruling, when = fired()): Promise<Reply | undefined> {
     const file = ctx?.sessionManager.getSessionFile();
     const payload = { hook_event_name: event, session_id: session, cwd: ctx?.cwd ?? process.cwd(), ...(file ? { transcript_path: file } : {}), ...(version ? { agent_version: version } : {}), ...fields };
+    const at = BigInt(when.at) * 1_000_000n;
+    lastSeq = at > lastSeq ? at : lastSeq + 1n;
+    const id = ulid(when.at);
+    const request = line({ agent: 'pi', event, seq: lastSeq.toString(), id, pid: process.pid, ppid: process.pid, matched: ruling?.matched ?? [], ...(ruling?.notes ? { notes: ruling.notes } : {}), ...(ruling?.stage ? { stage: ruling.stage } : {}), payload });
     let acked!: () => void;
     const ack = new Promise<void>((done) => { acked = done; });
-    const reply = sending.then(() => sendHook(socket, event, payload, acked, ruling));
+    const reply = sending.then(() => sendHook(socket, request, id, when, acked));
     sending = ack;
     return reply;
   }
@@ -453,12 +512,13 @@ export default function deepbuild(pi: Pi): void {
   on('tool_call', async (event) => {
     const name = String(event.toolName);
     // Our own native tools read as `deep mcp`'s do, so nothing downstream counts them as change.
+    const when = fired();
     const call = { tool_name: own.has(name) ? `mcp__deep__${name}` : name, tool_input: (event.input ?? {}) as Obj };
     const ruling = await read({ ...call, cwd: ctx?.cwd ?? process.cwd() });
     const reply = await hook('tool_call', {
       ...call, tool_use_id: String(event.toolCallId),
       ...(event.parentToolCallId ? { parent_tool_use_id: String(event.parentToolCallId) } : {}),
-    }, typeof ruling === 'string' ? undefined : ruling);
+    }, typeof ruling === 'string' ? undefined : ruling, when);
     // A call deep-hook didn't read never passes for one that matched nothing, whatever the hub says. pi fires no result
     // for a call it blocks here, so this one's end is said, or the hub keeps it as running.
     if (ruling === 'unread' || ruling === 'unparsed') {
@@ -468,7 +528,7 @@ export default function deepbuild(pi: Pi): void {
     }
     if (reply) return reply.exit !== 0 ? { block: true, reason: reply.stderr.trim() || 'DeepBuild blocked this call.' } : undefined;
     // The hub didn't answer: a fail-closed entry still holds the call, as deep-hook holds Claude Code's.
-    return ruling !== 'no setup' && ruling.denials.length ? { block: true, reason: ruling.denials.join('\n') } : undefined;
+    return ruling !== 'no setup' && ruling.denials.length && plant !== 'away-lets-guarded' ? { block: true, reason: ruling.denials.join('\n') } : undefined;
   });
   on('tool_execution_start', (event) => { sentBack = 0; if (!event.parentToolCallId) { toolCalls++; place(true); } });
   on('tool_execution_end', (event) => { if (!event.parentToolCallId) toolCalls = Math.max(0, toolCalls - 1); });
