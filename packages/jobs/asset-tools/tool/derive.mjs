@@ -1,7 +1,3 @@
-// table-derive@1.0.0's engine (#3569; canvas primitives: Asset job, `table.derive`): tables in by their bytes, a closed
-// list of steps run in order, each reading the table the step before it wrote, and one table out with its lineage and
-// receipt. Rows are processed in the order of their key and integer sums are exact in i64, so the same inputs give the
-// same bytes on every machine. A missing cell stays missing: it is never read as 0.
 import { createHash } from 'node:crypto';
 import { evaluate, parse, Refused } from './expr.mjs';
 
@@ -11,7 +7,6 @@ const I64_MIN = -(2n ** 63n);
 const I64_MAX = 2n ** 63n - 1n;
 const sha256 = (b) => createHash('sha256').update(b).digest('hex');
 
-/** A CSV's rows of cell texts: a row ends at LF, a CR before it outside the cell, a quoted cell's `""` its quote. */
 function csvRows(text) {
   const rows = [];
   let row = [];
@@ -54,7 +49,6 @@ function typeOf(texts) {
 const valueOf = (dtype, t) => (t === '' ? undefined : dtype === 'i64' ? BigInt(t) : dtype === 'f64' ? Number(t) : t);
 const num = (v) => (typeof v === 'bigint' ? Number(v) : v);
 
-/** Two cells of one column in key order: integers and numbers by value, text by its UTF-8 bytes, missing last. */
 function compareCells(a, b) {
   if (a === undefined || b === undefined) return a === b ? 0 : a === undefined ? 1 : -1;
   if (typeof a === 'string' || typeof b === 'string') return Buffer.compare(Buffer.from(String(a)), Buffer.from(String(b)));
@@ -62,7 +56,6 @@ function compareCells(a, b) {
 }
 const text = (v) => (v === undefined ? '' : typeof v === 'number' ? (Object.is(v, -0) ? '0' : String(v)) : String(v));
 
-/** One input as a table: its columns' types, units and lineage, its rows in key order, each row's own key. */
 function readInput(name, input) {
   let body;
   try { body = new TextDecoder('utf-8', { fatal: true }).decode(input.bytes); } catch { throw new Refused(`the input ${name} isn't UTF-8 text`); }
@@ -153,7 +146,6 @@ function join(t, step, inputs, receipt) {
 }
 
 const AGG = /^\s*(sum|min|max|mean)\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:,\s*weight\s*:\s*([A-Za-z_][A-Za-z0-9_]*)\s*)?\)\s*$|^\s*(count)\s*(?:\(\s*\))?\s*$/;
-/** An aggregate as a string (`sum(workers)`, `count`, `mean(rate, weight: workers)`) or an object (`{sum: workers}`, `{mean: rate, weight: workers}`, `{count: true}`). */
 function aggOf(name, spec) {
   if (typeof spec === 'string') {
     const m = AGG.exec(spec);
@@ -214,7 +206,11 @@ function group(t, step, receipt) {
             if (s < I64_MIN || s > I64_MAX) throw new Refused(`the sum of ${a.column} for ${name} passes i64`);
           }
           cells[a.name] = s;
-        } else cells[a.name] = values.reduce((s, [x]) => s + x, 0);
+        } else {
+          const s = values.reduce((acc, [x]) => acc + x, 0);
+          if (Number.isFinite(s)) cells[a.name] = s;
+          else { cells[a.name] = undefined; receipt.nonfinite[a.name] = (receipt.nonfinite[a.name] ?? 0) + 1; }
+        }
       } else if (a.op === 'min' || a.op === 'max') {
         cells[a.name] = values.reduce((m, [x]) => (m === undefined || (a.op === 'min' ? x < m : x > m) ? x : m), undefined);
       } else {
@@ -306,14 +302,8 @@ function select(t, step) {
 
 const csvCell = (s) => (/[",\r\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s);
 
-/**
- * The job: `params` {inputs, steps, key}, and each input by name as {bytes, key, units}. Answers the table's CSV bytes,
- * its lineage, its receipt and its record (the probe and each cell, as the table probe writes one) as JSON bytes, or
- * throws Refused naming why.
- */
 export function run(params, given) {
   const names = Object.keys(given).sort();
-  // Each input is the table its params name by hash, never one read by its name alone.
   const named = params.inputs ?? {};
   for (const n of new Set([...names, ...Object.keys(named)])) {
     if (!given[n] || sha256(given[n].bytes) !== named[n]) throw new Refused(`the input ${n} isn't the table ${named[n] ?? 'its params name'} by its bytes' hash`);
@@ -348,7 +338,6 @@ export function run(params, given) {
     keys.add(k);
   }
   receipt.rows_out = t.rows.length;
-  // The CSV, and each cell's byte range and raw bytes as the table probe keeps them: a quoted cell's inside its quotes.
   const parts = [];
   let at = 0;
   const cells = Object.fromEntries(t.columns.map((c) => [c, []]));

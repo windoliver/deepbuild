@@ -1,23 +1,8 @@
-// #3569.d0a835ea: "A label that shows metro A's 250 passes honest numbers in a document that also binds a reading, and
-// its trace lists the two input files with the four county keys. The same job with the county table written by an
-// agent yields story numbers, and the label fails, naming the item"
-//
-// AC1's job, its derived table named in a chart's `assets` by its hash, a text mark set `labels` showing its `workers`
-// column, one row per metro keyed by `metro`, and a reading bound into a text of its own (#406's form). The check is
-// `deep-canvas-render check` over the hub's evidence store (#397, #406), whose `numbers` lists what each shown number
-// traces to. Fetched: both input tables fetched by URL; the check passes, and the entry for labels#A, showing 250,
-// holds in its trace both input files' SHA-256 and a list of exactly the county keys 1, 2, 3 and 4; labels#B's holds
-// 5 and 6 (README: Readings, the trace). Agent: a second hub, the county table imported from an agent's session (source
-// `agent`), the metro table fetched; the same job and document fail with `number_unsourced` naming labels#A (or
-// labels), the item that shows the number.
-// Wrong programs it fails on: the merge base; a derived table that traces to itself alone, to one input or to every
-// county; a job whose output's source is the job's word; one that gives a number the source of its best input.
 import { describe, expect, it } from 'vitest';
 import { AC, COUNTY_UNITS, METRO, TIMEOUT, byMetro, derive, derivedOf, holds, honest, importTables, keyLists, labelsDoc, openHub, proof, show, shownErrors, type Hub } from './helpers.ts';
 
 const ID = AC[8];
 
-/** AC1's job in a hub on the two tables, its derived table checked in the chart with a reading bound. */
 async function charted(hub: Hub | string, county: 'url' | 'agent'): Promise<{ hub: Hub; inputs: Record<string, string>; table: string; checked: Awaited<ReturnType<typeof honest>> } | string> {
   if (typeof hub === 'string') return hub;
   const tables = await importTables(hub, [{ name: 'counties.csv', key: 'county', units: COUNTY_UNITS, by: county }, { name: 'metros.csv', key: METRO.key }]);

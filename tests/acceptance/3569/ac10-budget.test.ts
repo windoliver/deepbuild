@@ -1,18 +1,3 @@
-// #3569.1d1485e8: "Budget, on the reference Mac in the local preflight: 3,200 rows of 40 columns joined to a 2,000-row
-// table and grouped into 1,000 groups finish in under 2 s (estimate; the first measurement may move it once)"
-//
-// Made here, truth by construction: `big`, 3,200 rows of 40 columns (id, link and c01 to c38, integers in workers),
-// row i linking to ((i − 1) mod 2,000) + 1; `links`, 2,000 rows (link, grp), link l in group ((l − 1) mod 1,000) + 1.
-// The job joins links onto big by link (inner, many to one) and groups by grp, summing each of the 38 columns and
-// counting rows: 1,000 groups. Six copies of big differ in their numbers (an offset each), so each run is a miss with a
-// key of its own: one warm-up, then five timed runs. What is timed is the deep_job call, from the request to the
-// reply that says done: the tool's run and the kind's output check, data.derived, which the job finishes with.
-// The judge is the design's (#397's and #855's): PASS when all five are within 2,000 ms, FAIL when all are over it by
-// more than the margin (the larger of 5% and their spread), else INCONCLUSIVE. Off a reference Mac (Mac15,7 or
-// Mac15,12), in Low Power Mode, under a thermal warning or a 1-minute load above half the cores, the five readings are
-// taken and printed and the test reads INCONCLUSIVE (a skip), never PASS; mains power never gates.
-// Wrong programs it fails on: the merge base; a job that doesn't finish, or writes other than 1,000 groups; on a
-// reference Mac, a job that takes 2 s or more every time.
 import { describe, expect, it } from 'vitest';
 import { AC, TIMEOUT, brief, derive, derivedOf, environmentProblem, importTables, int, judge, keysOf, openHub, proof, show, type DeriveParams, type TableSpec } from './helpers.ts';
 

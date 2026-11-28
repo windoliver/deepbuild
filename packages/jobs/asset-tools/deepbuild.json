@@ -1,7 +1,7 @@
 {
   "id": "deepbuild/asset-tools",
   "version": "1.0.0",
-  "digest": "d1:a1fdb84f1452a4a220f1ac078c7b008edcd6e017f00d2e30218eb71fc0b76575",
+  "digest": "d1:62ca71ddd3fbee0a3fe5b63969b6ab797263ff19d264c38047040768246821c4",
   "checks": [
     "data.derived"
   ],

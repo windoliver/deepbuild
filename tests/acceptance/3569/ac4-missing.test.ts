@@ -1,16 +1,3 @@
-// #3569.becbb065: "County 2's cell is empty. Metro A's sum is missing. With `skip_missing: true` it reads 170 and the
-// receipt counts 1 skipped cell for that column. A planted tool that reads the empty cell as 0 and reports nothing
-// fails `data.derived`, naming metro A"
-//
-// fixtures/counties-gap.csv is counties.csv with county 2's manufacturing cell empty; AC1's job runs on it with the
-// group's skip_missing left out (false) and with it true. A missing cell is an empty cell in the derived CSV (README:
-// the derived table). The planted tool `reads-missing-as-zero@1.0.0` runs the right tool and, where it wrote metro A's
-// workers missing, writes 170 (the sum with the empty cell read as 0) and leaves the receipt as it is, so it reports
-// no skipped cell. It is installed beside `runs-as-is@1.0.0`, the same plug-in handing on the right bytes, which must
-// join and pass `data.derived` on the same job.
-// Wrong programs it fails on: the merge base; a sum that reads the empty cell as 0 (170 where it must be missing); a
-// skip that skips nothing or counts no cell; a `data.derived` that recounts with the same reading, or names B or no
-// metro.
 import { describe, expect, it } from 'vitest';
 import {
   AC, CHECK, COUNTY_UNITS, METRO, TIMEOUT, brief, byMetro, cell, derive, derivedOf, failedCheck, importTables, installPlanted, int, names, openHub, proof, show, spoil, type Plan,

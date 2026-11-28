@@ -1,4 +1,4 @@
-The blind suite tests/acceptance/3569 on the merge with main (run outside the test throttle, whose one test slot another worktree's run held from 10:20Z to past this run; no timed grant was held), 2026-11-27T12:53:54Z to 2026-11-27T12:59:26Z:
+The blind suite tests/acceptance/3569 on the merge with main (run through scripts/throttle.mjs test), 2026-11-27T22:02:18Z to 2026-11-27T22:05:02Z:
 
 Test Files  10 passed (10)
 Tests  10 passed | 1 skipped (11)

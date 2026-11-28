@@ -106,12 +106,16 @@
       "kind": "table.derive",
       "tool": "table-derive@1.0.0",
       "key": "a54327295a36545954b35dc61a78c3751ddbad03d930b149152dc916f13228f3",
-      "build": "d1:9d26996a71a7e43fbe1a4bd8a2700e8d9cc724e96a6ffa9d5420fb08e75718b7",
+      "build": "d1:bb1110963db3ecba683429e679661a420620f02ef81d1fc2c75ebaf6f6ee2e04",
       "cache": "miss",
       "inputs": {
         "county": "8b1181cb1ba1e7d6614d576739335e0c675688334464a043cc73c8c7b202e3f8",
         "metro": "65e3d5d869f7c1f7c69673793c66a4fcc12849465d99b440052dbee932e5551d",
         "#tables": "5d6852e2c328fb55beadd37e09520d5c3c5920e6176b2b978b1434abba061a47"
+      },
+      "used": {
+        "memory_peak_mb": 3,
+        "cpu_s": 0.038
       }
     }
   }

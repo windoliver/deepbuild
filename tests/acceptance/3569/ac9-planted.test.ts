@@ -1,18 +1,3 @@
-// #3569.070ae844: "A planted tool that sums in f32, and one that counts a county in two groups, each fail
-// `data.derived`, naming the output cell"
-//
-// fixtures/counties-pay.csv adds a payroll column in dollars, with cents, to the six counties; AC1's job runs with
-// `workers: sum(manufacturing)`, `payroll: sum(payroll)` and `counties: count`. Each planted tool runs the right tool
-// and rewrites cells of its table (README: The planted programs), computed here from the fixture:
-// - `sums-in-f32@1.0.0`: each metro's payroll summed in f32, the county rows in key order (Math.fround after each add),
-//   which is off the f64 sum by far more than 1e-12 relative;
-// - `counts-row-twice@1.0.0`: county 3 counted in metro B as well as in A, so B's workers, counties and payroll each
-//   gain county 3's (347 workers, 3 counties).
-// The right tool, the planted plug-in handing on the right bytes (`runs-as-is@1.0.0`) and both planted tools run the
-// same job in one hub. The two planted runs must fail `data.derived` with words naming a cell they changed: its metro
-// and its column.
-// Wrong programs it fails on: the merge base; a data.derived that reads the tool's own numbers back, compares f64
-// loosely (1e-6), checks only integers, or holds no sum to its inputs' total; one that fails without naming the cell.
 import { describe, expect, it } from 'vitest';
 import {
   AC, CHECK, METRO, TIMEOUT, byMetro, derive, derivedOf, failedCheck, fixture, importTables, installPlanted, names, openHub, parseCsv, proof, show, spoil, type Edit, type Plan,
@@ -22,7 +7,6 @@ const ID = AC[9];
 const AGG = { workers: 'sum(manufacturing)', payroll: 'sum(payroll)', counties: 'count' };
 const METROS: Record<string, string[]> = { A: ['1', '2', '3', '4'], B: ['5', '6'] };
 
-// The fixture's numbers, by county, read from its bytes.
 const rows = parseCsv(fixture('counties-pay.csv').toString('utf8')).slice(1);
 const pay = Object.fromEntries(rows.map((r) => [r[0]!, Number(r[2])]));
 const workers = Object.fromEntries(rows.map((r) => [r[0]!, Number(r[1])]));
@@ -41,7 +25,7 @@ const TWICE: Plan = {
 
 describe(`${ID} data.derived recounts every cell on its own and fails a tool that sums in f32 or counts a row twice, naming the cell`, () => {
   it(`${ID} a planted tool that sums in f32 and one that counts a county in two groups each fail data.derived, naming the output cell`, async () => {
-    // The fixture really separates f32 from f64 past the check's 1e-12, and the double count really changes B.
+
     for (const [m, keys] of Object.entries(METROS)) expect(Math.abs(f32(keys) - f64(keys)) / f64(keys), `fixture: metro ${m}'s payroll in f32 is off its f64 sum by more than 1e-9 relative`).toBeGreaterThan(1e-9);
     expect(workers['3'], 'fixture: county 3 holds workers').toBe(40);
 

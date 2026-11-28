@@ -1,0 +1,1 @@
+{ "alone": true, "why": "timing: ac7-budget.test.ts reads timing.check_ms against 5 ms by the perf lane's rule and, on a reference Mac at rest, builds deep-show in release with cargo; the other files run deep-show from DEEP_BIN_DIR or this checkout's target/debug", "timed": ["ac7-budget.test.ts"] }

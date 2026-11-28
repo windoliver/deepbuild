@@ -1,7 +1,3 @@
-//! What the Metal device holds, listed by the device itself: every texture and buffer it makes
-//! is kept by weak reference, so a reading lists what is alive with its label, its shape and its
-//! `allocatedSize`. Adapted from #2189's tracer (docs/evidence/2189/alloctrace.rs), which listed
-//! label and size; this one also reads each texture's own descriptor back.
 #![allow(unsafe_code)]
 
 use std::ffi::{c_char, c_void, CStr};
@@ -30,12 +26,9 @@ unsafe extern "C" {
 struct Rec {
     weak: Box<Id>,
     kind: &'static str,
-    /// Its place among everything the device made, and the frame being drawn when it was made
-    /// (−1 before the first).
     seq: u64,
     frame: i64,
 }
-// SAFETY: the weak slot is only read through the runtime's own weak-reference calls.
 unsafe impl Send for Rec {}
 
 static RECS: Mutex<Vec<Rec>> = Mutex::new(Vec::new());
@@ -45,7 +38,6 @@ static TEX: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static TEX_IOS: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static BUF: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static BUF_BYTES: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
-/// The length of the buffers [`keep`] asked for, 0 for none, and those made since, retained.
 static KEEP: AtomicUsize = AtomicUsize::new(0);
 static KEPT: Mutex<Vec<usize>> = Mutex::new(Vec::new());
 
@@ -87,7 +79,6 @@ extern "C" fn buf(this: Id, s: Sel, len: usize, opts: usize) -> Id {
         unsafe { std::mem::transmute(BUF.load(Ordering::SeqCst)) };
     let o = f(this, s, len, opts);
     record(o, "buffer");
-    // A buffer's length is what was asked, or that rounded up to the device's alignment.
     let want = KEEP.load(Ordering::SeqCst);
     if !o.is_null() && want != 0 && len >= want && len < want + 256 {
         unsafe { objc_retain(o) };
@@ -103,9 +94,6 @@ extern "C" fn buf_bytes(this: Id, s: Sel, bytes: *const c_void, len: usize, opts
     o
 }
 
-/// Swaps the four calls a Metal device makes a texture or a buffer with, on the class of `raw`
-/// (the device), for ones that also keep a weak reference to what they return. The names of the
-/// calls it could not find, which then go unlisted.
 pub fn install(raw: *const c_void) -> Vec<&'static str> {
     let mut missing = Vec::new();
     unsafe {
@@ -135,14 +123,10 @@ pub fn install(raw: *const c_void) -> Vec<&'static str> {
     missing
 }
 
-/// From now on every buffer of `len` bytes the device makes stays alive until [`kept`] takes it:
-/// a read-back's buffer, which the renderer lets go of as soon as it has read it.
 pub fn keep(len: usize) {
     KEEP.store(len, Ordering::SeqCst);
 }
 
-/// The bytes the device left in each buffer kept since the last call, in the order they were
-/// made; the buffers are let go. A buffer the CPU can't read gives no bytes.
 pub fn kept() -> Vec<Vec<u8>> {
     let objects = std::mem::take(&mut *KEPT.lock().unwrap_or_else(|e| e.into_inner()));
     let read = |o: usize| unsafe {
@@ -162,7 +146,6 @@ pub fn kept() -> Vec<Vec<u8>> {
     objects.into_iter().map(read).collect()
 }
 
-/// The frame being drawn, which everything made from now on is listed under.
 pub fn frame(k: i64) {
     FRAME.store(k, Ordering::SeqCst);
 }
@@ -188,10 +171,6 @@ fn number(obj: Id, name: &CStr) -> u64 {
     }
 }
 
-/// Everything the device made that is alive now, in the order it was made: a texture with its
-/// width, height, depth, array length, mip levels, sample count and Metal's own numbers for its
-/// pixel format, usage, storage mode and type; a buffer with its length; each with the bytes the
-/// device reports for it (`allocatedSize`).
 pub fn live() -> Vec<Value> {
     let mut out = Vec::new();
     let mut seen = std::collections::HashSet::new();

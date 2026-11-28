@@ -1,14 +1,5 @@
-// The record a job's table output gets beside its bytes in the evidence store (#3570; canvas primitives: Asset:
-// tables), `tables/<sha256>.json`, as `deep-show run` writes one for a table it fetched (#397): its probe (rows, typed
-// columns, key), every cell's byte range in the file and its raw bytes, and its source, which the hub writes, never the
-// tool: `job {kind, tool, input}`, each input with the URL and fetch time the hub recorded when it fetched the file, or
-// `origin: agent` where the hub fetched none of it. A document's `{from: asset, column}` reads the record, so a label's
-// trace runs through the job to the URL. The cells split by the probe's CSV rule (crates/deep-catalog/src/cells.rs):
-// a row ends at LF, a CR before it outside the cell, a quoted cell's range inside its quotes.
-
 type Cell = { start: number; end: number };
 
-/** The rows of a CSV, each a list of its cells' byte ranges; a blank line is no row. */
 function rows(data: Uint8Array): Cell[][] {
   const out: Cell[][] = [];
   let row: Cell[] = [];
@@ -38,7 +29,6 @@ function rows(data: Uint8Array): Cell[][] {
   return out;
 }
 
-/** The narrowest type every cell a column holds reads as, `i64`, `f64` or `str`; a missing (empty) cell reads as any. */
 function dtype(texts: string[]): 'i64' | 'f64' | 'str' {
   const held = texts.filter((t) => t !== '');
   if (held.every((t) => /^[+-]?\d+$/.test(t))) return 'i64';
@@ -46,7 +36,6 @@ function dtype(texts: string[]): 'i64' | 'f64' | 'str' {
   return 'str';
 }
 
-/** The record of a table's bytes: its probe, its cells and the source the hub gives it; undefined for bytes with no header. */
 export function tableRecord(sha256: string, bytes: Uint8Array, key: unknown, source: Record<string, unknown>): Record<string, unknown> | undefined {
   const text = (c: Cell): string => Buffer.from(bytes.subarray(c.start, c.end)).toString('utf8');
   const [header, ...body] = rows(bytes);

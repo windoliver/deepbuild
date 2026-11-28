@@ -1,7 +1,3 @@
-// table-derive@1.0.0, the tool of the job kind table.derive (#3569). The hub runs it with Node as a process of its own,
-// once per cache miss: it reads {params, inputs} on stdin, each input table's bytes in base64 under its name and
-// `#tables`, the hub's reading of each table's record ({name → {key, units}}), and writes {outputs: {table, lineage,
-// receipt, record}} (each base64) on stdout, or {refused: why}.
 import { run, Refused } from './derive.mjs';
 
 const chunks = [];

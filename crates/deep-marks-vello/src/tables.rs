@@ -128,20 +128,29 @@ pub fn tables(doc: &mut Map<String, Value>, evidence: Option<&Path>) -> Result<(
     Ok(())
 }
 
-/// How deep a derived table's inputs are followed to the tables they came from.
 const DEPTH: usize = 16;
 
-/// What a table derived by a `table.derive` job (#3569; Asset: tables) traces to: its lineage
-/// sidecar, read from the evidence store by the hash its record names, and its weakest input's
-/// source, followed through every derived input to the tables they came from. A table that
-/// isn't derived has neither.
 struct Derived {
     lineage: Option<Value>,
     weakest: &'static str,
 }
 
+fn source_is_agent(source: &Value) -> bool {
+    if source == "agent" {
+        return true;
+    }
+    source
+        .pointer("/job/input")
+        .and_then(Value::as_object)
+        .is_some_and(|inputs| {
+            inputs
+                .values()
+                .flat_map(|files| files.as_array().into_iter().flatten())
+                .any(|f| f["origin"] == "agent")
+        })
+}
+
 impl Derived {
-    /// None when the record names a lineage the store doesn't hold, or one that isn't JSON.
     fn of(record: &Value, evidence: Option<&Path>) -> Option<Derived> {
         Self::at(record, evidence, 0)
     }
@@ -151,7 +160,7 @@ impl Derived {
             lineage: None,
             weakest: "agent",
         };
-        if record["source"] == "agent" {
+        if source_is_agent(&record["source"]) {
             return Some(agent());
         }
         if record["source"]["job"]["kind"] != "table.derive" {
@@ -166,28 +175,24 @@ impl Derived {
             .and_then(|e| std::fs::read(e.join(&hash[..2]).join(&hash[2..])).ok())
             .filter(|b| sha256_hex(b) == hash)?;
         let lineage: Value = serde_json::from_slice(&bytes).ok()?;
-        // An input the store holds no record of, or one past the depth, might have been an
-        // agent's, so it counts as one.
-        let weakest = Self::inputs(&lineage)
-            .any(|(_, sha)| {
-                depth >= DEPTH
-                    || evidence
-                        .and_then(|e| {
-                            std::fs::read(e.join("tables").join(format!("{sha}.json"))).ok()
-                        })
-                        .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
-                        .and_then(|r| Self::at(&r, evidence, depth + 1))
-                        .is_none_or(|d| d.weakest == "agent")
-            })
-            .then_some("agent")
-            .unwrap_or("source");
+        let weakest = if Self::inputs(&lineage).any(|(_, sha)| {
+            depth >= DEPTH
+                || evidence
+                    .and_then(|e| std::fs::read(e.join("tables").join(format!("{sha}.json"))).ok())
+                    .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
+                    .and_then(|r| Self::at(&r, evidence, depth + 1))
+                    .is_none_or(|d| d.weakest == "agent")
+        }) {
+            "agent"
+        } else {
+            "source"
+        };
         Some(Derived {
             lineage: Some(lineage),
             weakest,
         })
     }
 
-    /// Each input of the lineage by name, with the hash of its file.
     fn inputs(lineage: &Value) -> impl Iterator<Item = (&str, &str)> {
         lineage["inputs"]
             .as_object()
@@ -196,8 +201,6 @@ impl Derived {
             .filter_map(|(name, i)| Some((name.as_str(), i["sha256"].as_str()?)))
     }
 
-    /// The input rows that fed the output row `key`: for each input, its file's hash and the keys
-    /// of its rows, as the lineage lists them.
     fn from(&self, key: &str) -> Value {
         let Some(lineage) = &self.lineage else {
             return Value::Null;
@@ -207,5 +210,90 @@ impl Derived {
             .map(|(name, sha)| json!({"input": name, "table": sha, "keys": rows[name].clone()}))
             .collect();
         Value::Array(list)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn put_blob(root: &Path, bytes: &[u8]) -> String {
+        let sha = sha256_hex(bytes);
+        let dir = root.join(&sha[..2]);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(&sha[2..]), bytes).unwrap();
+        sha
+    }
+
+    fn put_record(root: &Path, sha: &str, record: Value) {
+        let dir = root.join("tables");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(format!("{sha}.json")), record.to_string()).unwrap();
+    }
+
+    #[test]
+    fn derived_table_inherits_agent_origin_through_import_and_nested_derive() {
+        let root =
+            std::env::temp_dir().join(format!("deep-marks-vello-3569-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let imported_agent_csv = b"k,v\n1,10\n";
+        let imported_agent_sha = put_blob(&root, imported_agent_csv);
+        put_record(
+            &root,
+            &imported_agent_sha,
+            json!({
+                "sha256": imported_agent_sha,
+                "kind": "table",
+                "source": { "job": { "kind": "import", "tool": "table-import@1.0.0", "input": { "file": [{ "sha256": "0".repeat(64), "origin": "agent" }] } } }
+            }),
+        );
+        let imported_fetched_csv = b"k,v\n1,20\n";
+        let imported_fetched_sha = put_blob(&root, imported_fetched_csv);
+        put_record(
+            &root,
+            &imported_fetched_sha,
+            json!({
+                "sha256": imported_fetched_sha,
+                "kind": "table",
+                "source": { "job": { "kind": "import", "tool": "table-import@1.0.0", "input": { "file": [{ "sha256": "1".repeat(64), "url": "https://example.test/a.csv", "fetched": 1 }] } } }
+            }),
+        );
+        let lineage_agent = json!({
+            "format": 1,
+            "key": "k",
+            "inputs": { "a": { "sha256": imported_agent_sha, "key": "k" }, "b": { "sha256": imported_fetched_sha, "key": "k" } },
+            "rows": { "1": { "a": ["1"], "b": ["1"] } }
+        });
+        let lineage_agent_sha = put_blob(&root, lineage_agent.to_string().as_bytes());
+        let derived_agent_record = json!({
+            "source": { "job": { "kind": "table.derive", "tool": "table-derive@1.0.0", "input": { "a": imported_agent_sha, "b": imported_fetched_sha } } },
+            "lineage": lineage_agent_sha
+        });
+        assert_eq!(
+            Derived::of(&derived_agent_record, Some(&root))
+                .unwrap()
+                .weakest,
+            "agent"
+        );
+
+        let lineage_fetched = json!({
+            "format": 1,
+            "key": "k",
+            "inputs": { "b": { "sha256": imported_fetched_sha, "key": "k" } },
+            "rows": { "1": { "b": ["1"] } }
+        });
+        let lineage_fetched_sha = put_blob(&root, lineage_fetched.to_string().as_bytes());
+        let derived_fetched_record = json!({
+            "source": { "job": { "kind": "table.derive", "tool": "table-derive@1.0.0", "input": { "b": imported_fetched_sha } } },
+            "lineage": lineage_fetched_sha
+        });
+        assert_eq!(
+            Derived::of(&derived_fetched_record, Some(&root))
+                .unwrap()
+                .weakest,
+            "source"
+        );
+
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

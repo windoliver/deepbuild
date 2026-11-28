@@ -676,6 +676,16 @@ impl World {
         self.planted
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn compiles_reply() -> Value {
+        json!({"ok": true, "compiles": deep_sandbox_wasmtime::compiles()})
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) fn compiles_reply() -> Value {
+        json!({"ok": false, "code": "bad_input"})
+    }
+
     /// #277's planted catch-up: every item's clock moves on to the first step at or after `t`,
     /// running none of the steps before it.
     pub fn skip(&mut self, t: i64) {

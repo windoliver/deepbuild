@@ -8,16 +8,10 @@ import { registry, sha256Hex, type JsonValue, type Schema } from '@deepbuild/con
 import { packageDigest } from './digest.js';
 
 type Texts = Record<string, string>;
-/** A fixture's input: text, kept in UTF-8, or a file's bytes in base64 (#3570: a zip, a workbook, a Latin-1 file). */
 type FixtureFile = string | { base64: string };
 export interface JobFixture { name: string; params: Record<string, JsonValue>; inputs: Record<string, FixtureFile>; expect: Texts }
 export interface JobKind {
   /** Each input by name; one declared `many` (#154) takes zero or more files, in order, all of them in the key. */
-  /**
-   * `tables` (#3569) names the params field that maps input names to table assets by hash: the hub reads each table's
-   * bytes and its record's key and units from the evidence store, hands them to the tool under those names and
-   * `#tables`, and keeps the record of the table the kind writes as its `table` output beside it.
-   */
   schema: { params: Schema; inputs: Record<string, { media?: string; many?: boolean }>; tables?: string };
   outputs: Record<string, { media?: string }>;
   key: string[];
@@ -36,7 +30,6 @@ export interface Weight { name: string; sha256: string }
 export interface JobTool {
   tool: string; params: Schema; run: { dir: string; entry: string } | { url: string } | { core: true }; qualification: unknown; cost?: { usd: number };
   weights?: Weight[]; needs?: string[];
-  /** The kind's outputs this tool writes, where its format writes only some of them (#3570: a table import writes a table and its receipt); all of them when left out. */
   outputs?: string[];
 }
 /**
