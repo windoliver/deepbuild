@@ -1,0 +1,7 @@
+   × counts a soak's step limit on the Mac17,10 (M5 Max, 64 GB) 17ms
+   × counts a soak's step limit on the Mac18,1 (M6, 32 GB) 4ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  packages/checks/test/soak-reference.test.ts > counts a soak's step limit on the Mac17,10 (M5 Max, 64 GB)
+ FAIL  packages/checks/test/soak-reference.test.ts > counts a soak's step limit on the Mac18,1 (M6, 32 GB)
+AssertionError: expected false to be true // Object.is equality
+      Tests  2 failed | 3 passed (5)
