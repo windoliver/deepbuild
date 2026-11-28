@@ -13,5 +13,6 @@
     "hub-not-answering.png": "9adb2fc050c046012424b4ed75fb27ba47e28aa94b395899bebde9daa07b7ece",
     "not-notified-row.png": "5a176df131a573e11bfc9db31382745de0036ca81d7a53e7e1dfa4b50d854667",
     "notification.png": "778874335f85b51b2c4aa305a9b34e11af6307f40941a60ae9eaecdb6374a9eb"
-  }
+  },
+  "maker": {"agent":{"model":null,"session":null}}
 }

@@ -20,5 +20,6 @@
     "blend-dissolve.png": "494499ed048c13a2f53c9be9adc48c917c1a7396ff5ab463720c276ea5759fb2",
     "dancing-dissolve.apng": "d207ca3f76417d14718d627052ef29a2d978668688b3a62ee4efc91d814b1483"
   },
-  "note": "Read at 3x and frame by frame. The blur sits between the items drawn before and after it, the after bar stays sharp, its steps are the fixture's 25-tap grid. The backdrop stops at its coverage, its later bar sharp. The eleven modes read as distinct and as their names say. The dissolve re-rolls each frame and holds its share."
+  "note": "Read at 3x and frame by frame. The blur sits between the items drawn before and after it, the after bar stays sharp, its steps are the fixture's 25-tap grid. The backdrop stops at its coverage, its later bar sharp. The eleven modes read as distinct and as their names say. The dissolve re-rolls each frame and holds its share.",
+  "maker": {"agent":{"model":"claude-opus-5-5","session":null}}
 }

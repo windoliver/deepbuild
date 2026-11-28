@@ -13,5 +13,6 @@
     "sunlit-metal.png": "bdde86802a4e7d9eb8ef8421c2e845587924c810a189da47b159748113d37b99",
     "castle-orbit.apng": "1190faf9e6ba5c8516da0f8cf7730e87008b865579b66bf9f2e328f668c1b2a7"
   },
-  "note": "The castle reads at every quarter-turn: towers with lit windows, cascaded shadows, a second island, puffs and height fog below; furnace spheres vanish; sun-lit lobes widen with roughness. Weak points: the dusk sky is gold-to-peach with no blue above the horizon, shaded faces go muddy brown, and thin bright slivers show at some tower edges (light leaking at shadow seams). Re-judged Nov 5 on the castle with #428's 64 lamps: unchanged in look, since its painted recipe parts take only the sun and sky, so the lamps light none of them; the sunlit metal highlights are a touch wider at roughness 0 (#428's pixel-footprint floor)."
+  "note": "The castle reads at every quarter-turn: towers with lit windows, cascaded shadows, a second island, puffs and height fog below; furnace spheres vanish; sun-lit lobes widen with roughness. Weak points: the dusk sky is gold-to-peach with no blue above the horizon, shaded faces go muddy brown, and thin bright slivers show at some tower edges (light leaking at shadow seams). Re-judged Nov 5 on the castle with #428's 64 lamps: unchanged in look, since its painted recipe parts take only the sun and sky, so the lamps light none of them; the sunlit metal highlights are a touch wider at roughness 0 (#428's pixel-footprint floor).",
+  "maker": {"agent":{"model":"claude-opus-5-5","session":null}}
 }

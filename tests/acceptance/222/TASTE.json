@@ -12,5 +12,6 @@
     "explainer-cue-40.png": "d950867c34abd70730e0d4fb9ebf18d524e0b5b7337ad20ab228266cc366a41c",
     "explainer.apng": "38adc3bc4b2288aea99c4b7cfacd979bed3caa69953bdd6ade0c8b2514612e7c"
   },
-  "note": "Looked at the five stills and frames inside the recording. Cue 1: the triangle drawn whole by create. Cue 10: the three squares grown and spun in, their labels and the title in, a indicated and back. Cues 20 and 30: the formula in, the counter at 25 after count_to; flash's rays, broadcast's outlines, the swap and the morph read clearly mid-cue in the recording. Cue 40: everything faded out but the formula, indicated and back. The explainer's texts fade rather than write: frames don't yet draw a text's channel-driven reveal (filed as a follow-up); the write verbs' data passes their fixtures."
+  "note": "Looked at the five stills and frames inside the recording. Cue 1: the triangle drawn whole by create. Cue 10: the three squares grown and spun in, their labels and the title in, a indicated and back. Cues 20 and 30: the formula in, the counter at 25 after count_to; flash's rays, broadcast's outlines, the swap and the morph read clearly mid-cue in the recording. Cue 40: everything faded out but the formula, indicated and back. The explainer's texts fade rather than write: frames don't yet draw a text's channel-driven reveal (filed as a follow-up); the write verbs' data passes their fixtures.",
+  "maker": {"agent":{"model":null,"session":null}}
 }

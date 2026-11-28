@@ -1,0 +1,91 @@
+The #3423 blind suite on its base commit, 345c9ae2675bbf006a04450a1088928ddabd9548 (HEAD = merge base with origin/main),
+run as `npx vitest run tests/acceptance/3423` under Node 24.22.0 on November 26, 2026. 16 tests, 16 fail, each at an
+assertion (vitest AssertionError), none at load or by a crash.
+
+Per test, the expected reason:
+- AC1 x2, AC2 x2, AC3, AC4 x3, AC5 x3, AC7 x3, AC8: `reply()` asserts the script printed a JSON object; the base has no
+  scripts/taste.mjs ("Cannot find module"), so the surface doesn't exist.
+- AC6: the base's records have their maker in prose only: 121 of the merge base's 133 records hold a call and none has
+  a `maker` member ("the change adds no maker field", 121 problems; the 117 of ebf1e7f44 plus 4 added since).
+
+Below: each failing test with its first assertion, then the run's summary. The checkout's absolute path is shown as
+<checkout>.
+
+
+ FAIL  tests/acceptance/3423/ac1-lane-counts.test.ts > #3423.63f64cd6 the lane over main's taste records > #3423.63f64cd6 on the records ebf1e7f44 held the lane counts 19 calls by a person and 98 readings by an agent, 4 of them signed
+AssertionError: lane on the change: `node scripts/taste.mjs` printed no JSON object (exit 1):
+Error: Cannot find module '<checkout>/scripts/taste.mjs'
+
+ FAIL  tests/acceptance/3423/ac1-lane-counts.test.ts > #3423.63f64cd6 the lane over main's taste records > #3423.63f64cd6 on the merge base the lane fails, naming a record whose maker is prose
+AssertionError: lane --rev 345c9ae2675bbf006a04450a1088928ddabd9548: `node scripts/taste.mjs` printed no JSON object (exit 1):
+Error: Cannot find module '<checkout>/scripts/taste.mjs'
+
+ FAIL  tests/acceptance/3423/ac2-reading-inconclusive.test.ts > #3423.88a9d39c an agent's call that says right is a reading > #3423.88a9d39c it leaves its criterion INCONCLUSIVE before the deadline and reads as a default after it; a person's is the call
+AssertionError: verdict on docs/evidence/9301/taste-call.json before its deadline: `node scripts/taste.mjs` printed no JSON object (exit 1):
+Error: Cannot find module '<checkout>/scripts/taste.mjs'
+
+ FAIL  tests/acceptance/3423/ac2-reading-inconclusive.test.ts > #3423.88a9d39c an agent's call that says right is a reading > #3423.88a9d39c the lane reads the agent's record as a reading, not as a person's call
+AssertionError: lane on the scratch repository: `node scripts/taste.mjs` printed no JSON object (exit 1):
+Error: Cannot find module '<checkout>/scripts/taste.mjs'
+
+ FAIL  tests/acceptance/3423/ac3-wrong-sends-back.test.ts > #3423.16f305aa a reading that says wrong > #3423.16f305aa fails its criterion, and the run says the work was sent back by a reading
+AssertionError: verdict on docs/evidence/9401/taste-call.json: `node scripts/taste.mjs` printed no JSON object (exit 1):
+Error: Cannot find module '<checkout>/scripts/taste.mjs'
+
+ FAIL  tests/acceptance/3423/ac4-blind-job.test.ts > #3423.a83451d1 who may make a reading > #3423.a83451d1 a reading whose session authored a commit the pictures' check ran on is refused, naming the session
+AssertionError: accept readings/by-session.json: `node scripts/taste.mjs` printed no JSON object (exit 1):
+Error: Cannot find module '<checkout>/scripts/taste.mjs'
+
+ FAIL  tests/acceptance/3423/ac4-blind-job.test.ts > #3423.a83451d1 who may make a reading > #3423.a83451d1 the same pictures read by a job given only the criterion and the files are accepted
+AssertionError: accept readings/by-job.json: `node scripts/taste.mjs` printed no JSON object (exit 1):
+Error: Cannot find module '<checkout>/scripts/taste.mjs'
+
+ FAIL  tests/acceptance/3423/ac4-blind-job.test.ts > #3423.a83451d1 who may make a reading > #3423.a83451d1 a planted job that was also given the diff fails, naming the input
+AssertionError: accept readings/by-planted-job.json: `node scripts/taste.mjs` printed no JSON object (exit 1):
+Error: Cannot find module '<checkout>/scripts/taste.mjs'
+
+ FAIL  tests/acceptance/3423/ac5-by-you.test.ts > #3423.fca57d94 an agent's call marked as yours > #3423.fca57d94 an agent-made record that says by: "you" is refused, naming the field
+AssertionError: lane on the scratch repository: `node scripts/taste.mjs` printed no JSON object (exit 1):
+Error: Cannot find module '<checkout>/scripts/taste.mjs'
+
+ FAIL  tests/acceptance/3423/ac5-by-you.test.ts > #3423.fca57d94 an agent's call marked as yours > #3423.fca57d94 the same record under a signed tag that names it reads as that person's call
+AssertionError: lane on the scratch repository: `node scripts/taste.mjs` printed no JSON object (exit 1):
+Error: Cannot find module '<checkout>/scripts/taste.mjs'
+
+ FAIL  tests/acceptance/3423/ac5-by-you.test.ts > #3423.fca57d94 an agent's call marked as yours > #3423.fca57d94 under a tag by a key that isn't on the approvers list it stays a reading
+AssertionError: lane on the scratch repository: `node scripts/taste.mjs` printed no JSON object (exit 1):
+Error: Cannot find module '<checkout>/scripts/taste.mjs'
+
+ FAIL  tests/acceptance/3423/ac6-migration-diff.test.ts > #3423.997b049e the migration of main's records > #3423.997b049e the change differs from the merge base only in the maker field; every call, hash and time is the same
+AssertionError: 121 of the merge base's 133 records: expected [ …(121) ] to deeply equal []
++   "docs/evidence/1002/taste.json: the change adds no maker field",
+
+ FAIL  tests/acceptance/3423/ac7-owner-list.test.ts > #3423.408915d5 the list of readings put to the owner > #3423.408915d5 the list holds all 98 with their issue, criterion and hashes
+AssertionError: list on the change: `node scripts/taste.mjs` printed no JSON object (exit 1):
+Error: Cannot find module '<checkout>/scripts/taste.mjs'
+
+ FAIL  tests/acceptance/3423/ac7-owner-list.test.ts > #3423.408915d5 the list of readings put to the owner > #3423.408915d5 a list that drops a record fails, naming it
+AssertionError: list on the scratch repository: `node scripts/taste.mjs` printed no JSON object (exit 1):
+Error: Cannot find module '<checkout>/scripts/taste.mjs'
+
+ FAIL  tests/acceptance/3423/ac7-owner-list.test.ts > #3423.408915d5 the list of readings put to the owner > #3423.408915d5 a recorded overrule reopens its issue, naming the criterion
+AssertionError: reopen on the scratch repository: `node scripts/taste.mjs` printed no JSON object (exit 1):
+Error: Cannot find module '<checkout>/scripts/taste.mjs'
+
+ FAIL  tests/acceptance/3423/ac8-week-counts.test.ts > #3423.4573dacd the readings' three counts per week > #3423.4573dacd the week's three counts equal a hand count of a fixture week's records
+AssertionError: week on the scratch repository: `node scripts/taste.mjs` printed no JSON object (exit 1):
+Error: Cannot find module '<checkout>/scripts/taste.mjs'
+
+
+ Test Files  8 failed (8)
+      Tests  16 failed (16)
+   Start at  23:42:47
+   Duration  13.76s (tests 99%)
+
+
+Plumbing check (not a proof; nothing of it is committed): a throwaway stand-in script written to README.md's contract,
+placed in a scratch copy of this folder, passed the 11 fixture tests (AC2, AC3, AC4, AC5, AC7's list check and reopen,
+AC8; the stand-in's first week numbering was off by one and the test caught it, `date` confirms Mon Nov 16 2026 is
+2026-W47). Run as `lane --rev 345c9ae26` on this checkout it reported 133 records, 121 maker-in-prose failures (first
+docs/evidence/1002/taste.json), and 5 records named by a good signature: tests/acceptance/{1174,1175,399,422,425}/
+TASTE.json, 1175 being the person's.

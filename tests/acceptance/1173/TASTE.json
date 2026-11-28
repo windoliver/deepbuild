@@ -16,5 +16,6 @@
     "house-before.png": "08c4052aa867439aa4146e87c74d4a21524b83179a80771e5160a846e766c944",
     "house-edge-x6.png": "294055444e0be72d0cd9324c17049bd4561fd1c934c9160642eab09c2c2d8205"
   },
-  "note": "Drawn on the Mac (Apple M3, Metal) by Mac run 7 at bf6cf9ab, against main d1778722 as before. Edges: the city's, the effects box's and the house's silhouettes go from hard steps to graded coverage; nothing gains a halo or seam. Puff: the half-resolution glow on the orange box is smooth after, where before it showed 2 x 2 blocks. Full frames match before apart from edges; no part moves, darkens or vanishes. Two things unchanged by MSAA: the house's large stair-stepped shadow edge on the right (the same in before), and the effects box's thin cyan outline and blue grid line, which keep some steps."
+  "note": "Drawn on the Mac (Apple M3, Metal) by Mac run 7 at bf6cf9ab, against main d1778722 as before. Edges: the city's, the effects box's and the house's silhouettes go from hard steps to graded coverage; nothing gains a halo or seam. Puff: the half-resolution glow on the orange box is smooth after, where before it showed 2 x 2 blocks. Full frames match before apart from edges; no part moves, darkens or vanishes. Two things unchanged by MSAA: the house's large stair-stepped shadow edge on the right (the same in before), and the effects box's thin cyan outline and blue grid line, which keep some steps.",
+  "maker": {"agent":{"model":null,"session":null}}
 }

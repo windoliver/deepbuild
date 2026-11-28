@@ -11,5 +11,6 @@
     "castle-after.png": "706f8df0eaa0761fdfacc42847cb64ab2e6115319353fee2652306ebe81c32fb"
   },
   "note": "Owner authorized the recommendation to retain default radius 0.5 m and strength 1 after these exact images were shown in the session and linked on PR #2578. Exact owner instruction: 'goea d do whatever you reockemnd to close the issue'. This records acceptance of the recommendation, not a claim that the owner supplied a detailed visual assessment; it approves no other images or goldens.",
-  "source": "owner message in the issue-2516 working session; approval provenance also recorded on issue #2516"
+  "source": "owner message in the issue-2516 working session; approval provenance also recorded on issue #2516",
+  "maker": {"agent":{"model":null,"session":null}}
 }

@@ -8,5 +8,6 @@
     "lake-from-above.png": "ca1398b2863fde473d398f47eff0154b2fb2832b449b004d24e4f85073923c8e",
     "lake-from-below.png": "0af4185cce06112018a8dc74e1febf180cc4ba05304214f009c7ef3c1dda1c14"
   },
-  "note": "The owner asked the session to validate for them, so this call is the agent's, made on the two pictures of the check run; the owner may replace it. The frame from below reads as under water: teal water that deepens with distance, the posts and the buoy dimmed, the sky in a window overhead with a wavy edge, and the posts and the buoy mirrored in the surface outside it."
+  "note": "The owner asked the session to validate for them, so this call is the agent's, made on the two pictures of the check run; the owner may replace it. The frame from below reads as under water: teal water that deepens with distance, the posts and the buoy dimmed, the sky in a window overhead with a wavy edge, and the posts and the buoy mirrored in the surface outside it.",
+  "maker": {"agent":{"model":null,"session":null}}
 }

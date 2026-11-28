@@ -9,5 +9,6 @@
     "ring.png": "d3158e3c2c147da0e299c6aee086e17c333b9e1743bc34257b1b9f84d4385090",
     "av.png": "fcc3a18c7990d5c55129ee6b46e4ea85e1d51facc412d48586ff1dc9167fc405"
   },
-  "note": "OB: the O's counter and both of the B's counters are cut through, inner walls shaded, curves smooth at this size. Ring: the evenodd hole goes all the way through; the camera crops the ring's outer edge top and bottom, which is the test's framing, not the extrude. AV: the V sits under the A's right arm, as the kerned flat run sets it."
+  "note": "OB: the O's counter and both of the B's counters are cut through, inner walls shaded, curves smooth at this size. Ring: the evenodd hole goes all the way through; the camera crops the ring's outer edge top and bottom, which is the test's framing, not the extrude. AV: the V sits under the A's right arm, as the kerned flat run sets it.",
+  "maker": {"agent":{"model":"claude-opus-5-5","session":null}}
 }

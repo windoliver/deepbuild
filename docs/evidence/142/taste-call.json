@@ -29,5 +29,6 @@
   "whiteboard-2d.png": "f032ff8cdaa84ee1ad2d5f3decaddf767ced38af0855d09498b681fff2e7eff9",
   "whiteboard-3d.png": "c9432147a84a5f060025dd45dea926bf50c3de0a8da84da40fda265bba30eb57"
  },
- "note": "Called on the 23 files in this folder as the session showed them: the ten examples on the 2D stage, nine on the 3D stage, the kinetic-type slam, the linear-map shear, and the two recordings."
+ "note": "Called on the 23 files in this folder as the session showed them: the ten examples on the 2D stage, nine on the 3D stage, the kinetic-type slam, the linear-map shear, and the two recordings.",
+ "maker": {"person":"Tao Feng"}
 }

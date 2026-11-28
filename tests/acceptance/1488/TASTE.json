@@ -8,5 +8,6 @@
     "photo-and-clip-0.1s.png": "aea38afa3ad622a8bfc690053d8540af8bf8c74ab8550c9d0cc13b1fdd4dd257",
     "photo-and-clip-0.8s.png": "3514b6cb4a9ccf351083dcaa1dd16269ab4dd33eb968028c8273507f876d3f4d"
   },
-  "note": "Both pictures stand upright at 0.1 s and 0.8 s: the photo (left) and the clip (right) each show sky above, the sun top right, green ground below and the red arrow pointing up, with no picture lying on its side, mirrored or stretched; the clip's white ball rises from the ground to the sky between the two times. Checked beside them, not instead of them: all eight EXIF orientations and clips turned 90, 180 and 270 degrees match ffmpeg's own turned decode at the four corners on the worker's decode, deep-show's snapshot, raster and render."
+  "note": "Both pictures stand upright at 0.1 s and 0.8 s: the photo (left) and the clip (right) each show sky above, the sun top right, green ground below and the red arrow pointing up, with no picture lying on its side, mirrored or stretched; the clip's white ball rises from the ground to the sky between the two times. Checked beside them, not instead of them: all eight EXIF orientations and clips turned 90, 180 and 270 degrees match ffmpeg's own turned decode at the four corners on the worker's decode, deep-show's snapshot, raster and render.",
+  "maker": {"agent":{"model":"claude-opus-5-5","session":null}}
 }
