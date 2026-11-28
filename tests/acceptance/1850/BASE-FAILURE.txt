@@ -1,0 +1,75 @@
+Base: e87cefc44 (origin/main), no implementation of #1850. Real pi 1.4.0, the real hub, deep-hook built at base.
+Machine load average at the start: 110 (other sessions building); recorded, not waited on.
+
+Command:
+  DEEP_PI_CLI=<dir>/node_modules/@earendil-works/pi-coding-agent/dist/cli.js \
+    node node_modules/vitest/vitest.mjs run --no-file-parallelism tests/acceptance/1850/
+
+Result: 3 failed, 2 passed, each failing at its assertion for the expected reason:
+
+- #1850.081fc261 AC1: tool call 1 (call_1_0) returned 44995 ms after pi fired it. Base waits up to 15 s for each
+  event, each behind the one before: the call queues behind the input and agent_start events (15 s each) and then
+  waits its own 15 s, so 3 x 15 s.
+- #1850.3d9c6d57 AC4: the first event, tool call call_1_0, is not in the spool; the spool holds 0 lines.
+- #1850.33ec08d6 AC5: tool call 1 (call_1_0) is not in the spool; the spool holds 0 lines.
+- #1850.8ddd247a AC2: passes on base (blocked with the entry's words after the 15 s waits); its wrong program is the twin away-lets-guarded.
+- #1850.517fa524 AC3: passes on base (base holds any acknowledged event 70 s); its wrong program is the twin hold-cut-at-50ms.
+
+Output:
+
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/issue-1850-pi-50ms-cc39d5
+
+ ❯ tests/acceptance/1850/pi-50ms.test.ts (5 tests | 3 failed) 197597ms
+   × #1850.081fc261 against a hub that accepts connections and never writes, ten pi tool calls in a row each return within 60 ms of the call 65885ms
+   × #1850.3d9c6d57 with the hub stopped, a scripted pi session's tool calls and its stop land in the record once the hub starts, once each, with the seq and id their spool lines carry 3872ms
+   × #1850.33ec08d6 with the fake hub that never writes, each of the ten calls is in the spool marked late, and once a working hub starts each is recorded once, marked late 52725ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1850/pi-50ms.test.ts > #1850.081fc261 against a hub that accepts connections and never writes, ten pi tool calls in a row each return within 60 ms of the call
+AssertionError: tool call 1 of 10 (call_1_0, read) returned 44995 ms after pi fired it, against a hub that accepted and never wrote: expected 44995 to be less than or equal to 60
+ ❯ tests/acceptance/1850/pi-50ms.test.ts:26:185
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/acceptance/1850/pi-50ms.test.ts > #1850.3d9c6d57 with the hub stopped, a scripted pi session's tool calls and its stop land in the record once the hub starts, once each, with the seq and id their spool lines carry
+AssertionError: the tool call call_1_0 should be in the spool once; the spool holds 0 lines: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ tests/acceptance/1850/pi-50ms.test.ts:75:195
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/acceptance/1850/pi-50ms.test.ts > #1850.33ec08d6 with the fake hub that never writes, each of the ten calls is in the spool marked late, and once a working hub starts each is recorded once, marked late
+AssertionError: tool call 1 of 10 (call_1_0) should be in the spool once; the spool holds 0 lines: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ tests/acceptance/1850/pi-50ms.test.ts:102:129
+    100|     const id = callId(n);
+    101|     const found = spooledCall(all, id);
+    102|     expect(found.length, `tool call ${n} of ${CALLS} (${id}) should be…
+       |                                                                                                                                 ^
+    103|     expect(found[0]!.line.late, `tool call ${n} of ${CALLS} (${id}) wa…
+    104|     expect(found[0]!.text.startsWith('{"v":1,"agent":"pi"'), `tool cal…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 2 passed (5)
+   Start at  20:12:48
+   Duration  198.19s (tests 100%)
+

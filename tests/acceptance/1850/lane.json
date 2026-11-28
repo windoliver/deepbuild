@@ -1,0 +1,1 @@
+{ "alone": true, "why": "timed: each pi tool call is held to 60 ms, so the file runs real pi, the real hub and fake hubs on their own sockets with nothing beside it" }
