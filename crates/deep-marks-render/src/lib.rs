@@ -98,6 +98,7 @@ struct View {
 
 /// One step of a document session: a whole revision (or the last one), the time of its first
 /// frame, the view, the record, and how many frames it presents.
+#[cfg_attr(not(target_os = "macos"), expect(dead_code, reason = "only macOS reads it"))]
 struct Step {
     doc: Option<Map<String, Value>>,
     t: i64,
@@ -108,6 +109,7 @@ struct Step {
     look: Option<Look>,
 }
 
+#[cfg_attr(not(target_os = "macos"), expect(dead_code, reason = "only macOS reads it"))]
 enum Request {
     Frames {
         doc: Map<String, Value>,
@@ -175,12 +177,14 @@ enum Request {
 
 /// Where a `live` run's frame is written: one frame of a phase (`None`: its last), or every
 /// frame of it into a folder.
+#[cfg_attr(not(target_os = "macos"), expect(dead_code, reason = "only macOS reads it"))]
 enum Shot {
     One(Option<u32>, String),
     Every(PathBuf),
 }
 
 /// #1486: a `live` run: the document's view opened, moved, settled and redrawn on the real clock.
+#[cfg_attr(not(target_os = "macos"), expect(dead_code, reason = "only macOS reads it"))]
 struct Live {
     doc: Map<String, Value>,
     look: Look,
@@ -1169,7 +1173,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
         deep_text::vertical::plant(plant.and_then(vertical_plant).unwrap_or_default());
         request.hit = match input.get("hit") {
             None => None,
-            Some(v) => Some(point(v)?),
+            Some(v) => Some(place::point(v)?),
         };
         // #1484 AC1's planted shaper, for this line alone.
         let ignores_opsz =
@@ -1488,12 +1492,4 @@ fn vertical_plant(name: &str) -> Option<deep_text::vertical::Planted> {
         },
         _ => return None,
     })
-}
-
-/// #1215: a page point `[x, y]` in document u.
-fn point(v: &Value) -> Option<[f64; 2]> {
-    let [x, y] = v.as_array()?.as_slice() else {
-        return None;
-    };
-    Some([x.as_f64()?, y.as_f64()?]).filter(|p| p.iter().all(|n| n.is_finite()))
 }

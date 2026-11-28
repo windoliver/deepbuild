@@ -220,3 +220,10 @@ fn lagged(doc: &Map<String, Value>, program: &Program, t: i64, items: &mut Map<S
         }
     }
 }
+
+pub(crate) fn point(v: &Value) -> Option<[f64; 2]> {
+    let [x, y] = v.as_array()?.as_slice() else {
+        return None;
+    };
+    Some([x.as_f64()?, y.as_f64()?]).filter(|p| p.iter().all(|n| n.is_finite()))
+}

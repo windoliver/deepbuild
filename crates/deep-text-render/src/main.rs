@@ -81,6 +81,7 @@ static ALLOC: CountingAlloc = CountingAlloc;
 type FrameRequest = (Vec<LabelRequest>, Option<Vec<String>>);
 
 /// One render request, read from its JSON line.
+#[cfg_attr(not(target_os = "macos"), expect(dead_code, reason = "only macOS reads it"))]
 struct Request {
     out: String,
     width: f32,
@@ -93,6 +94,7 @@ struct Request {
     whole_page: bool,
 }
 
+#[cfg_attr(not(target_os = "macos"), expect(dead_code, reason = "only macOS reads it"))]
 struct LabelRequest {
     text: String,
     x: f32,
