@@ -1,0 +1,12 @@
+# 2026-11-28T03:42:21Z MacBook Pro, the only Mac this group of sessions can reach
+hw.model: Mac18,1
+chip: Apple M6
+memory: 32 GiB
+cores: 12
+load (1, 5, 15 min): { 69.01 83.27 77.93 }
+lowpowermode: 0
+pmset -g therm:
+  Note: No thermal warning level has been recorded
+  Note: No performance warning level has been recorded
+  Note: No CPU power status has been recorded
+tailscale peers: macbook-pro (this machine), spark-c89f (Linux); no Mac15,7 or Mac15,12 online

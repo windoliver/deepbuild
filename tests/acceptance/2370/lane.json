@@ -1,0 +1,1 @@
+{ "alone": true, "why": "shared: the sandbox log stream, as #348's folder: each file opens the supervisor and starts a sandboxed package through it, and ac6 runs #348's inbound.test.ts, which reads listeners with lsof" }
