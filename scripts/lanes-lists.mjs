@@ -860,6 +860,8 @@ Object.assign(redrafted, {
   'tests/acceptance/1551/lane.test.ts': 'tests/acceptance/1551/redraft-3300/',
 });
 byHand.push('tests/acceptance/1492/idle-energy.test.ts', 'tests/acceptance/1551/lane.test.ts');
+redrafted['tests/acceptance/854/redraft-3300/idle.test.ts'] = 'tests/acceptance/854/redraft-3370/';
+byHand.push('tests/acceptance/854/redraft-3300/idle.test.ts');
 
 timed.push('tests/acceptance/1815/budget.test.ts');
 byHand.push('tests/acceptance/1815/shown.test.ts');

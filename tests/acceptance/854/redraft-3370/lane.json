@@ -1,0 +1,1 @@
+{ "alone": true, "why": "timing: #854's idle test, redrafted blind for #3370, builds a release deep-show and holds its real window on screen for five 60 s runs on the real clock, reading frames, wakeups and CPU, so it runs alone as tests/acceptance/854/ does and under a timed grant as its predecessor in redraft-3300/ did", "timed": ["idle.test.ts"] }
