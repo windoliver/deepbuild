@@ -1,7 +1,7 @@
 // #1123: each run (and each proof side) owns a snapshot of its own Cargo executables, never links into target/. #2817:
 // a test that can start the copy's hub also gets copies of the hub's binaries in that copy's target/debug/.
 import { fork, spawnSync } from 'node:child_process';
-import { constants, copyFileSync, existsSync, globSync, mkdirSync, readFileSync, rmSync, utimesSync } from 'node:fs';
+import { constants, copyFileSync, existsSync, globSync, mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
@@ -67,6 +67,8 @@ function sourceSlice(file, source, requested) {
 // package, which reaches the hub through ../src.
 const HUB_BINARIES = ['deep-hook', 'deep-show'];
 const HUB_ENTRY = /(?<![\w.@-])packages\/(?:hub|cli)(?![\w-]|\.\w)|(?<![\w./@-])@deepbuild\/(?:hub|cli)(?![\w-]|\.\w)/;
+const TARGET_DEBUG = /(?<![\w./@-])target\/debug\/([\w-]+)(?![\w-]|\.\w)/g;
+const PLACED = '.deep-placed';
 // A test file named as a path from the checkout's root, which a test may run in a child Vitest, as #3178's meta-test
 // runs its rows (#3293): followed as an import is.
 const TEST_FILE = /^(?:tests|packages\/[^/]+\/test)\/(?:[^/]+\/)*[^/]+\.test\.(?:[cm]?[jt]s|tsx)$/;
@@ -92,19 +94,23 @@ export function binaryPlan(cwd, patterns) {
 
 /**
  * Selected tests and the helper declarations they reach: `bin`, the binaries their DEEP_BIN_DIR consumers name,
- * `target`, the hub's binaries when one of them names the hub's or the CLI's package, `hub`, the selected paths
- * that do, which alone may find `target` in place (#2817), and with `findBuilds` `builds`, their own `cargo build`s
- * (binaryPlan).
+ * `target`, the hub's binaries when one names the hub's or the CLI's package and each workspace binary one reads
+ * at target/debug/<bin> unbuilt (#3720), `hub`, the selected paths that do either, which alone may find `target`
+ * in place (#2817), and with `findBuilds` `builds`, their own `cargo build`s (binaryPlan).
  */
 export function selectBinaries(cwd, patterns, hubBinaries = true, findBuilds = false) {
-  const hubRoots = [];
-  let reaches = false;
-  const names = (text) => { if (HUB_ENTRY.test(text)) reaches = true; };
+  const hubRoots = [], debugRoots = [];
+  let reaches = false, debugNames = new Set();
+  const names = (text) => {
+    if (HUB_ENTRY.test(text)) reaches = true;
+    for (const [, name] of text.matchAll(TARGET_DEBUG)) debugNames.add(name);
+  };
   const sources = [], selfBuilt = [], roots = patterns.flatMap((path) => path.includes('*') ? globSync(path, { cwd }) : [path]);
   for (const root of roots) {
     const seen = new Set(), own = [], builds = [], queue = [{ path: root, requested: null }];
-    let readsBin = false, executes = false;
+    let readsBin = false, executes = false, buildsItself = false;
     reaches = false;
+    debugNames = new Set();
     while (queue.length) {
       const { path, requested } = queue.pop();
       const candidates = /\.(?:[cm]?[jt]s|tsx)$/.test(path) ? [path] : globSync(`${path.replace(/\/$/, '')}/**/*.{ts,mjs,js}`, { cwd });
@@ -150,6 +156,10 @@ export function selectBinaries(cwd, patterns, hubBinaries = true, findBuilds = f
               if (findBuilds && args[0] === 'build') builds.push({ args: args.slice(1).filter((arg) => arg !== '-q' && arg !== '--quiet'), profile });
             }
           }
+          if (ts.isCallExpression(node) && node.arguments.length > 1 && ts.isStringLiteralLike(node.arguments[0]) && node.arguments[0].text === 'cargo' && ts.isArrayLiteralExpression(node.arguments[1])) {
+            const [first] = node.arguments[1].elements;
+            if (first && ts.isStringLiteralLike(first) && first.text === 'build') buildsItself = true;
+          }
           if (ts.isCallExpression(node) && /^(?:join|resolve)$/.test(node.expression.getText().split('.').at(-1))) names(node.arguments.filter(ts.isStringLiteralLike).map((arg) => arg.text).join('/'));
           if (ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node)) names(node.text);
           if (ts.isStringLiteralLike(node)) {
@@ -164,13 +174,14 @@ export function selectBinaries(cwd, patterns, hubBinaries = true, findBuilds = f
     }
     if (readsBin && executes) sources.push(own.join('\n'));
     if (reaches) hubRoots.push(root);
+    if (hubBinaries && debugNames.size && !buildsItself) debugRoots.push({ root, names: [...debugNames] });
     if (builds.length) selfBuilt.push({ builds, source: own.join('\n') });
   }
   const hub = hubBinaries && hubRoots.length > 0;
   const none = { bin: [], target: [], hub: [], builds: [] };
   // Only actual redrafted consumers need a build; a missing workspace is not a wrong executable, and a test's own
   // build in a checkout with no workspace is the test's to report.
-  if (!sources.length && !hub && !selfBuilt.length) return none;
+  if (!sources.length && !hub && !selfBuilt.length && !debugRoots.length) return none;
   if (!existsSync(join(cwd, 'Cargo.toml'))) {
     if (!sources.length) return none;
     throw Error('BLOCKED test binaries: selected binary consumer has no Cargo.toml');
@@ -183,7 +194,9 @@ export function selectBinaries(cwd, patterns, hubBinaries = true, findBuilds = f
   const bins = sources.length ? packages.flatMap((pkg) => pkg.targets.filter((target) => target.kind.includes('bin') && (mentions(target.name) || mentions(pkg.name))).map((target) => target.name)) : [];
   if (sources.length && !bins.length) throw Error('BLOCKED test binaries: a selected consumer names DEEP_BIN_DIR but no workspace binary');
   const workspace = new Set(packages.flatMap((pkg) => pkg.targets.filter((target) => target.kind.includes('bin')).map((target) => target.name)));
-  const target = hub ? HUB_BINARIES.filter((name) => workspace.has(name)) : [];
+  const hubTarget = hub ? HUB_BINARIES.filter((name) => workspace.has(name)) : [];
+  const read = debugRoots.map(({ root, names }) => ({ root, names: names.filter((name) => workspace.has(name)) })).filter(({ names }) => names.length);
+  const target = [...new Set([...hubTarget, ...read.flatMap(({ names }) => names)])];
   const binsOf = new Map(packages.map((pkg) => [pkg.name, pkg.targets.filter((target) => target.kind.includes('bin')).map((target) => target.name)]));
   // A build is the run's to make only when every flag is one that picks what it builds, every value is written out,
   // and it names workspace binaries, of the package it names if it names one: a bare `cargo build` builds the whole
@@ -214,7 +227,7 @@ export function selectBinaries(cwd, patterns, hubBinaries = true, findBuilds = f
     const filled = slot < 0 ? [args] : packages.flatMap((pkg) => pkg.targets.filter((target) => target.kind.includes('bin') && mentions(target.name, source)).map((target) => target.name)).map((name) => args.map((arg, at) => at === slot ? name : arg));
     for (const each of filled) if (known(each)) builds.set(JSON.stringify([each, profile]), { args: each, profile, outputs: outputs(each) });
   }
-  return { bin: [...new Set(bins)], target, hub: target.length ? hubRoots : [], builds: [...builds.values()] };
+  return { bin: [...new Set(bins)], target, hub: [...new Set([...(hubTarget.length ? hubRoots : []), ...read.map(({ root }) => root)])], builds: [...builds.values()] };
 }
 
 /**
@@ -222,9 +235,12 @@ export function selectBinaries(cwd, patterns, hubBinaries = true, findBuilds = f
  * bay keeps target/ between uses, so what an earlier use put there goes first and a use that needs none finds none.
  */
 export function placeHubBinaries(cwd, bin, names) {
-  const debug = join(cwd, 'target', 'debug');
-  for (const name of HUB_BINARIES) rmSync(join(debug, name), { force: true });
+  const debug = join(cwd, 'target', 'debug'), placed = join(debug, PLACED);
+  const earlier = existsSync(placed) ? readFileSync(placed, 'utf8').split('\n').filter(Boolean).map((name) => basename(name)) : [];
+  for (const name of new Set([...HUB_BINARIES, ...earlier, ...names])) rmSync(join(debug, name), { force: true });
+  rmSync(placed, { force: true });
   if (names.length) mkdirSync(debug, { recursive: true });
+  if (names.length) writeFileSync(placed, `${names.join('\n')}\n`);
   const now = new Date();
   for (const name of names) {
     copyFileSync(join(bin, name), join(debug, name), constants.COPYFILE_FICLONE);
