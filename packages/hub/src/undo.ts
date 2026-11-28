@@ -6,7 +6,7 @@ import { hubControl } from './paths.js';
 
 const USAGE = 'Usage: deep undo staged:<id> | sync:<id> | ask:<id> | decision:<id>';
 
-/** `deep undo <handle>`: exit 0 undone, 1 refused (as once the copy is let go), 2 a usage error, 3 the hub couldn't be reached. */
+/** `deep undo <handle>`: exit 0 undone, 1 refused (as once the copy is let go), 2 a usage error, 3 not reached; ask: and decision: exit as deep inbox undo and deep memory overrule. */
 export async function undoCommand(args: readonly string[]): Promise<number> {
   if (args.length !== 1 || args[0]!.startsWith('-')) {
     process.stderr.write(`${USAGE}\n`);

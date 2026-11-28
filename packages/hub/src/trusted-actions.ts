@@ -391,9 +391,9 @@ export class TrustedActions {
   async addGuard(params: Obj, context: CallContext): Promise<Obj> {
     if (context.role !== 'cli') throw new Refused(refusal('role', '/method', 'A guard is added from the CLI, once the OS confirms you.', 'guard.add'));
     const agent = await this.options.state().agentAbove(context.peer);
-    if (agent) throw new Refused(refusal('role', '/method', `Nothing was added: this deep command runs inside agent session ${agent}'s process tree, and no agent changes your rules. Add it from your own terminal.`, 'guard.add'));
+    if (agent) throw new Refused(refusal('role', '/method', `Nothing was added: this deep command runs inside agent session ${agent}'s process tree, and no agent changes your guard entries. Add it from your own terminal.`, 'guard.add'));
     const names = isObj(params.guards) && isObj(params.guards.entries) ? Object.keys(params.guards.entries) : [];
-    const why = await this.options.services.confirmer.you(`add the guard ${names.length === 1 ? 'entry' : 'entries'} ${names.join(', ')} to your rules`, { handle: 'command:guard add', revision: names.join(','), process: context.peer });
+    const why = await this.options.services.confirmer.you(`add the guard ${names.length === 1 ? 'entry' : 'entries'} ${names.join(', ')} to your guard entries`, { handle: 'command:guard add', revision: names.join(','), process: context.peer });
     if (why) throw new Refused(refusal('unconfirmed', '', `Nothing was added: the OS didn't confirm you (${why}).`, names.join(', '), true));
     return addGuards(this.options.services.root.dir, params.guards, { deepHook: deepHook(), classes: toolClasses(), plant: this.options.settings.plant });
   }
