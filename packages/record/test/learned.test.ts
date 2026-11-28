@@ -7,6 +7,7 @@ import Database from 'better-sqlite3';
 import { afterEach, describe, expect, it } from 'vitest';
 import { openEvidenceStore } from '@deepbuild/evidence';
 import type { EvidenceStore } from '@deepbuild/evidence';
+import { transcriptReaders } from '@deepbuild/adapters';
 import { compareReplay, openRecord, planHash, RecordError } from '../src/index.js';
 import { dependsOn } from '../src/learned.js';
 import type { Connection, RecordStore } from '../src/index.js';
@@ -30,7 +31,7 @@ async function world(entries: object[]): Promise<{ record: RecordStore; store: E
   const root = mkdtempSync(join(tmpdir(), 'deep-learned-'));
   roots.push(root);
   const store = await openEvidenceStore({ root: join(root, 'evidence'), now: () => T0 });
-  const record = await openRecord({ path: join(root, 'record.db'), now: () => T0, evidence: store });
+  const record = await openRecord({ path: join(root, 'record.db'), now: () => T0, evidence: store, readers: transcriptReaders });
   const S = await session(record, store, entries);
   return { record, store, S };
 }
@@ -129,7 +130,7 @@ describe('the learned layer', () => {
     roots.push(root);
     const path = join(root, 'record.db');
     const store = await openEvidenceStore({ root: join(root, 'evidence'), now: () => T0 });
-    const first = await openRecord({ path, now: () => T0, evidence: store });
+    const first = await openRecord({ path, now: () => T0, evidence: store, readers: transcriptReaders });
     const S = await session(first, store, [said('m1', 'the api runs on 4100')]);
     const id = await apply(first, core, { layer: 'learned', target: 'slice:api', diff: '+ api on 4100', evidence: [{ at: `session:${S}#m1`, quote: 'runs on 4100' }], scope: `session:${S}`, applied_by: 'rule:localfirst' });
     await first.close();
@@ -139,8 +140,8 @@ describe('the learned layer', () => {
     // An open whose replay stops partway, here on a migration that throws, leaves the old table for the next open.
     // Failed on an open that remade the table in its own commit, which the next open took as current and left empty.
     const failing = { kind: 'learn.applied', from: 1, to: 2, up: () => { throw Error('stopped mid-replay'); } };
-    await expect(openRecord({ path, now: () => T0, evidence: store, migrations: [failing] })).rejects.toThrow('stopped mid-replay');
-    const record = await openRecord({ path, now: () => T0, evidence: store });
+    await expect(openRecord({ path, now: () => T0, evidence: store, readers: transcriptReaders, migrations: [failing] })).rejects.toThrow('stopped mid-replay');
+    const record = await openRecord({ path, now: () => T0, evidence: store, readers: transcriptReaders });
     expect(await stateOf(record, id)).toBe('applied');
     expect(JSON.stringify(await record.startSlice(S))).toContain('api on 4100');
     await record.close();
@@ -169,7 +170,7 @@ describe('the learned layer', () => {
     const root = mkdtempSync(join(tmpdir(), 'deep-learned-'));
     roots.push(root);
     const store = await openEvidenceStore({ root: join(root, 'evidence'), now: () => T0 });
-    const record = await openRecord({ path: join(root, 'record.db'), now: () => T0, evidence: store });
+    const record = await openRecord({ path: join(root, 'record.db'), now: () => T0, evidence: store, readers: transcriptReaders });
     const S = await session(record, store, [said('m1', 'the api runs on 4100')]);
     const sha = String((await record.table('sessions')).rows.find((r) => r.id === S)!.transcript);
     const file = join(root, 'evidence', sha.slice(0, 2), sha.slice(2));
@@ -313,7 +314,7 @@ describe('the learned layer', () => {
     const root = mkdtempSync(join(tmpdir(), 'deep-learned-'));
     roots.push(root);
     const store = await openEvidenceStore({ root: join(root, 'evidence'), now: () => T0 });
-    const record = await openRecord({ path: join(root, 'record.db'), now: () => T0, evidence: store });
+    const record = await openRecord({ path: join(root, 'record.db'), now: () => T0, evidence: store, readers: transcriptReaders });
     const S = ulidAt(T0);
     await record.append({ writer: 'hook', actor: 'you', scope: 'you', session: S, project: 'shop' }, { v: 1, id: ulidAt(T0), kind: 'session.start', ts: T0, data: { agent: 'claude-code', worktree: '~/src/shop', branch: 'main', thread: S } });
     const bytes = new Uint8Array(Buffer.from(`${JSON.stringify(said('m1', 'the api runs on 4100'))}\n`));
@@ -387,7 +388,7 @@ describe('the learned layer', () => {
     roots.push(root);
     const path = join(root, 'record.db');
     const store = await openEvidenceStore({ root: join(root, 'evidence'), now: () => T0 });
-    const record = await openRecord({ path, now: () => T0, evidence: store });
+    const record = await openRecord({ path, now: () => T0, evidence: store, readers: transcriptReaders });
     const S = await session(record, store, [said('m1', 'the api runs on 4100')]);
     const A = await apply(record, core, { layer: 'learned', target: 'wiki:api', diff: '+ api on 4100', evidence: [{ at: `session:${S}#m1`, quote: 'runs on 4100' }], scope: `session:${S}`, applied_by: 'rule:localfirst' });
     const B = await apply(record, core, { layer: 'learned', target: 'wiki:api2', diff: '+ api on 4100', evidence: [{ at: `doc:${A}`, quote: 'api on 4100' }], scope: `session:${S}`, applied_by: 'rule:localfirst' });

@@ -49,7 +49,7 @@ import { Replicas } from './drive.js';
 import { cursorAt, cursorOf, Refused, refusal, refuse, SETTLED_PAGE, ulid, type CoreOptions, type Draft, type HookMeta, type ModeRead } from './wire.js';
 import type { CallContext, Session, Live } from './session-types.js';
 
-import { TranscriptReader } from './transcript-reader.js';
+import type { LiveTranscriptReader } from '@deepbuild/adapters';
 import { CODEX_BINARY, CLAUDE_BINARY, JOB_ROW_MS, sql, letters, QUIET_MS, CALL_GRACE, COMMITS, ENDED_KEPT, manyThreads, type Obj, reusedPids, isObj, isUnder } from "./hub-shared.js";
 
 /** How long a call with no end yet keeps its session at work through quiet hooks (#2021): Claude Code's Bash tool's own limit. */
@@ -63,7 +63,7 @@ export interface SessionStateOptions {
     readonly now: () => number;
     readonly record: RecordStore;
     readonly raw: RecordStore['raw'];
-    readonly transcriptReader: TranscriptReader;
+    readonly transcriptReader: LiveTranscriptReader;
     readonly stacks: Stacks;
     readonly replicas: Replicas;
     readonly archivedSessions: (() => Promise<Set<string>>) | undefined;

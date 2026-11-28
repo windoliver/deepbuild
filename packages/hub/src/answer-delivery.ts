@@ -44,7 +44,7 @@ import { refuse, Refused, refusal, ulid, ulidTime, type CoreOptions, type Draft,
 import type { CallContext, Routes, CutOff, Note, Session } from './session-types.js';
 import { parents } from './children.js';
 
-import { TranscriptReader } from './transcript-reader.js';
+import type { LiveTranscriptReader } from '@deepbuild/adapters';
 import { letters, ghToken, WAKE_GRACE, SHOWN_SOON, said, FOREIGN, placesItself, type Obj, isObj, asRefused, effectEntries, callOf, sendKey, PULL_LOOKUP_MS, OWN_TURN, continueText, holdsTurns, sql } from "./hub-shared.js";
 
 export interface AnswerDeliveryOptions {
@@ -59,7 +59,7 @@ export interface AnswerDeliveryOptions {
     readonly tasks: AskTasks;
     readonly acceptance: Acceptance;
     readonly root: Root;
-    readonly transcriptReader: TranscriptReader;
+    readonly transcriptReader: LiveTranscriptReader;
     readonly holds: Holds;
   };
   state: () => Pick<SessionStatePort, "acks" | "attention" | "live" | "midTurn" | "onScreen" | "projects" | "sessions" | "startOf" | "turnsStarted">;

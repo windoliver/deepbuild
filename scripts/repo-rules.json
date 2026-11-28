@@ -2073,6 +2073,10 @@
     },
     "packages/reading/package.json": {
       "dependencies": {
+        "@deepbuild/adapters": {
+          "spec": "0.0.0",
+          "why": "Issue #1894: a session handle's transcript is read in turns by the shipped agents' readers, which their adapters own; the record reads no format itself."
+        },
         "@deepbuild/contracts": {
           "spec": "0.0.0",
           "why": "Issue #63: a reading job's answer is checked against reading.answer@1 before any finding is read."

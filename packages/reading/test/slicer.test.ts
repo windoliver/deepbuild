@@ -11,6 +11,7 @@ import { openEvidenceStore } from '@deepbuild/evidence';
 import { openRecord, ulid, type Connection, type RecordStore } from '@deepbuild/record';
 import { openWiki } from '@deepbuild/wiki';
 import { CAP, findCommand, NotFound, openSlicer, readCommand, type Slice, type Slicer } from '../src/index.ts';
+import { transcriptReaders } from '@deepbuild/adapters';
 
 const YOU: Connection = { writer: 'app', actor: 'you', scope: 'you' };
 const dirs: string[] = [];
@@ -27,7 +28,7 @@ async function root(sessions: string[][], id = (i: number) => `m${i}`, role = 'u
   const dir = mkdtempSync(join(tmpdir(), 'reading63-'));
   dirs.push(dir);
   const store = await openEvidenceStore({ root: join(dir, 'evidence'), now: () => t });
-  const record = await openRecord({ path: join(dir, 'ledger.db'), now: () => t, evidence: store });
+  const record = await openRecord({ path: join(dir, 'ledger.db'), now: () => t, evidence: store, readers: transcriptReaders });
   records.push(record);
   const handles: string[] = [];
   for (const lines of sessions) {

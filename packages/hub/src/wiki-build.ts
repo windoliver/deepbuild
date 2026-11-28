@@ -12,6 +12,7 @@ import { basename, join, relative } from 'node:path';
 import { cwdOf } from '@deepbuild/archive';
 import { scrubText } from '@deepbuild/evidence';
 import { claimId, openReading } from '@deepbuild/reading';
+import { transcriptReaders } from '@deepbuild/adapters';
 import { openRecordReader, parseClaimLine, ulid, type Message } from '@deepbuild/record';
 import type { Agent } from '@deepbuild/runner';
 import { openWiki, type Candidate, type Wiki } from '@deepbuild/wiki';
@@ -407,7 +408,7 @@ export function openWikiBuild(o: WikiBuildOptions): { build(): Promise<WikiBuilt
       for (const name of pagesOf().keys()) if (!/^(index|log)\.md$/.test(name)) rmSync(join(folder, name));
       await wiki.write();
     } else await wiki.keepEdits(o.cli);
-    const reader = openRecordReader({ path: root.ledger, evidence: o.store });
+    const reader = openRecordReader({ path: root.ledger, evidence: o.store, readers: transcriptReaders });
     try {
       const rows = (await record.raw("SELECT s.id AS id, s.project_id AS project, s.transcript AS transcript, (SELECT agent FROM events WHERE kind = 'transcript.archived' AND replace(replace(json_extract(data, '$.session'), 'session:', ''), '-', '') = s.id ORDER BY log_pos DESC LIMIT 1) AS agent FROM sessions s WHERE s.transcript IS NOT NULL ORDER BY s.id")) as Row[];
       // The folder each repo's sessions worked in, by agent, read from the first of its transcripts.

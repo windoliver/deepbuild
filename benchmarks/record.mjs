@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { fixtures } from '../packages/contracts/dist/index.js';
 import { openEvidenceStore } from '../packages/evidence/dist/index.js';
 import { openRecord } from '../packages/record/dist/index.js';
+import { transcriptReaders } from '../packages/adapters/dist/index.js';
 
 const T0 = 1_760_013_451_000;
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
@@ -99,7 +100,7 @@ if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(w
 const root = mkdtempSync(join(tmpdir(), 'deep-record-bench-'));
 try {
   const store = await openEvidenceStore({ root: join(root, 'evidence'), now: () => T0 });
-  const record = await openRecord({ path: join(root, 'record.db'), now: () => T0, evidence: store });
+  const record = await openRecord({ path: join(root, 'record.db'), now: () => T0, evidence: store, readers: transcriptReaders });
   await workloads[task](record, store);
   await record.close();
 } finally {

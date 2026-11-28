@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { askSources, draftAskSettings, openAsks } from '../packages/asks/dist/index.js';
 import { openEvidenceStore } from '../packages/evidence/dist/index.js';
 import { openRecord } from '../packages/record/dist/index.js';
+import { transcriptReaders } from '../packages/adapters/dist/index.js';
 
 const T0 = 1_760_013_451_000;
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
@@ -93,7 +94,7 @@ try {
   const home = join(root, 'home');
   await draftAskSettings(home);
   const evidence = await openEvidenceStore({ root: join(root, 'evidence'), now: () => T0 });
-  const record = await openRecord({ path: join(root, 'record.db'), now: () => T0, evidence });
+  const record = await openRecord({ path: join(root, 'record.db'), now: () => T0, evidence, readers: transcriptReaders });
   const asks = await openAsks({ record, now: () => T0, deliver: () => {}, home });
   await workloads[task](record, asks, evidence);
   await record.close();

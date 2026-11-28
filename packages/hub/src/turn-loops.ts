@@ -2,7 +2,7 @@
 import { loopFact } from './hookmap.js';
 import { isObj, TURN_ENTRIES, type Obj } from './hub-shared.js';
 import type { Live, Session } from './session-types.js';
-import type { TranscriptReader } from './transcript-reader.js';
+import type { LiveTranscriptReader } from '@deepbuild/adapters';
 
 /**
  * The wake-ups and cron jobs the turn's transcript shows it scheduled or cancelled, read by the same loop facts as
@@ -53,7 +53,7 @@ export function loopAt(live: Live, plant: string | undefined): Obj | undefined {
  * it reads them; a session it met after its prompt's entry was written (its first hook came late) is read here
  * from the transcript's last few MiB.
  */
-export async function turnFrom(session: Session, promptId: string, reader: TranscriptReader): Promise<Obj[]> {
+export async function turnFrom(session: Session, promptId: string, reader: LiveTranscriptReader): Promise<Obj[]> {
   if (session.prompts.has(promptId)) return session.entries[0]?.promptId === promptId ? session.entries : [session.prompts.get(promptId)!];
   const lines = (await reader.tail(session.transcript, 4 << 20)).split('\n');
   const at = lines.findIndex((l) => l.includes(promptId) && l.includes('"promptId"'));

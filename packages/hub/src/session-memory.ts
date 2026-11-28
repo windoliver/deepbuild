@@ -10,6 +10,7 @@ import { type Asks } from '@deepbuild/asks';
 import { sha256Hex } from '@deepbuild/contracts';
 import { type EvidenceStore } from '@deepbuild/evidence';
 
+import { transcriptReaders } from '@deepbuild/adapters';
 import { openRecordReader, type RecordStore } from '@deepbuild/record';
 import type { Runner } from '@deepbuild/runner';
 import type { DecisionsProvider } from './decisions-port.js';
@@ -433,7 +434,7 @@ export class SessionMemory {
     if (!given) {
       const { root, store, runner } = this.options.services;
       const job = await runner.submit({ kind: 'eval', agent: 'claude-code', prompt: `Remove ${lesson.id}: ${rule.text}`, deadline_ms: 110 * 60_000 }, async (context) => {
-        const reader = openRecordReader({ path: root.ledger, evidence: store });
+        const reader = openRecordReader({ path: root.ledger, evidence: store, readers: transcriptReaders });
         let input: Awaited<ReturnType<KnowledgeProvider['removal']>>;
         try { input = await this.options.removal(reader, (sha) => store.read(sha), { id: context.job, repo: rule.repo!, file: rule.file, before, after }); }
         finally { reader.close(); }
