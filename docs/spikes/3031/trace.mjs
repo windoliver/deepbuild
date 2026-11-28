@@ -1,8 +1,3 @@
-// What a run's API trace says its frames did: every texture and buffer the device was asked for, and each frame's
-// passes in the order the device got them, each with everything it binds (an attachment, a resolve target, what a bind
-// group it sets or a bundle it runs holds, its vertex, index and indirect buffers, a copy's source and destination)
-// and the draws it issues. Read from wgpu-core's `trace.ron`, which the device writes itself; a buffer the harness
-// names `spike3031 frame <k>` marks where frame k starts.
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { actions, parse } from './ron.mjs';
@@ -13,7 +8,6 @@ const MARK = /^spike3031 frame (\d+)$/;
 
 const TEXTURE_USAGES = [[1, 'COPY_SRC'], [2, 'COPY_DST'], [4, 'TEXTURE_BINDING'], [8, 'STORAGE_BINDING'], [16, 'RENDER_ATTACHMENT']];
 const BUFFER_USAGES = [[1, 'MAP_READ'], [2, 'MAP_WRITE'], [4, 'COPY_SRC'], [8, 'COPY_DST'], [16, 'INDEX'], [32, 'VERTEX'], [64, 'UNIFORM'], [128, 'STORAGE'], [256, 'INDIRECT'], [512, 'QUERY_RESOLVE']];
-/** A usage as the layer spells it, as a sorted list of names: the trace writes the names joined by ` | `. */
 function usages(v, table) {
   if (typeof v === 'string') return v.split('|').map((s) => s.trim()).filter(Boolean).sort();
   const bits = typeof v === 'number' ? v : (v?.bits ?? v?._?.[0]);
@@ -23,7 +17,6 @@ function usages(v, table) {
   return [...named.map(([, n]) => n), ...(rest ? [`BITS_${rest}`] : [])].sort();
 }
 
-/** A binding's access by its layout entry: what a pass that sets the group may do to what is bound there. */
 function access(ty) {
   if (!ty || typeof ty !== 'object') return 'read';
   if (ty.$ === 'StorageTexture') return { writeonly: 'write', readonly: 'read' }[name(ty.access)] ?? 'readwrite';
@@ -32,7 +25,6 @@ function access(ty) {
 }
 const merge = (a, b) => (a === undefined || a === b ? b : 'readwrite');
 
-/** What a shader's source declares at each `group:binding`: read, write or readwrite. */
 function declared(wgsl) {
   const out = new Map();
   for (const [, group, binding, qualifier, type] of wgsl.matchAll(/@group\((\d+)\)\s*@binding\((\d+)\)\s*var\s*(<[^>]*>)?\s*\w+\s*:\s*([^;]+);/g)) {
@@ -43,12 +35,6 @@ function declared(wgsl) {
   return out;
 }
 
-/**
- * The trace at `path` as `{init, resources, frames, counts, failed}`. `resources` holds every texture (`t<n>`) and
- * buffer (`b<n>`) the device was asked for, in the order asked, with what its descriptor said, the frame it was made
- * in and its place among the trace's actions when it was made and let go (`lastSubmit` is the last submission's). `frames[k].passes` are frame k's passes, each `{kind, name, touches, draws}` with
- * `touches: [{id, how, reads, writes}]` and `draws: [{pipeline, depth_write, indices, instances, first, indirect, bundle}]`.
- */
 export function readTrace(path) {
   const resources = [];
   const made = { t: 0, b: 0 };
@@ -77,7 +63,6 @@ export function readTrace(path) {
     t.writes ||= writes;
     touches.set(r.id, t);
   }
-  // What a list of pass commands binds, into `touches`, and the draws it issues, into `draws`.
   const walk = (commands, touches, draws, bundle) => {
     let pipe = null;
     for (const c of commands ?? []) {
@@ -135,7 +120,6 @@ export function readTrace(path) {
       const r = (kind.endsWith('Texture') ? texture : buffer).get(pointer(a._[0]));
       if (r && r.dropped_at === null) r.dropped_at = ordinal;
     } else if (kind === 'CreateTextureView') {
-      // A view of one layer or one mip: a pass that writes through it leaves the rest of the texture as it was.
       const r = texture.get(pointer(a.parent));
       const range = a.desc?.range ?? {};
       const part = (base, count, all) => (base ?? 0) !== 0 || (count !== null && count !== undefined && count !== all);
@@ -147,7 +131,6 @@ export function readTrace(path) {
       const file = a.data?.$ === 'File' ? a.data._[0] : null;
       shaders.set(pointer(a.id), file?.endsWith('.wgsl') ? declared(readFileSync(join(folder, file), 'utf8')) : new Map());
     } else if (kind === 'GetRenderPipelineBindGroupLayout' || kind === 'GetComputePipelineBindGroupLayout') {
-      // A layout taken from a pipeline: its bindings are what the pipeline's shaders declare in that group.
       const taken = new Map();
       for (const m of pipes.get(pointer(a.pipeline))?.modules ?? []) {
         for (const [at, how] of shaders.get(m) ?? []) if (at.startsWith(`${a.index}:`)) taken.set(Number(at.split(':')[1]), how);
@@ -194,7 +177,6 @@ export function readTrace(path) {
             }
             const ds = c.depth_stencil_attachment;
             if (ds) {
-              // `depth` is `Operational((load, store))`, or `ReadOnly`.
               const ops = typeof ds.depth === 'object' ? (ds.depth?._?.[0] ?? ds.depth) : null;
               const only = ops === null;
               const to = view.get(pointer(ds.view));

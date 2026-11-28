@@ -1,42 +1,3 @@
-//! circuit@2's reference library (#3604; canvas primitives: Logic: library interfaces):
-//! circuit@1's nodes and parts (#1181), solved each step by the same nodal analysis, plus a
-//! breaker, an RCD, a changeover and a transformer, inputs the item's own arrays drive, and number
-//! fields a control or one of the item's arrays sets within a range. Every closed part is linear,
-//! so each source frequency (DC is frequency 0) is one solve of the same matrix with that
-//! frequency's sources as phasors of their rms values; each instant is the closed form at the
-//! step's time, f × k ÷ per turns. The matrix is solved again only when the closed set or a set
-//! value changes. A switch, a connector, a closed fuse or breaker, a changeover's joined way, an
-//! RCD's closed poles, a transformer's windings, a source with no internal resistance and a
-//! resistor of 0 Ω are branches of their own (modified nodal analysis).
-//!
-//! - A fuse heats as circuit@1's does and opens at the first step θ ≥ 1.
-//! - A breaker's thermal element heats as θ' = ((i_rms ÷ rating)² − θ) ÷ τ at every step, open
-//!   included (its current is then 0), and opens it at the start of the first step θ has reached
-//!   its opening heat (1.69); its magnetic element opens it at the start of the step after one
-//!   whose rms current reached the curve's multiple of its rating. A rising `reset_by` closes it
-//!   with the heat it has.
-//! - An RCD's residual is the rms of its two poles' currents summed, each from the supply side to
-//!   the load side. Its count rises by the step's length ÷ max(0.2 s × rating ÷ residual, 0.01 s)
-//!   on a step whose residual is at or above its rating and returns to 0 on any other; both poles
-//!   open at the start of the first step the count has reached 1. Its test path, `test_r` from the
-//!   load-side live to the supply-side neutral, conducts while `test_by` says so.
-//! - A changeover joins `common` to `a` while its input is 0 and to `b` while it is nonzero.
-//! - A transformer is ideal: the secondary's volts are the primary's × n2 ÷ n1, the primary's
-//!   current the secondary's × n2 ÷ n1 against it, and it takes no power.
-//! - A set value outside its range is held to the nearest end of it; one that isn't finite keeps
-//!   the last.
-//!
-//! Built with `--cfg no_magnetic` it is the planted library whose breakers have no magnetic
-//! element; `--cfg cold_reset`, the one whose reset breaker closes cold; `--cfg one_pole`, the one
-//! whose RCD reads its live pole alone; `--cfg both_ways`, the one whose changeover joins both ways
-//! for the step its input changes; `--cfg primary_current`, the one whose transformer's primary
-//! carries the secondary's current; `--cfg late_set`, the one that reads a set value a step late;
-//! `--cfg late_fuse`, the one whose fuses open at ten times their curve's time.
-//!
-//! The state, `circuit.state@2`, and the built table's bytes are laid out as LAYOUT.md says. The
-//! library keeps everything in the caller's memory and calls nothing: a relocatable object of
-//! functions only, built by scripts/circuit2-pack.mjs.
-
 #![cfg_attr(target_arch = "wasm32", no_std)]
 #![allow(
     clippy::missing_safety_doc,
@@ -52,15 +13,11 @@ fn panic(_: &core::panic::PanicInfo) -> ! {
     core::arch::wasm32::unreachable()
 }
 
-// ---------------------------------------------------------------------------------------------
-// Memory: every address is the caller's, an i32 into its linear memory.
-
 #[cfg(target_arch = "wasm32")]
 #[inline(always)]
 fn at(a: u32) -> *mut u8 {
     a as usize as *mut u8
 }
-/// Off wasm (a host's tests), addresses are offsets from this memory.
 #[cfg(not(target_arch = "wasm32"))]
 pub static mut BASE: *mut u8 = core::ptr::null_mut();
 #[cfg(not(target_arch = "wasm32"))]
@@ -93,9 +50,6 @@ fn sl(a: u32, x: i64) {
     unsafe { (at(a) as *mut i64).write_unaligned(x) }
 }
 
-// ---------------------------------------------------------------------------------------------
-// Numbers, by plain IEEE operations only, so every host gives the same bits.
-
 #[inline(always)]
 fn ab(x: f64) -> f64 {
     if x < 0.0 {
@@ -104,7 +58,6 @@ fn ab(x: f64) -> f64 {
         x
     }
 }
-/// √x by Newton's steps from the exponent's guess; the last two agree or neighbour, the smaller kept.
 #[inline(never)]
 fn sqrt(x: f64) -> f64 {
     if !(x > 0.0) {
@@ -146,8 +99,6 @@ const C4: f64 = -2.75573143513906633035e-07;
 const C5: f64 = 2.08757232129817482790e-09;
 const C6: f64 = -1.13596475577881948265e-11;
 
-/// sin and cos of `u` turns: reduced exactly to the nearest quarter turn, then the kernels on
-/// ±π/4 (their coefficients are the classic minimax ones, good to an ulp or so).
 #[inline(always)]
 fn sincos_turns(u: f64) -> (f64, f64) {
     let q4 = (u - floor(u)) * 4.0;
@@ -168,7 +119,6 @@ fn sincos_turns(u: f64) -> (f64, f64) {
     }
 }
 
-/// e^x for x ≤ 0: x = k ln 2 + r, |r| ≤ ln 2 ÷ 2, and the classic rational kernel for e^r.
 fn exp_neg(x: f64) -> f64 {
     if x < -745.0 {
         return 0.0;
@@ -190,16 +140,11 @@ fn exp_neg(x: f64) -> f64 {
     let y = 1.0 - ((lo - (r * c) / (2.0 - c)) - hi);
     let k = k as i64;
     if k < -1021 {
-        // Subnormal: scale in two steps.
         y * f64::from_bits(((k + 1000 + 1023) as u64) << 52) * f64::from_bits(((1023 - 1000) as u64) << 52)
     } else {
         y * f64::from_bits(((k + 1023) as u64) << 52)
     }
 }
-
-
-// ---------------------------------------------------------------------------------------------
-// The built table (LAYOUT.md: The built table), from `g`.
 
 const SOURCE_DC: i32 = 1;
 const SOURCE_AC: i32 = 2;
@@ -219,11 +164,8 @@ const TRANSFORMER: i32 = 14;
 const NODES: u32 = 64;
 const PARTS: u32 = 128;
 const GROUPS: u32 = 8;
-/// The most unknowns: every node but the reference, and two branches for every part.
 const DIM: u32 = NODES - 1 + 2 * PARTS;
-/// The elementary charge, C.
 const E: f64 = 1.602176634e-19;
-/// A part's bytes in the table.
 const PART: u32 = 160;
 
 #[inline(always)]
@@ -242,8 +184,6 @@ fn part(g: u32, i: u32) -> u32 {
 fn kind(g: u32, i: u32) -> i32 {
     li(part(g, i))
 }
-/// Node j (0 to 3) of part i: `from`, `to`; a changeover's `common`, `a`, `b`; an RCD's live and
-/// neutral poles and a transformer's windings, each `[from, to]`.
 #[inline(always)]
 fn nd(g: u32, i: u32, j: u32) -> i32 {
     li(part(g, i) + 4 + 4 * j)
@@ -257,14 +197,10 @@ fn x(g: u32, i: u32, j: u32) -> f64 {
     lf(part(g, i) + 48 + 8 * j)
 }
 
-// ---------------------------------------------------------------------------------------------
-// The state from `s`: the head (circuit.state@2's arrays), then the library's own.
-
 #[inline(always)]
 fn a8(n: u32) -> u32 {
     (n + 7) & !7
 }
-/// Each head array's offset from `s`, for n nodes and p parts.
 #[derive(Clone, Copy)]
 struct Head {
     v: u32,
@@ -300,11 +236,6 @@ fn head(n: u32, p: u32) -> Head {
     Head { v, i_rms, i, p: pw, r, on, energy, kwh, drift, drift_x, heat, residual, i2_rms, i2 }
 }
 
-// The library's own, from `o = s + OWN_AT`:
-//   +0 i32 ready (1 once a builder ran), +4 i32 nodes, +8 i32 parts, +12 i32 table address
-//   +16 i32 valid (the closed set's solve is current), +20 i32 groups, +24 i32 singular
-//   +32 i64 the step the closed set last changed, +40 i64 the last per, +48 i64 the last step solved
-//   +64 the per-part arrays below, each PARTS long, then the groups', then the solve's.
 const READY: u32 = 0;
 const NN: u32 = 4;
 const PP: u32 = 8;
@@ -315,50 +246,41 @@ const SINGULAR: u32 = 24;
 const K0: u32 = 32;
 const PER: u32 = 40;
 const LAST: u32 = 48;
-const ADDED: u32 = 64; // i32 × PARTS: 1 once added
-const NODE_ADDED: u32 = ADDED + 4 * PARTS; // i32 × NODES
-const LATEST: u32 = NODE_ADDED + 4 * NODES; // f64 × PARTS × 3: each input's latest value
-const RAW: u32 = LATEST + 24 * PARTS; // f64 × PARTS × 2: each set field's latest value as given
-const VAL: u32 = RAW + 16 * PARTS; // f64 × PARTS × 2: each set field's value held to its range
-const THETA: u32 = VAL + 16 * PARTS; // f64 × PARTS: a fuse's or a breaker's heat
-const OPEN: u32 = THETA + 8 * PARTS; // i32 × PARTS: a fuse melted, a breaker or an RCD open
-const MAG: u32 = OPEN + 4 * PARTS; // i32 × PARTS: a breaker's magnetic element reached
-const COUNT: u32 = MAG + 4 * PARTS; // f64 × PARTS: an RCD's count
-const CODE: u32 = COUNT + 8 * PARTS; // i32 × PARTS: the closed set solved (below)
-const COOL: u32 = CODE + 4 * PARTS; // f64 × PARTS: a fuse's or breaker's e^(−dt ÷ τ) at the last per
-const X0: u32 = COOL + 8 * PARTS; // f64 × PARTS: a wire's displacement at the step K0
-const BRANCH: u32 = X0 + 8 * PARTS; // i32 × PARTS × 2: its branch unknowns, or −1
-const RMS: u32 = BRANCH + 8 * PARTS; // f64 × PARTS: its rms current under the closed set
-const RMS2: u32 = RMS + 8 * PARTS; // f64 × PARTS: its second pole's or winding's
-const RESID: u32 = RMS2 + 8 * PARTS; // f64 × PARTS: an RCD's residual
-const MEAN: u32 = RESID + 8 * PARTS; // f64 × PARTS: its mean power
-const FREQ: u32 = MEAN + 8 * PARTS; // f64 × GROUPS: each group's frequency, 0 for DC
-const S0: u32 = FREQ + 8 * GROUPS; // f64 × GROUPS: sin at K0
-const C0: u32 = S0 + 8 * GROUPS; // f64 × GROUPS: cos at K0
-const IPH: u32 = C0 + 8 * GROUPS; // f64 × PARTS × GROUPS × 2: each part's current phasor (re, im)
-const I2PH: u32 = IPH + 16 * PARTS * GROUPS; // the same for its second pole or winding
-const VPH: u32 = I2PH + 16 * PARTS * GROUPS; // f64 × NODES × GROUPS × 2: each node's volts phasor
-const MAT: u32 = VPH + 16 * NODES * GROUPS; // f64 × DIM × DIM
-const RHS: u32 = MAT + 8 * DIM * DIM; // f64 × 2 GROUPS × DIM
-const UP: u32 = RHS + 16 * GROUPS * DIM; // i32 × NODES: a union-find's parents
-const SC: u32 = UP + 4 * NODES; // f64 × GROUPS × 2: each group's sin and cos at the step
-/// Where the library's own bytes start: past the largest head (64 nodes, 128 parts), so `solve`,
-/// which isn't given the table, finds the counts there. The state is OWN_AT + SC + 16 × GROUPS
-/// bytes in all, under 1 MiB.
+const ADDED: u32 = 64;
+const NODE_ADDED: u32 = ADDED + 4 * PARTS;
+const LATEST: u32 = NODE_ADDED + 4 * NODES;
+const RAW: u32 = LATEST + 24 * PARTS;
+const VAL: u32 = RAW + 16 * PARTS;
+const THETA: u32 = VAL + 16 * PARTS;
+const OPEN: u32 = THETA + 8 * PARTS;
+const MAG: u32 = OPEN + 4 * PARTS;
+const COUNT: u32 = MAG + 4 * PARTS;
+const CODE: u32 = COUNT + 8 * PARTS;
+const COOL: u32 = CODE + 4 * PARTS;
+const X0: u32 = COOL + 8 * PARTS;
+const BRANCH: u32 = X0 + 8 * PARTS;
+const RMS: u32 = BRANCH + 8 * PARTS;
+const RMS2: u32 = RMS + 8 * PARTS;
+const RESID: u32 = RMS2 + 8 * PARTS;
+const MEAN: u32 = RESID + 8 * PARTS;
+const FREQ: u32 = MEAN + 8 * PARTS;
+const S0: u32 = FREQ + 8 * GROUPS;
+const C0: u32 = S0 + 8 * GROUPS;
+const IPH: u32 = C0 + 8 * GROUPS;
+const I2PH: u32 = IPH + 16 * PARTS * GROUPS;
+const VPH: u32 = I2PH + 16 * PARTS * GROUPS;
+const MAT: u32 = VPH + 16 * NODES * GROUPS;
+const RHS: u32 = MAT + 8 * DIM * DIM;
+const UP: u32 = RHS + 16 * GROUPS * DIM;
+const SC: u32 = UP + 4 * NODES;
 const OWN_AT: u32 = 8 * NODES + 12 * 8 * PARTS + 4 * PARTS;
 const _FITS: () = assert!(OWN_AT + SC + 16 * GROUPS < 1 << 20);
-
-// A part's code, the closed set: 0 out of the network; 1 closed (a changeover at `a`, an RCD's
-// poles closed); 2 a changeover at `b`; 3 a changeover joining both (the planted both_ways). An
-// RCD adds 2 while its test path conducts.
 
 #[inline(always)]
 fn own(s: u32) -> u32 {
     s + OWN_AT
 }
 
-/// Starts the state from the table at `g` at the first builder; false when another table started
-/// it, or the table's counts are out of range.
 fn start(s: u32, g: u32) -> bool {
     let o = own(s);
     if li(o + READY) == 1 {
@@ -376,12 +298,10 @@ fn start(s: u32, g: u32) -> bool {
     true
 }
 
-/// Set field j (0 or 1) of part i: 0 a number, 1 a control, 2 an f64 the item writes.
 #[inline(always)]
 fn set_mode(g: u32, i: u32, j: u32) -> i32 {
     li(part(g, i) + 96 + 24 * j)
 }
-/// A value held to set field j's range; a value that isn't finite keeps `last`.
 fn held(g: u32, i: u32, j: u32, raw: f64, last: f64) -> f64 {
     let (lo, hi) = (lf(part(g, i) + 104 + 24 * j), lf(part(g, i) + 112 + 24 * j));
     if !raw.is_finite() {
@@ -394,7 +314,6 @@ fn held(g: u32, i: u32, j: u32, raw: f64, last: f64) -> f64 {
         raw
     }
 }
-/// Number j of part i as it stands: its set value when set, else the table's.
 #[inline(always)]
 fn val(o: u32, g: u32, i: u32, j: u32) -> f64 {
     if j < 2 && set_mode(g, i, j) != 0 {
@@ -403,9 +322,6 @@ fn val(o: u32, g: u32, i: u32, j: u32) -> f64 {
         x(g, i, j)
     }
 }
-
-// ---------------------------------------------------------------------------------------------
-// The builders: each adds node or part i of the table, of its own kind.
 
 #[no_mangle]
 pub unsafe extern "C" fn node(s: i32, g: i32, i: i32) -> i32 {
@@ -433,7 +349,6 @@ fn add(s: i32, g: i32, i: i32, k: i32) -> i32 {
     }
     si(a, 1);
     si(o + VALID, 0);
-    // A set value before its first: 0 held to its range.
     let mut j = 0;
     while j < 2 {
         if set_mode(g, i as u32, j) != 0 {
@@ -501,11 +416,6 @@ pub unsafe extern "C" fn transformer(s: i32, g: i32, i: i32) -> i32 {
     add(s, g, i, TRANSFORMER)
 }
 
-// ---------------------------------------------------------------------------------------------
-// What each part is.
-
-/// A part's resistance as the library models it (a load's v_rated² ÷ p_rated, a resistor's or a
-/// fault's r, a source's r_internal), 0 for the rest.
 fn ohms(o: u32, g: u32, i: u32) -> f64 {
     match kind(g, i) {
         SOURCE_DC | SOURCE_AC => x(g, i, 2),
@@ -517,11 +427,9 @@ fn ohms(o: u32, g: u32, i: u32) -> f64 {
         _ => 0.0,
     }
 }
-/// Whether part i is in the network at all (meters and wires measure; they aren't).
 fn networked(g: u32, i: u32) -> bool {
     !matches!(kind(g, i), METER | WIRE)
 }
-/// Its group: the index of its frequency among the groups (DC is a frequency of 0).
 fn group_of(o: u32, g: u32, i: u32) -> u32 {
     let f = if kind(g, i) == SOURCE_AC { val(o, g, i, 1) } else { 0.0 };
     let n = li(o + NG) as u32;
@@ -534,8 +442,6 @@ fn group_of(o: u32, g: u32, i: u32) -> u32 {
     }
     0
 }
-/// The latest value of the control whose slot is at `r + off`: its last entry this step, else
-/// what it was (0 before its first).
 fn latest(r: u32, off: i32, was: f64) -> f64 {
     if off < 0 {
         return was;
@@ -548,8 +454,6 @@ fn latest(r: u32, off: i32, was: f64) -> f64 {
     let n = if n > 16 { 16 } else { n } as u32;
     lf(slot + 8 + 16 * (n - 1) + 8)
 }
-/// Input w of part i (0 what closes it, 1 `reset_by`, 2 `test_by`) at this solve: a control's
-/// latest value, or the i32 or bool the item wrote this step (nonzero says so); `was` with none.
 fn input_now(g: u32, i: u32, w: u32, r: u32, was: f64) -> f64 {
     let at = part(g, i) + 24 + 8 * w;
     match li(at) {
@@ -558,8 +462,6 @@ fn input_now(g: u32, i: u32, w: u32, r: u32, was: f64) -> f64 {
         _ => was,
     }
 }
-/// Set field j of part i as given at this solve: a control's latest value or the f64 the item
-/// wrote this step.
 fn set_now(g: u32, i: u32, j: u32, r: u32, was: f64) -> f64 {
     let at = part(g, i) + 96 + 24 * j;
     match li(at) {
@@ -568,8 +470,6 @@ fn set_now(g: u32, i: u32, j: u32, r: u32, was: f64) -> f64 {
         _ => was,
     }
 }
-/// The nodes branch w (0 or 1) of part i joins at code c: a changeover's common and the way it
-/// is at; an RCD's and a transformer's pole or winding w; any other's `from` and `to`.
 #[inline(always)]
 fn ends(g: u32, i: u32, w: u32, c: i32) -> (i32, i32) {
     match kind(g, i) {
@@ -578,7 +478,6 @@ fn ends(g: u32, i: u32, w: u32, c: i32) -> (i32, i32) {
         _ => (nd(g, i, 0), nd(g, i, 1)),
     }
 }
-/// How many branches of its own part i takes at code c.
 fn branches(o: u32, g: u32, i: u32, c: i32) -> u32 {
     if c == 0 {
         return 0;
@@ -594,11 +493,6 @@ fn branches(o: u32, g: u32, i: u32, c: i32) -> u32 {
     }
 }
 
-// ---------------------------------------------------------------------------------------------
-// The solve of a closed set.
-
-/// Gaussian elimination with partial pivoting on `d` unknowns and `m` right-hand sides in place;
-/// a column with no pivot left sets its unknown to 0 and the result is flagged singular.
 fn eliminate(o: u32, d: u32, m: u32) -> bool {
     let a = |i: u32, j: u32| o + MAT + 8 * (i * d + j);
     let b = |r: u32, i: u32| o + RHS + 8 * (r * d + i);
@@ -681,13 +575,11 @@ fn eliminate(o: u32, d: u32, m: u32) -> bool {
     whole
 }
 
-/// Adds v at row r, column c of the matrix (rows and columns past the reference node's).
 #[inline(always)]
 fn put(o: u32, d: u32, r: u32, c: u32, v: f64) {
     let at = o + MAT + 8 * (r * d + c);
     sf(at, lf(at) + v);
 }
-/// A node's row or column, None for the reference.
 #[inline(always)]
 fn row(n: i32) -> Option<u32> {
     if n > 0 {
@@ -696,7 +588,6 @@ fn row(n: i32) -> Option<u32> {
         None
     }
 }
-/// Conductance gg between nodes a and b.
 fn conduct(o: u32, d: u32, a: i32, b: i32, gg: f64) {
     if let Some(ra) = row(a) {
         put(o, d, ra, ra, gg);
@@ -712,8 +603,6 @@ fn conduct(o: u32, d: u32, a: i32, b: i32, gg: f64) {
     }
 }
 
-/// The groups: DC first when any DC source is added, then each AC source's frequency as it stands
-/// in part order.
 fn regroup(o: u32, g: u32, p: u32) {
     let mut q = 0;
     let mut i = 0;
@@ -744,14 +633,10 @@ fn regroup(o: u32, g: u32, p: u32) {
     si(o + NG, if q == 0 { 1 } else { q as i32 });
 }
 
-/// Builds and solves the closed set's network: every frequency group's node volts and part
-/// currents as phasors, each part's rms currents, an RCD's residual and each mean power. Returns
-/// false when it has no single solution.
 fn network(o: u32, g: u32) -> bool {
     let (n, p) = (li(o + NN) as u32, li(o + PP) as u32);
     regroup(o, g, p);
     let groups = li(o + NG) as u32;
-    // The unknowns: nodes 1 … n − 1, then the branches of each closed part.
     let mut d = n - 1;
     let mut i = 0;
     while i < p {
@@ -782,7 +667,6 @@ fn network(o: u32, g: u32) -> bool {
             sf(at, lf(at) + v);
         }
     };
-    // Each closed part's stamp.
     let mut i = 0;
     while i < p {
         let c = li(o + CODE + 4 * i);
@@ -797,7 +681,6 @@ fn network(o: u32, g: u32) -> bool {
         while w < 2 {
             let b = li(o + BRANCH + 8 * i + 4 * w);
             if b >= 0 {
-                // j from `fr` to `t` through the branch: leaves `fr`, enters `t`; V(t) − V(fr) = e.
                 let bu = b as u32;
                 let (fr, t) = ends(g, i, w, c);
                 if let Some(r) = row(fr) {
@@ -822,7 +705,6 @@ fn network(o: u32, g: u32) -> bool {
             w += 1;
         }
         if k == TRANSFORMER {
-            // Vs − a Vp = 0, each from its `from` to its `to`; and Ip + a Is = 0, a = n2 ÷ n1.
             let (bp, bs) = (li(o + BRANCH + 8 * i) as u32, li(o + BRANCH + 8 * i + 4) as u32);
             let a = x(g, i, 1) / x(g, i, 0);
             let mut j = 0;
@@ -849,7 +731,6 @@ fn network(o: u32, g: u32) -> bool {
                 let gg = 1.0 / ohm;
                 conduct(o, d, fr, t, gg);
                 if source {
-                    // A source behind its internal resistance: e ÷ r into `to`, out of `from`.
                     rhs(2 * q, t, e_re * gg);
                     rhs(2 * q, fr, -e_re * gg);
                     rhs(2 * q + 1, t, e_im * gg);
@@ -859,7 +740,6 @@ fn network(o: u32, g: u32) -> bool {
         }
         i += 1;
     }
-    // A part of the network that nothing joins to node 0 is held at 0 V at its lowest node.
     grounds(o, g, n, p);
     let mut v = 1;
     while v < n {
@@ -880,7 +760,6 @@ fn network(o: u32, g: u32) -> bool {
         v += 1;
     }
     let whole = eliminate(o, d, m);
-    // Node phasors, then each part's current phasors, rms and mean power.
     let mut q = 0;
     while q < groups {
         let mut v = 0;
@@ -904,7 +783,6 @@ fn network(o: u32, g: u32) -> bool {
     whole
 }
 
-/// A node's volts phasor in group q.
 #[inline(always)]
 fn vph(o: u32, q: u32, v: i32) -> (f64, f64) {
     if v <= 0 {
@@ -915,8 +793,6 @@ fn vph(o: u32, q: u32, v: i32) -> (f64, f64) {
     }
 }
 
-/// Part i's current phasors in each group, its rms currents, residual and mean power, from the
-/// solve of `d` unknowns.
 fn currents(o: u32, g: u32, i: u32, d: u32, groups: u32) {
     let c = li(o + CODE + 4 * i);
     let k = kind(g, i);
@@ -971,7 +847,6 @@ fn currents(o: u32, g: u32, i: u32, d: u32, groups: u32) {
             given += (ta - fa) * re + (tb - fb) * im;
         }
         if k == RCD && c & 2 != 0 {
-            // The test path, from the load-side live to the supply-side neutral.
             let (la, lb) = vph(o, q, nd(g, i, 1));
             let (na, nb) = vph(o, q, nd(g, i, 2));
             let r = x(g, i, 1);
@@ -994,7 +869,6 @@ fn currents(o: u32, g: u32, i: u32, d: u32, groups: u32) {
     sf(o + MEAN + 8 * i, mean);
 }
 
-/// A source's rms phasor (DC: its volts) and its group.
 #[inline(always)]
 fn emf(o: u32, g: u32, i: u32) -> (f64, f64, u32) {
     let q = group_of(o, g, i);
@@ -1007,9 +881,6 @@ fn emf(o: u32, g: u32, i: u32) -> (f64, f64, u32) {
     }
 }
 
-/// Roots the closed network's parts with a union-find in the state (UP), the lower root winning
-/// so node 0's part is rooted at 0; a node whose root is itself and not 0 is the lowest node of a
-/// part nothing joins to node 0 (a node no closed part touches is such a part on its own).
 fn find(o: u32, v: u32) -> u32 {
     let mut v = v;
     while li(o + UP + 4 * v) as u32 != v {
@@ -1064,10 +935,6 @@ fn grounds(o: u32, g: u32, n: u32, p: u32) {
     }
 }
 
-// ---------------------------------------------------------------------------------------------
-// A step.
-
-/// Each wire's displacement at step k under the closed set solved at K0, from X0 there.
 fn displaced(o: u32, g: u32, w: u32, k: i64, per: f64) -> f64 {
     let groups = li(o + NG) as u32;
     let part = target(g, w);
@@ -1096,7 +963,6 @@ fn displaced(o: u32, g: u32, w: u32, k: i64, per: f64) -> f64 {
     lf(o + X0 + 8 * w) + sum / nae
 }
 
-/// Input w of part i at this solve, kept as its latest: (what it was, what it is).
 #[inline(always)]
 fn took(o: u32, g: u32, i: u32, w: u32, r: u32) -> (f64, f64) {
     let at = o + LATEST + 24 * i + 8 * w;
@@ -1106,8 +972,6 @@ fn took(o: u32, g: u32, i: u32, w: u32, r: u32) -> (f64, f64) {
     (was, now)
 }
 
-/// Part i's inputs, protective state and set values at this solve; its code, and whether a set
-/// value changed.
 #[inline(always)]
 fn update(o: u32, g: u32, i: u32, r: u32) -> (i32, bool) {
     if li(o + ADDED + 4 * i) != 1 {
@@ -1180,7 +1044,6 @@ fn update(o: u32, g: u32, i: u32, r: u32) -> (i32, bool) {
         FUSE | BREAKER => (li(open) == 0) as i32,
         CHANGEOVER => {
             let at = 1 + (now != 0.0) as i32;
-            // The planted both_ways joins both for the step its input changes.
             #[cfg(both_ways)]
             let at = if li(o + CODE + 4 * i) != 0 && (was != 0.0) != (now != 0.0) { 3 } else { at };
             at
@@ -1192,9 +1055,6 @@ fn update(o: u32, g: u32, i: u32, r: u32) -> (i32, bool) {
     (code, moved)
 }
 
-/// solve(s, r, k, per): the circuit's step k, at t = k ÷ per s, each step 1 ÷ per s long, its
-/// inputs read from the read region at `r` and from the item's arrays. Writes the state's head;
-/// 1, or 0 for a circuit with no single solution (or a state no builder started).
 #[no_mangle]
 pub unsafe extern "C" fn solve(s: i32, r: i32, k: i64, per: i64) -> i32 {
     let (s, r) = (s as u32, r as u32);
@@ -1207,7 +1067,6 @@ pub unsafe extern "C" fn solve(s: i32, r: i32, k: i64, per: i64) -> i32 {
     let h = head(n, p);
     let per_f = per as f64;
     let dt = 1.0 / per_f;
-    // Each fuse's and breaker's cooling over a step, for this per.
     if ll(o + PER) != per {
         sl(o + PER, per);
         let mut i = 0;
@@ -1226,7 +1085,6 @@ pub unsafe extern "C" fn solve(s: i32, r: i32, k: i64, per: i64) -> i32 {
             i += 1;
         }
     }
-    // Inputs, protective parts, set values and the closed set.
     let mut changed = li(o + VALID) != 1;
     let mut i = 0;
     while i < p {
@@ -1248,7 +1106,6 @@ pub unsafe extern "C" fn solve(s: i32, r: i32, k: i64, per: i64) -> i32 {
     };
     wave(o, k);
     if changed {
-        // Carry each wire's displacement to this step under the closed set before.
         let valid = li(o + VALID) == 1;
         let mut w = 0;
         while w < p {
@@ -1271,7 +1128,6 @@ pub unsafe extern "C" fn solve(s: i32, r: i32, k: i64, per: i64) -> i32 {
         }
     }
     let groups = li(o + NG) as u32;
-    // A step's instantaneous value of a phasor set: DC as it is, AC × √2 on the wave.
     let inst = move |base: u32, stride: u32| -> f64 {
         let mut v = 0.0;
         let mut q = 0;
@@ -1316,7 +1172,6 @@ pub unsafe extern "C" fn solve(s: i32, r: i32, k: i64, per: i64) -> i32 {
         sf(s + h.i2 + 8 * i, inst(o + I2PH + 16 * GROUPS * i, 16));
         i += 1;
     }
-    // Meters and wires read their parts as just written.
     let mut i = 0;
     while i < p {
         match kind(g, i) {
@@ -1340,8 +1195,6 @@ pub unsafe extern "C" fn solve(s: i32, r: i32, k: i64, per: i64) -> i32 {
         }
         i += 1;
     }
-    // Each closed fuse heats by its rms current over the step, and each breaker by its, open
-    // included; a breaker's magnetic element and an RCD's count read the step's current.
     let mut i = 0;
     while i < p {
         let c = li(o + CODE + 4 * i);

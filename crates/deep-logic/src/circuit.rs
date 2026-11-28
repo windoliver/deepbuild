@@ -1,15 +1,3 @@
-//! circuit@1's and circuit@2's built tables and their kind rules (#1181, #3604; canvas
-//! primitives: Logic: library interfaces): the nodes and parts a logic item's `circuit` declares,
-//! checked and refused naming a part the interface can't model; their bytes, the item's asset 0,
-//! which a library of that interface reads (packs/circuit-1.0.0/LAYOUT.md and
-//! packs/circuit-2.0.0/LAYOUT.md); and the judge's reading of a run: `circuit.kcl`,
-//! `circuit.power` and `circuit.fuse`, and under circuit@2 `circuit.breaker`, `circuit.rcd` and
-//! `circuit.range`. The rules read the arrays a library writes at every step with the item's own
-//! topology, ratings, inputs and the pack's constants, never a library's verdict, so they hold any
-//! library, a planted one included. An item is circuit@2's when its program imports
-//! `lib:circuit@2` or links a library that implements it or exports its builders; circuit@1's bytes and rules are as #1181
-//! built them.
-
 use serde_json::{json, Map, Value};
 
 use crate::first_party;
@@ -118,8 +106,10 @@ pub struct Circuit {
 /// and one of the item's writes by name, `(offset in the write region, address, type, count)`.
 pub struct Lookup<'a> {
     pub slot: &'a dyn Fn(&str) -> Option<u32>,
-    pub write: &'a dyn Fn(&str) -> Option<(u32, u32, String, u32)>,
+    pub write: &'a dyn Fn(&str) -> Option<Write>,
 }
+
+pub type Write = (u32, u32, String, u32);
 
 fn refusal(what: String, part: Option<&str>) -> Value {
     let mut out = json!({"rule": "circuit", "what": what});
@@ -137,10 +127,6 @@ pub fn constant(major: u32, path: &str) -> Option<f64> {
         .and_then(Value::as_f64)
 }
 
-/// The circuit `circuit` declares under circuit@`major`, each input found by `look`, or every
-/// refusal: a part of a kind the interface can't model, a field it doesn't take or a number out
-/// of range, a node or part it names that isn't there, an input the item doesn't read or an array
-/// it doesn't write, and under circuit@2 a DC source in a network a transformer joins.
 pub fn build(v: &Value, major: u32, look: &Lookup) -> Result<Circuit, Vec<Value>> {
     let whole = |what: &str| vec![refusal(what.into(), None)];
     if let Some(k) = v
@@ -184,7 +170,6 @@ pub fn build(v: &Value, major: u32, look: &Lookup) -> Result<Circuit, Vec<Value>
             Err(r) => refused.push(r),
         }
     }
-    // Each fixed frequency once, and each set one as a frequency of its own.
     let mut frequencies: Vec<u64> = Vec::new();
     let mut set_frequencies = 0;
     for p in parts.iter().filter(|p| p.kind == Kind::SourceAc) {
@@ -342,8 +327,6 @@ fn table2(nodes: &[String], parts: &[Part], look: &Lookup) -> Result<Vec<u8>, Ve
     }
 }
 
-/// circuit@2's refusal of a DC source in a network a transformer's winding joins, naming both:
-/// an ideal transformer passes no DC. A network is the nodes its parts join, each winding apart.
 fn no_dc_through_transformers(nodes: &[String], parts: &[Part]) -> Vec<Value> {
     let mut up: Vec<usize> = (0..nodes.len()).collect();
     fn find(up: &mut [usize], v: usize) -> usize {
@@ -467,7 +450,6 @@ fn part_of(
         }
         named(k, p.get(k).unwrap_or(&Value::Null)).map(Some)
     };
-    // A pole or a winding: `[from, to]`, two of the circuit's nodes.
     let pair = |k: &str| -> Result<(Option<usize>, Option<usize>), Value> {
         match p.get(k).and_then(Value::as_array).map(Vec::as_slice) {
             Some([a, b]) => {
@@ -506,7 +488,6 @@ fn part_of(
             (f, t, None, None)
         }
     };
-    // `<name>[<index>]` of the item's own writes, of one of `types`: its offset and address.
     let array = |k: &str, given: &Value, types: &[&str]| -> Result<Src, Value> {
         let text = given.as_str().unwrap_or_default();
         let parsed = text
@@ -549,7 +530,6 @@ fn part_of(
                 .ok_or_else(|| bad(format!("has {k} {v}: {k} is {what}"))),
         }
     };
-    // A number field circuit@2 lets a control or the item's own f64 set within a range.
     let settable = |k: &'static str,
                     ok: &dyn Fn(f64) -> bool,
                     what: &str|
@@ -862,9 +842,6 @@ fn control_values(entries: &[Entry], name: &str, step: i64) -> Vec<(i64, f64)> {
 }
 
 impl<'a> Judge<'a> {
-    /// The rules over `item`'s arrays, each rule's params from `rules` or the pack's defaults,
-    /// the controls' values from `entries`, or what it lacks: every array they read, by name and
-    /// type.
     pub fn new(
         item: &Item,
         circuit: &'a Circuit,
@@ -1009,9 +986,6 @@ impl<'a> Judge<'a> {
         let f = |a: At, j: usize| f64_at(b, a.0 + 8 * j);
         let on_of = |j: usize| i32_at(b, self.on.0 + 4 * j);
         let second = |a: Option<At>, j: usize| a.map_or(0.0, |a| f(a, j));
-        // circuit.kcl: into each node, + for a part whose `to` it is, − for one whose `from` it is;
-        // a changeover's way by where it is, an RCD's and a transformer's second pole or winding
-        // by i2, and an RCD's test path from its node volts while it takes power.
         let mut sums = vec![0.0; c.nodes.len()];
         let mut flow = |from: Option<usize>, to: Option<usize>, i: f64| {
             if let (Some(a), Some(b)) = (from, to) {
@@ -1070,8 +1044,6 @@ impl<'a> Judge<'a> {
                     .fail(json!({"step": k, "meter": x.id, "gap": gap}));
             }
         }
-        // circuit.fuse and circuit.breaker: the step a fuse's curve, or a breaker's two elements,
-        // give it open, against the step its `on` turns 0.
         let (i_rms, i_at) = (self.i_rms, self.i);
         for (u, rule, name) in [
             (&mut self.fuses, &mut self.fuse, "fuse"),
@@ -1086,7 +1058,6 @@ impl<'a> Judge<'a> {
                     u.due = Some(k);
                 }
                 if on && u.open {
-                    // Closed again by its reset: a fuse cold, a breaker with the heat it has.
                     u.open = false;
                     if !breaker {
                         u.theta = 0.0;
@@ -1095,8 +1066,6 @@ impl<'a> Judge<'a> {
                 } else if !on && !u.open {
                     u.open = true;
                     let expected = u.due.or_else(|| {
-                        // Opened before its heat reached the opening heat: the step it would have,
-                        // at the last current.
                         let m = (u.last_rms / u.rating).powi(2);
                         (m > u.open_at).then(|| {
                             let left = ((m - u.theta) / (m - u.open_at)).ln() / -u.cool.ln();
@@ -1124,17 +1093,12 @@ impl<'a> Judge<'a> {
                 }
             }
         }
-        // circuit.rcd: each RCD's count from its residual, read from its poles' currents, against
-        // the step its `on` turns 0; an open one carries nothing on either pole.
         for u in &mut self.rcds {
             let x = &c.parts[u.part];
             let on = on_of(u.part) != 0;
             let (a, b2) = (f(self.i, u.part), second(self.i2, u.part));
             let (ar, br) = (f(self.i_rms, u.part), second(self.i2_rms, u.part));
             let residual = if self.in_phase {
-                // In phase or against it: the sum of each pole's rms by the sign it has now. At a
-                // crossing it is the step before's while the poles' currents haven't changed, and
-                // the library's own reading for the one step they changed on.
                 let sign = |v: f64, rms: f64| {
                     if rms == 0.0 {
                         Some(0.0)
@@ -1154,7 +1118,6 @@ impl<'a> Judge<'a> {
             };
             u.residual = residual;
             u.poles = (ar, br);
-            // Reached 1, within the rounding of a sum of rises.
             if !u.open && u.due.is_none() && u.count >= 1.0 - 1e-9 {
                 u.due = Some(k);
             }
@@ -1183,8 +1146,6 @@ impl<'a> Judge<'a> {
                 0.0
             };
         }
-        // circuit.range: each set value as given, finite and in its range, and the resistance the
-        // library models from it.
         for h in &mut self.held {
             let x = &c.parts[h.part];
             let Some(s) = &x.sets[h.j] else { continue };
@@ -1194,8 +1155,8 @@ impl<'a> Judge<'a> {
                     .as_array()
                     .into_iter()
                     .flatten()
-                    .filter(|e| e[0].as_i64().is_some_and(|at| at <= k))
-                    .last()
+                    .rev()
+                    .find(|e| e[0].as_i64().is_some_and(|at| at <= k))
                     .and_then(|e| e[1].as_f64())
                     .unwrap_or(h.given),
             };
@@ -1238,9 +1199,6 @@ impl<'a> Judge<'a> {
         }
     }
 
-    /// The rules: each with its verdict, the steps it read and its first fails. A fuse, breaker or
-    /// RCD its curve or count opened that the run never opened fails here, naming the step that
-    /// gives it.
     pub fn result(mut self) -> Value {
         let c = self.circuit;
         for (u, rule, name) in [
