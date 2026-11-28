@@ -2534,6 +2534,41 @@
       "criteria": [
         "#3529.50c3d51b"
       ]
+    },
+    {
+      "id": "logic-writes",
+      "command": [
+        "node",
+        "benchmarks/canvas-world.mjs",
+        "tests/acceptance/3530/ac3-writes.test.ts"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "writes_ns_per_fuel": 0.5
+      },
+      "initialReason": "Issue #3530 first measurement (#3530.9355f915): the merge base follows every store of a logic item's program with a call to the page tracker and has no such task. #3445's twin that mostly writes, 64 stores in the 203 instructions of an iteration and 23,600 iterations a step (4,790,807 fuel), as a logic item's program; the vitest file runs the blind acceptance test itself, which reads a release deep-logic's live view of the twin and of its one-iteration twin, a step a frame, takes a reading as the record's is taken (the least eval_ns of ten steps less the least of ten of the one-iteration twin, over the fuel between them), six times with the first left out, and judges the five against 0.5 ns per fuel unit, twice the record's 0.25, by scripts/benchmark.mjs's judgeLimit (PASS only on a reference Mac at rest); the benchmark prints that verdict and exits 0, and its judge gives it as the target. #3445 read the merge base at 0.622, 2.49 times the record. Once main has this task, p50 and peak memory of the whole command get a 50% merge-base margin.",
+      "criteria": [
+        "#3530.9355f915"
+      ]
+    },
+    {
+      "id": "logic-metering",
+      "command": [
+        "node",
+        "benchmarks/canvas-world.mjs",
+        "tests/acceptance/3530/ac4-metering.test.ts"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "app_times_record": 1.5,
+        "web_times_record": 1.5
+      },
+      "initialReason": "Issue #3530 first measurement (#3530.80a29246): the merge base has no such task. The metering benchmark, whose program stores once in the 40 instructions of an iteration, rewritten with the store's page marked without a call; the vitest file runs the blind acceptance test itself, which runs node benchmarks/logic.mjs once (a release deep-logic's five readings in the app and five in headless Chrome) and judges each host's five as multiples of the record, crates/deep-logic/metering.json, against 1.5 by scripts/benchmark.mjs's judgeLimit (PASS only on the record's reference Mac at rest); the benchmark prints that verdict and exits 0, and its judge gives it as the target. Once main has this task, p50 and peak memory of the whole command get a 50% merge-base margin.",
+      "criteria": [
+        "#3530.80a29246"
+      ]
     }
   ]
 }

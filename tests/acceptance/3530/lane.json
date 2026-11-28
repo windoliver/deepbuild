@@ -1,0 +1,1 @@
+{ "alone": true, "why": "binary: ac1-pages and ac2-fixtures build and run deep-logic from this checkout's target/ when no DEEP_BIN_DIR is given, and ac1-pages starts headless Chrome; ac3-writes and ac4-metering are timed files that read a release build there", "timed": ["ac3-writes.test.ts", "ac4-metering.test.ts"] }

@@ -1,0 +1,8 @@
+{
+  "crates/deep-logic/src/main.rs": [
+    {
+      "find": ["    let mut planted = Planted::default();"],
+      "wrong": ["    let mut planted = Planted::default().and(\"store_skips_page_marked_last\").expect(\"the planted rewrite of #3530\");"]
+    }
+  ]
+}

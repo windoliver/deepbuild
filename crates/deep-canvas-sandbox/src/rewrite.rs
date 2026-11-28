@@ -60,6 +60,7 @@ pub struct Faults {
     pub skip_fill_pages: bool,
     /// Copies every `i64.rotl` as `i64.rotr` (#458).
     pub rotl_as_rotr: bool,
+    pub store_skips_page_marked_last: bool,
 }
 
 /// The exported global names a logic item's program gains (#531): each mutable global of the
@@ -304,6 +305,17 @@ pub fn rewrite_as(bytes: &[u8], faults: Faults, mode: Mode) -> Result<Rewritten,
         };
         exports.export(&name, ExportKind::Global, bitmap + i);
     }
+    let planted_last_marked_page = (faults.store_skips_page_marked_last && words == 1).then(|| {
+        globals.global(
+            GlobalType {
+                val_type: ValType::I32,
+                mutable: true,
+                shared: false,
+            },
+            &ConstExpr::i32_const(-1),
+        );
+        globals.len() - 1
+    });
     if logic {
         for i in &mutable {
             exports.export(&format!("{GLOBAL}{i}"), ExportKind::Global, *i);
@@ -336,6 +348,8 @@ pub fn rewrite_as(bytes: &[u8], faults: Faults, mode: Mode) -> Result<Rewritten,
         cap,
         trap,
         mark: logic.then_some(mark),
+        only_bitmap_word: (logic && words == 1).then_some(bitmap),
+        planted_last_marked_page,
         counted: (mode == Mode::Counted).then_some(counted),
     };
     let mut blocks = Vec::new();
@@ -674,6 +688,8 @@ struct Counters {
     trap: u32,
     /// The page tracker's function, in a logic item's program.
     mark: Option<u32>,
+    only_bitmap_word: Option<u32>,
+    planted_last_marked_page: Option<u32>,
     /// The first block count's global, in a counted rewrite.
     counted: Option<u32>,
 }
@@ -956,11 +972,43 @@ impl Body<'_> {
                     e.i(I::LocalTee(a));
                     e.i(I::LocalGet(value));
                     e.op(re.instruction(op.clone()).map_err(err)?);
-                    e.i(I::LocalGet(a));
-                    e.i(I::I32Const(offset as u32 as i32));
-                    e.i(I::I32Add);
-                    e.i(I::LocalSet(a));
-                    mark(&mut e, Some(size as i32));
+                    if let Some(word) = c.only_bitmap_word {
+                        let ends = [offset, offset + u64::from(size) - 1];
+                        let ends = &ends[..1 + usize::from(size > 1)];
+                        let page = |e: &mut Emit, byte: u64| {
+                            e.i(I::LocalGet(a));
+                            e.i(I::I32Const(byte as u32 as i32));
+                            e.i(I::I32Add);
+                            e.i(I::I32Const(16));
+                            e.i(I::I32ShrU);
+                        };
+                        if let Some(kept) = c.planted_last_marked_page {
+                            page(&mut e, offset);
+                            e.i(I::GlobalGet(kept));
+                            e.i(I::I32Ne);
+                            e.i(I::If(BlockType::Empty));
+                        }
+                        e.i(I::GlobalGet(word));
+                        for byte in ends {
+                            e.i(I::I64Const(1));
+                            page(&mut e, *byte);
+                            e.i(I::I64ExtendI32U);
+                            e.i(I::I64Shl);
+                            e.i(I::I64Or);
+                        }
+                        e.i(I::GlobalSet(word));
+                        if let Some(kept) = c.planted_last_marked_page {
+                            page(&mut e, offset);
+                            e.i(I::GlobalSet(kept));
+                            e.i(I::End);
+                        }
+                    } else {
+                        e.i(I::LocalGet(a));
+                        e.i(I::I32Const(offset as u32 as i32));
+                        e.i(I::I32Add);
+                        e.i(I::LocalSet(a));
+                        mark(&mut e, Some(size as i32));
+                    }
                 }
                 _ => {
                     e.op(re.instruction(op.clone()).map_err(err)?);
