@@ -175,6 +175,31 @@ pub(super) fn cycle(packs: &Packs, pack: &Pack) -> Result<(), Vec<Issue>> {
     Err(vec![cycle_issue("requires/packs".into(), found, &what)])
 }
 
+pub fn reached(packs: &Packs, manifest: &Value) -> BTreeMap<String, String> {
+    let listed = member(manifest, "requires").and_then(|r| r.get("packs"));
+    let mut next: Vec<String> = (listed.and_then(Value::as_array).into_iter().flatten())
+        .filter_map(|d| d.as_str().map(String::from))
+        .collect();
+    let named = |dep: &str| match dep.rsplit_once('@') {
+        Some((name, v)) => format!("{}@{v}", name.rsplit_once('/').map_or(name, |(_, n)| n)),
+        None => dep.to_string(),
+    };
+    let mut out = BTreeMap::new();
+    while let Some(dep) = next.pop() {
+        match packs.all().find(|p| short(&p.id) == named(&dep)) {
+            Some(p) if !out.contains_key(&p.id.text()) => {
+                next.extend(p.requires_packs.iter().map(Dep::text));
+                out.insert(p.id.text(), p.digest.clone());
+            }
+            Some(_) => {}
+            None => {
+                out.insert(dep, String::new());
+            }
+        }
+    }
+    out
+}
+
 /// The store a pack's kind kit checks its documents in: the pack and every version it requires,
 /// through other packs, as the versions `packs` admitted.
 pub(super) fn store(packs: &Packs, pack: &Pack) -> Packs {

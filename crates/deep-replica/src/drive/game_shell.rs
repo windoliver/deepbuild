@@ -13,6 +13,8 @@ use deep_canvas::show::{stamp, Writer, WriterKind};
 use deep_canvas_marks::look::{self, Look};
 use deep_canvas_marks::scene::Record;
 use deep_canvas_marks::select;
+use deep_canvas_motion::eval::Validity;
+use deep_canvas_motion::program::Program;
 use deep_logic::shell::run::{plants_of, Screens};
 use deep_marks_raster::Renderer;
 use serde_json::{json, Value};
@@ -71,6 +73,14 @@ impl Canvas {
         let map = stamped
             .as_object()
             .ok_or_else(|| refused("a screen's document is an object".into()))?;
+        // #3605: each driven data value written where the screen's templates read it, as the scheduler writes it
+        // (`{data/ch1} of 3` over the shell's `done`), before the screen is drawn.
+        let program = Program::compile(map)
+            .map_err(|r| json!({"ok": false, "code": r.code, "what": format!("a screen's document doesn't compile: {}", r.path), "path": r.path}))?;
+        let mut state = program.state();
+        program.evaluate(0, Validity::Full, &mut state);
+        let shown = deep_canvas_motion::eval::shown_doc(map, &program, &state);
+        let map = shown.as_object().unwrap_or(map);
         let drawn = self
             .renderer
             .prepare(map, 0, &self.look.light, self.look.status.as_ref(), &Record::default(), &self.evidence)
@@ -144,6 +154,12 @@ impl Screens for Canvas {
         self.keep(&png)
     }
 
+    fn texts(&mut self, doc: &Value, size: [f64; 2]) -> Result<BTreeMap<String, String>, Value> {
+        let (drawn, _, _) = self.drawn(doc, size)?;
+        let texts = select::texts(&drawn.frame, &mut deep_text::Shaper::new());
+        Ok(texts.into_iter().map(|t| (t.item, t.source)).collect())
+    }
+
     fn recording(&mut self, frames: &[String]) -> Option<String> {
         if frames.is_empty() {
             return None;
@@ -162,6 +178,21 @@ pub fn run(call: &Value, plant: Option<Plant>, out: &Path) -> Result<Value, Valu
     let document = call.get("document").ok_or_else(
         || json!({"ok": false, "code": "bad_input", "what": "a shell's play takes its document"}),
     )?;
+    // #3605: a level's track replayed as a piece with no shell, which the moves journey's check compares with its run.
+    if call.pointer("/shell/journey").and_then(Value::as_str) == Some("replay") {
+        return replay(document, call, out);
+    }
+    // #3605: a relaunch journey's plays keep the shell's profile record in one store, under this replica's out folder.
+    let mut call = call.clone();
+    if let Some(store) = call.pointer("/shell/store").and_then(Value::as_str) {
+        let name = format!("{:x}", Sha256::digest(store.as_bytes()));
+        let dir = out.join("profiles").join(name);
+        std::fs::create_dir_all(&dir).map_err(
+            |e| json!({"ok": false, "code": "blocked", "what": format!("{}: {e}", dir.display())}),
+        )?;
+        call["saves_dir"] = json!(dir);
+    }
+    let call = &call;
     let inline = call.get("assets").cloned().unwrap_or(json!({}));
     let evidence = call
         .get("evidence")
@@ -184,10 +215,57 @@ pub fn run(call: &Value, plant: Option<Plant>, out: &Path) -> Result<Value, Valu
         Some(Plant::ShellPauseRunsClock) => Some("pause-runs-level-clock"),
         Some(Plant::ShellFocusStaysDisabled) => Some("focus-stays-on-disabled"),
         Some(Plant::ShellPromptsKeepKeys) => Some("prompts-keep-key-glyphs"),
+        Some(Plant::ShellDoneOnEnter) => Some("done-on-enter"),
+        Some(Plant::ShellDoneInSave) => Some("done-in-save"),
+        Some(Plant::ShellSettingInReadRegion) => Some("setting-through-reads"),
         _ => None,
     };
     // A screen's or a level's document by hash: the call's own, or one the evidence store holds.
     let docs =
         |sha: &str| -> Option<Value> { stored(sha).and_then(|b| serde_json::from_slice(&b).ok()) };
     deep_logic::shell::run::play(document, &stored, &docs, call, &mut canvas, plants_of(name))
+}
+
+/// #3605: level `shell.of`'s document, from the shell's own, played alone over the track the call gives, for
+/// `shell.steps` steps, with each array `shell.values` names at each step: the replica's piece play, with no shell.
+fn replay(document: &Value, call: &Value, out: &Path) -> Result<Value, Value> {
+    let spec = &call["shell"];
+    let i = spec["of"].as_u64().unwrap_or(0) as usize;
+    let levels = document
+        .get("items")
+        .and_then(Value::as_object)
+        .and_then(|items| items.values().find(|it| it["kind"] == "shell@1"))
+        .and_then(|it| it.pointer("/params/levels"))
+        .and_then(Value::as_array);
+    let mut level = levels
+        .and_then(|l| l.get(i))
+        .map(|l| l["doc"].clone())
+        .unwrap_or(Value::Null);
+    // A level named by hash is one the call or its evidence gives.
+    if let Some(h) = level.as_str().map(str::to_string) {
+        let bytes = call
+            .pointer(&format!("/documents/{h}"))
+            .cloned()
+            .or_else(|| {
+                let b = call.pointer(&format!("/assets/{h}"))?.as_str()?;
+                serde_json::from_slice(&B64.decode(b).ok()?).ok()
+            });
+        level = bytes.unwrap_or(Value::Null);
+    }
+    if !level.is_object() {
+        return Err(
+            json!({"ok": false, "code": "bad_input", "what": format!("the shell has no level {i} to replay")}),
+        );
+    }
+    let alone = json!({"call": "play", "document": level, "assets": call.get("assets"), "seed": call.get("seed"),
+                       "track": call.get("track"), "span": {"steps": spec["steps"]}, "values": spec["values"]});
+    let reply = super::play::run(&alone, None, out).map_err(|f| {
+        let mut e = f.0;
+        e.insert("ok".into(), json!(false));
+        Value::Object(e)
+    })?;
+    Ok(
+        json!({"ok": true, "shell": {"journey": "replay", "level": i, "values": reply["values"], "final": reply["final"],
+                                     "steps": reply["steps"], "entries": reply["entries"]}}),
+    )
 }

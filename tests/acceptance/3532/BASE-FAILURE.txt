@@ -1,0 +1,78 @@
+Acceptance tests for #3532 on the base d303e2b64 (origin/main when this suite was written; no scripts/kit-ledger.mjs),
+run on 2026-11-27 with Node v24.22.2 in this checkout, with the suite uncommitted, at a 1-minute load of about 83:
+
+  node --test tests/acceptance/3532/kit-ledger.test.mjs
+
+Trimmed to each test's result and each failure's message; stack frames are left out. Home folders are written as ~
+and the system's temporary folder as <tmp>. aafef3131's tree was already exported and built in <tmp>/deep-3532 by
+this job's probe (README: Expected values), so no build ran here. All 3 tests fail at an assertion in
+tests/acceptance/3532/kit-ledger.test.mjs: the lint lane holds no kit ledger command, and the check doesn't exist,
+so node exits 1 with no kit ledger line.
+
+✖ #3532.400b035d on a built tree, aafef3131, the lint lane's kit ledger command takes under 5 s, one reading recorded with the load (0.884334ms)
+✖ #3532.4bbb848d on aafef3131, whose ledger wasn't written again after scene3d's shapes changed, the check fails naming scene3d with the ledger's digest and the tree's; with the ledger written again for scene3d it passes (310654.955625ms)
+✖ #3532.ed1562fc a ledger that holds marks2d and look at aafef3131's own digests with the verdicts FAIL and INCONCLUSIVE fails, naming each module and its verdict (230.448333ms)
+ℹ tests 3
+ℹ pass 0
+ℹ fail 3
+
+✖ #3532.400b035d …
+  AssertionError [ERR_ASSERTION]: the lint lane in scripts/lanes.mjs runs [process.execPath, 'scripts/kit-ledger.mjs']; its commands are:
+  fmt --all -- --check
+  scripts/repo-rules.mjs
+  clippy --workspace --all-targets --locked -- -D warnings
+  scripts/vendor-rebase.mjs check
+  scripts/canvas-lint.mjs
+  scripts/size-ratchet.mjs
+  scripts/wait-ratchet.mjs
+  scripts/doc-ceilings.mjs
+  scripts/reading-rule.mjs
+  scripts/conformance-lint.mjs
+  scripts/slots-check.mjs
+  scripts/canvas-closures.mjs closures
+  scripts/canvas-closures.mjs drift
+  scripts/canvas-closures.mjs paths
+  scripts/record-reader-guard.mjs
+  scripts/render-lint.mjs
+  scripts/plant-lint.mjs
+  scripts/loads-lint.mjs
+  scripts/budget-table.mjs check
+  scripts/cache-lint.mjs
+  scripts/blocking-call-guard.mjs
+  scripts/ask-sources-guard.mjs
+  scripts/keymap-guard.mjs
+  scripts/color-literal-guard.mjs
+  scripts/guide.mjs --check
+  scripts/panel-catalog.mjs
+  scripts/known-failures-check.mjs
+  scripts/fetch-lock.mjs lint
+  scripts/exit-lint.mjs
+  scripts/app-copy-lint.mjs
+  scripts/alone-lint.mjs
+  scripts/built-escapes.mjs
+    actual: undefined,
+    expected: true,
+
+✖ #3532.4bbb848d …
+  AssertionError [ERR_ASSERTION]: aafef3131: one FAIL kit ledger line for each of scene3d and none other
+  exit 1
+  stdout:
+
+  stderr:
+  scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `node scripts/kit-ledger.mjs --root <tmp>/deep-3532/trees/aafef3131` runs under the throttle's grant with no lease
+  Error: Cannot find module '~/dev/claude-worktrees/github-issue-3532-ef4f6b/agent-a6667754d0b5b9008/scripts/kit-ledger.mjs'
+    code: 'MODULE_NOT_FOUND',
+    actual: [],
+    expected: [ 'scene3d' ],
+
+✖ #3532.ed1562fc …
+  AssertionError [ERR_ASSERTION]: aafef3131 with the planted verdicts: one FAIL kit ledger line for each of marks2d, look and none other
+  exit 1
+  stdout:
+
+  stderr:
+  scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `node scripts/kit-ledger.mjs --root <tmp>/deep-3532/trees/aafef3131` runs under the throttle's grant with no lease
+  Error: Cannot find module '~/dev/claude-worktrees/github-issue-3532-ef4f6b/agent-a6667754d0b5b9008/scripts/kit-ledger.mjs'
+    code: 'MODULE_NOT_FOUND',
+    actual: [],
+    expected: [ 'look', 'marks2d' ],

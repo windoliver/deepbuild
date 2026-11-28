@@ -6,7 +6,7 @@ The proof check plug-in (#685): it registers check kind `proof` through `deep.re
 
 ## Where new code goes
 
-- `src/index.ts`: the plug-in entry and its fill; `src/check.ts`: one run; `src/lean.ts` and `src/kani.ts`: the two runners; `src/run.ts`: what both share.
+- `src/index.ts`: the plug-in entry and its fill; `src/check.ts`: one run and its mutants, through `RUNNERS`, the one table from a runner's name (a new runner is one entry there, #1896); `src/lean.ts` and `src/kani.ts`: the two runners; `src/run.ts`: what both share.
 - `src/kit.ts`: the `check.kind@1` kit, its cases on the crates in `fixtures/`; `src/types.ts`: the shapes.
 - Tests: `test/` for the rules that run without a toolchain; the acceptance suite in `tests/acceptance/685` (never edited) runs by hand with Lean and Kani installed.
 

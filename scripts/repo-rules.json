@@ -353,6 +353,10 @@
           "spec": "* path=../deep-marks-raster",
           "why": "Issue #1498: the replica's copy of the hub's canvas core: render-back's raster."
         },
+        "deep-canvas-motion": {
+          "spec": "* path=../deep-canvas-motion",
+          "why": "Issue #3605: a shell screen's driven data values written where its templates read them, as the scheduler writes them, so a level select's chapter counts show the shell's done."
+        },
         "deep-text": {
           "spec": "* path=../deep-text",
           "why": "Issue #1498: the replica's copy of the hub's canvas core: the shaper."
@@ -2913,6 +2917,42 @@
         }
       }
     },
+    "spikes/3031/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../../crates/deep-canvas",
+          "why": "Spike #3031: the viewer's offsets a frame is evaluated with, at their defaults."
+        },
+        "deep-canvas-scene3d": {
+          "spec": "* path=../../crates/deep-canvas-scene3d",
+          "why": "Spike #3031: evaluates each fixture's document into the scene a frame draws."
+        },
+        "deep-effects-render": {
+          "spec": "* path=../../crates/deep-effects-render",
+          "why": "Spike #3031: the shipped pairing of the evaluations at t ± s/2 that motion blur by velocity draws from."
+        },
+        "deep-gpu": {
+          "spec": "* path=../../crates/deep-gpu",
+          "why": "Spike #3031: the app's device, opened as the app opens it, and its allocated size."
+        },
+        "deep-scene3d-render": {
+          "spec": "* path=../../crates/deep-scene3d-render",
+          "why": "Spike #3031: the renderer whose frames are read, through its public entry."
+        },
+        "wgpu": {
+          "spec": "=30.0.1",
+          "why": "Spike #3031: the wgpu the app pins, with its API trace on; outside the workspace with its own lockfile, so the trace feature never reaches the app."
+        },
+        "pollster": {
+          "spec": "^0.4",
+          "why": "Spike #3031: blocks on wgpu's device request in the headless reader."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Spike #3031: reads the documents and writes the reader's rows, keys in order."
+        }
+      }
+    },
     "docs/spikes/3444/own-device/Cargo.toml": {
       "dependencies": {
         "wgpu": {
@@ -3303,6 +3343,18 @@
         }
       }
     },
+    "tests/acceptance/3605/wat/Cargo.toml": {
+      "dependencies": {
+        "wat": {
+          "spec": "=1.263.0",
+          "why": "Issue #3605's blind suite: its own assembler for the fixtures, #851's suite's, renamed, apart from the code under test; the version earlier suites pin."
+        },
+        "wasmparser": {
+          "spec": "=0.263.0",
+          "why": "Issue #3605's blind suite: validates each fixture module before it is written."
+        }
+      }
+    },
     "tests/acceptance/2700/probe/Cargo.toml": {
       "dependencies": {
         "deep-canvas": {
@@ -3324,6 +3376,18 @@
         "serde_json": {
           "spec": "^1",
           "why": "Issue #2700: the probe prints what it saw as one JSON line, with the canvas core's own serde_json and its preserve_order feature; already in the tree, test-only."
+        }
+      }
+    },
+    "tests/acceptance/2130/suite/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../../../../crates/deep-canvas",
+          "why": "Issue #2130: the acceptance suite's seven Rust files call the canvas core's public items, built from each checkout's own copy; test-only, outside the workspace."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #2130: the suite's files build documents and manifests with the canvas core's own serde_json and its preserve_order feature; already in the tree, test-only."
         }
       }
     }

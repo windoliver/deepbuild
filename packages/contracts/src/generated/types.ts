@@ -4088,6 +4088,7 @@ export type AdapterFactsV9OriginRule = {
   prompt?: AdapterFactsV9Text;
   match?: { [key: string]: unknown };
   from: AdapterFactsV9Text;
+  data?: { [key: string]: AdapterFactsV9Text };
 };
 
 export type AdapterFactsV9HookRule = {
@@ -9186,6 +9187,7 @@ export interface HookRequestV3 {
   payload: unknown;
   late?: boolean;
   billing?: { [key: string]: boolean };
+  inbox?: string;
 }
 
 /** hook.template@1 */
@@ -12332,6 +12334,7 @@ export interface SessionStartV3 {
     branch: string | null;
     thread: string;
     billing?: { [key: string]: boolean };
+    inbox?: string;
     loads: Array<{
       kind: "instructions" | "skill" | "hooks" | "mcp";
       name: string;
@@ -12366,6 +12369,7 @@ export interface SessionStartV4 {
     branch: string | null;
     thread: string;
     billing?: { [key: string]: boolean };
+    inbox?: string;
     loads: Array<{
       kind: "instructions" | "skill" | "hooks" | "mcp";
       name: string;
@@ -14169,7 +14173,9 @@ export interface UserAskV2 {
     msg: number;
     text: string;
     tasks: Array<string>;
-    from: "person" | "scheduled" | "subagent" | "session" | "continuation" | "app" | "unknown";
+    from: "person" | "scheduled" | "subagent" | "session" | "channel" | "continuation" | "app" | "unknown";
+    sender?: string;
+    server?: string;
     request?: string;
     disposition?: "handled";
   };

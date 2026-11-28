@@ -2894,6 +2894,7 @@ dependencies = [
  "deep-canvas-cells",
  "deep-canvas-input",
  "deep-canvas-marks",
+ "deep-canvas-motion",
  "deep-gpu",
  "deep-logic",
  "deep-marks-raster",
