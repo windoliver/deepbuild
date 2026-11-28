@@ -171,3 +171,59 @@ FAIL #3433.46eec7ed (39561 ms): 15 s after SIGTERM to lanes.mjs, processes its c
 FAIL #3433.bf4b249a (5337 ms): 2 s after ETIMEDOUT these processes the command started still run: the grandchild
 FAIL #3433.0ced7c1d measureOnce (3126 ms): the ETIMEDOUT error names the lead it stopped ...
 FAIL #3433.0ced7c1d perf (240639 ms): perf printed a BLOCKED perf line ... naming ETIMEDOUT; status null (load gate)
+
+# ---------------------------------------------------------------------------------------------------------------
+# #3433.7e03e656 (reopened 2026-11-28), affected-term.test.mjs, on the merge base 9bbe0f24c (origin/main), macOS
+# darwin-arm64, Node 24.22.0, 2026-11-28, load averages 20 to 24 on 12 cores (home paths written as ~). It fails for the
+# expected reason: the run prints its BLOCKED line, but the grandchild of its job runs on 15 s after the SIGTERM.
+# node --test tests/acceptance/3433/affected-term.test.mjs
+
+✖ #3433.7e03e656 an affected.mjs run stopped by SIGTERM to the affected.mjs process alone, while a job's command has started a grandchild in a process group of its own, prints BLOCKED affected: stopped by SIGTERM and leaves no process the job started alive 15 s later (23290.376333ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 23321.300083
+
+✖ failing tests:
+
+test at tests/acceptance/3433/affected-term.test.mjs:40:1
+✖ #3433.7e03e656 an affected.mjs run stopped by SIGTERM to the affected.mjs process alone, while a job's command has started a grandchild in a process group of its own, prints BLOCKED affected: stopped by SIGTERM and leaves no process the job started alive 15 s later (23290.376333ms)
+  AssertionError [ERR_ASSERTION]: 15 s after SIGTERM to affected.mjs, processes its job started still run
+  exit: {"code":143,"signal":null}
+  output:
+  parallel node: tests/fixture-3433.test.mjs
+  SETTLED no list: /private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-3433-affected-term-1KHpy0/home/.deepbuild/main-watch/settled.json is missing, so every suite the change reaches runs
+  BLOCKED affected: stopped by SIGTERM; its jobs were stopped and none of their results is read; logs in /private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-3433-affected-term-1KHpy0/tmp/deep-affected-F6ZiCJ
+  
+  processes the job started: [{"role":"runner","pid":12059,"start":"Sat Nov 28 07:33:13 2026","alive":false},{"role":"file","pid":12060,"start":"Sat Nov 28 07:33:13 2026","alive":false},{"role":"grandchild","pid":12071,"start":"Sat Nov 28 07:33:13 2026","alive":true,"command":"~/.nvm/versions/node/v24.22.0/bin/node /private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-3433-affected-term-1KHpy0/grandchild-3433.mjs /private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-3433-affected-term-1KHpy0/pids"}]
+  + actual - expected
+  
+  + [
+  +   'grandchild 12071'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-3433-affected-stop/tests/acceptance/3433/affected-term.test.mjs:87:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'grandchild 12071' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+# The same test on a throwaway fix in a scratch copy of the checkout (not kept): main's signal handler also listing
+# each job's tree with descendants() before passing the signal, and killTree()ing that listing 3 s later.
+✔ #3433.7e03e656 an affected.mjs run stopped by SIGTERM to the affected.mjs process alone, while a job's command has started a grandchild in a process group of its own, prints BLOCKED affected: stopped by SIGTERM and leaves no process the job started alive 15 s later (11608.061667ms)
+
+# Rerun on the merge base after the file's comments other than its deadline markers were taken out for
+# scripts/comment-ratchet.mjs (no assertion or bound changed; line numbers above are from before): the same failure.
+✖ #3433.7e03e656 ... (22847.983541ms)
+  AssertionError [ERR_ASSERTION]: 15 s after SIGTERM to affected.mjs, processes its job started still run
+  +   'grandchild 41625'

@@ -13,5 +13,8 @@
   ],
   "#3433.cd15df63": [
     "stop-outlives-run"
+  ],
+  "#3433.7e03e656": [
+    "affected-as-main"
   ]
 }
