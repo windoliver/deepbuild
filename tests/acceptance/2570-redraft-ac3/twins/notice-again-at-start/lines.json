@@ -1,0 +1,15 @@
+{
+  "packages/hub/src/core.ts": [
+    {
+      "find": [
+        "    if (crashed) await this.appendCore('hub.stopped', { reason: 'crashed' });"
+      ],
+      "wrong": [
+        "    if (crashed) await this.appendCore('hub.stopped', { reason: 'crashed' });",
+        "    /* TWIN notice-again-at-start: a start records the last rollback's notice again */",
+        "    const notice = (await this.record.raw(`SELECT data FROM events WHERE kind = 'build.rolled_back' ORDER BY log_pos DESC LIMIT 1`)) as { data: string }[];",
+        "    if (notice[0]) await this.appendCore('build.rolled_back', JSON.parse(notice[0].data) as Obj);"
+      ]
+    }
+  ]
+}

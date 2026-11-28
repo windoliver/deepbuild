@@ -1,0 +1,45 @@
+{
+  "packages/hub/src/server.ts": [
+    {
+      "find": [
+        "    if (answers) for (const conn of this.conns) conn.sock.destroy();"
+      ],
+      "wrong": [
+        "    if (answers) for (const conn of this.conns) conn.sock.destroy();",
+        "    /* TWIN start-ignores-exiting: the stop's own connection closes now, before the process ends */ requester?.destroy();"
+      ]
+    },
+    {
+      "find": [
+        "    process.exit(code);"
+      ],
+      "wrong": [
+        "    /* TWIN start-ignores-exiting: the process lingers 3 s after its sockets closed and its lock was released, then exits */",
+        "    setTimeout(() => process.exit(code), 3000);"
+      ]
+    }
+  ],
+  "packages/hub/src/service.ts": [
+    {
+      "find": [
+        "  const old = await exiting(root, deadline);",
+        "  // A hub that answers while the old one exits was started by someone else: this start started nothing.",
+        "  if (old === 'answers') return up(true);",
+        "  if (old === 'held') return noHub();"
+      ],
+      "wrong": [
+        "  /* TWIN start-ignores-exiting: never asks whether a stopped hub's process is still exiting */ void exiting; void deadline;"
+      ]
+    },
+    {
+      "find": [
+        "  const again = options.root ? undefined : () => void launch(serviceFile());",
+        "  if (await waitForHub(root.socket, Date.now() + WAIT_MS, again)) return up(false);"
+      ],
+      "wrong": [
+        "  /* TWIN start-ignores-exiting: asks the service manager once, never again while no hub answers */",
+        "  if (await waitForHub(root.socket, Date.now() + WAIT_MS)) return up(false);"
+      ]
+    }
+  ]
+}
