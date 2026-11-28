@@ -5,7 +5,8 @@
 // and the write refusals the supervisor records. A planted backend is the same launch with one grant wider, or
 // one device bound in (suite.ts).
 import { execFileSync } from 'node:child_process';
-import { existsSync, readdirSync, readlinkSync, statSync } from 'node:fs';
+import { existsSync, lstatSync, readdirSync, readlinkSync, statSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { HELPER } from './procs.js';
 import { markerOf, real } from './seatbelt.js';
@@ -81,6 +82,23 @@ function socketMounts(granted: string): string[] {
   return args;
 }
 
+const AGENT_FOLDERS = new Set(['.claude', '.codex']);
+const AGENT_FILES = ['.claude', '.codex', '.mcp.json', '.claude.json'];
+
+function agentFileMounts(roots: readonly string[]): string[] {
+  const found = new Set<string>();
+  for (const root of roots) {
+    const parts = real(root).split('/');
+    const within = parts.findIndex((part) => AGENT_FOLDERS.has(part));
+    const last = parts[parts.length - 1]!;
+    const candidates = within > 0 ? [parts.slice(0, within + 1).join('/')] : AGENT_FILES.includes(last) ? [parts.join('/')] : AGENT_FILES.map((name) => join(parts.join('/'), name));
+    for (const path of candidates) {
+      try { if (!lstatSync(path).isSymbolicLink()) found.add(path); } catch { continue; }
+    }
+  }
+  return [...found].sort().flatMap((path) => ['--ro-bind', path, path]);
+}
+
 /**
  * The bwrap arguments that confine one process, and its children, to `grant`, with `cwd` readable, and the helper's
  * flags, which travel in the DEEP_CONFINE variable with the program's own arguments: neither bwrap's nor the helper's
@@ -108,6 +126,7 @@ function bwrapArgs(run: string, cwd: string, grant: Grant, guards: readonly Guar
       flags.push('--except', real(e));
     }
   }
+  mounts.push(...agentFileMounts([...(grant.write ?? []), ...(grant.run_as_you ? [homedir()] : [])]));
   // No PID namespace: a program's processes keep the IDs the machine knows them by, as on macOS, and the marker and
   // the helper, a subreaper, still account for every one of them.
   return {
