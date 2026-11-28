@@ -121,12 +121,11 @@ function bringsCall(root, sha, file) {
 }
 
 function approvedAsItReads(root, file, record, signed) {
-  return signed.map(({ sha, ...s }) => {
-    if (!s.approver) return s;
+  return signed.filter(({ sha }) => {
     let then = null;
     try { then = JSON.parse(show(root, sha, file) ?? 'null'); } catch { then = null; }
-    return { ...s, approver: isObject(then) && said(then) === said(record) };
-  });
+    return isObject(then) && said(then) === said(record);
+  }).map(({ sha, ...s }) => s);
 }
 
 function read(file, record, signed) {
