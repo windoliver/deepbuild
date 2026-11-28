@@ -82,6 +82,7 @@ export function createCore(
     },
     forge: { open: openGitHub, gateTokens, repoOf, revoke, sessionToken },
     workspaces: { create: (o) => new Workspaces(o), renamedSince, intake: (o) => new Intake(o) },
+    telemetry: async (o) => (await import('@deepbuild/otlp')).startReceiver(o),
   };
   return new Core(options, emit, providers, asking, acking, scrubbing, forgot, replayTold);
 }

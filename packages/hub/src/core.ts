@@ -59,7 +59,7 @@ import { GateRunner, type KeptRow } from './gate-runner.js';
 import { loopHoldFor, resolvePeerSender } from './peer-sender.js';
 import { Siblings } from './siblings.js';
 import { groupUnder } from './children.js';
-import { deepHook, repoOf, rootOf, type Root } from './paths.js';
+import { deepHook, installedRoot, real, repoOf, rootOf, type Root } from './paths.js';
 import { OWNER, People, scopeOf } from './people.js';
 
 import type { WikiBuild } from './knowledge-port.js';
@@ -140,6 +140,7 @@ export class Core {
   private flags!: SessionFlags;
   private mcp!: McpOperations;
   private control!: HubControl;
+  private telemetry?: Promise<{ close(): Promise<void> } | void>;
   private wireAnswerDelivery(): void {
     const readstopping = () => this.stopping;
     const readabandoned = () => this.abandoned;
@@ -1042,10 +1043,9 @@ export class Core {
       record: this.record, root: this.root, store: this.store, runner: this.runner, asks, now: this.now, archive: async () => { await archiving; await archivePass(); },
       core: this.connection('core'), cli: this.connection('cli'), plant: this.options.plant, held: this.options.held,
     });
-    this.timers.push(setInterval(archivePass, HOUR));
     this.github = this.openGitHub();
-    this.timers.push(setInterval(() => void this.github?.pass(), GITHUB_PASS_MS));
-    this.timers.push(setInterval(() => void this.spaces.driftAll(), DRIFT_MS));
+    this.timers.push(setInterval(archivePass, HOUR), setInterval(() => void this.github?.pass(), GITHUB_PASS_MS), setInterval(() => void this.spaces.driftAll(), DRIFT_MS));
+    if (!this.options.safe && real(this.root.dir) === real(rootOf(installedRoot()).dir)) this.telemetry = this.providers.telemetry({ record: this.record, connection: this.connection('ext:otlp') }).catch((error: unknown) => void process.stderr.write(`deep hub: the OTLP receiver didn't start, so the hub runs without it: ${error instanceof Error ? error.message : String(error)}\n`));
     // While appends fail, a small synced write is tried every quarter second; the gates come back with it.
     this.timers.push(setInterval(() => { if (this.blocked && !this.lost && this.durable.probe(this.root.dir)) { this.blocked = undefined; this.replayLate(true); } }, 250));
     // Between session starts, a removed or weakened entry of ours in an agent's own file goes back at once.
@@ -2574,7 +2574,7 @@ export class Core {
     await this.state.recordStates().catch(() => undefined);
     this.transcripts.writeCursors();
     this.canvasSide.close();
-    await this.replicas.close();
+    await Promise.all([this.replicas.close(), this.telemetry?.then((receiver) => receiver?.close())]);
     this.runs.stopAll();
     // Runs on hosts go on there; only this hub's followers of them stop, and the next hub follows them again (#1942).
     this.hosts.close();
