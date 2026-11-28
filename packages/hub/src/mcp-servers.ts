@@ -102,7 +102,7 @@ const CLIENT = { name: 'deepbuild', version: '0' };
 
 /**
  * The tool list of every stdio server Claude Code loads in `cwd`, synced by DeepBuild or added by you, asked of
- * each server over MCP as a client of both eras asks it (docs/adr/0009), page by page, in the order its configs win.
+ * each server over MCP as a client of both eras asks it (docs/adr/0020), page by page, in the order its configs win.
  * A server that doesn't answer within 10 s, or that isn't a command (a remote one), gives no list.
  */
 export async function toolLists(cwd: string): Promise<Listed[]> {

@@ -1,4 +1,4 @@
-# 0009: MCP without a handshake
+# 0020: MCP without a handshake
 
 Status: accepted (#2855). The design says deep's MCP servers and the hub's lister speak the MCP revision that takes no handshake. The decisions below are written nowhere else.
 
