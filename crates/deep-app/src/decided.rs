@@ -47,7 +47,7 @@ mod tests {
     use serde_json::json;
 
     fn asked(id: &str, question: &str) -> Value {
-        json!({"kind": "ask.created", "writer": "core", "subject": format!("ask:{id}"), "data": {"question": question}})
+        json!({"kind": "ask.created", "writer": "core", "id": id, "data": {"question": question}})
     }
 
     #[test]
