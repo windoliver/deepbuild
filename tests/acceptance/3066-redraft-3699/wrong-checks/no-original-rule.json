@@ -1,0 +1,8 @@
+[
+  {
+    "find": [
+      "    if (rel === '.' || rel === file || file.startsWith(`${rel}/`)) return { file, why: 'redraft is the original or holds it', line: `${move}, redrafted to ${target}, which is the original or a folder holding it` };"
+    ],
+    "wrong": []
+  }
+]

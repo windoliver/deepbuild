@@ -5,8 +5,9 @@ import { availableParallelism, homedir, loadavg, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
-import { readApprovals } from './proof-approvals.mjs';
-import { named, watchTree } from './proof-stop.mjs';
+const beside = (file) => existsSync(new URL(file, import.meta.url));
+const approvals = beside('./proof-approvals.mjs') ? await import('./proof-approvals.mjs') : null;
+const stop = beside('./proof-stop.mjs') ? await import('./proof-stop.mjs') : null;
 
 const metrics = ['p50Ms', 'p95Ms', 'peakBytes'];
 // What a budget runs and builds is bare by this module's own setting, never by the machine's: an empty RUSTC_WRAPPER is no
@@ -216,7 +217,7 @@ export function measureOnce(command, cwd, stream = false, timeoutMs = 300_000, f
   const build = follow ? counterBuild() : null;
   // A captured run's stop reaches every process it started, a detached one too, and names them (#3433). The watcher
   // lists the run's tree twice a second while it runs.
-  const watch = stream ? null : watchTree();
+  const watch = stream || !stop ? null : stop.watchTree();
   try {
     watch?.arm();
     if (build) writeFileSync(counted, '');
@@ -238,7 +239,7 @@ export function measureOnce(command, cwd, stream = false, timeoutMs = 300_000, f
       } catch (error) {
         if (error.code !== 'ESRCH') throw error;
       }
-      if (stopped) result.error.message += `; ${named(stopped)}`;
+      if (stopped) result.error.message += `; ${stop.named(stopped)}`;
       throw result.error;
     }
     const report = readFileSync(timing, 'utf8');
@@ -535,7 +536,7 @@ export function validateBudgets(current, base, approved = []) {
 /** The items of the approvals on the commits from `base` to `head` (#1326), which may hold a budget's proposal. */
 export function approvedItems(root, base, head) {
   const commits = execFileSync('git', ['rev-list', `${base}..${head}`], { cwd: root, encoding: 'utf8' }).split('\n').filter(Boolean).map((sha) => ({ sha }));
-  return [...readApprovals(root, { base, commits }, null).values()].flat();
+  return approvals ? [...approvals.readApprovals(root, { base, commits }, null).values()].flat() : [];
 }
 
 // p95 has only absolute caps: between identical binaries on a shared machine, the tail of 20

@@ -1,0 +1,8 @@
+{
+  "#3460.74f4978c": ["note-names-held-word"],
+  "#3460.8dffa8bf": ["note-counts-every-scope"],
+  "#3460.c0d74b68": ["note-beside-hits"],
+  "#3460.deebb776": ["find-sentence-for-one-word"],
+  "#3460.7cd4a1ff": ["reading-counts-any-hit"],
+  "#3460.e44187b3": ["hits-hold-any-word", "decisions-first-drops-own"]
+}

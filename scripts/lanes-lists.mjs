@@ -873,6 +873,9 @@ byHand.push('tests/acceptance/96/commit.test.ts', 'tests/acceptance/96/proof.tes
 Object.assign(redrafted, { 'tests/acceptance/3295/late-close.test.mjs': 'tests/acceptance/3295-redraft-fae86cca/' });
 byHand.push('tests/acceptance/3295/late-close.test.mjs');
 
+Object.assign(redrafted, { 'tests/acceptance/3066/same-failures.test.mjs': 'tests/acceptance/3066-redraft-3699/' });
+byHand.push('tests/acceptance/3066/same-failures.test.mjs');
+
 timed.push('tests/acceptance/3257/ac7-budget.test.ts');
 
 timed.push('tests/acceptance/1857/cap.test.ts', 'tests/acceptance/1857/budgets.test.ts');
@@ -898,6 +901,9 @@ for (const name of ['stalled-line', 'drain', 'under-grant']) {
 Object.assign(redrafted, Object.fromEntries([['2924', 'test-grants'], ['2924', 'blocked'], ['2924', 'log'], ['3238', 'inherited'], ['3549', 'passes'], ['3549', 'timed'], ['3549', 'window']]
   .map(([issue, file]) => [`tests/acceptance/${issue}/${file}.test.mjs`, `tests/acceptance/${issue}-redraft-3694/`])));
 byHand.push(...Object.keys(redrafted).filter((path) => redrafted[path].endsWith('-redraft-3694/')));
+
+Object.assign(redrafted, { 'tests/acceptance/1113/measured.test.mjs': 'tests/acceptance/1113-redraft-3296/' });
+byHand.push('tests/acceptance/1113/measured.test.mjs');
 
 timed.push('tests/acceptance/3507/ac3-timing.test.mjs');
 
