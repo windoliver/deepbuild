@@ -1681,6 +1681,9 @@ for (const name of ['ac1-section', 'ac3-agent-routes', 'ac5-taste-call']) {
   byHand.push(`tests/acceptance/1352/${name}.test.mjs`);
 }
 
+Object.assign(redrafted, { 'tests/acceptance/2665/lowering.test.mjs': 'tests/acceptance/2665-redraft-3537/' });
+byHand.push('tests/acceptance/2665/lowering.test.mjs');
+
 for (const entry of laneFolders.filter((folder) => !unread.includes(folder))) {
   let text = '';
   try { text = readFileSync(join(root, entry, 'lane.json'), 'utf8'); } catch {}
