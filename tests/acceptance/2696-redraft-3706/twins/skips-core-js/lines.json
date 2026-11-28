@@ -1,0 +1,12 @@
+{
+  "scripts/built-escapes.mjs": [
+    {
+      "find": [
+        "  const found = filesOf(folder).map((path) => ({ path, text: above(path) })).filter(({ text }) => text !== null);"
+      ],
+      "wrong": [
+        "  const found = filesOf(folder).map((path) => ({ path, text: above(path) })).filter(({ path, text }) => text !== null && !path.endsWith(\"/core.js\"));"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "scripts/built-escapes.mjs": [
+    {
+      "find": [
+        "    if (within(literals, first)) return kept + units(chars);"
+      ],
+      "wrong": [
+        "    if (within(literals, first)) return kept + units(chars + chars);"
+      ]
+    }
+  ]
+}

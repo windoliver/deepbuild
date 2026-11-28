@@ -1,0 +1,545 @@
+# Runs of tests/acceptance/2696-redraft-3706/ (node --test <file>, Node 24, one file at a time, macOS)
+
+Base: 03b71e900700d1c6347731cb43cecd094a00097c, npm ci and npm run build --workspaces done. Every scratch copy is an
+APFS clone (cp -cR) of the base checkout under $TMPDIR, removed after. Each "===" line gives the load when the file
+started; the machine was shared with other sessions (load 35 to 86).
+
+Summary
+- 1. Base as is: none-above PASS; lanes FAIL (expected: the change's two lines are not there yet); same-text 3 PASS;
+     heap BLOCKED (no deep-hook in target/).
+- 2. Base + the change's two lines in scripts/lanes-lists.mjs: none-above, lanes and the three same-text tests PASS.
+     heap not run: BLOCKED as in run 1 (no deep-hook). A cargo build of deep-hook needs 60 GB free held for 5 minutes;
+     free disk read 41 to 61 GB, falling to 11 GB, during the session, so none was started.
+- 3. Twins, each laid over run 2's copy and rebuilt (npm run build --workspaces, all exit 0):
+     skips-core-js          none-above FAIL at its assertion (packages/hub/dist/core.js:2209, U+2026); others PASS
+     escapes-json-only      none-above FAIL at its assertion (77 built files, first packages/asks/dist/index.js:113); others PASS;
+                            heap not run (BLOCKED, no deep-hook)
+     adds-a-line            same-text lines FAIL (78 files, each one line more) and thrown line FAIL (2778/2780 against
+                            2777/2779); others PASS
+     doubles-escapes        same-text messages FAIL (41 strings, e.g. packages/briefs/dist/index.js:45); others PASS
+     hands-the-whole-folder lanes FAIL (lint.test.mjs and newfile.test.mjs by hand); none-above PASS (no rebuild needed:
+                            the twin changes only scripts/lanes-lists.mjs)
+- 4. Run 2's copy with one blank line added at the top of packages/hub/src/core.ts, rebuilt: none-above, lanes and the
+     three same-text tests PASS. The dispute's fault (a PR's added source line fails the line test) is gone.
+
+Full output follows.
+
+
+######## Run 1: the base as is
+
+=== base: node --test tests/acceptance/2696-redraft-3706/none-above.test.mjs (load 39.37 36.82 26.83)
+✔ #2696.5a61170b #3706.61c191d3 after npm run build --workspaces no built file under packages/*/dist holds a character above U+00FF, though the built packages' sources hold such characters (382.291792ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 692.220917
+=== exit 0
+=== base: node --test tests/acceptance/2696-redraft-3706/lanes.test.mjs (load 39.37 36.82 26.83)
+✖ #3706.75c61bdf the first draft runs by hand with a redrafted entry naming this folder, and the first draft folder's other files and this folder's files run in the alone block (419.751208ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 653.119542
+
+✖ failing tests:
+
+test at tests/acceptance/2696-redraft-3706/lanes.test.mjs:13:1
+✖ #3706.75c61bdf the first draft runs by hand with a redrafted entry naming this folder, and the first draft folder's other files and this folder's files run in the alone block (419.751208ms)
+  AssertionError [ERR_ASSERTION]: scripts/lanes.mjs runs these files elsewhere than the redraft asks
+  + actual - expected
+  
+    {
+      'tests/acceptance/2696-redraft-3706/heap.test.mjs': 'alone',
+      'tests/acceptance/2696-redraft-3706/lanes.test.mjs': 'alone',
+      'tests/acceptance/2696-redraft-3706/none-above.test.mjs': 'alone',
+      'tests/acceptance/2696-redraft-3706/same-text.test.mjs': 'alone',
+  +   'tests/acceptance/2696/base.test.mjs': 'alone',
+  -   'tests/acceptance/2696/base.test.mjs': 'by hand',
+      'tests/acceptance/2696/lint.test.mjs': 'alone',
+      'tests/acceptance/2696/newfile.test.mjs': 'alone',
+  +   redrafted: null
+  -   redrafted: 'tests/acceptance/2696-redraft-3706/'
+    }
+  
+      at TestContext.<anonymous> (file://~/mac-runs/r3706/tests/acceptance/2696-redraft-3706/lanes.test.mjs:29:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: { redrafted: null, 'tests/acceptance/2696/base.test.mjs': 'alone', 'tests/acceptance/2696/lint.test.mjs': 'alone', 'tests/acceptance/2696/newfile.test.mjs': 'alone', 'tests/acceptance/2696-redraft-3706/heap.test.mjs': 'alone', 'tests/acceptance/2696-redraft-3706/lanes.test.mjs': 'alone', 'tests/acceptance/2696-redraft-3706/none-above.test.mjs': 'alone', 'tests/acceptance/2696-redraft-3706/same-text.test.mjs': 'alone' },
+    expected: { redrafted: 'tests/acceptance/2696-redraft-3706/', 'tests/acceptance/2696/base.test.mjs': 'by hand', 'tests/acceptance/2696/lint.test.mjs': 'alone', 'tests/acceptance/2696/newfile.test.mjs': 'alone', 'tests/acceptance/2696-redraft-3706/heap.test.mjs': 'alone', 'tests/acceptance/2696-redraft-3706/lanes.test.mjs': 'alone', 'tests/acceptance/2696-redraft-3706/none-above.test.mjs': 'alone', 'tests/acceptance/2696-redraft-3706/same-text.test.mjs': 'alone' },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+=== exit 1
+=== base: node --test tests/acceptance/2696-redraft-3706/same-text.test.mjs (load 39.37 36.82 26.83)
+✔ #2696.534150b4 #3706.414a9c5f each built file has as many lines as this checkout built without its escape step (166786.696333ms)
+✔ #2696.534150b4 #3706.414a9c5f an error thrown from packages/hub/dist/core.js names the line it names in this checkout built without its escape step, a line after the core's first character above U+00FF (594.582625ms)
+✔ #2696.6fbf771a #3706.c1a4b78e every message that holds a character above U+00FF reads the same, character for character, as in this checkout built without its escape step, and both builds of each package load, export and print the same (2985.032834ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 172606.050708
+=== exit 0
+=== base: node --test tests/acceptance/2696-redraft-3706/heap.test.mjs (load 36.53 37.89 29.19)
+✖ #2696.be4d3304 #3706.c1a4b78e after a start on the 30-day record the core thread's heap after two full collections is at least 1.2 MB under that of this checkout built without its escape step (168.870667ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 379.819959
+
+✖ failing tests:
+
+test at tests/acceptance/2696-redraft-3706/heap.test.mjs:12:1
+✖ #2696.be4d3304 #3706.c1a4b78e after a start on the 30-day record the core thread's heap after two full collections is at least 1.2 MB under that of this checkout built without its escape step (168.870667ms)
+  Error: BLOCKED: this checkout has no deep-hook under target/release or target/debug (cargo build -p deep-hook), and a hub of a checkout starts with nothing else
+      at TestContext.<anonymous> (file://~/mac-runs/r3706/tests/acceptance/2696-redraft-3706/heap.test.mjs:14:110)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17)
+=== exit 1
+=== DONE base
+
+
+######## Run 2: the base + the change's two lines
+
+=== change: node --test tests/acceptance/2696-redraft-3706/none-above.test.mjs (load 34.85 37.23 29.39)
+✔ #2696.5a61170b #3706.61c191d3 after npm run build --workspaces no built file under packages/*/dist holds a character above U+00FF, though the built packages' sources hold such characters (271.38525ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 521.073417
+=== exit 0
+=== change: node --test tests/acceptance/2696-redraft-3706/lanes.test.mjs (load 34.85 37.23 29.39)
+✔ #3706.75c61bdf the first draft runs by hand with a redrafted entry naming this folder, and the first draft folder's other files and this folder's files run in the alone block (264.948583ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 584.638833
+=== exit 0
+=== change: node --test tests/acceptance/2696-redraft-3706/same-text.test.mjs (load 34.85 37.23 29.39)
+✔ #2696.534150b4 #3706.414a9c5f each built file has as many lines as this checkout built without its escape step (257145.97475ms)
+✔ #2696.534150b4 #3706.414a9c5f an error thrown from packages/hub/dist/core.js names the line it names in this checkout built without its escape step, a line after the core's first character above U+00FF (1259.256167ms)
+✔ #2696.6fbf771a #3706.c1a4b78e every message that holds a character above U+00FF reads the same, character for character, as in this checkout built without its escape step, and both builds of each package load, export and print the same (3626.043458ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 265182.569584
+=== exit 0
+=== DONE change
+
+
+######## Run 3: twin skips-core-js
+
+=== skips-core-js: node --test tests/acceptance/2696-redraft-3706/none-above.test.mjs (load 46.16 42.87 34.03)
+✖ #2696.5a61170b #3706.61c191d3 after npm run build --workspaces no built file under packages/*/dist holds a character above U+00FF, though the built packages' sources hold such characters (1306.450583ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2129.45475
+
+✖ failing tests:
+
+test at tests/acceptance/2696-redraft-3706/none-above.test.mjs:7:1
+✖ #2696.5a61170b #3706.61c191d3 after npm run build --workspaces no built file under packages/*/dist holds a character above U+00FF, though the built packages' sources hold such characters (1306.450583ms)
+  AssertionError [ERR_ASSERTION]: 1 of the 575 built text files under packages/*/dist hold a character above U+00FF (80 source files of the built packages hold one); the first is packages/hub/dist/core.js:2209 (U+2026):
+  packages/hub/dist/core.js:2209 (U+2026)
+  
+  1 !== 0
+  
+      at TestContext.<anonymous> (file:///private$TMPDIR/r3706-runs/skips-core-js/tests/acceptance/2696-redraft-3706/none-above.test.mjs:12:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+=== exit 1
+=== skips-core-js: node --test tests/acceptance/2696-redraft-3706/lanes.test.mjs (load 46.06 42.91 34.09)
+✔ #3706.75c61bdf the first draft runs by hand with a redrafted entry naming this folder, and the first draft folder's other files and this folder's files run in the alone block (609.68875ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2278.148917
+=== exit 0
+=== skips-core-js: node --test tests/acceptance/2696-redraft-3706/same-text.test.mjs (load 46.06 42.91 34.09)
+✔ #2696.534150b4 #3706.414a9c5f each built file has as many lines as this checkout built without its escape step (524927.6075ms)
+✔ #2696.534150b4 #3706.414a9c5f an error thrown from packages/hub/dist/core.js names the line it names in this checkout built without its escape step, a line after the core's first character above U+00FF (975.803875ms)
+✔ #2696.6fbf771a #3706.c1a4b78e every message that holds a character above U+00FF reads the same, character for character, as in this checkout built without its escape step, and both builds of each package load, export and print the same (6164.210166ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 534938.859375
+=== exit 0
+=== DONE skips-core-js
+
+
+######## Run 3: twin escapes-json-only
+
+=== escapes-json-only: node --test tests/acceptance/2696-redraft-3706/none-above.test.mjs (load 65.53 65.19 50.64)
+✖ #2696.5a61170b #3706.61c191d3 after npm run build --workspaces no built file under packages/*/dist holds a character above U+00FF, though the built packages' sources hold such characters (412.254542ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1253.4
+
+✖ failing tests:
+
+test at tests/acceptance/2696-redraft-3706/none-above.test.mjs:7:1
+✖ #2696.5a61170b #3706.61c191d3 after npm run build --workspaces no built file under packages/*/dist holds a character above U+00FF, though the built packages' sources hold such characters (412.254542ms)
+  AssertionError [ERR_ASSERTION]: 77 of the 575 built text files under packages/*/dist hold a character above U+00FF (80 source files of the built packages hold one); the first is packages/asks/dist/index.js:113 (U+2192):
+  packages/asks/dist/index.js:113 (U+2192)
+  packages/asks/dist/model.d.ts:22 (U+2026)
+  packages/asks/dist/model.js:7 (U+2026)
+  packages/briefs/dist/index.js:45 (U+2026)
+  packages/buying/dist/index.js:68 (U+2022)
+  ... and 72 more
+  
+  77 !== 0
+  
+      at TestContext.<anonymous> (file:///private$TMPDIR/r3706-runs/escapes-json-only/tests/acceptance/2696-redraft-3706/none-above.test.mjs:12:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 77,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+=== exit 1
+=== escapes-json-only: node --test tests/acceptance/2696-redraft-3706/lanes.test.mjs (load 65.53 65.19 50.64)
+✔ #3706.75c61bdf the first draft runs by hand with a redrafted entry naming this folder, and the first draft folder's other files and this folder's files run in the alone block (268.404417ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1569.942583
+=== exit 0
+=== escapes-json-only: node --test tests/acceptance/2696-redraft-3706/same-text.test.mjs (load 65.53 65.19 50.64)
+✔ #2696.534150b4 #3706.414a9c5f each built file has as many lines as this checkout built without its escape step (406309.330666ms)
+✔ #2696.534150b4 #3706.414a9c5f an error thrown from packages/hub/dist/core.js names the line it names in this checkout built without its escape step, a line after the core's first character above U+00FF (1443.889583ms)
+✔ #2696.6fbf771a #3706.c1a4b78e every message that holds a character above U+00FF reads the same, character for character, as in this checkout built without its escape step, and both builds of each package load, export and print the same (7231.822042ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 420031.200625
+=== exit 0
+=== DONE escapes-json-only
+
+
+######## Run 3: twin adds-a-line
+
+=== adds-a-line: node --test tests/acceptance/2696-redraft-3706/none-above.test.mjs (load 57.67 63.36 55.58)
+✔ #2696.5a61170b #3706.61c191d3 after npm run build --workspaces no built file under packages/*/dist holds a character above U+00FF, though the built packages' sources hold such characters (288.843209ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 770.37125
+=== exit 0
+=== adds-a-line: node --test tests/acceptance/2696-redraft-3706/lanes.test.mjs (load 57.69 63.27 55.59)
+✔ #3706.75c61bdf the first draft runs by hand with a redrafted entry naming this folder, and the first draft folder's other files and this folder's files run in the alone block (275.203417ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 701.133583
+=== exit 0
+=== adds-a-line: node --test tests/acceptance/2696-redraft-3706/same-text.test.mjs (load 57.69 63.27 55.59)
+✖ #2696.534150b4 #3706.414a9c5f each built file has as many lines as this checkout built without its escape step (483088.941125ms)
+✖ #2696.534150b4 #3706.414a9c5f an error thrown from packages/hub/dist/core.js names the line it names in this checkout built without its escape step, a line after the core's first character above U+00FF (2200.758209ms)
+✔ #2696.6fbf771a #3706.c1a4b78e every message that holds a character above U+00FF reads the same, character for character, as in this checkout built without its escape step, and both builds of each package load, export and print the same (11322.661875ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 1
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 500632.407875
+
+✖ failing tests:
+
+test at tests/acceptance/2696-redraft-3706/same-text.test.mjs:13:1
+✖ #2696.534150b4 #3706.414a9c5f each built file has as many lines as this checkout built without its escape step (483088.941125ms)
+  AssertionError [ERR_ASSERTION]: 78 of the 575 built text files differ in their number of lines from this checkout built without its escape step:
+  packages/asks/dist/index.js: 2240 lines in this build, 2239 in this checkout built without its escape step
+  packages/asks/dist/model.d.ts: 338 lines in this build, 337 in this checkout built without its escape step
+  packages/asks/dist/model.js: 40 lines in this build, 39 in this checkout built without its escape step
+  packages/briefs/dist/index.js: 271 lines in this build, 270 in this checkout built without its escape step
+  packages/buying/dist/index.js: 182 lines in this build, 181 in this checkout built without its escape step
+  ... and 73 more
+  
+  78 !== 0
+  
+      at TestContext.<anonymous> (file:///private$TMPDIR/r3706-runs/adds-a-line/tests/acceptance/2696-redraft-3706/same-text.test.mjs:26:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 78,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2696-redraft-3706/same-text.test.mjs:50:1
+✖ #2696.534150b4 #3706.414a9c5f an error thrown from packages/hub/dist/core.js names the line it names in this checkout built without its escape step, a line after the core's first character above U+00FF (2200.758209ms)
+  AssertionError [ERR_ASSERTION]: an error thrown from packages/hub/dist/core.js names another line than in this checkout built without its escape step: this build throws "Cannot read properties of undefined (reading 'advance_ms')" from line 2778; "Step the clock by a whole number of ms, 0 or more." from line 2780; without the step "Cannot read properties of undefined (reading 'advance_ms')" from line 2777; "Step the clock by a whole number of ms, 0 or more." from line 2779
+  + actual - expected
+  
+    [
+      {
+        error: "Cannot read properties of undefined (reading 'advance_ms')",
+  +     line: 2778
+  -     line: 2777
+      },
+      {
+        error: 'Step the clock by a whole number of ms, 0 or more.',
+  +     line: 2780
+  -     line: 2779
+      }
+    ]
+  
+      at TestContext.<anonymous> (file:///private$TMPDIR/r3706-runs/adds-a-line/tests/acceptance/2696-redraft-3706/same-text.test.mjs:58:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ { error: "Cannot read properties of undefined (reading 'advance_ms')", line: 2778 }, { error: 'Step the clock by a whole number of ms, 0 or more.', line: 2780 } ],
+    expected: [ { error: "Cannot read properties of undefined (reading 'advance_ms')", line: 2777 }, { error: 'Step the clock by a whole number of ms, 0 or more.', line: 2779 } ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+=== exit 1
+=== DONE adds-a-line
+
+
+######## Run 3: twin doubles-escapes
+
+=== doubles-escapes: node --test tests/acceptance/2696-redraft-3706/none-above.test.mjs (load 73.05 79.32 68.20)
+✔ #2696.5a61170b #3706.61c191d3 after npm run build --workspaces no built file under packages/*/dist holds a character above U+00FF, though the built packages' sources hold such characters (571.605166ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1268.909292
+=== exit 0
+=== doubles-escapes: node --test tests/acceptance/2696-redraft-3706/lanes.test.mjs (load 73.05 79.32 68.20)
+✔ #3706.75c61bdf the first draft runs by hand with a redrafted entry naming this folder, and the first draft folder's other files and this folder's files run in the alone block (341.34975ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1148.088125
+=== exit 0
+=== doubles-escapes: node --test tests/acceptance/2696-redraft-3706/same-text.test.mjs (load 72.08 79.02 68.16)
+✔ #2696.534150b4 #3706.414a9c5f each built file has as many lines as this checkout built without its escape step (490764.044875ms)
+✔ #2696.534150b4 #3706.414a9c5f an error thrown from packages/hub/dist/core.js names the line it names in this checkout built without its escape step, a line after the core's first character above U+00FF (1239.4365ms)
+✖ #2696.6fbf771a #3706.c1a4b78e every message that holds a character above U+00FF reads the same, character for character, as in this checkout built without its escape step, and both builds of each package load, export and print the same (4937.463625ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 2
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 500598.892459
+
+✖ failing tests:
+
+test at tests/acceptance/2696-redraft-3706/same-text.test.mjs:102:1
+✖ #2696.6fbf771a #3706.c1a4b78e every message that holds a character above U+00FF reads the same, character for character, as in this checkout built without its escape step, and both builds of each package load, export and print the same (4937.463625ms)
+  AssertionError [ERR_ASSERTION]: 41 strings differ from this checkout built without its escape step (108 messages with a character above U+00FF compared):
+  packages/briefs/dist/index.js:45: the template ["","…"] of this checkout built without its escape step reads ["","……"] (a template, line 45) in this build
+  packages/buying/dist/index.js:68: the template ["","•••• ",""] of this checkout built without its escape step reads ["","•••••••• ",""] (a template, line 68) in this build
+  packages/checks-journey/dist/api.js:26: the template [""," › ",""] of this checkout built without its escape step reads [""," ›› ",""] (a template, line 26) in this build
+  packages/checks-journey/dist/index.js:196: the template ["› ",""] of this checkout built without its escape step reads ["›› ",""] (a template, line 196) in this build
+  packages/checks-journey/dist/motion.js:20: the template [""," "," → ",", not "," → ",""] of this checkout built without its escape step reads [""," "," →→ ",", not "," →→ ",""] (a template, line 20) in this build
+  ... and 36 more
+  
+  41 !== 0
+  
+      at TestContext.<anonymous> (file:///private$TMPDIR/r3706-runs/doubles-escapes/tests/acceptance/2696-redraft-3706/same-text.test.mjs:130:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 41,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+=== exit 1
+=== DONE doubles-escapes
+
+
+######## Run 3: twin hands-the-whole-folder
+
+=== hands-the-whole-folder: node --test tests/acceptance/2696-redraft-3706/lanes.test.mjs (load 34.85 37.23 29.39)
+✖ #3706.75c61bdf the first draft runs by hand with a redrafted entry naming this folder, and the first draft folder's other files and this folder's files run in the alone block (274.993792ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 564.379458
+
+✖ failing tests:
+
+test at tests/acceptance/2696-redraft-3706/lanes.test.mjs:13:1
+✖ #3706.75c61bdf the first draft runs by hand with a redrafted entry naming this folder, and the first draft folder's other files and this folder's files run in the alone block (274.993792ms)
+  AssertionError [ERR_ASSERTION]: scripts/lanes.mjs runs these files elsewhere than the redraft asks
+  + actual - expected
+  
+    {
+      'tests/acceptance/2696-redraft-3706/heap.test.mjs': 'alone',
+      'tests/acceptance/2696-redraft-3706/lanes.test.mjs': 'alone',
+      'tests/acceptance/2696-redraft-3706/none-above.test.mjs': 'alone',
+      'tests/acceptance/2696-redraft-3706/same-text.test.mjs': 'alone',
+      'tests/acceptance/2696/base.test.mjs': 'by hand',
+  +   'tests/acceptance/2696/lint.test.mjs': 'by hand',
+  +   'tests/acceptance/2696/newfile.test.mjs': 'by hand',
+  -   'tests/acceptance/2696/lint.test.mjs': 'alone',
+  -   'tests/acceptance/2696/newfile.test.mjs': 'alone',
+      redrafted: 'tests/acceptance/2696-redraft-3706/'
+    }
+  
+      at TestContext.<anonymous> (file:///private$TMPDIR/r3706-runs/hands-the-whole-folder/tests/acceptance/2696-redraft-3706/lanes.test.mjs:29:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: { redrafted: 'tests/acceptance/2696-redraft-3706/', 'tests/acceptance/2696/base.test.mjs': 'by hand', 'tests/acceptance/2696/lint.test.mjs': 'by hand', 'tests/acceptance/2696/newfile.test.mjs': 'by hand', 'tests/acceptance/2696-redraft-3706/heap.test.mjs': 'alone', 'tests/acceptance/2696-redraft-3706/lanes.test.mjs': 'alone', 'tests/acceptance/2696-redraft-3706/none-above.test.mjs': 'alone', 'tests/acceptance/2696-redraft-3706/same-text.test.mjs': 'alone' },
+    expected: { redrafted: 'tests/acceptance/2696-redraft-3706/', 'tests/acceptance/2696/base.test.mjs': 'by hand', 'tests/acceptance/2696/lint.test.mjs': 'alone', 'tests/acceptance/2696/newfile.test.mjs': 'alone', 'tests/acceptance/2696-redraft-3706/heap.test.mjs': 'alone', 'tests/acceptance/2696-redraft-3706/lanes.test.mjs': 'alone', 'tests/acceptance/2696-redraft-3706/none-above.test.mjs': 'alone', 'tests/acceptance/2696-redraft-3706/same-text.test.mjs': 'alone' },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+=== exit 1
+=== hands-the-whole-folder: node --test tests/acceptance/2696-redraft-3706/none-above.test.mjs (load 34.85 37.23 29.39)
+✔ #2696.5a61170b #3706.61c191d3 after npm run build --workspaces no built file under packages/*/dist holds a character above U+00FF, though the built packages' sources hold such characters (249.602375ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 571.802417
+=== exit 0
+=== DONE hands-the-whole-folder
+
+
+######## Run 4: the change + a blank line in packages/hub/src/core.ts, rebuilt
+
+=== addline: node --test tests/acceptance/2696-redraft-3706/none-above.test.mjs (load 85.87 78.58 72.23)
+✔ #2696.5a61170b #3706.61c191d3 after npm run build --workspaces no built file under packages/*/dist holds a character above U+00FF, though the built packages' sources hold such characters (365.633333ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 808.738084
+=== exit 0
+=== addline: node --test tests/acceptance/2696-redraft-3706/lanes.test.mjs (load 85.87 78.58 72.23)
+✔ #3706.75c61bdf the first draft runs by hand with a redrafted entry naming this folder, and the first draft folder's other files and this folder's files run in the alone block (238.389042ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 661.764208
+=== exit 0
+=== addline: node --test tests/acceptance/2696-redraft-3706/same-text.test.mjs (load 85.87 78.58 72.23)
+✔ #2696.534150b4 #3706.414a9c5f each built file has as many lines as this checkout built without its escape step (235138.311833ms)
+✔ #2696.534150b4 #3706.414a9c5f an error thrown from packages/hub/dist/core.js names the line it names in this checkout built without its escape step, a line after the core's first character above U+00FF (687.20725ms)
+✔ #2696.6fbf771a #3706.c1a4b78e every message that holds a character above U+00FF reads the same, character for character, as in this checkout built without its escape step, and both builds of each package load, export and print the same (2576.296791ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 240629.300834
+=== exit 0
+=== DONE addline

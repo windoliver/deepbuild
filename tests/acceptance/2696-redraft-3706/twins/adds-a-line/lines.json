@@ -1,0 +1,12 @@
+{
+  "scripts/built-escapes.mjs": [
+    {
+      "find": [
+        "    writeFileSync(path, out);"
+      ],
+      "wrong": [
+        "    writeFileSync(path, `\\n${out}`);"
+      ]
+    }
+  ]
+}

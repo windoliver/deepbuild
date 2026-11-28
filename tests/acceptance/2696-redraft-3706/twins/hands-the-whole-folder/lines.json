@@ -1,0 +1,12 @@
+{
+  "scripts/lanes-lists.mjs": [
+    {
+      "find": [
+        "byHand.push('tests/acceptance/2696/base.test.mjs');"
+      ],
+      "wrong": [
+        "byHand.push('tests/acceptance/2696/');"
+      ]
+    }
+  ]
+}
