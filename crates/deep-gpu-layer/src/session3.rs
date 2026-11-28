@@ -367,15 +367,12 @@ pub fn surface(app: &mut App, surface: Surface) -> Result<(), Value> {
         .call(move |state| -> Result<(), String> {
             let s = state.scene3d.as_mut().ok_or("no session")?;
             let device = s.view.device().clone();
-            let mut shared = lock(&s.shared);
-            let planted = shared.planted;
-            let renderer = shared
-                .renderer
-                .get_or_insert_with(|| deep_scene3d_render::Renderer::new(&device, planted));
-            renderer.surface = surface;
-            if surface.scale < 1.0 && renderer.upscale.is_none() {
-                renderer.upscale = Some(Arc::new(Upscale::new(&device)));
-            }
+            lock(&s.shared).setup(&device, move |renderer, device| {
+                renderer.surface = surface;
+                if surface.scale < 1.0 && renderer.upscale.is_none() {
+                    renderer.upscale = Some(Arc::new(Upscale::new(device)));
+                }
+            });
             Ok(())
         })
         .map_err(|e| refused("no_session", e))
@@ -393,16 +390,21 @@ pub fn history(
     app.worker
         .call(move |state| -> Result<(), String> {
             let s = state.scene3d.as_mut().ok_or("no session")?;
+            let device = s.view.device().clone();
             let mut shared = lock(&s.shared);
-            let r = shared.renderer.as_mut().ok_or("no renderer")?;
-            r.surface = surface;
-            r.history = frame.is_some();
-            let internal = r.internal_size(size);
-            r.jitter = frame.as_ref().map_or([0.0; 2], |f| {
-                let k = |i: usize| f64::from(size[i]) / f64::from(internal[i].max(1));
-                [f.jitter[0] * k(0), f.jitter[1] * k(1)]
+            if shared.renderer.is_none() && !shared.planted.builds_on_first_frame {
+                return Err("no renderer".into());
+            }
+            shared.setup(&device, move |r, _| {
+                r.surface = surface;
+                r.history = frame.is_some();
+                let internal = r.internal_size(size);
+                r.jitter = frame.as_ref().map_or([0.0; 2], |f| {
+                    let k = |i: usize| f64::from(size[i]) / f64::from(internal[i].max(1));
+                    [f.jitter[0] * k(0), f.jitter[1] * k(1)]
+                });
+                r.frame_history.frame = frame;
             });
-            r.frame_history.frame = frame;
             Ok(())
         })
         .map_err(|e| refused("no_session", e))
@@ -414,12 +416,7 @@ pub fn core_targets(app: &mut App, want: deep_scene3d_render::targets::Want) -> 
         .call(move |state| -> Result<(), String> {
             let s = state.scene3d.as_mut().ok_or("no session")?;
             let device = s.view.device().clone();
-            let mut shared = lock(&s.shared);
-            let planted = shared.planted;
-            let renderer = shared
-                .renderer
-                .get_or_insert_with(|| deep_scene3d_render::Renderer::new(&device, planted));
-            renderer.core.want = want;
+            lock(&s.shared).setup(&device, move |renderer, _| renderer.core.want = want);
             Ok(())
         })
         .map_err(|e| refused("no_session", e))
@@ -458,8 +455,9 @@ pub fn masks(app: &mut App, key: u32, level: u32) -> Vec<(&'static str, [u32; 2]
 pub fn set_occlusion(app: &mut App, on: bool) {
     app.worker.call(move |state| {
         if let Some(s) = state.scene3d.as_ref() {
-            if let Some(r) = lock(&s.shared).renderer.as_mut() {
-                r.set_occlusion(on);
+            let mut shared = lock(&s.shared);
+            if shared.renderer.is_some() || shared.planted.builds_on_first_frame {
+                shared.setup(s.view.device(), move |r, _| r.set_occlusion(on));
             }
         }
     })
@@ -496,8 +494,9 @@ pub fn tile_texels(app: &mut App) -> Vec<(String, Vec<u8>)> {
 pub fn cull_on_cpu(app: &mut App) {
     app.worker.call(|state| {
         if let Some(s) = state.scene3d.as_ref() {
-            if let Some(r) = lock(&s.shared).renderer.as_mut() {
-                r.cull_on_cpu();
+            let mut shared = lock(&s.shared);
+            if shared.renderer.is_some() || shared.planted.builds_on_first_frame {
+                shared.setup(s.view.device(), move |r, _| r.cull_on_cpu());
             }
         }
     })

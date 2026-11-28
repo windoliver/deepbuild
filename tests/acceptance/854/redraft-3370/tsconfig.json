@@ -1,0 +1,10 @@
+{
+  "extends": "../../../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "rootDir": "../../../.."
+  },
+  "include": ["./**/*.ts", "../redraft-3300/helpers.ts", "../helpers.ts"],
+  "exclude": ["./node_modules/**"]
+}
