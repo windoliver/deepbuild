@@ -34,7 +34,7 @@ it('#2570 a start beside a root whose lock stays held and where no hub answers f
     // A start that has failed leaves nothing behind. It spawned no hub: a dev hub's start opens the root's hub.log
     // for it, in the CLI, before it spawns. And none waits for the lock to free.
     expect(existsSync(join(root, 'logs', 'hub.log')), 'the failed start spawned a hub beside the held lock').toBe(false);
-    const ps = spawnSync('ps', ['-A', '-ww', '-o', 'args='], { encoding: 'utf8', env: { PATH: process.env.PATH } });
+    const ps = spawnSync('ps', ['-A', '-ww', '-o', 'args='], { encoding: 'utf8', env: { PATH: process.env.PATH }, maxBuffer: 256 * 1024 * 1024 });
     expect(ps.status, `ps could not list the processes: ${ps.stderr}`).toBe(0);
     const running = ps.stdout.split('\n');
     expect(running.filter((args) => args.includes(`hub run --root ${root}`)), 'a hub the failed start spawned waits for the root').toEqual([]);
