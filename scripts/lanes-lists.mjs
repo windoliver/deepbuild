@@ -907,6 +907,11 @@ for (const name of ['ac1-section', 'ac3-agent-routes', 'ac5-taste-call']) {
   byHand.push(`tests/acceptance/1352/${name}.test.mjs`);
 }
 
+for (const name of ['ac1-journeys', 'ac2-reader', 'ac3-reduced', 'ac5-repeat', 'ac6-pacing', 'scope-recording']) {
+  redrafted[`tests/acceptance/1427/${name}.test.ts`] = 'tests/acceptance/1427-redraft-panel/';
+  byHand.push(`tests/acceptance/1427/${name}.test.ts`);
+}
+
 for (const entry of laneFolders.filter((folder) => !unread.includes(folder))) {
   let text = '';
   try { text = readFileSync(join(root, entry, 'lane.json'), 'utf8'); } catch {}
