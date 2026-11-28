@@ -1,0 +1,4 @@
+{
+  "#1334.775c65d4": ["notice-at-every-start", "stop-stops-nothing", "slow-rollback", "two-notices", "notice-names-restored", "fresh-root-on-rollback", "loses-mid-outage"],
+  "#1334.14e4b3e9": ["notice-at-every-start", "pings-only", "judges-in-promote"]
+}
